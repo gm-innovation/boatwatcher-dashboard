@@ -17,8 +17,7 @@ const ProjectSettings = () => {
     engineer: "Eng. João Silva",
     company: "Marítima Internacional",
     captain: "Cap. Carlos Santos",
-    crewCount: "15",
-    workersCount: "42"
+    crewCount: "15"
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,17 +154,6 @@ const ProjectSettings = () => {
                     id="crewCount"
                     name="crewCount"
                     value={projectInfo.crewCount}
-                    onChange={handleInputChange}
-                    className="mt-1"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="workersCount">Trabalhadores</Label>
-                  <Input
-                    id="workersCount"
-                    name="workersCount"
-                    value={projectInfo.workersCount}
                     onChange={handleInputChange}
                     className="mt-1"
                   />
