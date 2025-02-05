@@ -1,13 +1,16 @@
 
 import { format } from 'date-fns';
-import { Clock, Settings } from 'lucide-react';
+import { Clock, Settings, Moon, Sun } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Toggle } from '@/components/ui/toggle';
+import { useTheme } from 'next-themes';
 
 export const Header = () => {
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
+  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -18,26 +21,39 @@ export const Header = () => {
   }, []);
 
   return (
-    <header className="fixed top-0 left-0 right-0 w-full bg-white/80 backdrop-blur-sm border-b border-gray-200 animate-fade-in z-50">
+    <header className="fixed top-0 left-0 right-0 w-full bg-background/80 backdrop-blur-sm border-b border-border animate-fade-in z-50">
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4">
         <div className="flex items-center space-x-2">
-          <div className="h-10 w-32 bg-gray-200 rounded animate-pulse">
+          <div className="h-10 w-32 bg-muted rounded animate-pulse">
             {/* Company Logo Placeholder */}
           </div>
         </div>
         
         <div className="flex items-center gap-4">
           <div className="flex flex-col items-center">
-            <div className="flex items-center space-x-2 text-gray-600">
+            <div className="flex items-center space-x-2 text-foreground/80">
               <Clock className="h-4 w-4" />
               <span className="text-sm font-medium">
                 {format(currentTime, 'HH:mm:ss')}
               </span>
             </div>
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-muted-foreground">
               {format(currentTime, 'dd/MM/yyyy')}
             </span>
           </div>
+
+          <Toggle
+            variant="outline"
+            size="sm"
+            pressed={theme === 'dark'}
+            onPressedChange={(pressed) => setTheme(pressed ? 'dark' : 'light')}
+          >
+            {theme === 'dark' ? (
+              <Moon className="h-4 w-4" />
+            ) : (
+              <Sun className="h-4 w-4" />
+            )}
+          </Toggle>
 
           <Button
             variant="ghost"
@@ -50,7 +66,7 @@ export const Header = () => {
         </div>
 
         <div className="flex items-center space-x-2">
-          <div className="h-10 w-32 bg-gray-200 rounded animate-pulse">
+          <div className="h-10 w-32 bg-muted rounded animate-pulse">
             {/* Client Logo Placeholder */}
           </div>
         </div>
