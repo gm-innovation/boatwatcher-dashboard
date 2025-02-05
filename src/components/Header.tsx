@@ -8,6 +8,14 @@ import { useTheme } from '@/components/theme-provider';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 
+interface ProjectData {
+  project: {
+    client: {
+      logo_url: string | null;
+    } | null;
+  } | null;
+}
+
 export const Header = () => {
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
