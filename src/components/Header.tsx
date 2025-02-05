@@ -56,8 +56,9 @@ export const Header = () => {
           .eq('user_id', session.user.id)
           .single();
 
-        if (projectData?.project?.client?.logo_url) {
-          setClientLogo(projectData.project.client.logo_url);
+        const typedProjectData = projectData as unknown as ProjectData;
+        if (typedProjectData?.project?.client?.logo_url) {
+          setClientLogo(typedProjectData.project.client.logo_url);
         }
       }
     };
