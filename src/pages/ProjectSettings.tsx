@@ -5,25 +5,62 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { ProjectSelector } from "@/components/ProjectSelector";
+import { useProjectById, useProjects } from "@/hooks/useSupabase";
+import { supabase } from "@/lib/supabase";
 
 const ProjectSettings = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [projectInfo, setProjectInfo] = useState({
-    vesselName: "MV Ocean Explorer",
-    startDate: "2024-03-15",
-    projectType: "Docagem",
-    engineer: "Eng. João Silva",
-    company: "Marítima Internacional",
-    captain: "Cap. Carlos Santos",
-    crewCount: "15"
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const { data: projectInfo } = useProjectById(selectedProjectId);
+  const { data: projects = [] } = useProjects();
+  
+  const [formData, setFormData] = useState({
+    vesselName: "",
+    startDate: "",
+    projectType: "",
+    engineer: "",
+    company: "",
+    captain: "",
+    crewCount: ""
   });
+
+  // Atualiza o formulário quando um projeto é selecionado
+  const handleProjectSelect = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    const project = projects.find(p => p.id === projectId);
+    if (project) {
+      setFormData({
+        vesselName: project.vessel_name,
+        startDate: project.start_date,
+        projectType: project.project_type,
+        engineer: project.engineer,
+        company: project.company,
+        captain: project.captain,
+        crewCount: "15" // valor padrão já que não está na tabela
+      });
+    }
+  };
+
+  const handleNewProject = () => {
+    setSelectedProjectId(null);
+    setFormData({
+      vesselName: "",
+      startDate: "",
+      projectType: "",
+      engineer: "",
+      company: "",
+      captain: "",
+      crewCount: ""
+    });
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setProjectInfo(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleLogoUpload = (themeMode: string, logoType: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,12 +81,52 @@ const ProjectSettings = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast({
-      title: "Configurações atualizadas",
-      description: "As informações do projeto foram atualizadas com sucesso.",
-    });
+    
+    const projectData = {
+      vessel_name: formData.vesselName,
+      start_date: formData.startDate,
+      project_type: formData.projectType,
+      engineer: formData.engineer,
+      company: formData.company,
+      captain: formData.captain,
+    };
+
+    try {
+      if (selectedProjectId) {
+        // Atualiza projeto existente
+        const { error } = await supabase
+          .from('projects')
+          .update(projectData)
+          .eq('id', selectedProjectId);
+
+        if (error) throw error;
+
+        toast({
+          title: "Projeto atualizado",
+          description: "As informações do projeto foram atualizadas com sucesso.",
+        });
+      } else {
+        // Cria novo projeto
+        const { error } = await supabase
+          .from('projects')
+          .insert([projectData]);
+
+        if (error) throw error;
+
+        toast({
+          title: "Projeto criado",
+          description: "O novo projeto foi criado com sucesso.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Ocorreu um erro ao salvar o projeto.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -65,7 +142,19 @@ const ProjectSettings = () => {
         </Button>
 
         <div className="bg-card rounded-lg shadow-sm p-6">
-          <h1 className="text-2xl font-semibold mb-6 text-foreground">Configurações do Projeto</h1>
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-2xl font-semibold text-foreground">Configurações do Projeto</h1>
+            <div className="flex gap-2">
+              <ProjectSelector
+                selectedProjectId={selectedProjectId}
+                onProjectSelect={handleProjectSelect}
+              />
+              <Button onClick={handleNewProject} variant="outline">
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Projeto
+              </Button>
+            </div>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -140,7 +229,7 @@ const ProjectSettings = () => {
                     <Input
                       id="vesselName"
                       name="vesselName"
-                      value={projectInfo.vesselName}
+                      value={formData.vesselName}
                       onChange={handleInputChange}
                       className="mt-1"
                     />
@@ -152,7 +241,7 @@ const ProjectSettings = () => {
                       id="startDate"
                       name="startDate"
                       type="date"
-                      value={projectInfo.startDate}
+                      value={formData.startDate}
                       onChange={handleInputChange}
                       className="mt-1"
                     />
@@ -163,7 +252,7 @@ const ProjectSettings = () => {
                     <Input
                       id="projectType"
                       name="projectType"
-                      value={projectInfo.projectType}
+                      value={formData.projectType}
                       onChange={handleInputChange}
                       className="mt-1"
                     />
@@ -174,7 +263,7 @@ const ProjectSettings = () => {
                     <Input
                       id="engineer"
                       name="engineer"
-                      value={projectInfo.engineer}
+                      value={formData.engineer}
                       onChange={handleInputChange}
                       className="mt-1"
                     />
@@ -185,7 +274,7 @@ const ProjectSettings = () => {
                     <Input
                       id="company"
                       name="company"
-                      value={projectInfo.company}
+                      value={formData.company}
                       onChange={handleInputChange}
                       className="mt-1"
                     />
@@ -196,7 +285,7 @@ const ProjectSettings = () => {
                     <Input
                       id="captain"
                       name="captain"
-                      value={projectInfo.captain}
+                      value={formData.captain}
                       onChange={handleInputChange}
                       className="mt-1"
                     />
@@ -207,7 +296,7 @@ const ProjectSettings = () => {
                     <Input
                       id="crewCount"
                       name="crewCount"
-                      value={projectInfo.crewCount}
+                      value={formData.crewCount}
                       onChange={handleInputChange}
                       className="mt-1"
                     />
@@ -218,7 +307,7 @@ const ProjectSettings = () => {
 
             <div className="flex justify-end pt-4">
               <Button type="submit">
-                Salvar Alterações
+                {selectedProjectId ? 'Atualizar Projeto' : 'Criar Projeto'}
               </Button>
             </div>
           </form>
