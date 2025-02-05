@@ -58,7 +58,7 @@ export const WorkersList = ({ className = "" }) => {
               <th className="w-[200px] text-center py-3 text-sm font-medium text-gray-500">Nome</th>
               <th className="w-[200px] text-center py-3 text-sm font-medium text-gray-500">Empresa</th>
               <th className="w-[200px] text-center py-3 text-sm font-medium text-gray-500">Função</th>
-              <th className="w-[150px] text-center py-3 text-sm font-medium text-gray-500">Horário de Chegada</th>
+              <th className="w-[150px] text-center py-3 text-sm font-medium text-gray-500">Entrada</th>
             </tr>
           </thead>
         </table>
