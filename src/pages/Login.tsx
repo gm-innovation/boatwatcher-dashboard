@@ -21,7 +21,7 @@ const Login = () => {
     setLoading(true);
 
     try {
-      // Tentar fazer login
+      console.log("Tentando fazer login com:", email);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -40,13 +40,15 @@ const Login = () => {
       }
 
       if (data.user) {
-        console.log("Login bem sucedido. Verificando role...");
+        console.log("Login bem sucedido. User ID:", data.user.id);
         // Verificar o role do usuário
         const { data: roleData, error: roleError } = await supabase
           .from('user_roles')
           .select('role')
           .eq('user_id', data.user.id)
-          .single();
+          .maybeSingle();
+
+        console.log("Resposta da consulta de role:", { roleData, roleError });
 
         if (roleError) {
           console.error("Erro ao buscar role:", roleError);
@@ -58,10 +60,20 @@ const Login = () => {
           return;
         }
 
-        console.log("Role encontrada:", roleData);
+        if (!roleData) {
+          console.log("Nenhuma role encontrada para o usuário");
+          toast({
+            title: "Erro de permissões",
+            description: "Usuário sem role definida",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        console.log("Role encontrada:", roleData.role);
         toast({
           title: "Login realizado com sucesso",
-          description: `Bem-vindo ${roleData?.role === 'admin' ? 'administrador' : 'usuário'}!`,
+          description: `Bem-vindo ${roleData.role === 'admin' ? 'administrador' : 'usuário'}!`,
         });
 
         navigate("/");
@@ -82,14 +94,14 @@ const Login = () => {
     setLoading(true);
 
     try {
-      // Verificar se já existe um usuário admin
+      console.log("Verificando admin existente...");
       const { data: existingAdmin, error: checkError } = await supabase
         .from('user_roles')
         .select('*')
         .eq('role', 'admin')
-        .single();
+        .maybeSingle();
 
-      if (checkError && checkError.code !== 'PGRST116') {
+      if (checkError) {
         console.error("Erro ao verificar admin existente:", checkError);
         toast({
           title: "Erro ao verificar admin existente",
@@ -109,13 +121,10 @@ const Login = () => {
         return;
       }
 
-      // Criar usuário admin inicial
+      console.log("Criando usuário admin...");
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: "admin@admin.com",
         password: "admin123",
-        options: {
-          emailRedirectTo: window.location.origin,
-        }
       });
 
       if (authError) {
@@ -125,7 +134,8 @@ const Login = () => {
 
       if (authData.user) {
         console.log("Usuário admin criado:", authData.user);
-        // Adicionar role admin
+        
+        console.log("Adicionando role admin...");
         const { error: roleError } = await supabase
           .from('user_roles')
           .insert([{ user_id: authData.user.id, role: 'admin' }]);
@@ -135,7 +145,10 @@ const Login = () => {
           throw roleError;
         }
 
+        console.log("Role admin adicionada com sucesso");
+
         // Fazer login automaticamente com o usuário admin
+        console.log("Tentando login automático...");
         const { error: loginError } = await supabase.auth.signInWithPassword({
           email: "admin@admin.com",
           password: "admin123"
@@ -146,6 +159,7 @@ const Login = () => {
           throw loginError;
         }
 
+        console.log("Login automático realizado com sucesso");
         toast({
           title: "Usuário admin criado com sucesso",
           description: "Email: admin@admin.com, Senha: admin123. Você será logado automaticamente.",
