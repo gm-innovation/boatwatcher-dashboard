@@ -1,4 +1,3 @@
-
 import { format } from 'date-fns';
 import { Clock, Settings, Moon, Sun, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -14,11 +13,11 @@ export const Header = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const { theme, setTheme } = useTheme();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [clientLogo, setClientLogo] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // Get logos based on current theme
+  // Get company logo based on current theme
   const companyLogo = localStorage.getItem(`company_${theme}`);
-  const clientLogo = localStorage.getItem(`client_${theme}`);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -28,13 +27,30 @@ export const Header = () => {
     const checkAdminRole = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        const { data } = await supabase
+        const { data: roleData } = await supabase
           .from('user_roles')
           .select('role')
           .eq('user_id', session.user.id)
           .single();
         
-        setIsAdmin(data?.role === 'admin');
+        setIsAdmin(roleData?.role === 'admin');
+
+        // Fetch client logo from user's projects
+        const { data: projectData } = await supabase
+          .from('user_projects')
+          .select(`
+            project:projects (
+              client:companies (
+                logo_url
+              )
+            )
+          `)
+          .eq('user_id', session.user.id)
+          .single();
+
+        if (projectData?.project?.client?.logo_url) {
+          setClientLogo(projectData.project.client.logo_url);
+        }
       }
     };
 
@@ -59,8 +75,8 @@ export const Header = () => {
     <header className="fixed top-0 left-0 right-0 w-full bg-background/80 backdrop-blur-sm border-b border-border animate-fade-in z-50">
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4">
         <div className="flex items-center space-x-2">
-          {companyLogo ? (
-            <img src={companyLogo} alt="Logo da Empresa" className="h-10 w-32 object-contain" />
+          {clientLogo ? (
+            <img src={clientLogo} alt="Logo do Cliente" className="h-10 w-32 object-contain" />
           ) : (
             <div className="h-10 w-32 bg-muted rounded animate-pulse" />
           )}
@@ -114,8 +130,8 @@ export const Header = () => {
         </div>
 
         <div className="flex items-center space-x-2">
-          {clientLogo ? (
-            <img src={clientLogo} alt="Logo do Cliente" className="h-10 w-32 object-contain" />
+          {companyLogo ? (
+            <img src={companyLogo} alt="Logo da Empresa" className="h-10 w-32 object-contain" />
           ) : (
             <div className="h-10 w-32 bg-muted rounded animate-pulse" />
           )}
