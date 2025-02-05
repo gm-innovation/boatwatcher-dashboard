@@ -12,6 +12,10 @@ export const Header = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const { theme, setTheme } = useTheme();
 
+  // Get logos based on current theme
+  const companyLogo = localStorage.getItem(`company_${theme}`);
+  const clientLogo = localStorage.getItem(`client_${theme}`);
+
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -24,9 +28,11 @@ export const Header = () => {
     <header className="fixed top-0 left-0 right-0 w-full bg-background/80 backdrop-blur-sm border-b border-border animate-fade-in z-50">
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4">
         <div className="flex items-center space-x-2">
-          <div className="h-10 w-32 bg-muted rounded animate-pulse">
-            {/* Company Logo Placeholder */}
-          </div>
+          {companyLogo ? (
+            <img src={companyLogo} alt="Logo da Empresa" className="h-10 w-32 object-contain" />
+          ) : (
+            <div className="h-10 w-32 bg-muted rounded animate-pulse" />
+          )}
         </div>
         
         <div className="flex items-center gap-4">
@@ -66,12 +72,13 @@ export const Header = () => {
         </div>
 
         <div className="flex items-center space-x-2">
-          <div className="h-10 w-32 bg-muted rounded animate-pulse">
-            {/* Client Logo Placeholder */}
-          </div>
+          {clientLogo ? (
+            <img src={clientLogo} alt="Logo do Cliente" className="h-10 w-32 object-contain" />
+          ) : (
+            <div className="h-10 w-32 bg-muted rounded animate-pulse" />
+          )}
         </div>
       </div>
     </header>
   );
 };
-
