@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -64,6 +63,43 @@ const UserManagement = () => {
     }
   };
 
+  const createInitialAdmin = async () => {
+    setLoading(true);
+
+    try {
+      // Criar usuário admin inicial
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: "admin@admin.com",
+        password: "admin123",
+        email_confirm: true,
+      });
+
+      if (authError) throw authError;
+
+      if (authData.user) {
+        // Adicionar role admin
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .insert([{ user_id: authData.user.id, role: 'admin' }]);
+
+        if (roleError) throw roleError;
+
+        toast({
+          title: "Usuário admin criado com sucesso",
+          description: "Email: admin@admin.com, Senha: admin123",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro ao criar usuário admin",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -72,6 +108,16 @@ const UserManagement = () => {
           Crie e gerencie os usuários que terão acesso ao sistema.
         </p>
       </div>
+
+      <Button 
+        onClick={createInitialAdmin} 
+        variant="outline" 
+        disabled={loading}
+        className="mb-4"
+      >
+        {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+        Criar Usuário Admin Inicial
+      </Button>
 
       <form onSubmit={handleCreateUser} className="space-y-4">
         <div className="space-y-2">
