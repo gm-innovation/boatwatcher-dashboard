@@ -24,14 +24,17 @@ export const CompanyForm = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (selectedCompanyId) {
+    if (selectedCompanyId && selectedCompanyId !== "new") {
       const company = companies?.find(c => c.id === selectedCompanyId);
       if (company) {
         setCompanyName(company.name);
-        // Note: We'll need to add these fields to the companies table later
         setProjectManagers("");
         setVessels("");
       }
+    } else {
+      setCompanyName("");
+      setProjectManagers("");
+      setVessels("");
     }
   }, [selectedCompanyId, companies]);
 
@@ -72,7 +75,7 @@ export const CompanyForm = () => {
     setIsLoading(true);
 
     try {
-      if (selectedCompanyId) {
+      if (selectedCompanyId && selectedCompanyId !== "new") {
         // Update existing company
         const { error } = await supabase
           .from('companies')
@@ -125,12 +128,12 @@ export const CompanyForm = () => {
     <div className="border rounded-lg p-6">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold">Cadastro de Empresa</h2>
-        <Select value={selectedCompanyId || ''} onValueChange={setSelectedCompanyId}>
+        <Select value={selectedCompanyId || "new"} onValueChange={setSelectedCompanyId}>
           <SelectTrigger className="w-[280px]">
             <SelectValue placeholder="Selecione uma empresa para editar" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Nova empresa</SelectItem>
+            <SelectItem value="new">Nova empresa</SelectItem>
             {companies?.map((company) => (
               <SelectItem key={company.id} value={company.id}>
                 {company.name}
@@ -219,7 +222,7 @@ export const CompanyForm = () => {
         </div>
 
         <Button type="submit" disabled={isLoading}>
-          {isLoading ? "Salvando..." : selectedCompanyId ? "Atualizar Empresa" : "Cadastrar Empresa"}
+          {isLoading ? "Salvando..." : selectedCompanyId && selectedCompanyId !== "new" ? "Atualizar Empresa" : "Cadastrar Empresa"}
         </Button>
       </form>
     </div>
