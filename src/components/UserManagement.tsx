@@ -31,7 +31,7 @@ const UserManagement = () => {
         email,
         password,
         options: {
-          emailRedirect: window.location.origin
+          emailRedirectTo: window.location.origin
         }
       });
 
@@ -75,7 +75,7 @@ const UserManagement = () => {
         email: "admin@admin.com",
         password: "admin123",
         options: {
-          emailRedirect: window.location.origin
+          emailRedirectTo: window.location.origin
         }
       });
 
