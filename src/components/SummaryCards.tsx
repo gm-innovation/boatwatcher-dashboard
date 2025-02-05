@@ -1,33 +1,46 @@
 
-import { Users, Building } from 'lucide-react';
+import { Users, Building, Anchor } from 'lucide-react';
 
-const Card = ({ title, value, icon: Icon, color }: { 
+const Card = ({ title, value, icon: Icon, color, highlight = false }: { 
   title: string;
   value: number;
   icon: any;
   color: string;
+  highlight?: boolean;
 }) => (
-  <div className="bg-white/80 backdrop-blur-sm rounded-lg border border-gray-200 p-6 hover:shadow-lg transition-shadow duration-200 animate-fade-up">
+  <div className={`${highlight ? 'bg-purple-100/80 border-purple-300' : 'bg-white/80 border-gray-200'} backdrop-blur-sm rounded-lg border p-6 hover:shadow-lg transition-shadow duration-200 animate-fade-up`}>
     <div className="flex flex-col items-center justify-center text-center">
       <div className={`p-3 rounded-full ${color} mb-3`}>
         <Icon className="h-6 w-6 text-white" />
       </div>
       <div>
         <p className="text-sm text-gray-500 mb-1">{title}</p>
-        <p className="text-2xl font-semibold text-gray-800">{value}</p>
+        <p className={`text-2xl font-semibold ${highlight ? 'text-purple-800' : 'text-gray-800'}`}>{value}</p>
       </div>
     </div>
   </div>
 );
 
 export const SummaryCards = () => {
+  // Mock data - In a real application, these would come from your data source
+  const crewCount = 15;
+  const workersCount = 42;
+  const totalCount = crewCount + workersCount;
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+      <Card
+        title="Tripulação a Bordo"
+        value={crewCount}
+        icon={Anchor}
+        color="bg-blue-500"
+      />
       <Card
         title="Total de Pessoas a Bordo"
-        value={42}
+        value={totalCount}
         icon={Users}
-        color="bg-indigo-500"
+        color="bg-purple-500"
+        highlight={true}
       />
       <Card
         title="Total de Empresas"
@@ -38,3 +51,4 @@ export const SummaryCards = () => {
     </div>
   );
 };
+
