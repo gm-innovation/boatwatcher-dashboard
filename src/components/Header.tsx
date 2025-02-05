@@ -1,9 +1,12 @@
 
 import { format } from 'date-fns';
-import { Clock } from 'lucide-react';
+import { Clock, Settings } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 
 export const Header = () => {
+  const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -23,16 +26,27 @@ export const Header = () => {
           </div>
         </div>
         
-        <div className="flex flex-col items-center">
-          <div className="flex items-center space-x-2 text-gray-600">
-            <Clock className="h-4 w-4" />
-            <span className="text-sm font-medium">
-              {format(currentTime, 'HH:mm:ss')}
+        <div className="flex items-center gap-4">
+          <div className="flex flex-col items-center">
+            <div className="flex items-center space-x-2 text-gray-600">
+              <Clock className="h-4 w-4" />
+              <span className="text-sm font-medium">
+                {format(currentTime, 'HH:mm:ss')}
+              </span>
+            </div>
+            <span className="text-xs text-gray-500">
+              {format(currentTime, 'dd/MM/yyyy')}
             </span>
           </div>
-          <span className="text-xs text-gray-500">
-            {format(currentTime, 'dd/MM/yyyy')}
-          </span>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate('/settings')}
+            className="ml-4"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
         </div>
 
         <div className="flex items-center space-x-2">
