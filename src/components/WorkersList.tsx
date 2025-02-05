@@ -23,7 +23,7 @@ const workers = [
   // Add more workers as needed
 ];
 
-export const WorkersList = () => {
+export const WorkersList = ({ className = "" }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredWorkers = workers.filter(worker =>
@@ -33,7 +33,7 @@ export const WorkersList = () => {
   );
 
   return (
-    <div className="bg-white/80 backdrop-blur-sm rounded-lg border border-gray-200 flex flex-col">
+    <div className={`bg-white/80 backdrop-blur-sm rounded-lg border border-gray-200 flex flex-col ${className}`}>
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-800">Lista de Trabalhadores</h2>
@@ -54,11 +54,11 @@ export const WorkersList = () => {
         <table className="w-full">
           <thead>
             <tr>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Foto</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Nome</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Empresa</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Função</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Horário de Chegada</th>
+              <th className="text-center py-3 px-4 text-sm font-medium text-gray-500">Foto</th>
+              <th className="text-center py-3 px-4 text-sm font-medium text-gray-500">Nome</th>
+              <th className="text-center py-3 px-4 text-sm font-medium text-gray-500">Empresa</th>
+              <th className="text-center py-3 px-4 text-sm font-medium text-gray-500">Função</th>
+              <th className="text-center py-3 px-4 text-sm font-medium text-gray-500">Horário de Chegada</th>
             </tr>
           </thead>
         </table>
@@ -70,17 +70,19 @@ export const WorkersList = () => {
             <tbody>
               {filteredWorkers.map((worker) => (
                 <tr key={worker.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-3 px-4">
-                    <img
-                      src={worker.photo}
-                      alt={worker.name}
-                      className="h-8 w-8 rounded-full object-cover"
-                    />
+                  <td className="py-3 px-4 text-center">
+                    <div className="flex justify-center">
+                      <img
+                        src={worker.photo}
+                        alt={worker.name}
+                        className="h-8 w-8 rounded-full object-cover"
+                      />
+                    </div>
                   </td>
-                  <td className="py-3 px-4 text-sm text-gray-800">{worker.name}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600">{worker.company}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600">{worker.role}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600">{worker.arrivalTime}</td>
+                  <td className="py-3 px-4 text-sm text-gray-800 text-center">{worker.name}</td>
+                  <td className="py-3 px-4 text-sm text-gray-600 text-center">{worker.company}</td>
+                  <td className="py-3 px-4 text-sm text-gray-600 text-center">{worker.role}</td>
+                  <td className="py-3 px-4 text-sm text-gray-600 text-center">{worker.arrivalTime}</td>
                 </tr>
               ))}
             </tbody>

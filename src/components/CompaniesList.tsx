@@ -1,4 +1,3 @@
-
 import { format } from 'date-fns';
 import { Search } from 'lucide-react';
 import { useState } from 'react';
@@ -9,11 +8,13 @@ const companies = [
     id: 1,
     name: "TechMarine",
     entryTime: new Date('2024-03-15T08:30:00'),
+    workersCount: 15,
   },
   {
     id: 2,
     name: "NavalTech",
     entryTime: new Date('2024-03-15T09:15:00'),
+    workersCount: 8,
   },
   // Add more companies as needed
 ];
@@ -26,7 +27,7 @@ export const CompaniesList = () => {
   );
 
   return (
-    <div className="bg-white/80 backdrop-blur-sm rounded-lg border border-gray-200 flex flex-col">
+    <div className="bg-white/80 backdrop-blur-sm rounded-lg border border-gray-200 flex flex-col col-span-1">
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-800">Lista de Empresas</h2>
@@ -47,8 +48,9 @@ export const CompaniesList = () => {
         <table className="w-full">
           <thead>
             <tr>
-              <th className="text-left py-3 text-sm font-medium text-gray-500">Nome da Empresa</th>
-              <th className="text-left py-3 text-sm font-medium text-gray-500">Horário de Entrada</th>
+              <th className="text-center py-3 text-sm font-medium text-gray-500">Nome da Empresa</th>
+              <th className="text-center py-3 text-sm font-medium text-gray-500">Horário de Entrada</th>
+              <th className="text-center py-3 text-sm font-medium text-gray-500">Qtd. Trabalhadores</th>
             </tr>
           </thead>
         </table>
@@ -60,9 +62,12 @@ export const CompaniesList = () => {
             <tbody>
               {filteredCompanies.map((company) => (
                 <tr key={company.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-3 text-sm text-gray-800">{company.name}</td>
-                  <td className="py-3 text-sm text-gray-600">
+                  <td className="py-3 text-sm text-gray-800 text-center">{company.name}</td>
+                  <td className="py-3 text-sm text-gray-600 text-center">
                     {format(company.entryTime, 'HH:mm')}
+                  </td>
+                  <td className="py-3 text-sm text-gray-600 text-center">
+                    {company.workersCount}
                   </td>
                 </tr>
               ))}
