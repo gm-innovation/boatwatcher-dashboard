@@ -1,19 +1,20 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, Plus, Loader2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { ProjectSelector } from "@/components/ProjectSelector";
 import { useProjectById, useProjects } from "@/hooks/useSupabase";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 
 const ProjectSettings = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { loading: authLoading } = useAuth('admin');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const { data: projectInfo } = useProjectById(selectedProjectId);
   const { data: projects = [] } = useProjects();
@@ -128,6 +129,14 @@ const ProjectSettings = () => {
       });
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
