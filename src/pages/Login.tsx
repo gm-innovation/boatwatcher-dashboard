@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { AdminUserAttributes, User } from '@supabase/supabase-js';
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -123,7 +124,7 @@ const Login = () => {
 
       // Verificar se o usuário já existe na autenticação
       const { data: { users }, error: getUserError } = await supabase.auth.admin.listUsers();
-      const adminExists = users?.some(user => user.email === "admin@admin.com");
+      const adminExists = users && Array.isArray(users) && users.some((user: AdminUserAttributes) => user.email === "admin@admin.com");
 
       if (adminExists) {
         // Se o usuário existe na auth mas não tem role, apenas adicionar a role
