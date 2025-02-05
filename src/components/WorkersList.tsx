@@ -36,7 +36,12 @@ export const WorkersList = ({ className = "" }) => {
     <div className={`bg-white/80 backdrop-blur-sm rounded-lg border border-gray-200 flex flex-col ${className}`}>
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-800">Lista de Trabalhadores</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-gray-800">Trabalhadores</h2>
+            <span className="px-2 py-1 bg-gray-100 rounded-md text-sm text-gray-600">
+              {workers.length}
+            </span>
+          </div>
           <div className="relative">
             <Search className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
             <input
