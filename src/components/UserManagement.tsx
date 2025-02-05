@@ -70,12 +70,28 @@ const UserManagement = () => {
     setLoading(true);
 
     try {
+      // Verificar se já existe um usuário admin
+      const { data: existingAdmin } = await supabase
+        .from('user_roles')
+        .select('*')
+        .eq('role', 'admin')
+        .single();
+
+      if (existingAdmin) {
+        toast({
+          title: "Administrador já existe",
+          description: "Já existe um usuário administrador no sistema.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Criar usuário admin inicial
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: "admin@admin.com",
         password: "admin123",
         options: {
-          emailRedirectTo: window.location.origin
+          emailRedirectTo: window.location.origin,
         }
       });
 
@@ -89,9 +105,17 @@ const UserManagement = () => {
 
         if (roleError) throw roleError;
 
+        // Fazer login automaticamente com o usuário admin
+        const { error: loginError } = await supabase.auth.signInWithPassword({
+          email: "admin@admin.com",
+          password: "admin123"
+        });
+
+        if (loginError) throw loginError;
+
         toast({
           title: "Usuário admin criado com sucesso",
-          description: "Email: admin@admin.com, Senha: admin123",
+          description: "Email: admin@admin.com, Senha: admin123. Você será logado automaticamente.",
         });
       }
     } catch (error: any) {
