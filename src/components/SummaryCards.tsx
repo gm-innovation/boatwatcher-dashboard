@@ -8,14 +8,22 @@ const Card = ({ title, value, icon: Icon, color, highlight = false }: {
   color: string;
   highlight?: boolean;
 }) => (
-  <div className={`${highlight ? 'bg-purple-100/80 border-purple-300' : 'bg-white/80 border-gray-200'} backdrop-blur-sm rounded-lg border p-6 hover:shadow-lg transition-shadow duration-200 animate-fade-up`}>
+  <div className={`${
+    highlight 
+      ? 'bg-purple-100/80 dark:bg-purple-900/20 border-purple-300 dark:border-purple-700' 
+      : 'bg-background/80 border-border'
+    } backdrop-blur-sm rounded-lg border p-6 hover:shadow-lg transition-shadow duration-200 animate-fade-up`}>
     <div className="flex flex-col items-center justify-center text-center">
       <div className={`p-3 rounded-full ${color} mb-3`}>
         <Icon className="h-6 w-6 text-white" />
       </div>
       <div>
-        <p className="text-sm text-gray-500 mb-1">{title}</p>
-        <p className={`text-2xl font-semibold ${highlight ? 'text-purple-800' : 'text-gray-800'}`}>{value}</p>
+        <p className="text-sm text-muted-foreground mb-1">{title}</p>
+        <p className={`text-2xl font-semibold ${
+          highlight 
+            ? 'text-purple-800 dark:text-purple-300' 
+            : 'text-foreground'
+          }`}>{value}</p>
       </div>
     </div>
   </div>
