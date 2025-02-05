@@ -20,22 +20,48 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      // Tentar fazer login
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) {
+      if (error) {
+        toast({
+          title: "Erro ao fazer login",
+          description: error.message === "Invalid login credentials"
+            ? "Email ou senha incorretos"
+            : error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (data.user) {
+        // Verificar o role do usuário
+        const { data: roleData } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', data.user.id)
+          .single();
+
+        toast({
+          title: "Login realizado com sucesso",
+          description: `Bem-vindo ${roleData?.role === 'admin' ? 'administrador' : 'usuário'}!`,
+        });
+
+        navigate("/");
+      }
+    } catch (error: any) {
       toast({
         title: "Erro ao fazer login",
         description: error.message,
         variant: "destructive",
       });
+    } finally {
       setLoading(false);
-      return;
     }
-
-    navigate("/");
   };
 
   return (
