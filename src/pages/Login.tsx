@@ -28,6 +28,7 @@ const Login = () => {
       });
 
       if (error) {
+        console.error("Erro no login:", error);
         toast({
           title: "Erro ao fazer login",
           description: error.message === "Invalid login credentials"
@@ -39,13 +40,25 @@ const Login = () => {
       }
 
       if (data.user) {
+        console.log("Login bem sucedido. Verificando role...");
         // Verificar o role do usuário
-        const { data: roleData } = await supabase
+        const { data: roleData, error: roleError } = await supabase
           .from('user_roles')
           .select('role')
           .eq('user_id', data.user.id)
           .single();
 
+        if (roleError) {
+          console.error("Erro ao buscar role:", roleError);
+          toast({
+            title: "Erro ao verificar permissões",
+            description: roleError.message,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        console.log("Role encontrada:", roleData);
         toast({
           title: "Login realizado com sucesso",
           description: `Bem-vindo ${roleData?.role === 'admin' ? 'administrador' : 'usuário'}!`,
@@ -54,6 +67,7 @@ const Login = () => {
         navigate("/");
       }
     } catch (error: any) {
+      console.error("Erro inesperado:", error);
       toast({
         title: "Erro ao fazer login",
         description: error.message,
@@ -69,16 +83,27 @@ const Login = () => {
 
     try {
       // Verificar se já existe um usuário admin
-      const { data: existingAdmin } = await supabase
+      const { data: existingAdmin, error: checkError } = await supabase
         .from('user_roles')
         .select('*')
         .eq('role', 'admin')
         .single();
 
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error("Erro ao verificar admin existente:", checkError);
+        toast({
+          title: "Erro ao verificar admin existente",
+          description: checkError.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
       if (existingAdmin) {
+        console.log("Admin já existe:", existingAdmin);
         toast({
           title: "Administrador já existe",
-          description: "Já existe um usuário administrador no sistema.",
+          description: "Já existe um usuário administrador no sistema. Use email: admin@admin.com e senha: admin123",
           variant: "destructive",
         });
         return;
@@ -93,15 +118,22 @@ const Login = () => {
         }
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        console.error("Erro ao criar usuário:", authError);
+        throw authError;
+      }
 
       if (authData.user) {
+        console.log("Usuário admin criado:", authData.user);
         // Adicionar role admin
         const { error: roleError } = await supabase
           .from('user_roles')
           .insert([{ user_id: authData.user.id, role: 'admin' }]);
 
-        if (roleError) throw roleError;
+        if (roleError) {
+          console.error("Erro ao adicionar role:", roleError);
+          throw roleError;
+        }
 
         // Fazer login automaticamente com o usuário admin
         const { error: loginError } = await supabase.auth.signInWithPassword({
@@ -109,7 +141,10 @@ const Login = () => {
           password: "admin123"
         });
 
-        if (loginError) throw loginError;
+        if (loginError) {
+          console.error("Erro ao fazer login automático:", loginError);
+          throw loginError;
+        }
 
         toast({
           title: "Usuário admin criado com sucesso",
@@ -119,6 +154,7 @@ const Login = () => {
         navigate("/");
       }
     } catch (error: any) {
+      console.error("Erro ao criar usuário admin:", error);
       toast({
         title: "Erro ao criar usuário admin",
         description: error.message,
