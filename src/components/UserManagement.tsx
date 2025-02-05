@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -26,10 +27,12 @@ const UserManagement = () => {
 
     try {
       // Criar usuário no Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
-        email_confirm: true,
+        options: {
+          emailRedirect: window.location.origin
+        }
       });
 
       if (authError) throw authError;
@@ -68,10 +71,12 @@ const UserManagement = () => {
 
     try {
       // Criar usuário admin inicial
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: "admin@admin.com",
         password: "admin123",
-        email_confirm: true,
+        options: {
+          emailRedirect: window.location.origin
+        }
       });
 
       if (authError) throw authError;
@@ -103,7 +108,7 @@ const UserManagement = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-foreground">Gerenciamento de Usuários</h2>
+        <h2 className="text-lg font-semibold text-foreground">Gerenciamento de Usuários</h2>
         <p className="text-sm text-muted-foreground">
           Crie e gerencie os usuários que terão acesso ao sistema.
         </p>
