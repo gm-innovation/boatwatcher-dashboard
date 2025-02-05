@@ -7,10 +7,10 @@ import { CompaniesList } from "@/components/CompaniesList";
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       <Header />
       <main className="flex-1 pt-[72px]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 sticky top-[72px] bg-gray-50 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 sticky top-[72px] bg-background z-10">
           <ProjectInfo />
           <SummaryCards />
         </div>
