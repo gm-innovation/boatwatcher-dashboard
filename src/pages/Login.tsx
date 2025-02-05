@@ -64,6 +64,71 @@ const Login = () => {
     }
   };
 
+  const createInitialAdmin = async () => {
+    setLoading(true);
+
+    try {
+      // Verificar se já existe um usuário admin
+      const { data: existingAdmin } = await supabase
+        .from('user_roles')
+        .select('*')
+        .eq('role', 'admin')
+        .single();
+
+      if (existingAdmin) {
+        toast({
+          title: "Administrador já existe",
+          description: "Já existe um usuário administrador no sistema.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Criar usuário admin inicial
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: "admin@admin.com",
+        password: "admin123",
+        options: {
+          emailRedirectTo: window.location.origin,
+        }
+      });
+
+      if (authError) throw authError;
+
+      if (authData.user) {
+        // Adicionar role admin
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .insert([{ user_id: authData.user.id, role: 'admin' }]);
+
+        if (roleError) throw roleError;
+
+        // Fazer login automaticamente com o usuário admin
+        const { error: loginError } = await supabase.auth.signInWithPassword({
+          email: "admin@admin.com",
+          password: "admin123"
+        });
+
+        if (loginError) throw loginError;
+
+        toast({
+          title: "Usuário admin criado com sucesso",
+          description: "Email: admin@admin.com, Senha: admin123. Você será logado automaticamente.",
+        });
+
+        navigate("/");
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro ao criar usuário admin",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <Card className="w-full max-w-md p-6">
@@ -96,6 +161,21 @@ const Login = () => {
             Entrar
           </Button>
         </form>
+
+        <div className="mt-6 text-center">
+          <p className="text-sm text-muted-foreground mb-2">
+            Primeiro acesso? Crie um usuário administrador:
+          </p>
+          <Button
+            onClick={createInitialAdmin}
+            variant="outline"
+            disabled={loading}
+            className="w-full"
+          >
+            {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Criar Usuário Admin Inicial
+          </Button>
+        </div>
       </Card>
     </div>
   );
