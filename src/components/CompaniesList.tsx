@@ -1,3 +1,4 @@
+
 import { format } from 'date-fns';
 import { Search } from 'lucide-react';
 import { useState } from 'react';
@@ -48,9 +49,9 @@ export const CompaniesList = () => {
         <table className="w-full">
           <thead>
             <tr>
-              <th className="text-center py-3 text-sm font-medium text-gray-500">Nome da Empresa</th>
-              <th className="text-center py-3 text-sm font-medium text-gray-500">Horário de Entrada</th>
-              <th className="text-center py-3 text-sm font-medium text-gray-500">Qtd. Trabalhadores</th>
+              <th className="w-[200px] text-center py-3 text-sm font-medium text-gray-500">Nome da Empresa</th>
+              <th className="w-[150px] text-center py-3 text-sm font-medium text-gray-500">Horário de Entrada</th>
+              <th className="w-[150px] text-center py-3 text-sm font-medium text-gray-500">Qtd. Trabalhadores</th>
             </tr>
           </thead>
         </table>
@@ -62,11 +63,11 @@ export const CompaniesList = () => {
             <tbody>
               {filteredCompanies.map((company) => (
                 <tr key={company.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-3 text-sm text-gray-800 text-center">{company.name}</td>
-                  <td className="py-3 text-sm text-gray-600 text-center">
+                  <td className="w-[200px] py-3 text-sm text-gray-800 text-center">{company.name}</td>
+                  <td className="w-[150px] py-3 text-sm text-gray-600 text-center">
                     {format(company.entryTime, 'HH:mm')}
                   </td>
-                  <td className="py-3 text-sm text-gray-600 text-center">
+                  <td className="w-[150px] py-3 text-sm text-gray-600 text-center">
                     {company.workersCount}
                   </td>
                 </tr>

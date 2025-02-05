@@ -54,11 +54,11 @@ export const WorkersList = ({ className = "" }) => {
         <table className="w-full">
           <thead>
             <tr>
-              <th className="text-center py-3 px-4 text-sm font-medium text-gray-500">Foto</th>
-              <th className="text-center py-3 px-4 text-sm font-medium text-gray-500">Nome</th>
-              <th className="text-center py-3 px-4 text-sm font-medium text-gray-500">Empresa</th>
-              <th className="text-center py-3 px-4 text-sm font-medium text-gray-500">Função</th>
-              <th className="text-center py-3 px-4 text-sm font-medium text-gray-500">Horário de Chegada</th>
+              <th className="w-[100px] text-center py-3 text-sm font-medium text-gray-500">Foto</th>
+              <th className="w-[200px] text-center py-3 text-sm font-medium text-gray-500">Nome</th>
+              <th className="w-[200px] text-center py-3 text-sm font-medium text-gray-500">Empresa</th>
+              <th className="w-[200px] text-center py-3 text-sm font-medium text-gray-500">Função</th>
+              <th className="w-[150px] text-center py-3 text-sm font-medium text-gray-500">Horário de Chegada</th>
             </tr>
           </thead>
         </table>
@@ -70,7 +70,7 @@ export const WorkersList = ({ className = "" }) => {
             <tbody>
               {filteredWorkers.map((worker) => (
                 <tr key={worker.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-3 px-4 text-center">
+                  <td className="w-[100px] py-3 text-center">
                     <div className="flex justify-center">
                       <img
                         src={worker.photo}
@@ -79,10 +79,10 @@ export const WorkersList = ({ className = "" }) => {
                       />
                     </div>
                   </td>
-                  <td className="py-3 px-4 text-sm text-gray-800 text-center">{worker.name}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600 text-center">{worker.company}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600 text-center">{worker.role}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600 text-center">{worker.arrivalTime}</td>
+                  <td className="w-[200px] py-3 text-sm text-gray-800 text-center">{worker.name}</td>
+                  <td className="w-[200px] py-3 text-sm text-gray-600 text-center">{worker.company}</td>
+                  <td className="w-[200px] py-3 text-sm text-gray-600 text-center">{worker.role}</td>
+                  <td className="w-[150px] py-3 text-sm text-gray-600 text-center">{worker.arrivalTime}</td>
                 </tr>
               ))}
             </tbody>
