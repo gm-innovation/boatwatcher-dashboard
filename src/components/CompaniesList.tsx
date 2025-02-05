@@ -49,9 +49,9 @@ export const CompaniesList = () => {
         <table className="w-full">
           <thead>
             <tr>
-              <th className="w-[200px] text-center py-3 text-sm font-medium text-gray-500">Nome da Empresa</th>
-              <th className="w-[150px] text-center py-3 text-sm font-medium text-gray-500">Horário de Entrada</th>
-              <th className="w-[150px] text-center py-3 text-sm font-medium text-gray-500">Qtd. Trabalhadores</th>
+              <th className="w-[200px] text-center py-3 text-sm font-medium text-gray-500">Empresa</th>
+              <th className="w-[150px] text-center py-3 text-sm font-medium text-gray-500">Entrada</th>
+              <th className="w-[150px] text-center py-3 text-sm font-medium text-gray-500">Equipe</th>
             </tr>
           </thead>
         </table>
