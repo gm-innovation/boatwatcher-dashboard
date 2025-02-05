@@ -10,6 +10,7 @@ import { ProjectSelector } from "@/components/ProjectSelector";
 import { useProjectById, useProjects } from "@/hooks/useSupabase";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
+import UserManagement from "@/components/UserManagement";
 
 const ProjectSettings = () => {
   const navigate = useNavigate();
@@ -150,23 +151,25 @@ const ProjectSettings = () => {
           Voltar ao Dashboard
         </Button>
 
-        <div className="bg-card rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h1 className="text-2xl font-semibold text-foreground">Configurações do Projeto</h1>
-            <div className="flex gap-2">
-              <ProjectSelector
-                selectedProjectId={selectedProjectId}
-                onProjectSelect={handleProjectSelect}
-              />
-              <Button onClick={handleNewProject} variant="outline">
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Projeto
-              </Button>
+        <div className="space-y-8">
+          {/* Seção de Projetos */}
+          <div className="bg-card rounded-lg shadow-sm p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h1 className="text-2xl font-semibold text-foreground">Configurações do Projeto</h1>
+              <div className="flex gap-2">
+                <ProjectSelector
+                  selectedProjectId={selectedProjectId}
+                  onProjectSelect={handleProjectSelect}
+                />
+                <Button onClick={handleNewProject} variant="outline">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Novo Projeto
+                </Button>
+              </div>
             </div>
-          </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Company Logo Section */}
               <div className="space-y-4">
                 <h2 className="text-lg font-medium text-foreground">Logos da Empresa</h2>
@@ -320,6 +323,12 @@ const ProjectSettings = () => {
               </Button>
             </div>
           </form>
+        </div>
+
+          {/* Seção de Gerenciamento de Usuários */}
+          <div className="bg-card rounded-lg shadow-sm p-6">
+            <UserManagement />
+          </div>
         </div>
       </div>
     </div>
