@@ -39,14 +39,14 @@ export const ProjectInfo = () => {
         <div className="flex items-center space-x-2">
           <User className="h-4 w-4 text-gray-500" />
           <div>
-            <p className="text-xs text-gray-500">Engenheiro</p>
+            <p className="text-xs text-gray-500">Responsável</p>
             <p className="text-sm font-medium text-gray-800">{projectInfo.engineer}</p>
           </div>
         </div>
         <div className="flex items-center space-x-2">
           <Building2 className="h-4 w-4 text-gray-500" />
           <div>
-            <p className="text-xs text-gray-500">Empresa</p>
+            <p className="text-xs text-gray-500">Armador</p>
             <p className="text-sm font-medium text-gray-800">{projectInfo.company}</p>
           </div>
         </div>

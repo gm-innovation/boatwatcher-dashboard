@@ -26,8 +26,6 @@ const ProjectSettings = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Here we would typically save to a backend
-    // For now, we'll just show a success message
     toast({
       title: "Configurações atualizadas",
       description: "As informações do projeto foram atualizadas com sucesso.",
@@ -117,7 +115,7 @@ const ProjectSettings = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="engineer">Engenheiro Responsável</Label>
+                  <Label htmlFor="engineer">Responsável</Label>
                   <Input
                     id="engineer"
                     name="engineer"
@@ -128,7 +126,7 @@ const ProjectSettings = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="company">Empresa da Embarcação</Label>
+                  <Label htmlFor="company">Armador</Label>
                   <Input
                     id="company"
                     name="company"
