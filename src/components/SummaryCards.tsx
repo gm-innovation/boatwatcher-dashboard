@@ -1,5 +1,5 @@
 
-import { Users, Buildings } from 'lucide-react';
+import { Users, Building } from 'lucide-react';
 
 const Card = ({ title, value, icon: Icon, color }: { 
   title: string;
@@ -32,7 +32,7 @@ export const SummaryCards = () => {
       <Card
         title="Total de Empresas"
         value={8}
-        icon={Buildings}
+        icon={Building}
         color="bg-emerald-500"
       />
     </div>
