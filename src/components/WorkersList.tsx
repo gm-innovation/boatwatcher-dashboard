@@ -1,6 +1,7 @@
 
 import { Search } from 'lucide-react';
 import { useState } from 'react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const workers = [
   {
@@ -46,36 +47,38 @@ export const WorkersList = () => {
           />
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-gray-200">
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Foto</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Nome</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Empresa</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Função</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Horário de Chegada</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredWorkers.map((worker) => (
-              <tr key={worker.id} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="py-3 px-4">
-                  <img
-                    src={worker.photo}
-                    alt={worker.name}
-                    className="h-8 w-8 rounded-full object-cover"
-                  />
-                </td>
-                <td className="py-3 px-4 text-sm text-gray-800">{worker.name}</td>
-                <td className="py-3 px-4 text-sm text-gray-600">{worker.company}</td>
-                <td className="py-3 px-4 text-sm text-gray-600">{worker.role}</td>
-                <td className="py-3 px-4 text-sm text-gray-600">{worker.arrivalTime}</td>
+      <ScrollArea className="h-[400px]">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Foto</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Nome</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Empresa</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Função</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Horário de Chegada</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filteredWorkers.map((worker) => (
+                <tr key={worker.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-3 px-4">
+                    <img
+                      src={worker.photo}
+                      alt={worker.name}
+                      className="h-8 w-8 rounded-full object-cover"
+                    />
+                  </td>
+                  <td className="py-3 px-4 text-sm text-gray-800">{worker.name}</td>
+                  <td className="py-3 px-4 text-sm text-gray-600">{worker.company}</td>
+                  <td className="py-3 px-4 text-sm text-gray-600">{worker.role}</td>
+                  <td className="py-3 px-4 text-sm text-gray-600">{worker.arrivalTime}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </ScrollArea>
     </div>
   );
 };
