@@ -3,25 +3,11 @@ import { format } from 'date-fns';
 import { Search } from 'lucide-react';
 import { useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-
-const companies = [
-  {
-    id: 1,
-    name: "TechMarine",
-    entryTime: new Date('2024-03-15T08:30:00'),
-    workersCount: 15,
-  },
-  {
-    id: 2,
-    name: "NavalTech",
-    entryTime: new Date('2024-03-15T09:15:00'),
-    workersCount: 8,
-  },
-  // Add more companies as needed
-];
+import { useCompanies } from '@/hooks/useSupabase';
 
 export const CompaniesList = () => {
   const [searchTerm, setSearchTerm] = useState('');
+  const { data: companies = [], isLoading } = useCompanies();
 
   const filteredCompanies = companies.filter(company =>
     company.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -64,21 +50,27 @@ export const CompaniesList = () => {
 
       <ScrollArea className="flex-1 h-[400px]">
         <div className="px-6">
-          <table className="w-full">
-            <tbody>
-              {filteredCompanies.map((company) => (
-                <tr key={company.id} className="border-b border-border hover:bg-muted/50">
-                  <td className="w-[200px] py-3 text-sm text-foreground text-center">{company.name}</td>
-                  <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">
-                    {format(company.entryTime, 'HH:mm')}
-                  </td>
-                  <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">
-                    {company.workersCount}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {isLoading ? (
+            <div className="flex justify-center items-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : (
+            <table className="w-full">
+              <tbody>
+                {filteredCompanies.map((company) => (
+                  <tr key={company.id} className="border-b border-border hover:bg-muted/50">
+                    <td className="w-[200px] py-3 text-sm text-foreground text-center">{company.name}</td>
+                    <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">
+                      {format(new Date(company.entry_time), 'HH:mm')}
+                    </td>
+                    <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">
+                      {company.workers_count}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </ScrollArea>
     </div>

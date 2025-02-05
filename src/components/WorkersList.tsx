@@ -2,34 +2,15 @@
 import { Search } from 'lucide-react';
 import { useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-
-const workers = [
-  {
-    id: 1,
-    name: "João Silva",
-    company: "TechMarine",
-    role: "Engenheiro Mecânico",
-    arrivalTime: "08:30",
-    photo: "https://i.pravatar.cc/150?img=1"
-  },
-  {
-    id: 2,
-    name: "Maria Santos",
-    company: "NavalTech",
-    role: "Técnica de Segurança",
-    arrivalTime: "09:15",
-    photo: "https://i.pravatar.cc/150?img=2"
-  },
-  // Add more workers as needed
-];
+import { useWorkers } from '@/hooks/useSupabase';
+import { format } from 'date-fns';
 
 export const WorkersList = ({ className = "" }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const { data: workers = [], isLoading } = useWorkers();
 
   const filteredWorkers = workers.filter(worker =>
-    worker.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    worker.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    worker.role.toLowerCase().includes(searchTerm.toLowerCase())
+    worker.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -71,27 +52,35 @@ export const WorkersList = ({ className = "" }) => {
 
       <ScrollArea className="flex-1 h-[400px]">
         <div className="px-6">
-          <table className="w-full">
-            <tbody>
-              {filteredWorkers.map((worker) => (
-                <tr key={worker.id} className="border-b border-border hover:bg-muted/50">
-                  <td className="w-[100px] py-3 text-center">
-                    <div className="flex justify-center">
-                      <img
-                        src={worker.photo}
-                        alt={worker.name}
-                        className="h-8 w-8 rounded-full object-cover"
-                      />
-                    </div>
-                  </td>
-                  <td className="w-[200px] py-3 text-sm text-foreground text-center">{worker.name}</td>
-                  <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.company}</td>
-                  <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.role}</td>
-                  <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">{worker.arrivalTime}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {isLoading ? (
+            <div className="flex justify-center items-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : (
+            <table className="w-full">
+              <tbody>
+                {filteredWorkers.map((worker) => (
+                  <tr key={worker.id} className="border-b border-border hover:bg-muted/50">
+                    <td className="w-[100px] py-3 text-center">
+                      <div className="flex justify-center">
+                        <img
+                          src={worker.photo_url}
+                          alt={worker.name}
+                          className="h-8 w-8 rounded-full object-cover"
+                        />
+                      </div>
+                    </td>
+                    <td className="w-[200px] py-3 text-sm text-foreground text-center">{worker.name}</td>
+                    <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.role}</td>
+                    <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.role}</td>
+                    <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">
+                      {format(new Date(worker.arrival_time), 'HH:mm')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </ScrollArea>
     </div>
