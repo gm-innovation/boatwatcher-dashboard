@@ -121,7 +121,40 @@ const Login = () => {
         return;
       }
 
-      console.log("Criando usuário admin...");
+      // Verificar se o usuário já existe na autenticação
+      const { data: { users }, error: getUserError } = await supabase.auth.admin.listUsers();
+      const adminExists = users?.some(user => user.email === "admin@admin.com");
+
+      if (adminExists) {
+        // Se o usuário existe na auth mas não tem role, apenas adicionar a role
+        const { data: { user } } = await supabase.auth.signInWithPassword({
+          email: "admin@admin.com",
+          password: "admin123"
+        });
+
+        if (user) {
+          console.log("Usuário admin encontrado, adicionando role...");
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .insert([{ user_id: user.id, role: 'admin' }]);
+
+          if (roleError) {
+            console.error("Erro ao adicionar role:", roleError);
+            throw roleError;
+          }
+
+          console.log("Role admin adicionada com sucesso");
+          toast({
+            title: "Usuário admin configurado com sucesso",
+            description: "Email: admin@admin.com, Senha: admin123",
+          });
+
+          navigate("/");
+          return;
+        }
+      }
+
+      console.log("Criando novo usuário admin...");
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: "admin@admin.com",
         password: "admin123",
