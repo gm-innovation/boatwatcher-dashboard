@@ -33,17 +33,37 @@ export const useWorkers = () => {
   });
 };
 
-export const useProject = () => {
+export const useProjects = () => {
   return useQuery({
-    queryKey: ['project'],
+    queryKey: ['projects'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('projects')
         .select('*')
+        .order('vessel_name');
+      
+      if (error) throw error;
+      return data as Project[];
+    }
+  });
+};
+
+export const useProjectById = (projectId: string | null) => {
+  return useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
         .single();
       
       if (error) throw error;
       return data as Project;
-    }
+    },
+    enabled: !!projectId
   });
 };
+

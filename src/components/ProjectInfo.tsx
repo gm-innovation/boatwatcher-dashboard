@@ -1,9 +1,13 @@
 
 import { Ship, Calendar, User, Building2, Anchor } from 'lucide-react';
-import { useProject } from '@/hooks/useSupabase';
+import { useProjectById } from '@/hooks/useSupabase';
 
-export const ProjectInfo = () => {
-  const { data: projectInfo, isLoading } = useProject();
+interface ProjectInfoProps {
+  projectId: string | null;
+}
+
+export const ProjectInfo = ({ projectId }: ProjectInfoProps) => {
+  const { data: projectInfo, isLoading } = useProjectById(projectId);
 
   if (isLoading) {
     return (
@@ -24,7 +28,15 @@ export const ProjectInfo = () => {
     );
   }
 
-  if (!projectInfo) return null;
+  if (!projectInfo) {
+    return (
+      <div className="bg-card/80 backdrop-blur-sm rounded-lg border border-border p-4 mb-6">
+        <p className="text-center text-muted-foreground">
+          Selecione um projeto para ver suas informações
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-card/80 backdrop-blur-sm rounded-lg border border-border p-4 mb-6 animate-fade-up">
@@ -76,3 +88,4 @@ export const ProjectInfo = () => {
     </div>
   );
 };
+
