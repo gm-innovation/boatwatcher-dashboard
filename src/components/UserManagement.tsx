@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -13,13 +13,46 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { Project } from "@/types/supabase";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const UserManagement = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("user");
   const [loading, setLoading] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const { toast } = useToast();
+
+  // Buscar projetos disponíveis
+  useEffect(() => {
+    const fetchProjects = async () => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('vessel_name');
+      
+      if (error) {
+        console.error('Erro ao buscar projetos:', error);
+        return;
+      }
+
+      setProjects(data || []);
+    };
+
+    fetchProjects();
+  }, []);
+
+  const handleToggleProject = (projectId: string) => {
+    setSelectedProjects(prev => {
+      if (prev.includes(projectId)) {
+        return prev.filter(id => id !== projectId);
+      } else {
+        return [...prev, projectId];
+      }
+    });
+  };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,15 +78,30 @@ const UserManagement = () => {
 
         if (roleError) throw roleError;
 
+        // Vincular usuário aos projetos selecionados
+        if (selectedProjects.length > 0) {
+          const projectAssignments = selectedProjects.map(projectId => ({
+            user_id: authData.user.id,
+            project_id: projectId
+          }));
+
+          const { error: projectError } = await supabase
+            .from('user_projects')
+            .insert(projectAssignments);
+
+          if (projectError) throw projectError;
+        }
+
         toast({
           title: "Usuário criado com sucesso",
-          description: `O usuário ${email} foi criado com a role ${role}.`,
+          description: `O usuário ${email} foi criado com a role ${role} e vinculado a ${selectedProjects.length} projeto(s).`,
         });
 
         // Limpar formulário
         setEmail("");
         setPassword("");
         setRole("user");
+        setSelectedProjects([]);
       }
     } catch (error: any) {
       toast({
@@ -182,6 +230,24 @@ const UserManagement = () => {
               <SelectItem value="admin">Administrador</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Projetos</Label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border rounded-lg p-4">
+            {projects.map(project => (
+              <div key={project.id} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`project-${project.id}`}
+                  checked={selectedProjects.includes(project.id)}
+                  onCheckedChange={() => handleToggleProject(project.id)}
+                />
+                <Label htmlFor={`project-${project.id}`} className="cursor-pointer">
+                  {project.vessel_name || 'Projeto sem nome'}
+                </Label>
+              </div>
+            ))}
+          </div>
         </div>
 
         <Button type="submit" disabled={loading}>
