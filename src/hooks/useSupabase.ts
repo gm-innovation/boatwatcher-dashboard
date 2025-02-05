@@ -1,4 +1,3 @@
-
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { Company, Worker, Project } from '@/types/supabase';
@@ -67,3 +66,21 @@ export const useProjectById = (projectId: string | null) => {
   });
 };
 
+export const useCompanyLogo = (companyId: string | null) => {
+  return useQuery({
+    queryKey: ['company-logo', companyId],
+    queryFn: async () => {
+      if (!companyId) return null;
+      
+      const { data, error } = await supabase
+        .from('companies')
+        .select('logo_url')
+        .eq('id', companyId)
+        .single();
+      
+      if (error) throw error;
+      return data?.logo_url;
+    },
+    enabled: !!companyId
+  });
+};

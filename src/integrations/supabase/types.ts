@@ -14,6 +14,7 @@ export type Database = {
           created_at: string | null
           entry_time: string | null
           id: string
+          logo_url: string | null
           name: string
           workers_count: number | null
         }
@@ -21,6 +22,7 @@ export type Database = {
           created_at?: string | null
           entry_time?: string | null
           id?: string
+          logo_url?: string | null
           name: string
           workers_count?: number | null
         }
@@ -28,6 +30,7 @@ export type Database = {
           created_at?: string | null
           entry_time?: string | null
           id?: string
+          logo_url?: string | null
           name?: string
           workers_count?: number | null
         }
@@ -36,6 +39,7 @@ export type Database = {
       projects: {
         Row: {
           captain: string | null
+          client_id: string | null
           company: string | null
           created_at: string | null
           engineer: string | null
@@ -46,6 +50,7 @@ export type Database = {
         }
         Insert: {
           captain?: string | null
+          client_id?: string | null
           company?: string | null
           created_at?: string | null
           engineer?: string | null
@@ -56,6 +61,7 @@ export type Database = {
         }
         Update: {
           captain?: string | null
+          client_id?: string | null
           company?: string | null
           created_at?: string | null
           engineer?: string | null
@@ -64,7 +70,15 @@ export type Database = {
           start_date?: string | null
           vessel_name?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "projects_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_projects: {
         Row: {
