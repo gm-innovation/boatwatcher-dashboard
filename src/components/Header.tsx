@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
-import { useTheme } from 'next-themes';
+import { useTheme } from '@/components/theme-provider';
 
 export const Header = () => {
   const navigate = useNavigate();
@@ -74,3 +74,4 @@ export const Header = () => {
     </header>
   );
 };
+
