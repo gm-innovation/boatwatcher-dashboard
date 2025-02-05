@@ -8,6 +8,7 @@ import UserManagement from "@/components/UserManagement";
 import { ProjectSelector } from "@/components/ProjectSelector";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -22,45 +23,19 @@ const ProjectSettings = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
-  const { data: companies = [] } = useCompanies();
+  const [companyName, setCompanyName] = useState("");
+  const [projectManagers, setProjectManagers] = useState("");
+  const [vessels, setVessels] = useState("");
 
   const handleLogoUpload = (themeMode: string) => async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      const reader = new FileReader();
-      
-      reader.onloadend = () => {
-        const logoKey = `company_${themeMode}`;
-        localStorage.setItem(logoKey, reader.result as string);
-        toast({
-          title: "Logo atualizada",
-          description: `A logo foi atualizada com sucesso para o modo ${themeMode === 'light' ? 'claro' : 'escuro'}.`,
-        });
-      };
-      
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleClientLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!selectedClientId) {
-      toast({
-        title: "Erro",
-        description: "Selecione um cliente primeiro",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
       const fileExt = file.name.split('.').pop();
-      const filePath = `${selectedClientId}.${fileExt}`;
+      const fileName = `${crypto.randomUUID()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from('client-logos')
-        .upload(filePath, file, { upsert: true });
+        .upload(fileName, file, { upsert: true });
 
       if (uploadError) {
         toast({
@@ -73,27 +48,45 @@ const ProjectSettings = () => {
 
       const { data: { publicUrl } } = supabase.storage
         .from('client-logos')
-        .getPublicUrl(filePath);
-
-      const { error: updateError } = await supabase
-        .from('companies')
-        .update({ logo_url: publicUrl })
-        .eq('id', selectedClientId);
-
-      if (updateError) {
-        toast({
-          title: "Erro ao atualizar logo do cliente",
-          description: updateError.message,
-          variant: "destructive",
-        });
-        return;
-      }
+        .getPublicUrl(fileName);
 
       toast({
         title: "Logo atualizada",
-        description: "A logo do cliente foi atualizada com sucesso.",
+        description: `A logo foi atualizada com sucesso para o modo ${themeMode === 'light' ? 'claro' : 'escuro'}.`,
       });
+
+      localStorage.setItem(`company_${themeMode}`, publicUrl);
     }
+  };
+
+  const handleCompanySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const { error } = await supabase
+      .from('companies')
+      .insert({
+        name: companyName,
+        logo_url: localStorage.getItem('company_light'),
+      });
+
+    if (error) {
+      toast({
+        title: "Erro ao cadastrar empresa",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Empresa cadastrada",
+      description: "A empresa foi cadastrada com sucesso.",
+    });
+
+    // Reset form
+    setCompanyName("");
+    setProjectManagers("");
+    setVessels("");
   };
 
   return (
@@ -131,35 +124,88 @@ const ProjectSettings = () => {
           <TabsContent value="company" className="space-y-6">
             <div className="border rounded-lg p-6">
               <h2 className="text-xl font-semibold mb-6">Cadastro de Empresa</h2>
-              <div className="space-y-6">
+              <form onSubmit={handleCompanySubmit} className="space-y-6">
                 <div>
-                  <Label>Cliente</Label>
-                  <Select value={selectedClientId || undefined} onValueChange={setSelectedClientId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {companies.map((company) => (
-                        <SelectItem key={company.id} value={company.id}>
-                          {company.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Logo (Modo Claro)</Label>
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload('light')}
+                    className="mt-2"
+                  />
+                  <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-white mt-2">
+                    {localStorage.getItem('company_light') ? (
+                      <img
+                        src={localStorage.getItem('company_light') || ''}
+                        alt="Logo Modo Claro"
+                        className="max-h-24 max-w-full object-contain"
+                      />
+                    ) : (
+                      <p className="text-muted-foreground">Nenhuma logo definida</p>
+                    )}
+                  </div>
                 </div>
 
-                {selectedClientId && (
-                  <div>
-                    <Label>Logo do Cliente</Label>
-                    <Input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleClientLogoUpload}
-                      className="mt-2"
-                    />
+                <div>
+                  <Label>Logo (Modo Escuro)</Label>
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload('dark')}
+                    className="mt-2"
+                  />
+                  <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-zinc-900 mt-2">
+                    {localStorage.getItem('company_dark') ? (
+                      <img
+                        src={localStorage.getItem('company_dark') || ''}
+                        alt="Logo Modo Escuro"
+                        className="max-h-24 max-w-full object-contain"
+                      />
+                    ) : (
+                      <p className="text-muted-foreground">Nenhuma logo definida</p>
+                    )}
                   </div>
-                )}
-              </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="companyName">Nome da Empresa (Armador)</Label>
+                  <Input
+                    id="companyName"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    className="mt-2"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="projectManagers">Gerentes de Projeto (Responsáveis)</Label>
+                  <Textarea
+                    id="projectManagers"
+                    value={projectManagers}
+                    onChange={(e) => setProjectManagers(e.target.value)}
+                    className="mt-2"
+                    placeholder="Digite os nomes dos gerentes de projeto, um por linha"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="vessels">Embarcações</Label>
+                  <Textarea
+                    id="vessels"
+                    value={vessels}
+                    onChange={(e) => setVessels(e.target.value)}
+                    className="mt-2"
+                    placeholder="Digite os nomes das embarcações, uma por linha"
+                    required
+                  />
+                </div>
+
+                <Button type="submit">
+                  Cadastrar Empresa
+                </Button>
+              </form>
             </div>
           </TabsContent>
 
