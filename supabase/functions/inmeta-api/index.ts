@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 
-const API_BASE_URL = 'https://api.homologacao.inmeta.com.br'
+const API_BASE_URL = 'https://api.homologacao.inmeta.com.br/api'
 
 interface InmetaCredentials {
   email: string
@@ -28,7 +28,7 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
   console.log('Getting token with email:', credentials.email);
   
   try {
-    const response = await fetch(`${API_BASE_URL}/api/v1/token`, {
+    const response = await fetch(`${API_BASE_URL}/v1/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -56,10 +56,11 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
 async function getAccessEvents(token: string, startDate: string, endDate: string): Promise<AccessEvent[]> {
   console.log(`Fetching access events for date range: ${startDate} to ${endDate}`);
   
-  const formattedStartDate = new Date(startDate).toISOString().split('T')[0];
-  const formattedEndDate = new Date(endDate).toISOString().split('T')[0];
+  // Format dates according to API requirements (YYYY-MM-DDThh:mm:ss)
+  const formattedStartDate = `${new Date(startDate).toISOString().split('.')[0]}`;
+  const formattedEndDate = `${new Date(endDate).toISOString().split('T')[0]}T23:59:00`;
   
-  const url = `${API_BASE_URL}/acesso/eventos`;
+  const url = `${API_BASE_URL}/v1/eventos-acesso`;
   const requestBody = {
     dataInicial: formattedStartDate,
     dataFinal: formattedEndDate
