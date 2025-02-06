@@ -1,20 +1,38 @@
+
 import { useCompanies } from '@/hooks/useSupabase';
 import { useInmetaEvents } from '@/hooks/useInmetaApi';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { format } from 'date-fns';
 
 export const CompaniesList = () => {
   const { data: companies = [] } = useCompanies();
   const { data: inmetaEvents = [] } = useInmetaEvents();
 
-  // Get unique companies from Inmeta events
-  const inmetaCompanies = new Set(
-    inmetaEvents
-      .map(event => event.vinculoColaborador?.empresa)
-      .filter(Boolean)
-  );
+  // Get unique companies and their data from Inmeta events
+  const companiesData = inmetaEvents.reduce((acc, event) => {
+    const company = event.vinculoColaborador?.empresa;
+    if (!company) return acc;
 
-  // Convert Set to array and sort alphabetically
-  const companiesOnBoard = Array.from(inmetaCompanies).sort();
+    if (!acc[company]) {
+      acc[company] = {
+        name: company,
+        entryTime: new Date(event.data),
+        workersCount: 1,
+      };
+    } else {
+      // Update entry time if this event is earlier
+      if (new Date(event.data) < acc[company].entryTime) {
+        acc[company].entryTime = new Date(event.data);
+      }
+      acc[company].workersCount++;
+    }
+    return acc;
+  }, {} as Record<string, { name: string; entryTime: Date; workersCount: number }>);
+
+  // Convert to array and sort alphabetically by company name
+  const companiesOnBoard = Object.values(companiesData).sort((a, b) => 
+    a.name.localeCompare(b.name)
+  );
 
   return (
     <div className="bg-card/80 backdrop-blur-sm rounded-lg border border-border">
@@ -35,17 +53,25 @@ export const CompaniesList = () => {
             <thead>
               <tr>
                 <th className="text-left py-3 text-sm font-medium text-muted-foreground">Nome</th>
+                <th className="text-center py-3 text-sm font-medium text-muted-foreground">Entrada</th>
+                <th className="text-center py-3 text-sm font-medium text-muted-foreground">Equipe</th>
               </tr>
             </thead>
             <tbody>
               {companiesOnBoard.map((company, index) => (
                 <tr key={index} className="border-b border-border hover:bg-muted/50">
-                  <td className="py-3 text-sm text-foreground">{company}</td>
+                  <td className="py-3 text-sm text-foreground">{company.name}</td>
+                  <td className="py-3 text-sm text-muted-foreground text-center">
+                    {format(company.entryTime, 'HH:mm')}
+                  </td>
+                  <td className="py-3 text-sm text-muted-foreground text-center">
+                    {company.workersCount}
+                  </td>
                 </tr>
               ))}
               {companiesOnBoard.length === 0 && (
                 <tr>
-                  <td className="py-3 text-sm text-muted-foreground text-center">
+                  <td colSpan={3} className="py-3 text-sm text-muted-foreground text-center">
                     Nenhuma empresa a bordo
                   </td>
                 </tr>
