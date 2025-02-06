@@ -1,66 +1,59 @@
-import { Search } from 'lucide-react';
-import { useState } from 'react';
 import { useCompanies } from '@/hooks/useSupabase';
-import { CompaniesTable } from './companies/CompaniesTable';
-import { EditCompanyDialog } from './companies/EditCompanyDialog';
+import { useInmetaEvents } from '@/hooks/useInmetaApi';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export const CompaniesList = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const { data: companies = [], isLoading, refetch } = useCompanies();
-  const [selectedCompany, setSelectedCompany] = useState<any>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { data: companies = [] } = useCompanies();
+  const { data: inmetaEvents = [] } = useInmetaEvents();
 
-  const filteredCompanies = companies.filter(company =>
-    company.name.toLowerCase().includes(searchTerm.toLowerCase())
+  // Get unique companies from Inmeta events
+  const inmetaCompanies = new Set(
+    inmetaEvents
+      .map(event => event.vinculoColaborador?.empresa)
+      .filter(Boolean)
   );
 
-  const handleEditCompany = (company: any) => {
-    setSelectedCompany(company);
-    setIsDialogOpen(true);
-  };
+  // Convert Set to array and sort alphabetically
+  const companiesOnBoard = Array.from(inmetaCompanies).sort();
 
   return (
-    <div className="bg-card/80 backdrop-blur-sm rounded-lg border border-border flex flex-col col-span-1">
+    <div className="bg-card/80 backdrop-blur-sm rounded-lg border border-border">
       <div className="p-6 border-b border-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-foreground">Empresas</h2>
+            <h2 className="text-lg font-semibold text-foreground">Empresas a Bordo</h2>
             <span className="px-2 py-1 bg-muted rounded-md text-sm text-muted-foreground">
-              {companies.length}
+              {companiesOnBoard.length}
             </span>
-          </div>
-          <div className="relative">
-            <Search className="h-5 w-5 text-muted-foreground absolute left-3 top-1/2 transform -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Pesquisar..."
-              className="pl-10 pr-4 py-2 border border-input rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
           </div>
         </div>
       </div>
-      
-      {isLoading ? (
-        <div className="flex justify-center items-center h-32">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      ) : (
-        <CompaniesTable 
-          companies={filteredCompanies} 
-          onEditCompany={handleEditCompany} 
-        />
-      )}
 
-      {selectedCompany && (
-        <EditCompanyDialog
-          isOpen={isDialogOpen}
-          onClose={() => setIsDialogOpen(false)}
-          company={selectedCompany}
-          onSave={refetch}
-        />
-      )}
+      <ScrollArea className="h-[400px]">
+        <div className="p-6">
+          <table className="w-full">
+            <thead>
+              <tr>
+                <th className="text-left py-3 text-sm font-medium text-muted-foreground">Nome</th>
+              </tr>
+            </thead>
+            <tbody>
+              {companiesOnBoard.map((company, index) => (
+                <tr key={index} className="border-b border-border hover:bg-muted/50">
+                  <td className="py-3 text-sm text-foreground">{company}</td>
+                </tr>
+              ))}
+              {companiesOnBoard.length === 0 && (
+                <tr>
+                  <td className="py-3 text-sm text-muted-foreground text-center">
+                    Nenhuma empresa a bordo
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </ScrollArea>
     </div>
   );
 };
