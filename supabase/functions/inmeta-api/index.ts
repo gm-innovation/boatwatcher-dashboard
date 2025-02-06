@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 
 // Remove /api from base URL since it's included in the endpoints
-const API_BASE_URL = 'https://api.homologacao.inmeta.com.br'
+const API_BASE_URL = 'https://api.homologacao.inmeta.com.br/api/v1'
 
 interface InmetaCredentials {
   email: string
@@ -13,19 +13,21 @@ interface InmetaCredentials {
 interface AccessEvent {
   tipo: string
   data: string
-  alvo: object
+  alvo: string
   agente: string
   cpfPessoa: string
   tipoPessoa: string
   nomePessoa: string
   cargoPessoa: string
   observacoes: string
-  vinculoColaborador: object
+  vinculoColaborador: {
+    empresa: string
+  }
 }
 
 async function getToken(credentials: InmetaCredentials): Promise<string> {
   console.log('Getting token...');
-  const response = await fetch(`${API_BASE_URL}/api/v1/token`, {
+  const response = await fetch(`${API_BASE_URL}/token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -52,7 +54,7 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   const formattedStartDate = new Date(startDate).toISOString().split('T')[0];
   const formattedEndDate = new Date(endDate).toISOString().split('T')[0];
   
-  const url = `${API_BASE_URL}/api/v1/eventos-acesso`;
+  const url = `${API_BASE_URL}/eventos-acesso`;
   const body = {
     dataInicial: formattedStartDate,
     dataFinal: formattedEndDate
@@ -75,7 +77,7 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
     console.error('Access events request failed:', response.status, response.statusText);
     const text = await response.text();
     console.error('Response body:', text);
-    throw new Error(`Failed to get access events: ${response.statusText} (${response.status})`);
+    throw new Error(`Failed to get access events: ${response.statusText} (${response.status}). Response: ${text}`);
   }
 
   const data = await response.json()
