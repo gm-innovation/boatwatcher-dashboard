@@ -59,7 +59,7 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   const formattedStartDate = new Date(startDate).toISOString().split('T')[0];
   const formattedEndDate = new Date(endDate).toISOString().split('T')[0];
   
-  const url = `${API_BASE_URL}/api/v1/eventos-acesso/consultar`;
+  const url = `${API_BASE_URL}/acesso/eventos`;
   const requestBody = {
     dataInicial: formattedStartDate,
     dataFinal: formattedEndDate
@@ -156,4 +156,3 @@ serve(async (req) => {
     );
   }
 });
-
