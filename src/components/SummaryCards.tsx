@@ -1,5 +1,5 @@
-
 import { Users, Building, Anchor } from 'lucide-react';
+import { useProjectById } from '@/hooks/useSupabase';
 
 const Card = ({ title, value, icon: Icon, color, highlight = false }: { 
   title: string;
@@ -29,11 +29,18 @@ const Card = ({ title, value, icon: Icon, color, highlight = false }: {
   </div>
 );
 
-export const SummaryCards = () => {
-  // Mock data - In a real application, these would come from your data source
-  const crewCount = 15;
-  const workersCount = 42;
+interface SummaryCardsProps {
+  projectId: string | null;
+}
+
+export const SummaryCards = ({ projectId }: SummaryCardsProps) => {
+  const { data: projectInfo } = useProjectById(projectId);
+
+  // Use project data if available, otherwise fallback to default values
+  const crewCount = projectInfo?.crew_count || 0;
+  const workersCount = 42; // This seems to be a mock value, keep it for now
   const totalCount = crewCount + workersCount;
+  const companiesCount = 8; // This seems to be a mock value, keep it for now
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -52,11 +59,10 @@ export const SummaryCards = () => {
       />
       <Card
         title="Total de Empresas"
-        value={8}
+        value={companiesCount}
         icon={Building}
         color="bg-emerald-500"
       />
     </div>
   );
 };
-

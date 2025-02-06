@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Header } from "@/components/Header";
 import { ProjectInfo } from "@/components/ProjectInfo";
@@ -22,7 +21,7 @@ const Index = () => {
             />
           </div>
           <ProjectInfo projectId={selectedProjectId} />
-          <SummaryCards />
+          <SummaryCards projectId={selectedProjectId} />
         </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-3 gap-6">
@@ -36,4 +35,3 @@ const Index = () => {
 };
 
 export default Index;
-
