@@ -2,7 +2,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 
-const API_BASE_URL = 'https://api.homologacao.inmeta.com.br/api'
+// Remove /api from base URL since it's included in the endpoints
+const API_BASE_URL = 'https://api.homologacao.inmeta.com.br'
 
 interface InmetaCredentials {
   email: string
@@ -24,7 +25,7 @@ interface AccessEvent {
 
 async function getToken(credentials: InmetaCredentials): Promise<string> {
   console.log('Getting token...');
-  const response = await fetch(`${API_BASE_URL}/v1/token`, {
+  const response = await fetch(`${API_BASE_URL}/api/v1/token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -51,7 +52,7 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   const formattedStartDate = new Date(startDate).toISOString().split('T')[0];
   const formattedEndDate = new Date(endDate).toISOString().split('T')[0];
   
-  const url = `${API_BASE_URL}/v1/eventos-acesso`;
+  const url = `${API_BASE_URL}/api/v1/eventos-acesso`;
   const body = {
     dataInicial: formattedStartDate,
     dataFinal: formattedEndDate
