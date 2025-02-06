@@ -2,7 +2,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 
-const API_BASE_URL = 'https://api.homologacao.inmeta.com.br/api'
+// Remove /api since it's already in the domain
+const API_BASE_URL = 'https://api.homologacao.inmeta.com.br'
 
 interface InmetaCredentials {
   email: string
@@ -28,7 +29,7 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
   console.log('Getting token with email:', credentials.email);
   
   try {
-    const response = await fetch(`${API_BASE_URL}/v1/token`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -60,7 +61,7 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   const formattedStartDate = `${startDate}T00:00:00`;
   const formattedEndDate = `${endDate}T23:59:00`;
   
-  const url = `${API_BASE_URL}/v1/eventos-acesso`;
+  const url = `${API_BASE_URL}/api/v1/eventos-acesso`;
   const requestBody = {
     dataInicial: formattedStartDate,
     dataFinal: formattedEndDate
@@ -157,3 +158,4 @@ serve(async (req) => {
     );
   }
 });
+
