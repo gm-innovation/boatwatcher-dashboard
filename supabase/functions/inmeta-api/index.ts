@@ -26,17 +26,22 @@ interface AccessEvent {
 
 async function getToken(credentials: InmetaCredentials): Promise<string> {
   console.log('Getting token with email:', credentials.email);
+  const url = `${API_BASE_URL}/api/v1/token`;
+  console.log('Token request URL:', url);
   
   try {
-    const response = await fetch(`${API_BASE_URL}/api/v1/token`, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'Supabase Edge Function',
       },
       body: JSON.stringify(credentials),
     })
 
     console.log('Token request status:', response.status);
+    console.log('Token response headers:', Object.fromEntries(response.headers.entries()));
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -49,6 +54,12 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
     return data.token;
   } catch (error) {
     console.error('Error in getToken:', error);
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      cause: error.cause,
+      stack: error.stack
+    });
     throw error;
   }
 }
@@ -56,7 +67,6 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
 async function getAccessEvents(token: string, startDate: string, endDate: string): Promise<AccessEvent[]> {
   console.log(`Fetching access events for date range: ${startDate} to ${endDate}`);
   
-  // Format dates according to API requirements (YYYY-MM-DDThh:mm:ss)
   const formattedStartDate = `${startDate}T00:00:00`;
   const formattedEndDate = `${endDate}T23:59:59`;
   
@@ -66,11 +76,12 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
     dataFinal: formattedEndDate
   };
   
-  console.log('Request URL:', url);
+  console.log('Access events request URL:', url);
   console.log('Request body:', JSON.stringify(requestBody));
   console.log('Request headers:', {
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
     'modulo': 'CONTROLE_ACESSO'
   });
   
@@ -80,12 +91,15 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'Supabase Edge Function',
         'modulo': 'CONTROLE_ACESSO'
       },
       body: JSON.stringify(requestBody)
     });
 
     console.log('Access events response status:', response.status);
+    console.log('Access events response headers:', Object.fromEntries(response.headers.entries()));
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -98,6 +112,12 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
     return data;
   } catch (error) {
     console.error('Error in getAccessEvents:', error);
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      cause: error.cause,
+      stack: error.stack
+    });
     throw error;
   }
 }
@@ -157,4 +177,3 @@ serve(async (req) => {
     );
   }
 });
-
