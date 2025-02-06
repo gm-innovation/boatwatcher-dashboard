@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/lib/supabase';
 
 interface EditCompanyDialogProps {
@@ -19,9 +19,12 @@ export const EditCompanyDialog = ({ isOpen, onClose, company, onSave }: EditComp
   const [companyName, setCompanyName] = useState(company?.name || '');
   const [projectManagers, setProjectManagers] = useState(company?.project_managers?.join('\n') || '');
   const [vessels, setVessels] = useState(company?.vessels?.join('\n') || '');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSaveCompany = async () => {
     try {
+      setIsLoading(true);
+
       const projectManagersArray = projectManagers
         .split('\n')
         .map(pm => pm.trim())
@@ -56,6 +59,8 @@ export const EditCompanyDialog = ({ isOpen, onClose, company, onSave }: EditComp
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -95,11 +100,11 @@ export const EditCompanyDialog = ({ isOpen, onClose, company, onSave }: EditComp
             />
           </div>
           <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={onClose} disabled={isLoading}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveCompany}>
-              Salvar Alterações
+            <Button onClick={handleSaveCompany} disabled={isLoading}>
+              {isLoading ? "Salvando..." : "Salvar Alterações"}
             </Button>
           </div>
         </div>

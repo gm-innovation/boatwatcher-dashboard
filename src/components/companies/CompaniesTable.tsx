@@ -29,7 +29,11 @@ export const CompaniesTable = ({ companies, onEditCompany }: CompaniesTableProps
           <table className="w-full">
             <tbody>
               {companies.map((company) => (
-                <tr key={company.id} className="border-b border-border hover:bg-muted/50 cursor-pointer" onClick={() => onEditCompany(company)}>
+                <tr 
+                  key={company.id} 
+                  className="border-b border-border hover:bg-muted/50 cursor-pointer" 
+                  onClick={() => onEditCompany(company)}
+                >
                   <td className="w-[200px] py-3 text-sm text-foreground text-center">{company.name}</td>
                   <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">
                     {company.entry_time ? format(new Date(company.entry_time), 'HH:mm') : '-'}
