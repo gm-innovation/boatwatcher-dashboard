@@ -1,4 +1,3 @@
-
 import { format } from 'date-fns';
 import { Clock, Settings, Moon, Sun, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -84,7 +83,7 @@ export const Header = () => {
   return (
     <header className="fixed top-0 left-0 right-0 w-full bg-background/80 backdrop-blur-sm border-b border-border animate-fade-in z-50">
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4">
-        {/* Client Logo - Left Side */}
+        {/* Left Side - Client Logo */}
         <div className="flex items-center space-x-2">
           {clientLogo ? (
             <img src={clientLogo} alt="Logo do Cliente" className="h-10 w-32 object-contain" />
@@ -93,7 +92,7 @@ export const Header = () => {
           )}
         </div>
         
-        {/* Center Controls */}
+        {/* Center - Controls */}
         <div className="flex items-center gap-4">
           <div className="flex flex-col items-center">
             <div className="flex items-center space-x-2 text-foreground/80">
@@ -141,7 +140,7 @@ export const Header = () => {
           </Button>
         </div>
 
-        {/* System Logo - Right Side */}
+        {/* Right Side - System Logo */}
         <div className="flex items-center space-x-2">
           {systemLogo ? (
             <img src={systemLogo} alt="Logo do Sistema" className="h-10 w-32 object-contain" />
@@ -153,4 +152,3 @@ export const Header = () => {
     </header>
   );
 };
-

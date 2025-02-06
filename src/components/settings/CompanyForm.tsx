@@ -47,7 +47,7 @@ export const CompanyForm = () => {
     }
   }, [selectedCompanyId, companies]);
 
-  const handleLogoUpload = (themeMode: string) => async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       const fileExt = file.name.split('.').pop();
@@ -72,10 +72,10 @@ export const CompanyForm = () => {
 
       toast({
         title: "Logo atualizada",
-        description: `A logo foi atualizada com sucesso para o modo ${themeMode === 'light' ? 'claro' : 'escuro'}.`,
+        description: "A logo do cliente foi atualizada com sucesso.",
       });
 
-      localStorage.setItem(`company_${themeMode}`, publicUrl);
+      return publicUrl;
     }
   };
 
@@ -94,15 +94,20 @@ export const CompanyForm = () => {
         .map(v => v.trim())
         .filter(v => v !== '');
 
+      let logoUrl = null;
+      const logoInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+      if (logoInput?.files?.length) {
+        logoUrl = await handleLogoUpload(logoInput as unknown as React.ChangeEvent<HTMLInputElement>);
+      }
+
       if (selectedCompanyId && selectedCompanyId !== "new") {
-        // Update existing company
         const { error } = await supabase
           .from('companies')
           .update({
             name: companyName,
-            logo_url: localStorage.getItem('company_light'),
             project_managers: projectManagersArray,
             vessels: vesselsArray,
+            ...(logoUrl && { logo_url: logoUrl }),
           })
           .eq('id', selectedCompanyId);
 
@@ -113,12 +118,11 @@ export const CompanyForm = () => {
           description: "Os dados da empresa foram atualizados com sucesso.",
         });
       } else {
-        // Create new company
         const { error } = await supabase
           .from('companies')
           .insert({
             name: companyName,
-            logo_url: localStorage.getItem('company_light'),
+            logo_url: logoUrl,
             project_managers: projectManagersArray,
             vessels: vesselsArray,
           });
@@ -131,7 +135,6 @@ export const CompanyForm = () => {
         });
       }
 
-      // Reset form and refresh data
       setCompanyName("");
       setProjectManagers("");
       setVessels("");
@@ -170,39 +173,17 @@ export const CompanyForm = () => {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <Label>Logo (Modo Claro)</Label>
+            <Label>Logo da Empresa</Label>
             <Input
               type="file"
               accept="image/*"
-              onChange={handleLogoUpload('light')}
               className="mt-2"
             />
-            <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-white mt-2">
-              {localStorage.getItem('company_light') ? (
+            <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-white dark:bg-zinc-900 mt-2">
+              {selectedCompanyId && selectedCompanyId !== "new" ? (
                 <img
-                  src={localStorage.getItem('company_light') || ''}
-                  alt="Logo Modo Claro"
-                  className="max-h-24 max-w-full object-contain"
-                />
-              ) : (
-                <p className="text-muted-foreground">Nenhuma logo definida</p>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <Label>Logo (Modo Escuro)</Label>
-            <Input
-              type="file"
-              accept="image/*"
-              onChange={handleLogoUpload('dark')}
-              className="mt-2"
-            />
-            <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-zinc-900 mt-2">
-              {localStorage.getItem('company_dark') ? (
-                <img
-                  src={localStorage.getItem('company_dark') || ''}
-                  alt="Logo Modo Escuro"
+                  src={companies?.find(c => c.id === selectedCompanyId)?.logo_url || ''}
+                  alt="Logo da Empresa"
                   className="max-h-24 max-w-full object-contain"
                 />
               ) : (
