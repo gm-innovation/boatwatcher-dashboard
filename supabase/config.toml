@@ -25,6 +25,6 @@ enabled = true
 [realtime]
 enabled = true
 
-[edge_functions]
-[edge_functions.inmeta-api]
+[functions]
+[functions.inmeta-api]
 verify_jwt = false
