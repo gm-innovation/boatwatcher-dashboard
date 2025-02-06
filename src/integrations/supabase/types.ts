@@ -48,6 +48,7 @@ export type Database = {
           client_id: string | null
           created_at: string | null
           crew_count: number | null
+          engineer: string | null
           id: string
           project_type: string | null
           start_date: string | null
@@ -57,6 +58,7 @@ export type Database = {
           client_id?: string | null
           created_at?: string | null
           crew_count?: number | null
+          engineer?: string | null
           id?: string
           project_type?: string | null
           start_date?: string | null
@@ -66,6 +68,7 @@ export type Database = {
           client_id?: string | null
           created_at?: string | null
           crew_count?: number | null
+          engineer?: string | null
           id?: string
           project_type?: string | null
           start_date?: string | null

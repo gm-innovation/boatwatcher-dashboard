@@ -84,6 +84,11 @@ export const ProjectForm = () => {
         // Update the selected project to the newly created one
         setSelectedProjectId(data.id);
         setIsCreatingNew(false);
+
+        toast({
+          title: "Projeto criado",
+          description: "O novo projeto foi criado com sucesso",
+        });
       } else {
         // Update existing project
         const { error } = await supabase
@@ -92,14 +97,12 @@ export const ProjectForm = () => {
           .eq('id', selectedProjectId);
 
         if (error) throw error;
-      }
 
-      toast({
-        title: isCreatingNew ? "Projeto criado" : "Projeto atualizado",
-        description: isCreatingNew ? 
-          "O novo projeto foi criado com sucesso" : 
-          "As alterações foram salvas com sucesso",
-      });
+        toast({
+          title: "Projeto atualizado",
+          description: "As alterações foram salvas com sucesso",
+        });
+      }
     } catch (error: any) {
       console.error('Error saving project:', error);
       toast({
