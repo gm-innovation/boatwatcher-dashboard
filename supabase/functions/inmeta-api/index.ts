@@ -30,6 +30,9 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
   console.log('Token request URL:', url);
   
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -38,11 +41,15 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
         'User-Agent': 'Mozilla/5.0',
       },
       body: JSON.stringify(credentials),
-      // Add configuration for handling certificates
-      mode: 'cors',
-      redirect: 'follow',
-    })
+      signal: controller.signal,
+      // @ts-ignore - Adding Deno-specific TLS configuration
+      client: {
+        allowInsecure: true // Allow self-signed certificates
+      }
+    });
 
+    clearTimeout(timeoutId);
+    
     console.log('Token request status:', response.status);
     console.log('Token response headers:', Object.fromEntries(response.headers.entries()));
     
@@ -64,7 +71,11 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
       stack: error.stack
     });
     
-    // Add more specific error handling
+    if (error.name === 'AbortError') {
+      console.error('Request timed out after 30 seconds');
+      throw new Error('Request timed out while trying to get token');
+    }
+    
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
       console.error('Network connection error - possibly related to SSL/certificates');
     }
@@ -94,6 +105,9 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   });
   
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -104,10 +118,14 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
         'modulo': 'CONTROLE_ACESSO'
       },
       body: JSON.stringify(requestBody),
-      // Add configuration for handling certificates
-      mode: 'cors',
-      redirect: 'follow',
+      signal: controller.signal,
+      // @ts-ignore - Adding Deno-specific TLS configuration
+      client: {
+        allowInsecure: true // Allow self-signed certificates
+      }
     });
+
+    clearTimeout(timeoutId);
 
     console.log('Access events response status:', response.status);
     console.log('Access events response headers:', Object.fromEntries(response.headers.entries()));
@@ -130,7 +148,11 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
       stack: error.stack
     });
     
-    // Add more specific error handling
+    if (error.name === 'AbortError') {
+      console.error('Request timed out after 30 seconds');
+      throw new Error('Request timed out while trying to get access events');
+    }
+    
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
       console.error('Network connection error - possibly related to SSL/certificates');
     }
@@ -193,3 +215,4 @@ serve(async (req) => {
     );
   }
 });
+
