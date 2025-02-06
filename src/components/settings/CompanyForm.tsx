@@ -52,7 +52,7 @@ export const CompanyForm = () => {
     const fileName = `${crypto.randomUUID()}.${fileExt}`;
 
     const { error: uploadError } = await supabase.storage
-      .from('company-logos')
+      .from('client-logos')
       .upload(fileName, file, { upsert: true });
 
     if (uploadError) {
@@ -65,7 +65,7 @@ export const CompanyForm = () => {
     }
 
     const { data: { publicUrl } } = supabase.storage
-      .from('company-logos')
+      .from('client-logos')
       .getPublicUrl(fileName);
 
     toast({

@@ -1,4 +1,3 @@
-
 import { format } from 'date-fns';
 import { Clock, Settings, Moon, Sun, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -76,7 +75,7 @@ export const Header = ({ selectedProjectId, onProjectSelect }: HeaderProps) => {
 
     checkAdminRole();
     return () => clearInterval(timer);
-  }, []);
+  }, [selectedProjectId]);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();

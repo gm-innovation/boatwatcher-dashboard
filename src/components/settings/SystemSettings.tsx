@@ -1,3 +1,4 @@
+
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
@@ -13,7 +14,7 @@ export const SystemSettings = () => {
       const fileName = `${crypto.randomUUID()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
-        .from('client-logos')
+        .from('company-logos')  // Changed from 'client-logos' to 'company-logos'
         .upload(fileName, file, { upsert: true });
 
       if (uploadError) {
@@ -26,7 +27,7 @@ export const SystemSettings = () => {
       }
 
       const { data: { publicUrl } } = supabase.storage
-        .from('client-logos')
+        .from('company-logos')  // Changed from 'client-logos' to 'company-logos'
         .getPublicUrl(fileName);
 
       toast({
