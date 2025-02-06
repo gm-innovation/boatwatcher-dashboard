@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 
-// Remove /api from base URL since it's included in the endpoints
+// Correct base URL for Inmeta API
 const API_BASE_URL = 'https://api.homologacao.inmeta.com.br/api/v1'
 
 interface InmetaCredentials {
@@ -54,7 +54,8 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   const formattedStartDate = new Date(startDate).toISOString().split('T')[0];
   const formattedEndDate = new Date(endDate).toISOString().split('T')[0];
   
-  const url = `${API_BASE_URL}/eventos-acesso`;
+  // Updated URL to include proper path
+  const url = `${API_BASE_URL}/eventos-acesso/consultar`;
   const body = {
     dataInicial: formattedStartDate,
     dataFinal: formattedEndDate
@@ -137,3 +138,4 @@ serve(async (req) => {
     )
   }
 })
+
