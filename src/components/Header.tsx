@@ -25,8 +25,8 @@ export const Header = () => {
   const [clientLogo, setClientLogo] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // Get company logo based on current theme
-  const companyLogo = localStorage.getItem(`company_${theme}`);
+  // Get system logo based on current theme
+  const systemLogo = localStorage.getItem(`company_${theme}`);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -84,6 +84,7 @@ export const Header = () => {
   return (
     <header className="fixed top-0 left-0 right-0 w-full bg-background/80 backdrop-blur-sm border-b border-border animate-fade-in z-50">
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4">
+        {/* Client Logo - Left Side */}
         <div className="flex items-center space-x-2">
           {clientLogo ? (
             <img src={clientLogo} alt="Logo do Cliente" className="h-10 w-32 object-contain" />
@@ -92,6 +93,7 @@ export const Header = () => {
           )}
         </div>
         
+        {/* Center Controls */}
         <div className="flex items-center gap-4">
           <div className="flex flex-col items-center">
             <div className="flex items-center space-x-2 text-foreground/80">
@@ -139,9 +141,10 @@ export const Header = () => {
           </Button>
         </div>
 
+        {/* System Logo - Right Side */}
         <div className="flex items-center space-x-2">
-          {companyLogo ? (
-            <img src={companyLogo} alt="Logo da Empresa" className="h-10 w-32 object-contain" />
+          {systemLogo ? (
+            <img src={systemLogo} alt="Logo do Sistema" className="h-10 w-32 object-contain" />
           ) : (
             <div className="h-10 w-32 bg-muted rounded animate-pulse" />
           )}
@@ -150,3 +153,4 @@ export const Header = () => {
     </header>
   );
 };
+
