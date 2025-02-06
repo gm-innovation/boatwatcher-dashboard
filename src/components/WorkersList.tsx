@@ -1,3 +1,4 @@
+
 import { Search } from 'lucide-react';
 import { useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -56,7 +57,6 @@ export const WorkersList = ({ className = "" }) => {
         <table className="w-full">
           <thead>
             <tr>
-              <th className="w-[100px] text-center py-3 text-sm font-medium text-muted-foreground">Foto</th>
               <th className="w-[200px] text-center py-3 text-sm font-medium text-muted-foreground">Nome</th>
               <th className="w-[200px] text-center py-3 text-sm font-medium text-muted-foreground">Empresa</th>
               <th className="w-[200px] text-center py-3 text-sm font-medium text-muted-foreground">Função</th>
@@ -77,15 +77,6 @@ export const WorkersList = ({ className = "" }) => {
               <tbody>
                 {filteredWorkers.map((worker) => (
                   <tr key={worker.id} className="border-b border-border hover:bg-muted/50">
-                    <td className="w-[100px] py-3 text-center">
-                      <div className="flex justify-center">
-                        <img
-                          src={worker.photo_url}
-                          alt={worker.name}
-                          className="h-8 w-8 rounded-full object-cover"
-                        />
-                      </div>
-                    </td>
                     <td className="w-[200px] py-3 text-sm text-foreground text-center">{worker.name}</td>
                     <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.company}</td>
                     <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.role}</td>

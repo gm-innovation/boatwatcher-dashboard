@@ -49,6 +49,7 @@ export type Database = {
           created_at: string | null
           crew_count: number | null
           engineer: string | null
+          external_project_id: string | null
           id: string
           project_type: string | null
           start_date: string | null
@@ -60,6 +61,7 @@ export type Database = {
           created_at?: string | null
           crew_count?: number | null
           engineer?: string | null
+          external_project_id?: string | null
           id?: string
           project_type?: string | null
           start_date?: string | null
@@ -71,6 +73,7 @@ export type Database = {
           created_at?: string | null
           crew_count?: number | null
           engineer?: string | null
+          external_project_id?: string | null
           id?: string
           project_type?: string | null
           start_date?: string | null

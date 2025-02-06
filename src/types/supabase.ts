@@ -1,3 +1,4 @@
+
 export interface Company {
   id: string
   name: string
@@ -31,4 +32,5 @@ export interface Project {
   created_at: string
   crew_count?: number
   client_id?: string
+  external_project_id?: string
 }
