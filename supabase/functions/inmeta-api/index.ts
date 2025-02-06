@@ -2,7 +2,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 
-// Remove /api since it's already in the domain
 const API_BASE_URL = 'https://api.homologacao.inmeta.com.br'
 
 interface InmetaCredentials {
@@ -59,7 +58,7 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   
   // Format dates according to API requirements (YYYY-MM-DDThh:mm:ss)
   const formattedStartDate = `${startDate}T00:00:00`;
-  const formattedEndDate = `${endDate}T23:59:00`;
+  const formattedEndDate = `${endDate}T23:59:59`;
   
   const url = `${API_BASE_URL}/api/v1/eventos-acesso`;
   const requestBody = {
@@ -69,11 +68,6 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   
   console.log('Request URL:', url);
   console.log('Request body:', JSON.stringify(requestBody));
-  console.log('Request headers:', {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json',
-    'modulo': 'CONTROLE_ACESSO'
-  });
   
   try {
     const response = await fetch(url, {
@@ -158,4 +152,3 @@ serve(async (req) => {
     );
   }
 });
-
