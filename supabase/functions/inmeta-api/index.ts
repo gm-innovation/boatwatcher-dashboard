@@ -46,8 +46,19 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
 
 async function getAccessEvents(token: string, startDate: string, endDate: string): Promise<AccessEvent[]> {
   console.log(`Fetching access events for date range: ${startDate} to ${endDate}`);
-  const url = `${API_BASE_URL}/v1/eventos-acesso?dataInicial=${startDate}&dataFinal=${endDate}`;
+  
+  // Format dates to ensure they're in YYYY-MM-DD format
+  const formattedStartDate = new Date(startDate).toISOString().split('T')[0];
+  const formattedEndDate = new Date(endDate).toISOString().split('T')[0];
+  
+  const url = `${API_BASE_URL}/v1/eventos-acesso`;
+  const body = {
+    dataInicial: formattedStartDate,
+    dataFinal: formattedEndDate
+  };
+  
   console.log('Request URL:', url);
+  console.log('Request body:', body);
   
   const response = await fetch(url, {
     method: 'POST',
@@ -55,7 +66,8 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
       'modulo': 'CONTROLE_ACESSO'
-    }
+    },
+    body: JSON.stringify(body)
   })
 
   if (!response.ok) {
