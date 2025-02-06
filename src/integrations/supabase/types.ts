@@ -16,6 +16,8 @@ export type Database = {
           id: string
           logo_url: string | null
           name: string
+          project_managers: string[] | null
+          vessels: string[] | null
           workers_count: number | null
         }
         Insert: {
@@ -24,6 +26,8 @@ export type Database = {
           id?: string
           logo_url?: string | null
           name: string
+          project_managers?: string[] | null
+          vessels?: string[] | null
           workers_count?: number | null
         }
         Update: {
@@ -32,6 +36,8 @@ export type Database = {
           id?: string
           logo_url?: string | null
           name?: string
+          project_managers?: string[] | null
+          vessels?: string[] | null
           workers_count?: number | null
         }
         Relationships: []

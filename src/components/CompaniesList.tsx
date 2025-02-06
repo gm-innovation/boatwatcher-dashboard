@@ -1,17 +1,76 @@
-
 import { format } from 'date-fns';
-import { Search } from 'lucide-react';
+import { Search, Edit2 } from 'lucide-react';
 import { useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCompanies } from '@/hooks/useSupabase';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
+import { supabase } from '@/lib/supabase';
 
 export const CompaniesList = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const { data: companies = [], isLoading } = useCompanies();
+  const { data: companies = [], isLoading, refetch } = useCompanies();
+  const [selectedCompany, setSelectedCompany] = useState<any>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [companyName, setCompanyName] = useState('');
+  const [projectManagers, setProjectManagers] = useState('');
+  const [vessels, setVessels] = useState('');
+  const { toast } = useToast();
 
   const filteredCompanies = companies.filter(company =>
     company.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleEditCompany = (company: any) => {
+    setSelectedCompany(company);
+    setCompanyName(company.name);
+    setProjectManagers(company.project_managers?.join('\n') || '');
+    setVessels(company.vessels?.join('\n') || '');
+    setIsDialogOpen(true);
+  };
+
+  const handleSaveCompany = async () => {
+    try {
+      const projectManagersArray = projectManagers
+        .split('\n')
+        .map(pm => pm.trim())
+        .filter(pm => pm !== '');
+
+      const vesselsArray = vessels
+        .split('\n')
+        .map(v => v.trim())
+        .filter(v => v !== '');
+
+      const { error } = await supabase
+        .from('companies')
+        .update({
+          name: companyName,
+          project_managers: projectManagersArray,
+          vessels: vesselsArray,
+        })
+        .eq('id', selectedCompany.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Empresa atualizada",
+        description: "As informações da empresa foram atualizadas com sucesso.",
+      });
+
+      refetch();
+      setIsDialogOpen(false);
+    } catch (error: any) {
+      toast({
+        title: "Erro ao atualizar empresa",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <div className="bg-card/80 backdrop-blur-sm rounded-lg border border-border flex flex-col col-span-1">
@@ -43,6 +102,7 @@ export const CompaniesList = () => {
               <th className="w-[200px] text-center py-3 text-sm font-medium text-muted-foreground">Empresa</th>
               <th className="w-[150px] text-center py-3 text-sm font-medium text-muted-foreground">Entrada</th>
               <th className="w-[150px] text-center py-3 text-sm font-medium text-muted-foreground">Equipe</th>
+              <th className="w-[100px] text-center py-3 text-sm font-medium text-muted-foreground">Ações</th>
             </tr>
           </thead>
         </table>
@@ -66,6 +126,15 @@ export const CompaniesList = () => {
                     <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">
                       {company.workers_count}
                     </td>
+                    <td className="w-[100px] py-3 text-sm text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditCompany(company)}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -73,6 +142,50 @@ export const CompaniesList = () => {
           )}
         </div>
       </ScrollArea>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Editar Empresa</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="companyName">Nome da Empresa</Label>
+              <Input
+                id="companyName"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="projectManagers">Gerentes de Projeto (um por linha)</Label>
+              <Textarea
+                id="projectManagers"
+                value={projectManagers}
+                onChange={(e) => setProjectManagers(e.target.value)}
+                rows={4}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="vessels">Embarcações (uma por linha)</Label>
+              <Textarea
+                id="vessels"
+                value={vessels}
+                onChange={(e) => setVessels(e.target.value)}
+                rows={4}
+              />
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSaveCompany}>
+                Salvar Alterações
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
