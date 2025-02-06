@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 
-const API_BASE_URL = 'https://api.homologacao.inmeta.com.br'
+const API_BASE_URL = 'https://homologacao.inmeta.com.br'
 
 interface InmetaCredentials {
   email: string
@@ -68,6 +68,11 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   
   console.log('Request URL:', url);
   console.log('Request body:', JSON.stringify(requestBody));
+  console.log('Request headers:', {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+    'modulo': 'CONTROLE_ACESSO'
+  });
   
   try {
     const response = await fetch(url, {
@@ -152,3 +157,4 @@ serve(async (req) => {
     );
   }
 });
+
