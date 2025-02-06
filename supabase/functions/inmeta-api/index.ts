@@ -57,8 +57,8 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   console.log(`Fetching access events for date range: ${startDate} to ${endDate}`);
   
   // Format dates according to API requirements (YYYY-MM-DDThh:mm:ss)
-  const formattedStartDate = `${new Date(startDate).toISOString().split('.')[0]}`;
-  const formattedEndDate = `${new Date(endDate).toISOString().split('T')[0]}T23:59:00`;
+  const formattedStartDate = `${startDate}T00:00:00`;
+  const formattedEndDate = `${endDate}T23:59:00`;
   
   const url = `${API_BASE_URL}/v1/eventos-acesso`;
   const requestBody = {
