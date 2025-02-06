@@ -118,19 +118,22 @@ export const CompaniesList = () => {
             <table className="w-full">
               <tbody>
                 {filteredCompanies.map((company) => (
-                  <tr key={company.id} className="border-b border-border hover:bg-muted/50">
+                  <tr key={company.id} className="border-b border-border hover:bg-muted/50 cursor-pointer" onClick={() => handleEditCompany(company)}>
                     <td className="w-[200px] py-3 text-sm text-foreground text-center">{company.name}</td>
                     <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">
-                      {format(new Date(company.entry_time), 'HH:mm')}
+                      {company.entry_time ? format(new Date(company.entry_time), 'HH:mm') : '-'}
                     </td>
                     <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">
-                      {company.workers_count}
+                      {company.workers_count || 0}
                     </td>
                     <td className="w-[100px] py-3 text-sm text-center">
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleEditCompany(company)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditCompany(company);
+                        }}
                       >
                         <Edit2 className="h-4 w-4" />
                       </Button>
@@ -164,6 +167,7 @@ export const CompaniesList = () => {
                 value={projectManagers}
                 onChange={(e) => setProjectManagers(e.target.value)}
                 rows={4}
+                placeholder="Digite um gerente por linha"
               />
             </div>
             <div className="space-y-2">
@@ -173,6 +177,7 @@ export const CompaniesList = () => {
                 value={vessels}
                 onChange={(e) => setVessels(e.target.value)}
                 rows={4}
+                placeholder="Digite uma embarcação por linha"
               />
             </div>
             <div className="flex justify-end space-x-2">
