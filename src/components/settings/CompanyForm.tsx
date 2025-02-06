@@ -6,6 +6,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { useCompanies } from "@/hooks/useSupabase";
+import { format } from "date-fns";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -125,106 +134,136 @@ export const CompanyForm = () => {
   };
 
   return (
-    <div className="border rounded-lg p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold">Cadastro de Empresa</h2>
-        <Select value={selectedCompanyId || "new"} onValueChange={setSelectedCompanyId}>
-          <SelectTrigger className="w-[280px]">
-            <SelectValue placeholder="Selecione uma empresa para editar" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="new">Nova empresa</SelectItem>
-            {companies?.map((company) => (
-              <SelectItem key={company.id} value={company.id}>
-                {company.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+    <div className="space-y-8">
+      <div className="border rounded-lg p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold">Cadastro de Empresa</h2>
+          <Select value={selectedCompanyId || "new"} onValueChange={setSelectedCompanyId}>
+            <SelectTrigger className="w-[280px]">
+              <SelectValue placeholder="Selecione uma empresa para editar" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="new">Nova empresa</SelectItem>
+              {companies?.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <Label>Logo (Modo Claro)</Label>
+            <Input
+              type="file"
+              accept="image/*"
+              onChange={handleLogoUpload('light')}
+              className="mt-2"
+            />
+            <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-white mt-2">
+              {localStorage.getItem('company_light') ? (
+                <img
+                  src={localStorage.getItem('company_light') || ''}
+                  alt="Logo Modo Claro"
+                  className="max-h-24 max-w-full object-contain"
+                />
+              ) : (
+                <p className="text-muted-foreground">Nenhuma logo definida</p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <Label>Logo (Modo Escuro)</Label>
+            <Input
+              type="file"
+              accept="image/*"
+              onChange={handleLogoUpload('dark')}
+              className="mt-2"
+            />
+            <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-zinc-900 mt-2">
+              {localStorage.getItem('company_dark') ? (
+                <img
+                  src={localStorage.getItem('company_dark') || ''}
+                  alt="Logo Modo Escuro"
+                  className="max-h-24 max-w-full object-contain"
+                />
+              ) : (
+                <p className="text-muted-foreground">Nenhuma logo definida</p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="companyName">Nome da Empresa (Armador)</Label>
+            <Input
+              id="companyName"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              className="mt-2"
+              required
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="projectManagers">Gerentes de Projeto (Responsáveis)</Label>
+            <Textarea
+              id="projectManagers"
+              value={projectManagers}
+              onChange={(e) => setProjectManagers(e.target.value)}
+              className="mt-2"
+              placeholder="Digite os nomes dos gerentes de projeto, um por linha"
+              required
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="vessels">Embarcações</Label>
+            <Textarea
+              id="vessels"
+              value={vessels}
+              onChange={(e) => setVessels(e.target.value)}
+              className="mt-2"
+              placeholder="Digite os nomes das embarcações, uma por linha"
+              required
+            />
+          </div>
+
+          <Button type="submit" disabled={isLoading}>
+            {isLoading ? "Salvando..." : selectedCompanyId && selectedCompanyId !== "new" ? "Atualizar Empresa" : "Cadastrar Empresa"}
+          </Button>
+        </form>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <Label>Logo (Modo Claro)</Label>
-          <Input
-            type="file"
-            accept="image/*"
-            onChange={handleLogoUpload('light')}
-            className="mt-2"
-          />
-          <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-white mt-2">
-            {localStorage.getItem('company_light') ? (
-              <img
-                src={localStorage.getItem('company_light') || ''}
-                alt="Logo Modo Claro"
-                className="max-h-24 max-w-full object-contain"
-              />
-            ) : (
-              <p className="text-muted-foreground">Nenhuma logo definida</p>
-            )}
-          </div>
-        </div>
-
-        <div>
-          <Label>Logo (Modo Escuro)</Label>
-          <Input
-            type="file"
-            accept="image/*"
-            onChange={handleLogoUpload('dark')}
-            className="mt-2"
-          />
-          <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-zinc-900 mt-2">
-            {localStorage.getItem('company_dark') ? (
-              <img
-                src={localStorage.getItem('company_dark') || ''}
-                alt="Logo Modo Escuro"
-                className="max-h-24 max-w-full object-contain"
-              />
-            ) : (
-              <p className="text-muted-foreground">Nenhuma logo definida</p>
-            )}
-          </div>
-        </div>
-
-        <div>
-          <Label htmlFor="companyName">Nome da Empresa (Armador)</Label>
-          <Input
-            id="companyName"
-            value={companyName}
-            onChange={(e) => setCompanyName(e.target.value)}
-            className="mt-2"
-            required
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="projectManagers">Gerentes de Projeto (Responsáveis)</Label>
-          <Textarea
-            id="projectManagers"
-            value={projectManagers}
-            onChange={(e) => setProjectManagers(e.target.value)}
-            className="mt-2"
-            placeholder="Digite os nomes dos gerentes de projeto, um por linha"
-            required
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="vessels">Embarcações</Label>
-          <Textarea
-            id="vessels"
-            value={vessels}
-            onChange={(e) => setVessels(e.target.value)}
-            className="mt-2"
-            placeholder="Digite os nomes das embarcações, uma por linha"
-            required
-          />
-        </div>
-
-        <Button type="submit" disabled={isLoading}>
-          {isLoading ? "Salvando..." : selectedCompanyId && selectedCompanyId !== "new" ? "Atualizar Empresa" : "Cadastrar Empresa"}
-        </Button>
-      </form>
+      <div className="border rounded-lg p-6">
+        <h2 className="text-xl font-semibold mb-6">Empresas Cadastradas</h2>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nome da Empresa</TableHead>
+              <TableHead>Horário de Entrada</TableHead>
+              <TableHead>Quantidade de Trabalhadores</TableHead>
+              <TableHead>Data de Cadastro</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {companies?.map((company) => (
+              <TableRow key={company.id}>
+                <TableCell className="font-medium">{company.name}</TableCell>
+                <TableCell>
+                  {company.entry_time ? format(new Date(company.entry_time), 'HH:mm') : '-'}
+                </TableCell>
+                <TableCell>{company.workers_count || 0}</TableCell>
+                <TableCell>
+                  {company.created_at ? format(new Date(company.created_at), 'dd/MM/yyyy') : '-'}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 };
