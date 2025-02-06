@@ -59,7 +59,8 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   const formattedStartDate = new Date(startDate).toISOString().split('T')[0];
   const formattedEndDate = new Date(endDate).toISOString().split('T')[0];
   
-  const url = `${API_BASE_URL}/eventos-acesso/consultar`;
+  // Updated endpoint to match the API documentation
+  const url = `${API_BASE_URL}/acessos/eventos`;
   const requestBody = {
     dataInicial: formattedStartDate,
     dataFinal: formattedEndDate
