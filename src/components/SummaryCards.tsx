@@ -1,5 +1,6 @@
 import { Users, Building, Anchor } from 'lucide-react';
 import { useProjectById } from '@/hooks/useSupabase';
+import { useInmetaEvents } from '@/hooks/useInmetaApi';
 
 const Card = ({ title, value, icon: Icon, color, highlight = false }: { 
   title: string;
@@ -35,12 +36,12 @@ interface SummaryCardsProps {
 
 export const SummaryCards = ({ projectId }: SummaryCardsProps) => {
   const { data: projectInfo } = useProjectById(projectId);
+  const { data: inmetaEvents = [] } = useInmetaEvents();
 
-  // Use project data if available, otherwise fallback to default values
   const crewCount = projectInfo?.crew_count || 0;
-  const workersCount = 42; // This seems to be a mock value, keep it for now
-  const totalCount = crewCount + workersCount;
-  const companiesCount = 8; // This seems to be a mock value, keep it for now
+  const inmetaCount = inmetaEvents.length;
+  const totalCount = crewCount + inmetaCount;
+  const companiesCount = 8; // Mock value maintained as is
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">

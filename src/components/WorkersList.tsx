@@ -1,17 +1,32 @@
-
 import { Search } from 'lucide-react';
 import { useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useWorkers } from '@/hooks/useSupabase';
+import { useInmetaEvents } from '@/hooks/useInmetaApi';
 import { format } from 'date-fns';
 
 export const WorkersList = ({ className = "" }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const { data: workers = [], isLoading } = useWorkers();
+  const { data: workers = [], isLoading: isLoadingWorkers } = useWorkers();
+  const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useInmetaEvents();
 
-  const filteredWorkers = workers.filter(worker =>
+  // Combine workers from both sources
+  const allWorkers = [
+    ...workers,
+    ...inmetaEvents.map(event => ({
+      id: event.id,
+      name: event.name,
+      role: event.role,
+      arrival_time: event.arrival_time,
+      photo_url: event.photo_url,
+    })),
+  ];
+
+  const filteredWorkers = allWorkers.filter(worker =>
     worker.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const isLoading = isLoadingWorkers || isLoadingInmeta;
 
   return (
     <div className={`bg-card/80 backdrop-blur-sm rounded-lg border border-border flex flex-col ${className}`}>
@@ -20,7 +35,7 @@ export const WorkersList = ({ className = "" }) => {
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold text-foreground">Trabalhadores</h2>
             <span className="px-2 py-1 bg-muted rounded-md text-sm text-muted-foreground">
-              {workers.length}
+              {allWorkers.length}
             </span>
           </div>
           <div className="relative">
