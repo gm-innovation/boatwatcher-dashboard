@@ -13,6 +13,7 @@ export interface Worker {
   id: string
   name: string
   company_id: string
+  company?: string
   role: string
   arrival_time: string
   photo_url: string

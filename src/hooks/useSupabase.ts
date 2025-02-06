@@ -23,11 +23,20 @@ export const useWorkers = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('workers')
-        .select('*')
+        .select(`
+          *,
+          companies (
+            name
+          )
+        `)
         .order('name');
       
       if (error) throw error;
-      return data as Worker[];
+      
+      return data.map((worker: any) => ({
+        ...worker,
+        company: worker.companies?.name || 'N/A'
+      })) as Worker[];
     }
   });
 };
