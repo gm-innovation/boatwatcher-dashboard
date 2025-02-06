@@ -46,39 +46,37 @@ export type Database = {
         Row: {
           captain: string | null
           client_id: string | null
-          company: string | null
           created_at: string | null
-          engineer: string | null
           id: string
           project_type: string | null
           start_date: string | null
-          vessel_name: string | null
         }
         Insert: {
           captain?: string | null
           client_id?: string | null
-          company?: string | null
           created_at?: string | null
-          engineer?: string | null
           id?: string
           project_type?: string | null
           start_date?: string | null
-          vessel_name?: string | null
         }
         Update: {
           captain?: string | null
           client_id?: string | null
-          company?: string | null
           created_at?: string | null
-          engineer?: string | null
           id?: string
           project_type?: string | null
           start_date?: string | null
-          vessel_name?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "projects_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_company_fk"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "companies"
