@@ -1,3 +1,4 @@
+
 import { format } from 'date-fns';
 import { Clock, Settings, Moon, Sun, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -43,18 +44,18 @@ export const Header = () => {
         
         setIsAdmin(roleData?.role === 'admin');
 
-        // Fetch client logo from user's projects
+        // Fetch client logo from user's projects using the correct foreign key
         const { data: projectData } = await supabase
           .from('user_projects')
           .select(`
             project:projects (
-              client:companies (
+              client:companies!projects_client_id_fkey (
                 logo_url
               )
             )
           `)
           .eq('user_id', session.user.id)
-          .single();
+          .maybeSingle();
 
         const typedProjectData = projectData as unknown as ProjectData;
         if (typedProjectData?.project?.client?.logo_url) {

@@ -1,3 +1,4 @@
+
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 
@@ -16,8 +17,17 @@ export const useInmetaEvents = () => {
   return useQuery({
     queryKey: ["inmeta-events"],
     queryFn: async (): Promise<InmetaEvent[]> => {
+      const today = new Date();
+      const startDate = today.toISOString().split('T')[0];
+      const endDate = today.toISOString().split('T')[0];
+
       const { data, error } = await supabase.functions.invoke("inmeta-api", {
-        method: "GET",
+        method: "POST",
+        body: {
+          action: "getAccessEvents",
+          startDate,
+          endDate
+        }
       });
 
       if (error) {
