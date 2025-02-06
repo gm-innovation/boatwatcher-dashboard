@@ -21,13 +21,17 @@ export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectS
     );
   }
 
+  const selectedProject = projects.find(p => p.id === selectedProjectId);
+
   return (
     <Select 
       value={selectedProjectId || undefined} 
       onValueChange={onProjectSelect}
     >
       <SelectTrigger className="w-[200px]">
-        <SelectValue placeholder="Selecione um projeto" />
+        <SelectValue placeholder="Selecione um projeto">
+          {selectedProject?.vessel_name || 'Projeto sem nome'}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {projects.map((project) => (

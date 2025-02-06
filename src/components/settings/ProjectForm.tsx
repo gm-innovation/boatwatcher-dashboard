@@ -6,8 +6,15 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Plus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { useProjectById } from "@/hooks/useSupabase";
+import { useProjectById, useCompanies } from "@/hooks/useSupabase";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const ProjectForm = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -15,6 +22,7 @@ export const ProjectForm = () => {
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { data: companies = [] } = useCompanies();
   
   // Form state
   const [vesselName, setVesselName] = useState("");
@@ -23,7 +31,7 @@ export const ProjectForm = () => {
   const [engineer, setEngineer] = useState("");
   const [captain, setCaptain] = useState("");
   const [crewCount, setCrewCount] = useState("");
-  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
 
   // Fetch project data when selected
   const { data: projectData } = useProjectById(selectedProjectId);
@@ -37,16 +45,15 @@ export const ProjectForm = () => {
       setEngineer(projectData.engineer || "");
       setCaptain(projectData.captain || "");
       setCrewCount(projectData.crew_count?.toString() || "");
-      setCompanyId(projectData.client_id || null);
+      setSelectedCompanyId(projectData.client_id || null);
     } else {
-      // Reset form when no project is selected
       setVesselName("");
       setStartDate("");
       setProjectType("");
       setEngineer("");
       setCaptain("");
       setCrewCount("");
-      setCompanyId(null);
+      setSelectedCompanyId(null);
     }
   }, [projectData]);
 
@@ -70,11 +77,10 @@ export const ProjectForm = () => {
         engineer: engineer,
         captain: captain,
         crew_count: crewCount ? parseInt(crewCount) : null,
-        client_id: companyId,
+        client_id: selectedCompanyId,
       };
 
       if (isCreatingNew) {
-        // Create new project
         const { data, error } = await supabase
           .from('projects')
           .insert(projectData)
@@ -83,11 +89,9 @@ export const ProjectForm = () => {
 
         if (error) throw error;
         
-        // Update the selected project to the newly created one
         setSelectedProjectId(data.id);
         setIsCreatingNew(false);
 
-        // Invalidate and refetch projects query
         await queryClient.invalidateQueries({ queryKey: ['projects'] });
 
         toast({
@@ -95,7 +99,6 @@ export const ProjectForm = () => {
           description: "O novo projeto foi criado com sucesso",
         });
       } else {
-        // Update existing project
         const { error } = await supabase
           .from('projects')
           .update(projectData)
@@ -103,7 +106,6 @@ export const ProjectForm = () => {
 
         if (error) throw error;
 
-        // Invalidate and refetch projects query
         await queryClient.invalidateQueries({ queryKey: ['projects'] });
 
         toast({
@@ -126,14 +128,13 @@ export const ProjectForm = () => {
   const handleNewProject = () => {
     setIsCreatingNew(true);
     setSelectedProjectId(null);
-    // Reset form
     setVesselName("");
     setStartDate("");
     setProjectType("");
     setEngineer("");
     setCaptain("");
     setCrewCount("");
-    setCompanyId(null);
+    setSelectedCompanyId(null);
   };
 
   return (
@@ -159,6 +160,24 @@ export const ProjectForm = () => {
 
         {(selectedProjectId || isCreatingNew) && (
           <div className="grid gap-4">
+            <div>
+              <Label htmlFor="companyId">Empresa</Label>
+              <Select 
+                value={selectedCompanyId || undefined}
+                onValueChange={setSelectedCompanyId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma empresa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {companies.map((company) => (
+                    <SelectItem key={company.id} value={company.id}>
+                      {company.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div>
               <Label htmlFor="vesselName">Nome da Embarcação</Label>
               <Input 

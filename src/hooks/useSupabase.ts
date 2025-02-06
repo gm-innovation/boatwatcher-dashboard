@@ -53,15 +53,10 @@ export const useProjects = () => {
         throw error;
       }
       
-      // Transform the data to match the expected Project type
-      const transformedData = data.map((project: any) => ({
+      return data.map((project: any) => ({
         ...project,
-        vessel_name: project.company?.vessels?.[0] || '',
-        engineer: project.company?.project_managers?.[0] || '',
         company: project.company?.name || ''
-      }));
-      
-      return transformedData as Project[];
+      })) as Project[];
     }
   });
 };
@@ -90,15 +85,10 @@ export const useProjectById = (projectId: string | null) => {
         throw error;
       }
 
-      // Transform the data to match the expected Project type
-      const transformedData = {
+      return {
         ...data,
-        vessel_name: data.company?.vessels?.[0] || '',
-        engineer: data.company?.project_managers?.[0] || '',
         company: data.company?.name || ''
-      };
-      
-      return transformedData as Project;
+      } as Project;
     },
     enabled: !!projectId
   });
