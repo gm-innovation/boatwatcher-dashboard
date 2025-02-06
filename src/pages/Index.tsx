@@ -1,7 +1,7 @@
+
 import { useState } from "react";
 import { Header } from "@/components/Header";
 import { ProjectInfo } from "@/components/ProjectInfo";
-import { ProjectSelector } from "@/components/ProjectSelector";
 import { SummaryCards } from "@/components/SummaryCards";
 import { WorkersList } from "@/components/WorkersList";
 import { CompaniesList } from "@/components/CompaniesList";
@@ -11,15 +11,12 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <Header />
+      <Header 
+        selectedProjectId={selectedProjectId}
+        onProjectSelect={setSelectedProjectId}
+      />
       <main className="flex-1 pt-[72px]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 sticky top-[72px] bg-background z-10">
-          <div className="flex justify-end mb-4">
-            <ProjectSelector
-              selectedProjectId={selectedProjectId}
-              onProjectSelect={setSelectedProjectId}
-            />
-          </div>
           <ProjectInfo projectId={selectedProjectId} />
           <SummaryCards projectId={selectedProjectId} />
         </div>

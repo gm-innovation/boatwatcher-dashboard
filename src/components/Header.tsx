@@ -8,6 +8,7 @@ import { Toggle } from '@/components/ui/toggle';
 import { useTheme } from '@/components/theme-provider';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
+import { ProjectSelector } from '@/components/ProjectSelector';
 
 interface ProjectData {
   project: {
@@ -18,7 +19,12 @@ interface ProjectData {
   } | null;
 }
 
-export const Header = () => {
+interface HeaderProps {
+  selectedProjectId: string | null;
+  onProjectSelect: (projectId: string) => void;
+}
+
+export const Header = ({ selectedProjectId, onProjectSelect }: HeaderProps) => {
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
   const { theme, setTheme } = useTheme();
@@ -102,6 +108,11 @@ export const Header = () => {
         
         {/* Center - Controls */}
         <div className="flex items-center gap-4">
+          <ProjectSelector
+            selectedProjectId={selectedProjectId}
+            onProjectSelect={onProjectSelect}
+          />
+
           <div className="flex flex-col items-center">
             <div className="flex items-center space-x-2 text-foreground/80">
               <Clock className="h-4 w-4" />
