@@ -1,10 +1,12 @@
-
 export interface Company {
   id: string
   name: string
   entry_time: string
   workers_count: number
   created_at: string
+  logo_url: string | null
+  project_managers: string[]
+  vessels: string[]
 }
 
 export interface Worker {

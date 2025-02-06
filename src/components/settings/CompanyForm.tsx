@@ -25,7 +25,7 @@ import {
 
 export const CompanyForm = () => {
   const { toast } = useToast();
-  const { data: companies } = useCompanies();
+  const { data: companies, refetch } = useCompanies();
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState("");
   const [projectManagers, setProjectManagers] = useState("");
@@ -37,8 +37,8 @@ export const CompanyForm = () => {
       const company = companies?.find(c => c.id === selectedCompanyId);
       if (company) {
         setCompanyName(company.name);
-        setProjectManagers("");
-        setVessels("");
+        setProjectManagers(company.project_managers?.join('\n') || '');
+        setVessels(company.vessels?.join('\n') || '');
       }
     } else {
       setCompanyName("");
@@ -84,6 +84,16 @@ export const CompanyForm = () => {
     setIsLoading(true);
 
     try {
+      const projectManagersArray = projectManagers
+        .split('\n')
+        .map(pm => pm.trim())
+        .filter(pm => pm !== '');
+
+      const vesselsArray = vessels
+        .split('\n')
+        .map(v => v.trim())
+        .filter(v => v !== '');
+
       if (selectedCompanyId && selectedCompanyId !== "new") {
         // Update existing company
         const { error } = await supabase
@@ -91,6 +101,8 @@ export const CompanyForm = () => {
           .update({
             name: companyName,
             logo_url: localStorage.getItem('company_light'),
+            project_managers: projectManagersArray,
+            vessels: vesselsArray,
           })
           .eq('id', selectedCompanyId);
 
@@ -107,6 +119,8 @@ export const CompanyForm = () => {
           .insert({
             name: companyName,
             logo_url: localStorage.getItem('company_light'),
+            project_managers: projectManagersArray,
+            vessels: vesselsArray,
           });
 
         if (error) throw error;
@@ -117,11 +131,12 @@ export const CompanyForm = () => {
         });
       }
 
-      // Reset form
+      // Reset form and refresh data
       setCompanyName("");
       setProjectManagers("");
       setVessels("");
       setSelectedCompanyId(null);
+      refetch();
     } catch (error: any) {
       toast({
         title: selectedCompanyId ? "Erro ao atualizar empresa" : "Erro ao cadastrar empresa",
@@ -215,7 +230,6 @@ export const CompanyForm = () => {
               onChange={(e) => setProjectManagers(e.target.value)}
               className="mt-2"
               placeholder="Digite os nomes dos gerentes de projeto, um por linha"
-              required
             />
           </div>
 
@@ -227,7 +241,6 @@ export const CompanyForm = () => {
               onChange={(e) => setVessels(e.target.value)}
               className="mt-2"
               placeholder="Digite os nomes das embarcações, uma por linha"
-              required
             />
           </div>
 
