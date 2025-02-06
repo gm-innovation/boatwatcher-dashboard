@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 
@@ -22,6 +23,7 @@ interface AccessEvent {
 }
 
 async function getToken(credentials: InmetaCredentials): Promise<string> {
+  console.log('Getting token...');
   const response = await fetch(`${API_BASE_URL}/v1/token`, {
     method: 'POST',
     headers: {
@@ -31,31 +33,41 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to get token: ${response.statusText}`)
+    console.error('Token request failed:', response.status, response.statusText);
+    const text = await response.text();
+    console.error('Response body:', text);
+    throw new Error(`Failed to get token: ${response.statusText} (${response.status})`);
   }
 
   const data = await response.json()
+  console.log('Token obtained successfully');
   return data.token
 }
 
 async function getAccessEvents(token: string, startDate: string, endDate: string): Promise<AccessEvent[]> {
-  const response = await fetch(
-    `${API_BASE_URL}/v1/eventos-acesso?dataInicial=${startDate}&dataFinal=${endDate}`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'modulo': 'CONTROLE_ACESSO'
-      }
+  console.log(`Fetching access events for date range: ${startDate} to ${endDate}`);
+  const url = `${API_BASE_URL}/v1/eventos-acesso?dataInicial=${startDate}&dataFinal=${endDate}`;
+  console.log('Request URL:', url);
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'modulo': 'CONTROLE_ACESSO'
     }
-  )
+  })
 
   if (!response.ok) {
-    throw new Error(`Failed to get access events: ${response.statusText}`)
+    console.error('Access events request failed:', response.status, response.statusText);
+    const text = await response.text();
+    console.error('Response body:', text);
+    throw new Error(`Failed to get access events: ${response.statusText} (${response.status})`);
   }
 
-  return response.json()
+  const data = await response.json()
+  console.log(`Successfully fetched ${data.length} access events`);
+  return data
 }
 
 serve(async (req) => {
@@ -66,6 +78,7 @@ serve(async (req) => {
 
   try {
     const { action, startDate, endDate } = await req.json()
+    console.log('Received request with params:', { action, startDate, endDate });
 
     // Get credentials from environment variables
     const credentials = {
@@ -84,6 +97,7 @@ serve(async (req) => {
         if (!startDate || !endDate) {
           throw new Error('Missing required date parameters')
         }
+        console.log('Getting token and fetching access events...');
         const token = await getToken(credentials)
         result = await getAccessEvents(token, startDate, endDate)
         break
@@ -98,7 +112,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error:', error.message)
+    console.error('Error in Edge Function:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { 
