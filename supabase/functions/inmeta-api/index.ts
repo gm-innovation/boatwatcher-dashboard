@@ -2,7 +2,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 
-// Correct base URL for Inmeta API
 const API_BASE_URL = 'https://api.homologacao.inmeta.com.br/api/v1'
 
 interface InmetaCredentials {
@@ -26,106 +25,125 @@ interface AccessEvent {
 }
 
 async function getToken(credentials: InmetaCredentials): Promise<string> {
-  console.log('Getting token...');
-  const response = await fetch(`${API_BASE_URL}/token`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(credentials),
-  })
+  console.log('Getting token with email:', credentials.email);
+  
+  try {
+    const response = await fetch(`${API_BASE_URL}/token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(credentials),
+    })
 
-  if (!response.ok) {
-    console.error('Token request failed:', response.status, response.statusText);
-    const text = await response.text();
-    console.error('Response body:', text);
-    throw new Error(`Failed to get token: ${response.statusText} (${response.status})`);
+    console.log('Token request status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Token request failed:', response.status, errorText);
+      throw new Error(`Failed to get token: ${response.statusText} (${response.status}). Response: ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log('Token obtained successfully');
+    return data.token;
+  } catch (error) {
+    console.error('Error in getToken:', error);
+    throw error;
   }
-
-  const data = await response.json()
-  console.log('Token obtained successfully');
-  return data.token
 }
 
 async function getAccessEvents(token: string, startDate: string, endDate: string): Promise<AccessEvent[]> {
   console.log(`Fetching access events for date range: ${startDate} to ${endDate}`);
   
-  // Format dates to ensure they're in YYYY-MM-DD format
   const formattedStartDate = new Date(startDate).toISOString().split('T')[0];
   const formattedEndDate = new Date(endDate).toISOString().split('T')[0];
   
-  // Updated URL to include proper path
   const url = `${API_BASE_URL}/eventos-acesso/consultar`;
-  const body = {
+  const requestBody = {
     dataInicial: formattedStartDate,
     dataFinal: formattedEndDate
   };
   
   console.log('Request URL:', url);
-  console.log('Request body:', body);
+  console.log('Request body:', JSON.stringify(requestBody));
+  console.log('Request headers:', {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+    'modulo': 'CONTROLE_ACESSO'
+  });
   
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'modulo': 'CONTROLE_ACESSO'
-    },
-    body: JSON.stringify(body)
-  })
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'modulo': 'CONTROLE_ACESSO'
+      },
+      body: JSON.stringify(requestBody)
+    });
 
-  if (!response.ok) {
-    console.error('Access events request failed:', response.status, response.statusText);
-    const text = await response.text();
-    console.error('Response body:', text);
-    throw new Error(`Failed to get access events: ${response.statusText} (${response.status}). Response: ${text}`);
+    console.log('Access events response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Access events request failed:', response.status, errorText);
+      throw new Error(`Failed to get access events: ${response.statusText} (${response.status}). Response: ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log(`Successfully fetched ${data.length} access events`);
+    return data;
+  } catch (error) {
+    console.error('Error in getAccessEvents:', error);
+    throw error;
   }
-
-  const data = await response.json()
-  console.log(`Successfully fetched ${data.length} access events`);
-  return data
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { action, startDate, endDate } = await req.json()
+    const { action, startDate, endDate } = await req.json();
     console.log('Received request with params:', { action, startDate, endDate });
 
-    // Get credentials from environment variables
     const credentials = {
-      email: Deno.env.get('INMETA_EMAIL') || '',
-      senha: Deno.env.get('INMETA_PASSWORD') || ''
-    }
+      email: Deno.env.get('INMETA_EMAIL'),
+      senha: Deno.env.get('INMETA_PASSWORD')
+    };
 
     if (!credentials.email || !credentials.senha) {
-      throw new Error('Missing API credentials')
+      console.error('Missing API credentials');
+      throw new Error('Missing API credentials');
     }
 
-    let result
+    console.log('Using credentials with email:', credentials.email);
+
+    let result;
     
     switch (action) {
       case 'getAccessEvents':
         if (!startDate || !endDate) {
-          throw new Error('Missing required date parameters')
+          console.error('Missing required date parameters');
+          throw new Error('Missing required date parameters');
         }
         console.log('Getting token and fetching access events...');
-        const token = await getToken(credentials)
-        result = await getAccessEvents(token, startDate, endDate)
-        break
+        const token = await getToken(credentials);
+        result = await getAccessEvents(token, startDate, endDate);
+        break;
       
       default:
-        throw new Error('Invalid action')
+        console.error('Invalid action:', action);
+        throw new Error('Invalid action');
     }
 
     return new Response(
       JSON.stringify(result),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    );
 
   } catch (error) {
     console.error('Error in Edge Function:', error);
@@ -135,7 +153,6 @@ serve(async (req) => {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
-    )
+    );
   }
-})
-
+});
