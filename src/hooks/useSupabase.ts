@@ -38,11 +38,27 @@ export const useProjects = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('projects')
-        .select('*')
-        .order('vessel_name');
+        .select(`
+          *,
+          company:companies!projects_client_id_fkey (
+            name,
+            vessels,
+            project_managers
+          )
+        `)
+        .order('created_at');
       
       if (error) throw error;
-      return data as Project[];
+      
+      // Transform the data to match the expected Project type
+      const transformedData = data.map((project: any) => ({
+        ...project,
+        vessel_name: project.company?.vessels?.[0] || '',
+        engineer: project.company?.project_managers?.[0] || '',
+        company: project.company?.name || ''
+      }));
+      
+      return transformedData as Project[];
     }
   });
 };
@@ -55,12 +71,28 @@ export const useProjectById = (projectId: string | null) => {
       
       const { data, error } = await supabase
         .from('projects')
-        .select('*')
+        .select(`
+          *,
+          company:companies!projects_client_id_fkey (
+            name,
+            vessels,
+            project_managers
+          )
+        `)
         .eq('id', projectId)
         .single();
       
       if (error) throw error;
-      return data as Project;
+
+      // Transform the data to match the expected Project type
+      const transformedData = {
+        ...data,
+        vessel_name: data.company?.vessels?.[0] || '',
+        engineer: data.company?.project_managers?.[0] || '',
+        company: data.company?.name || ''
+      };
+      
+      return transformedData as Project;
     },
     enabled: !!projectId
   });
