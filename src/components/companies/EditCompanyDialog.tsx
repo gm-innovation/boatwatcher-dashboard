@@ -17,13 +17,22 @@ interface EditCompanyDialogProps {
 export const EditCompanyDialog = ({ isOpen, onClose, company, onSave }: EditCompanyDialogProps) => {
   const { toast } = useToast();
   const [companyName, setCompanyName] = useState(company?.name || '');
-  const [projectManagers, setProjectManagers] = useState(company?.project_managers?.join('\n') || '');
-  const [vessels, setVessels] = useState(company?.vessels?.join('\n') || '');
+  const [projectManagers, setProjectManagers] = useState(
+    Array.isArray(company?.project_managers) 
+      ? company.project_managers.join('\n') 
+      : ''
+  );
+  const [vessels, setVessels] = useState(
+    Array.isArray(company?.vessels) 
+      ? company.vessels.join('\n') 
+      : ''
+  );
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSaveCompany = async () => {
     try {
       setIsLoading(true);
+      console.log('Saving company with ID:', company.id);
 
       const projectManagersArray = projectManagers
         .split('\n')
@@ -35,16 +44,25 @@ export const EditCompanyDialog = ({ isOpen, onClose, company, onSave }: EditComp
         .map(v => v.trim())
         .filter(v => v !== '');
 
-      const { error } = await supabase
+      console.log('Project Managers:', projectManagersArray);
+      console.log('Vessels:', vesselsArray);
+
+      const { data, error } = await supabase
         .from('companies')
         .update({
           name: companyName,
           project_managers: projectManagersArray,
           vessels: vesselsArray,
         })
-        .eq('id', company.id);
+        .eq('id', company.id)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error saving company:', error);
+        throw error;
+      }
+
+      console.log('Updated company data:', data);
 
       toast({
         title: "Empresa atualizada",
@@ -54,6 +72,7 @@ export const EditCompanyDialog = ({ isOpen, onClose, company, onSave }: EditComp
       onSave();
       onClose();
     } catch (error: any) {
+      console.error('Error in handleSaveCompany:', error);
       toast({
         title: "Erro ao atualizar empresa",
         description: error.message,
