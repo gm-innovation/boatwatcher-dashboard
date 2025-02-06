@@ -35,9 +35,12 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'User-Agent': 'Supabase Edge Function',
+        'User-Agent': 'Mozilla/5.0',
       },
       body: JSON.stringify(credentials),
+      // Add configuration for handling certificates
+      mode: 'cors',
+      redirect: 'follow',
     })
 
     console.log('Token request status:', response.status);
@@ -60,6 +63,11 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
       cause: error.cause,
       stack: error.stack
     });
+    
+    // Add more specific error handling
+    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+      console.error('Network connection error - possibly related to SSL/certificates');
+    }
     throw error;
   }
 }
@@ -92,10 +100,13 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'User-Agent': 'Supabase Edge Function',
+        'User-Agent': 'Mozilla/5.0',
         'modulo': 'CONTROLE_ACESSO'
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
+      // Add configuration for handling certificates
+      mode: 'cors',
+      redirect: 'follow',
     });
 
     console.log('Access events response status:', response.status);
@@ -118,6 +129,11 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
       cause: error.cause,
       stack: error.stack
     });
+    
+    // Add more specific error handling
+    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+      console.error('Network connection error - possibly related to SSL/certificates');
+    }
     throw error;
   }
 }
