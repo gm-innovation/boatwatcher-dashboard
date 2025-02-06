@@ -19,6 +19,7 @@ export const WorkersList = ({ className = "" }) => {
       role: event.role,
       arrival_time: event.arrival_time,
       photo_url: event.photo_url,
+      company: event.vinculoColaborador?.empresa || 'N/A',
     })),
   ];
 
@@ -86,7 +87,7 @@ export const WorkersList = ({ className = "" }) => {
                       </div>
                     </td>
                     <td className="w-[200px] py-3 text-sm text-foreground text-center">{worker.name}</td>
-                    <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.role}</td>
+                    <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.company}</td>
                     <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.role}</td>
                     <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">
                       {format(new Date(worker.arrival_time), 'HH:mm')}

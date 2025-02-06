@@ -7,6 +7,9 @@ interface InmetaEvent {
   role: string;
   arrival_time: string;
   photo_url: string;
+  vinculoColaborador: {
+    empresa: string;
+  };
 }
 
 export const useInmetaEvents = () => {

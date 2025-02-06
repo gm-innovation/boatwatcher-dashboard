@@ -41,7 +41,14 @@ export const SummaryCards = ({ projectId }: SummaryCardsProps) => {
   const crewCount = projectInfo?.crew_count || 0;
   const inmetaCount = inmetaEvents.length;
   const totalCount = crewCount + inmetaCount;
-  const companiesCount = 8; // Mock value maintained as is
+
+  // Get unique companies from Inmeta events
+  const uniqueCompanies = new Set(
+    inmetaEvents
+      .map(event => event.vinculoColaborador?.empresa)
+      .filter(Boolean)
+  );
+  const companiesCount = uniqueCompanies.size;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
