@@ -1,1 +1,6 @@
 project_id = "ieadbzgzsjxcafgzbysu"
+[api]
+enabled = true
+[functions]
+[functions.inmeta-api]
+verify_jwt = true
