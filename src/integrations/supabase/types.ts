@@ -14,7 +14,8 @@ export type Database = {
           created_at: string | null
           entry_time: string | null
           id: string
-          logo_url: string | null
+          logo_url_dark: string | null
+          logo_url_light: string | null
           name: string
           project_managers: string[] | null
           vessels: string[] | null
@@ -24,7 +25,8 @@ export type Database = {
           created_at?: string | null
           entry_time?: string | null
           id?: string
-          logo_url?: string | null
+          logo_url_dark?: string | null
+          logo_url_light?: string | null
           name: string
           project_managers?: string[] | null
           vessels?: string[] | null
@@ -34,7 +36,8 @@ export type Database = {
           created_at?: string | null
           entry_time?: string | null
           id?: string
-          logo_url?: string | null
+          logo_url_dark?: string | null
+          logo_url_light?: string | null
           name?: string
           project_managers?: string[] | null
           vessels?: string[] | null

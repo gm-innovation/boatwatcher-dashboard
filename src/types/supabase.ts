@@ -5,7 +5,8 @@ export interface Company {
   entry_time: string
   workers_count: number
   created_at: string
-  logo_url: string | null
+  logo_url_light: string | null
+  logo_url_dark: string | null
   project_managers: string[]
   vessels: string[]
 }

@@ -47,36 +47,33 @@ export const CompanyForm = () => {
     }
   }, [selectedCompanyId, companies]);
 
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${crypto.randomUUID()}.${fileExt}`;
+  const handleLogoUpload = async (file: File, isDarkMode: boolean) => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${crypto.randomUUID()}.${fileExt}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('client-logos')
-        .upload(fileName, file, { upsert: true });
+    const { error: uploadError } = await supabase.storage
+      .from('company-logos')
+      .upload(fileName, file, { upsert: true });
 
-      if (uploadError) {
-        toast({
-          title: "Erro ao fazer upload da logo",
-          description: uploadError.message,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('client-logos')
-        .getPublicUrl(fileName);
-
+    if (uploadError) {
       toast({
-        title: "Logo atualizada",
-        description: "A logo do cliente foi atualizada com sucesso.",
+        title: `Erro ao fazer upload da logo ${isDarkMode ? 'dark' : 'light'}`,
+        description: uploadError.message,
+        variant: "destructive",
       });
-
-      return publicUrl;
+      return null;
     }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('company-logos')
+      .getPublicUrl(fileName);
+
+    toast({
+      title: "Logo atualizada",
+      description: `A logo ${isDarkMode ? 'dark' : 'light'} do cliente foi atualizada com sucesso.`,
+    });
+
+    return publicUrl;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -94,10 +91,18 @@ export const CompanyForm = () => {
         .map(v => v.trim())
         .filter(v => v !== '');
 
-      let logoUrl = null;
-      const logoInput = document.querySelector<HTMLInputElement>('input[type="file"]');
-      if (logoInput?.files?.length) {
-        logoUrl = await handleLogoUpload(logoInput as unknown as React.ChangeEvent<HTMLInputElement>);
+      let logoUrlLight = null;
+      let logoUrlDark = null;
+      
+      const logoLightInput = document.querySelector<HTMLInputElement>('input[name="logo-light"]');
+      const logoDarkInput = document.querySelector<HTMLInputElement>('input[name="logo-dark"]');
+
+      if (logoLightInput?.files?.length) {
+        logoUrlLight = await handleLogoUpload(logoLightInput.files[0], false);
+      }
+
+      if (logoDarkInput?.files?.length) {
+        logoUrlDark = await handleLogoUpload(logoDarkInput.files[0], true);
       }
 
       if (selectedCompanyId && selectedCompanyId !== "new") {
@@ -107,7 +112,8 @@ export const CompanyForm = () => {
             name: companyName,
             project_managers: projectManagersArray,
             vessels: vesselsArray,
-            ...(logoUrl && { logo_url: logoUrl }),
+            ...(logoUrlLight && { logo_url_light: logoUrlLight }),
+            ...(logoUrlDark && { logo_url_dark: logoUrlDark }),
           })
           .eq('id', selectedCompanyId);
 
@@ -122,7 +128,8 @@ export const CompanyForm = () => {
           .from('companies')
           .insert({
             name: companyName,
-            logo_url: logoUrl,
+            logo_url_light: logoUrlLight,
+            logo_url_dark: logoUrlDark,
             project_managers: projectManagersArray,
             vessels: vesselsArray,
           });
@@ -155,7 +162,7 @@ export const CompanyForm = () => {
     <div className="space-y-8">
       <div className="border rounded-lg p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold">Cadastro de Empresa</h2>
+          <h2 className="text-xl font-semibold text-foreground">Cadastro de Empresa</h2>
           <Select value={selectedCompanyId || "new"} onValueChange={setSelectedCompanyId}>
             <SelectTrigger className="w-[280px]">
               <SelectValue placeholder="Selecione uma empresa para editar" />
@@ -172,23 +179,47 @@ export const CompanyForm = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <Label>Logo da Empresa</Label>
-            <Input
-              type="file"
-              accept="image/*"
-              className="mt-2"
-            />
-            <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-white dark:bg-zinc-900 mt-2">
-              {selectedCompanyId && selectedCompanyId !== "new" ? (
-                <img
-                  src={companies?.find(c => c.id === selectedCompanyId)?.logo_url || ''}
-                  alt="Logo da Empresa"
-                  className="max-h-24 max-w-full object-contain"
-                />
-              ) : (
-                <p className="text-muted-foreground">Nenhuma logo definida</p>
-              )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label>Logo da Empresa (Light Mode)</Label>
+              <Input
+                type="file"
+                name="logo-light"
+                accept="image/*"
+                className="mt-2"
+              />
+              <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-white dark:bg-zinc-900 mt-2">
+                {selectedCompanyId && selectedCompanyId !== "new" ? (
+                  <img
+                    src={companies?.find(c => c.id === selectedCompanyId)?.logo_url_light || ''}
+                    alt="Logo da Empresa (Light)"
+                    className="max-h-24 max-w-full object-contain"
+                  />
+                ) : (
+                  <p className="text-muted-foreground">Nenhuma logo definida</p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Logo da Empresa (Dark Mode)</Label>
+              <Input
+                type="file"
+                name="logo-dark"
+                accept="image/*"
+                className="mt-2"
+              />
+              <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-zinc-900 dark:bg-white mt-2">
+                {selectedCompanyId && selectedCompanyId !== "new" ? (
+                  <img
+                    src={companies?.find(c => c.id === selectedCompanyId)?.logo_url_dark || ''}
+                    alt="Logo da Empresa (Dark)"
+                    className="max-h-24 max-w-full object-contain"
+                  />
+                ) : (
+                  <p className="text-muted-foreground">Nenhuma logo definida</p>
+                )}
+              </div>
             </div>
           </div>
 

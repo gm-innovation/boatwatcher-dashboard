@@ -1,3 +1,4 @@
+
 import { format } from 'date-fns';
 import { Clock, Settings, Moon, Sun, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -11,7 +12,8 @@ import { useToast } from '@/components/ui/use-toast';
 interface ProjectData {
   project: {
     client: {
-      logo_url: string | null;
+      logo_url_light: string | null;
+      logo_url_dark: string | null;
     } | null;
   } | null;
 }
@@ -21,7 +23,8 @@ export const Header = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const { theme, setTheme } = useTheme();
   const [isAdmin, setIsAdmin] = useState(false);
-  const [clientLogo, setClientLogo] = useState<string | null>(null);
+  const [clientLogoLight, setClientLogoLight] = useState<string | null>(null);
+  const [clientLogoDark, setClientLogoDark] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Get system logo based on current theme
@@ -43,13 +46,14 @@ export const Header = () => {
         
         setIsAdmin(roleData?.role === 'admin');
 
-        // Fetch client logo from user's projects using the correct foreign key
+        // Fetch client logos from user's projects using the correct foreign key
         const { data: projectData } = await supabase
           .from('user_projects')
           .select(`
             project:projects (
               client:companies!projects_client_id_fkey (
-                logo_url
+                logo_url_light,
+                logo_url_dark
               )
             )
           `)
@@ -57,8 +61,9 @@ export const Header = () => {
           .maybeSingle();
 
         const typedProjectData = projectData as unknown as ProjectData;
-        if (typedProjectData?.project?.client?.logo_url) {
-          setClientLogo(typedProjectData.project.client.logo_url);
+        if (typedProjectData?.project?.client) {
+          setClientLogoLight(typedProjectData.project.client.logo_url_light);
+          setClientLogoDark(typedProjectData.project.client.logo_url_dark);
         }
       }
     };
@@ -79,6 +84,9 @@ export const Header = () => {
     }
     navigate('/login');
   };
+
+  // Get the appropriate logo based on current theme
+  const clientLogo = theme === 'dark' ? clientLogoDark : clientLogoLight;
 
   return (
     <header className="fixed top-0 left-0 right-0 w-full bg-background/80 backdrop-blur-sm border-b border-border animate-fade-in z-50">
