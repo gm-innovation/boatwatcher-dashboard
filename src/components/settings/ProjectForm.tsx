@@ -4,12 +4,13 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useProjectById } from "@/hooks/useSupabase";
 
 export const ProjectForm = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
   
@@ -19,6 +20,7 @@ export const ProjectForm = () => {
   const [projectType, setProjectType] = useState("");
   const [engineer, setEngineer] = useState("");
   const [captain, setCaptain] = useState("");
+  const [companyId, setCompanyId] = useState<string | null>(null);
 
   // Fetch project data when selected
   const { data: projectData } = useProjectById(selectedProjectId);
@@ -31,6 +33,9 @@ export const ProjectForm = () => {
       setProjectType(projectData.project_type || "");
       setEngineer(projectData.engineer || "");
       setCaptain(projectData.captain || "");
+      // Store the company ID for saving
+      const company = projectData as any; // Temporary type assertion
+      setCompanyId(company.client_id || null);
     } else {
       // Reset form when no project is selected
       setVesselName("");
@@ -38,11 +43,12 @@ export const ProjectForm = () => {
       setProjectType("");
       setEngineer("");
       setCaptain("");
+      setCompanyId(null);
     }
   }, [projectData]);
 
   const handleSave = async () => {
-    if (!selectedProjectId) {
+    if (!isCreatingNew && !selectedProjectId) {
       toast({
         title: "Erro ao salvar",
         description: "Selecione um projeto primeiro",
@@ -51,27 +57,56 @@ export const ProjectForm = () => {
       return;
     }
 
+    if (!companyId && !isCreatingNew) {
+      toast({
+        title: "Erro ao salvar",
+        description: "ID da empresa não encontrado",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSaving(true);
 
     try {
-      // Get the company ID from the project data
-      const clientId = projectData?.client_id;
+      if (isCreatingNew) {
+        // Create new project
+        const { data, error } = await supabase
+          .from('projects')
+          .insert({
+            start_date: startDate,
+            project_type: projectType,
+            captain: captain,
+            client_id: companyId,
+          })
+          .select()
+          .single();
 
-      const { error } = await supabase
-        .from('projects')
-        .update({
-          start_date: startDate,
-          project_type: projectType,
-          captain: captain,
-          client_id: clientId, // Maintain the existing client_id
-        })
-        .eq('id', selectedProjectId);
+        if (error) throw error;
+        
+        // Update the selected project to the newly created one
+        setSelectedProjectId(data.id);
+        setIsCreatingNew(false);
+      } else {
+        // Update existing project
+        const { error } = await supabase
+          .from('projects')
+          .update({
+            start_date: startDate,
+            project_type: projectType,
+            captain: captain,
+            client_id: companyId,
+          })
+          .eq('id', selectedProjectId);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
 
       toast({
-        title: "Projeto salvo",
-        description: "As alterações foram salvas com sucesso",
+        title: isCreatingNew ? "Projeto criado" : "Projeto atualizado",
+        description: isCreatingNew ? 
+          "O novo projeto foi criado com sucesso" : 
+          "As alterações foram salvas com sucesso",
       });
     } catch (error: any) {
       console.error('Error saving project:', error);
@@ -85,16 +120,40 @@ export const ProjectForm = () => {
     }
   };
 
+  const handleNewProject = () => {
+    setIsCreatingNew(true);
+    setSelectedProjectId(null);
+    // Reset form
+    setVesselName("");
+    setStartDate("");
+    setProjectType("");
+    setEngineer("");
+    setCaptain("");
+    setCompanyId(null);
+  };
+
   return (
     <div className="border rounded-lg p-6">
-      <h2 className="text-xl font-semibold mb-6">Configuração do Projeto</h2>
-      <div className="space-y-6">
-        <ProjectSelector
-          selectedProjectId={selectedProjectId}
-          onProjectSelect={setSelectedProjectId}
-        />
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-semibold">Configuração do Projeto</h2>
+        <Button onClick={handleNewProject} variant="outline" className="gap-2">
+          <Plus className="h-4 w-4" />
+          Novo Projeto
+        </Button>
+      </div>
 
-        {selectedProjectId && (
+      <div className="space-y-6">
+        {!isCreatingNew && (
+          <ProjectSelector
+            selectedProjectId={selectedProjectId}
+            onProjectSelect={(id) => {
+              setSelectedProjectId(id);
+              setIsCreatingNew(false);
+            }}
+          />
+        )}
+
+        {(selectedProjectId || isCreatingNew) && (
           <div className="grid gap-4">
             <div>
               <Label htmlFor="vesselName">Nome da Embarcação</Label>
@@ -151,7 +210,7 @@ export const ProjectForm = () => {
               className="mt-4"
             >
               {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Salvar Alterações
+              {isCreatingNew ? "Criar Projeto" : "Salvar Alterações"}
             </Button>
           </div>
         )}
