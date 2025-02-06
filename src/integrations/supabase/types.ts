@@ -52,6 +52,7 @@ export type Database = {
           id: string
           project_type: string | null
           start_date: string | null
+          vessel_name: string | null
         }
         Insert: {
           captain?: string | null
@@ -62,6 +63,7 @@ export type Database = {
           id?: string
           project_type?: string | null
           start_date?: string | null
+          vessel_name?: string | null
         }
         Update: {
           captain?: string | null
@@ -72,6 +74,7 @@ export type Database = {
           id?: string
           project_type?: string | null
           start_date?: string | null
+          vessel_name?: string | null
         }
         Relationships: [
           {

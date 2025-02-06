@@ -7,12 +7,14 @@ import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Plus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useProjectById } from "@/hooks/useSupabase";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const ProjectForm = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   // Form state
   const [vesselName, setVesselName] = useState("");
@@ -85,6 +87,9 @@ export const ProjectForm = () => {
         setSelectedProjectId(data.id);
         setIsCreatingNew(false);
 
+        // Invalidate and refetch projects query
+        await queryClient.invalidateQueries({ queryKey: ['projects'] });
+
         toast({
           title: "Projeto criado",
           description: "O novo projeto foi criado com sucesso",
@@ -97,6 +102,9 @@ export const ProjectForm = () => {
           .eq('id', selectedProjectId);
 
         if (error) throw error;
+
+        // Invalidate and refetch projects query
+        await queryClient.invalidateQueries({ queryKey: ['projects'] });
 
         toast({
           title: "Projeto atualizado",
