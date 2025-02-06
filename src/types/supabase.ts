@@ -28,4 +28,6 @@ export interface Project {
   company: string
   captain: string
   created_at: string
+  crew_count?: number
+  client_id?: string
 }
