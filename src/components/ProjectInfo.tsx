@@ -1,4 +1,3 @@
-
 import { Ship, Calendar, User, Building2, Anchor } from 'lucide-react';
 import { useProjectById } from '@/hooks/useSupabase';
 
@@ -46,46 +45,45 @@ export const ProjectInfo = ({ projectId }: ProjectInfoProps) => {
           <Ship className="h-4 w-4 text-muted-foreground" />
           <div>
             <p className="text-xs text-muted-foreground">Embarcação</p>
-            <p className="text-sm font-medium text-foreground">{projectInfo.vessel_name}</p>
+            <p className="text-sm font-medium text-foreground">{projectInfo.vessel_name || 'Não informado'}</p>
           </div>
         </div>
         <div className="flex items-center space-x-2">
           <Calendar className="h-4 w-4 text-muted-foreground" />
           <div>
             <p className="text-xs text-muted-foreground">Data de Início</p>
-            <p className="text-sm font-medium text-foreground">{projectInfo.start_date}</p>
+            <p className="text-sm font-medium text-foreground">{projectInfo.start_date || 'Não informado'}</p>
           </div>
         </div>
         <div className="flex items-center space-x-2">
           <Anchor className="h-4 w-4 text-muted-foreground" />
           <div>
             <p className="text-xs text-muted-foreground">Tipo de Projeto</p>
-            <p className="text-sm font-medium text-foreground">{projectInfo.project_type}</p>
+            <p className="text-sm font-medium text-foreground">{projectInfo.project_type || 'Não informado'}</p>
           </div>
         </div>
         <div className="flex items-center space-x-2">
           <User className="h-4 w-4 text-muted-foreground" />
           <div>
             <p className="text-xs text-muted-foreground">Responsável</p>
-            <p className="text-sm font-medium text-foreground">{projectInfo.engineer}</p>
+            <p className="text-sm font-medium text-foreground">{projectInfo.engineer || 'Não informado'}</p>
           </div>
         </div>
         <div className="flex items-center space-x-2">
           <Building2 className="h-4 w-4 text-muted-foreground" />
           <div>
             <p className="text-xs text-muted-foreground">Armador</p>
-            <p className="text-sm font-medium text-foreground">{projectInfo.company}</p>
+            <p className="text-sm font-medium text-foreground">{projectInfo.company || 'Não informado'}</p>
           </div>
         </div>
         <div className="flex items-center space-x-2">
           <User className="h-4 w-4 text-muted-foreground" />
           <div>
             <p className="text-xs text-muted-foreground">Comandante</p>
-            <p className="text-sm font-medium text-foreground">{projectInfo.captain}</p>
+            <p className="text-sm font-medium text-foreground">{projectInfo.captain || 'Não informado'}</p>
           </div>
         </div>
       </div>
     </div>
   );
 };
-
