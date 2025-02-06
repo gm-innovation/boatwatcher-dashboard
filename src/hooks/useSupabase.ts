@@ -46,9 +46,12 @@ export const useProjects = () => {
             project_managers
           )
         `)
-        .order('created_at');
+        .order('created_at', { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching projects:', error);
+        throw error;
+      }
       
       // Transform the data to match the expected Project type
       const transformedData = data.map((project: any) => ({
@@ -82,7 +85,10 @@ export const useProjectById = (projectId: string | null) => {
         .eq('id', projectId)
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching project by id:', error);
+        throw error;
+      }
 
       // Transform the data to match the expected Project type
       const transformedData = {
