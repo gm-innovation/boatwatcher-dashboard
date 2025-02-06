@@ -20,6 +20,7 @@ export const ProjectForm = () => {
   const [projectType, setProjectType] = useState("");
   const [engineer, setEngineer] = useState("");
   const [captain, setCaptain] = useState("");
+  const [crewCount, setCrewCount] = useState("");
   const [companyId, setCompanyId] = useState<string | null>(null);
 
   // Fetch project data when selected
@@ -33,9 +34,8 @@ export const ProjectForm = () => {
       setProjectType(projectData.project_type || "");
       setEngineer(projectData.engineer || "");
       setCaptain(projectData.captain || "");
-      // Store the company ID for saving
-      const company = projectData as any; // Temporary type assertion
-      setCompanyId(company.client_id || null);
+      setCrewCount(projectData.crew_count?.toString() || "");
+      setCompanyId(projectData.client_id || null);
     } else {
       // Reset form when no project is selected
       setVesselName("");
@@ -43,6 +43,7 @@ export const ProjectForm = () => {
       setProjectType("");
       setEngineer("");
       setCaptain("");
+      setCrewCount("");
       setCompanyId(null);
     }
   }, [projectData]);
@@ -57,28 +58,24 @@ export const ProjectForm = () => {
       return;
     }
 
-    if (!companyId && !isCreatingNew) {
-      toast({
-        title: "Erro ao salvar",
-        description: "ID da empresa não encontrado",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsSaving(true);
 
     try {
+      const projectData = {
+        vessel_name: vesselName,
+        start_date: startDate,
+        project_type: projectType,
+        engineer: engineer,
+        captain: captain,
+        crew_count: crewCount ? parseInt(crewCount) : null,
+        client_id: companyId,
+      };
+
       if (isCreatingNew) {
         // Create new project
         const { data, error } = await supabase
           .from('projects')
-          .insert({
-            start_date: startDate,
-            project_type: projectType,
-            captain: captain,
-            client_id: companyId,
-          })
+          .insert(projectData)
           .select()
           .single();
 
@@ -91,12 +88,7 @@ export const ProjectForm = () => {
         // Update existing project
         const { error } = await supabase
           .from('projects')
-          .update({
-            start_date: startDate,
-            project_type: projectType,
-            captain: captain,
-            client_id: companyId,
-          })
+          .update(projectData)
           .eq('id', selectedProjectId);
 
         if (error) throw error;
@@ -129,6 +121,7 @@ export const ProjectForm = () => {
     setProjectType("");
     setEngineer("");
     setCaptain("");
+    setCrewCount("");
     setCompanyId(null);
   };
 
@@ -161,8 +154,7 @@ export const ProjectForm = () => {
                 id="vesselName" 
                 value={vesselName}
                 onChange={(e) => setVesselName(e.target.value)}
-                className="mt-1" 
-                disabled
+                className="mt-1"
               />
             </div>
             <div>
@@ -191,7 +183,6 @@ export const ProjectForm = () => {
                 value={engineer}
                 onChange={(e) => setEngineer(e.target.value)}
                 className="mt-1"
-                disabled 
               />
             </div>
             <div>
@@ -200,6 +191,16 @@ export const ProjectForm = () => {
                 id="captain" 
                 value={captain}
                 onChange={(e) => setCaptain(e.target.value)}
+                className="mt-1" 
+              />
+            </div>
+            <div>
+              <Label htmlFor="crewCount">Quantidade de Tripulantes</Label>
+              <Input 
+                id="crewCount" 
+                type="number"
+                value={crewCount}
+                onChange={(e) => setCrewCount(e.target.value)}
                 className="mt-1" 
               />
             </div>
