@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 
@@ -31,7 +30,7 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
   
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     const response = await fetch(url, {
       method: 'POST',
@@ -42,10 +41,11 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
       },
       body: JSON.stringify(credentials),
       signal: controller.signal,
-      // @ts-ignore - Adding Deno-specific TLS configuration
-      client: {
-        allowInsecure: true // Allow self-signed certificates
-      }
+    }, {
+      // Configure Deno HTTP client directly
+      client: new Deno.HttpClient({
+        tlsOptions: { alpnProtocols: ['h2', 'http/1.1'], rejectUnauthorized: false }
+      })
     });
 
     clearTimeout(timeoutId);
@@ -97,16 +97,10 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   
   console.log('Access events request URL:', url);
   console.log('Request body:', JSON.stringify(requestBody));
-  console.log('Request headers:', {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'modulo': 'CONTROLE_ACESSO'
-  });
   
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     const response = await fetch(url, {
       method: 'POST',
@@ -119,10 +113,11 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
       },
       body: JSON.stringify(requestBody),
       signal: controller.signal,
-      // @ts-ignore - Adding Deno-specific TLS configuration
-      client: {
-        allowInsecure: true // Allow self-signed certificates
-      }
+    }, {
+      // Configure Deno HTTP client directly
+      client: new Deno.HttpClient({
+        tlsOptions: { alpnProtocols: ['h2', 'http/1.1'], rejectUnauthorized: false }
+      })
     });
 
     clearTimeout(timeoutId);
@@ -215,4 +210,3 @@ serve(async (req) => {
     );
   }
 });
-
