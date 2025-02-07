@@ -41,11 +41,6 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
       },
       body: JSON.stringify(credentials),
       signal: controller.signal,
-    }, {
-      // Configure Deno HTTP client directly
-      client: new Deno.HttpClient({
-        tlsOptions: { alpnProtocols: ['h2', 'http/1.1'], rejectUnauthorized: false }
-      })
     });
 
     clearTimeout(timeoutId);
@@ -113,11 +108,6 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
       },
       body: JSON.stringify(requestBody),
       signal: controller.signal,
-    }, {
-      // Configure Deno HTTP client directly
-      client: new Deno.HttpClient({
-        tlsOptions: { alpnProtocols: ['h2', 'http/1.1'], rejectUnauthorized: false }
-      })
     });
 
     clearTimeout(timeoutId);
