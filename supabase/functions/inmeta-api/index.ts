@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 
@@ -41,6 +42,12 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
       },
       body: JSON.stringify(credentials),
       signal: controller.signal,
+    }, {
+      // @ts-ignore: Deno provides extended fetch options
+      certificateChains: [{
+        certificates: [],
+        verifyDefaults: false,
+      }],
     });
 
     clearTimeout(timeoutId);
@@ -108,6 +115,12 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
       },
       body: JSON.stringify(requestBody),
       signal: controller.signal,
+    }, {
+      // @ts-ignore: Deno provides extended fetch options
+      certificateChains: [{
+        certificates: [],
+        verifyDefaults: false,
+      }],
     });
 
     clearTimeout(timeoutId);
