@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 
-const API_BASE_URL = 'https://homologacao.inmeta.com.br'
+const API_BASE_URL = 'https://api.homologacao.inmeta.com.br/api'
 
 interface InmetaCredentials {
   email: string
@@ -12,21 +12,19 @@ interface InmetaCredentials {
 interface AccessEvent {
   tipo: string
   data: string
-  alvo: string
+  alvo: object
   agente: string
   cpfPessoa: string
   tipoPessoa: string
   nomePessoa: string
   cargoPessoa: string
   observacoes: string
-  vinculoColaborador: {
-    empresa: string
-  }
+  vinculoColaborador: object
 }
 
 async function getToken(credentials: InmetaCredentials): Promise<string> {
   console.log('Getting token with email:', credentials.email);
-  const url = `${API_BASE_URL}/api/v1/token`;
+  const url = `${API_BASE_URL}/v1/token`;
   console.log('Token request URL:', url);
   
   try {
@@ -38,16 +36,9 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0',
       },
       body: JSON.stringify(credentials),
       signal: controller.signal,
-    }, {
-      // @ts-ignore: Deno provides extended fetch options
-      certificateChains: [{
-        certificates: [],
-        verifyDefaults: false,
-      }],
     });
 
     clearTimeout(timeoutId);
@@ -77,10 +68,6 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
       console.error('Request timed out after 30 seconds');
       throw new Error('Request timed out while trying to get token');
     }
-    
-    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-      console.error('Network connection error - possibly related to SSL/certificates');
-    }
     throw error;
   }
 }
@@ -91,36 +78,25 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   const formattedStartDate = `${startDate}T00:00:00`;
   const formattedEndDate = `${endDate}T23:59:59`;
   
-  const url = `${API_BASE_URL}/api/v1/eventos-acesso`;
-  const requestBody = {
-    dataInicial: formattedStartDate,
-    dataFinal: formattedEndDate
-  };
+  // Construct URL with query parameters
+  const url = new URL(`${API_BASE_URL}/v1/eventos-acesso`);
+  url.searchParams.append('dataInicial', formattedStartDate);
+  url.searchParams.append('dataFinal', formattedEndDate);
   
-  console.log('Access events request URL:', url);
-  console.log('Request body:', JSON.stringify(requestBody));
+  console.log('Access events request URL:', url.toString());
   
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     const response = await fetch(url, {
-      method: 'POST',
+      method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0',
         'modulo': 'CONTROLE_ACESSO'
       },
-      body: JSON.stringify(requestBody),
       signal: controller.signal,
-    }, {
-      // @ts-ignore: Deno provides extended fetch options
-      certificateChains: [{
-        certificates: [],
-        verifyDefaults: false,
-      }],
     });
 
     clearTimeout(timeoutId);
@@ -149,10 +125,6 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
     if (error.name === 'AbortError') {
       console.error('Request timed out after 30 seconds');
       throw new Error('Request timed out while trying to get access events');
-    }
-    
-    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-      console.error('Network connection error - possibly related to SSL/certificates');
     }
     throw error;
   }
