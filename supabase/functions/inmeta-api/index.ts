@@ -30,6 +30,7 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
   console.log('Getting token with email:', credentials.email);
   const url = `${API_BASE_URL}/v1/token`;
   console.log('Token request URL:', url);
+  console.log('Request body:', JSON.stringify(credentials));
   
   try {
     const controller = new AbortController();
@@ -50,21 +51,32 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
     console.log('Token request status:', response.status);
     console.log('Token response headers:', Object.fromEntries(response.headers.entries()));
     
+    // Log the raw response text first
+    const responseText = await response.text();
+    console.log('Raw response text:', responseText);
+    
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Token request failed:', response.status, errorText);
-      throw new Error(`Failed to get token: ${response.statusText} (${response.status}). Response: ${errorText}`);
+      console.error('Token request failed:', response.status, responseText);
+      throw new Error(`Failed to get token: ${response.statusText} (${response.status}). Response: ${responseText}`);
     }
 
-    const data = await response.json() as TokenResponse;
-    console.log('Token response data:', data);
+    let data;
+    try {
+      data = JSON.parse(responseText) as TokenResponse;
+    } catch (parseError) {
+      console.error('Error parsing token response:', parseError);
+      throw new Error(`Failed to parse token response: ${responseText}`);
+    }
+
+    console.log('Parsed token response:', data);
     
-    if (!data.token) {
-      throw new Error('Token not found in response');
+    if (!data || !data.token) {
+      console.error('Invalid token response structure:', data);
+      throw new Error('Token not found in response. Full response: ' + JSON.stringify(data));
     }
 
     console.log('Token obtained successfully');
-    return data.token.trim(); // Ensure no whitespace in token
+    return data.token.trim();
   } catch (error) {
     console.error('Error in getToken:', error);
     console.error('Error details:', {
