@@ -33,6 +33,7 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
   
   try {
     console.log('Token request URL:', url);
+    console.log('Request body:', JSON.stringify(credentials));
 
     const response = await fetch(url, {
       method: 'POST',
@@ -44,6 +45,7 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
     });
 
     console.log('Token request status:', response.status);
+    console.log('Token response headers:', Object.fromEntries(response.headers.entries()));
 
     const text = await response.text();
     console.log('Raw response text:', text);
@@ -107,6 +109,7 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
     });
 
     console.log('Access events response status:', response.status);
+    console.log('Access events response headers:', Object.fromEntries(response.headers.entries()));
 
     const text = await response.text();
     console.log('Access events raw response:', text);
@@ -180,7 +183,6 @@ serve(async (req) => {
     const token = await getToken(credentials);
     console.log('Successfully obtained token');
 
-    // Como só temos eventos de acesso na API, sempre chamamos getAccessEvents
     const events = await getAccessEvents(
       token,
       startDate || new Date().toISOString().split('T')[0],

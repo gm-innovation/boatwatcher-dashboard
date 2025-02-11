@@ -33,64 +33,6 @@ function getDateRange() {
   };
 }
 
-export const useInmetaAlvos = () => {
-  return useQuery({
-    queryKey: ["inmeta-alvos"],
-    queryFn: async () => {
-      try {
-        console.log('Buscando alvos do Inmeta...');
-        const { startDate, endDate } = getDateRange();
-        
-        const { data: events, error } = await supabase.functions.invoke("inmeta-api", {
-          method: "POST",
-          body: JSON.stringify({
-            action: "getAccessEvents",
-            startDate,
-            endDate
-          })
-        });
-
-        if (error) {
-          console.error("Erro ao buscar eventos Inmeta:", error);
-          toast({
-            title: "Erro ao buscar alvos",
-            description: "Não foi possível obter os alvos do Inmeta. Por favor, tente novamente mais tarde.",
-            variant: "destructive",
-          });
-          throw error;
-        }
-
-        if (!Array.isArray(events)) {
-          console.error("Formato de resposta inválido da API Inmeta:", events);
-          return [];
-        }
-
-        // Extrair alvos únicos dos eventos
-        const alvosUnicos = new Map<string, InmetaEvent['alvo']>();
-        events.forEach(event => {
-          if (event.alvo?.id && event.alvo?.nome) {
-            alvosUnicos.set(event.alvo.id, event.alvo);
-          }
-        });
-
-        const alvos = Array.from(alvosUnicos.values());
-        console.log('Alvos encontrados:', alvos);
-        return alvos;
-      } catch (error) {
-        console.error("Erro em useInmetaAlvos:", error);
-        toast({
-          title: "Erro ao buscar alvos",
-          description: "Ocorreu um erro ao buscar os alvos do Inmeta. Por favor, tente novamente mais tarde.",
-          variant: "destructive",
-        });
-        return [];
-      }
-    },
-    retry: 2,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-  });
-};
-
 export const useInmetaEvents = (alvoId?: string) => {
   return useQuery({
     queryKey: ["inmeta-events", alvoId],

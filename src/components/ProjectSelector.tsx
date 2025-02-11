@@ -1,6 +1,6 @@
 
 import { useProjects } from '@/hooks/useSupabase';
-import { useInmetaAlvos } from '@/hooks/useInmetaApi';
+import { useInmetaEvents } from '@/hooks/useInmetaApi';
 import {
   Select,
   SelectContent,
@@ -17,7 +17,7 @@ interface ProjectSelectorProps {
 
 export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectSelectorProps) => {
   const { data: dbProjects = [], isLoading: isLoadingDb } = useProjects();
-  const { data: alvos = [], isLoading: isLoadingInmeta } = useInmetaAlvos();
+  const { data: events = [], isLoading: isLoadingInmeta } = useInmetaEvents();
 
   const isLoading = isLoadingDb || isLoadingInmeta;
 
@@ -25,24 +25,32 @@ export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectS
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Carregando alvos...</span>
+        <span>Carregando...</span>
       </div>
     );
   }
 
-  // Encontrar o alvo selecionado no banco ou no Inmeta
-  const selectedAlvo = alvos.find(a => a.id === selectedProjectId);
+  // Extrair alvo único dos eventos
+  const alvosMap = new Map<string, { id: string; nome: string }>();
+  events.forEach(event => {
+    if (event.alvo?.id && event.alvo?.nome) {
+      alvosMap.set(event.alvo.id, event.alvo);
+    }
+  });
+  
+  // Encontrar o alvo selecionado
+  const selectedAlvo = Array.from(alvosMap.values()).find(a => a.id === selectedProjectId);
   const selectedDbProject = dbProjects.find(p => p.id === selectedProjectId);
 
-  // Mesclar projetos do banco com os alvos do Inmeta, evitando duplicatas
+  // Mesclar projetos do banco com os alvos dos eventos
   const allProjects = [
-    ...alvos.map(alvo => ({
+    ...Array.from(alvosMap.values()).map(alvo => ({
       id: alvo.id,
       name: alvo.nome,
       source: 'inmeta' as const
     })),
     ...dbProjects
-      .filter(p => !alvos.some(a => a.id === p.external_project_id))
+      .filter(p => !alvosMap.has(p.external_project_id || ''))
       .map(p => ({
         id: p.id,
         name: p.vessel_name || 'Sem nome',
