@@ -1,6 +1,6 @@
 
 import { useProjects } from '@/hooks/useSupabase';
-import { useInmetaObras } from '@/hooks/useInmetaApi';
+import { useInmetaAlvos } from '@/hooks/useInmetaApi';
 import {
   Select,
   SelectContent,
@@ -17,7 +17,7 @@ interface ProjectSelectorProps {
 
 export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectSelectorProps) => {
   const { data: dbProjects = [], isLoading: isLoadingDb } = useProjects();
-  const { data: obras = [], isLoading: isLoadingInmeta } = useInmetaObras();
+  const { data: alvos = [], isLoading: isLoadingInmeta } = useInmetaAlvos();
 
   const isLoading = isLoadingDb || isLoadingInmeta;
 
@@ -25,24 +25,24 @@ export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectS
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Carregando obras...</span>
+        <span>Carregando alvos...</span>
       </div>
     );
   }
 
-  // Encontrar a obra selecionada no banco ou no Inmeta
-  const selectedObra = obras.find(p => p.id === selectedProjectId);
+  // Encontrar o alvo selecionado no banco ou no Inmeta
+  const selectedAlvo = alvos.find(a => a.id === selectedProjectId);
   const selectedDbProject = dbProjects.find(p => p.id === selectedProjectId);
 
-  // Mesclar projetos do banco com as obras do Inmeta, evitando duplicatas
+  // Mesclar projetos do banco com os alvos do Inmeta, evitando duplicatas
   const allProjects = [
-    ...obras.map(obra => ({
-      id: obra.id,
-      name: obra.nome,
+    ...alvos.map(alvo => ({
+      id: alvo.id,
+      name: alvo.nome,
       source: 'inmeta' as const
     })),
     ...dbProjects
-      .filter(p => !obras.some(o => o.id === p.external_project_id))
+      .filter(p => !alvos.some(a => a.id === p.external_project_id))
       .map(p => ({
         id: p.id,
         name: p.vessel_name || 'Sem nome',
@@ -56,8 +56,8 @@ export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectS
       onValueChange={onProjectSelect}
     >
       <SelectTrigger className="w-[300px]">
-        <SelectValue placeholder="Selecione uma obra">
-          {selectedObra?.nome || selectedDbProject?.vessel_name || 'Selecione uma obra'}
+        <SelectValue placeholder="Selecione um alvo">
+          {selectedAlvo?.nome || selectedDbProject?.vessel_name || 'Selecione um alvo'}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>

@@ -22,11 +22,6 @@ interface InmetaEvent {
   };
 }
 
-interface InmetaObra {
-  id: string;
-  nome: string;
-}
-
 function getDateRange() {
   const today = new Date();
   const startDate = new Date();
@@ -38,12 +33,12 @@ function getDateRange() {
   };
 }
 
-export const useInmetaObras = () => {
+export const useInmetaAlvos = () => {
   return useQuery({
-    queryKey: ["inmeta-obras"],
-    queryFn: async (): Promise<InmetaObra[]> => {
+    queryKey: ["inmeta-alvos"],
+    queryFn: async () => {
       try {
-        console.log('Buscando obras do Inmeta...');
+        console.log('Buscando alvos do Inmeta...');
         const { startDate, endDate } = getDateRange();
         
         const { data: events, error } = await supabase.functions.invoke("inmeta-api", {
@@ -58,8 +53,8 @@ export const useInmetaObras = () => {
         if (error) {
           console.error("Erro ao buscar eventos Inmeta:", error);
           toast({
-            title: "Erro ao buscar obras",
-            description: "Não foi possível obter as obras do Inmeta. Por favor, tente novamente mais tarde.",
+            title: "Erro ao buscar alvos",
+            description: "Não foi possível obter os alvos do Inmeta. Por favor, tente novamente mais tarde.",
             variant: "destructive",
           });
           throw error;
@@ -70,25 +65,22 @@ export const useInmetaObras = () => {
           return [];
         }
 
-        // Extrair obras únicas dos eventos
-        const obrasUnicas = new Map<string, InmetaObra>();
+        // Extrair alvos únicos dos eventos
+        const alvosUnicos = new Map<string, InmetaEvent['alvo']>();
         events.forEach(event => {
           if (event.alvo?.id && event.alvo?.nome) {
-            obrasUnicas.set(event.alvo.id, {
-              id: event.alvo.id,
-              nome: event.alvo.nome
-            });
+            alvosUnicos.set(event.alvo.id, event.alvo);
           }
         });
 
-        const obras = Array.from(obrasUnicas.values());
-        console.log('Obras encontradas:', obras);
-        return obras;
+        const alvos = Array.from(alvosUnicos.values());
+        console.log('Alvos encontrados:', alvos);
+        return alvos;
       } catch (error) {
-        console.error("Erro em useInmetaObras:", error);
+        console.error("Erro em useInmetaAlvos:", error);
         toast({
-          title: "Erro ao buscar obras",
-          description: "Ocorreu um erro ao buscar as obras do Inmeta. Por favor, tente novamente mais tarde.",
+          title: "Erro ao buscar alvos",
+          description: "Ocorreu um erro ao buscar os alvos do Inmeta. Por favor, tente novamente mais tarde.",
           variant: "destructive",
         });
         return [];

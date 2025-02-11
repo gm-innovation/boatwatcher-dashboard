@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { ProjectSelector } from "@/components/ProjectSelector";
 import { Label } from "@/components/ui/label";
@@ -8,7 +7,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Plus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useProjectById, useCompanies } from "@/hooks/useSupabase";
-import { useInmetaProjects } from "@/hooks/useInmetaApi";
+import { useInmetaAlvos } from "@/hooks/useInmetaApi";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Select,
@@ -34,7 +33,7 @@ export const ProjectForm = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: companies = [] } = useCompanies();
-  const { data: inmetaProjects = [] } = useInmetaProjects();
+  const { data: inmetaAlvos = [] } = useInmetaAlvos();
   
   // Form state
   const [vesselName, setVesselName] = useState("");
@@ -44,7 +43,7 @@ export const ProjectForm = () => {
   const [captain, setCaptain] = useState("");
   const [crewCount, setCrewCount] = useState("");
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
-  const [selectedInmetaProjectId, setSelectedInmetaProjectId] = useState<string | null>(null);
+  const [selectedInmetaAlvoId, setSelectedInmetaAlvoId] = useState<string | null>(null);
 
   // Fetch project data when selected
   const { data: projectData } = useProjectById(selectedProjectId);
@@ -59,7 +58,7 @@ export const ProjectForm = () => {
       setCaptain(projectData.captain || "");
       setCrewCount(projectData.crew_count?.toString() || "");
       setSelectedCompanyId(projectData.client_id || null);
-      setSelectedInmetaProjectId(projectData.external_project_id || null);
+      setSelectedInmetaAlvoId(projectData.external_project_id || null);
     } else {
       setVesselName("");
       setStartDate("");
@@ -68,7 +67,7 @@ export const ProjectForm = () => {
       setCaptain("");
       setCrewCount("");
       setSelectedCompanyId(null);
-      setSelectedInmetaProjectId(null);
+      setSelectedInmetaAlvoId(null);
     }
   }, [projectData]);
 
@@ -82,7 +81,7 @@ export const ProjectForm = () => {
       return;
     }
 
-    if (!selectedInmetaProjectId) {
+    if (!selectedInmetaAlvoId) {
       toast({
         title: "Erro ao salvar",
         description: "Selecione uma obra do Inmeta",
@@ -94,16 +93,16 @@ export const ProjectForm = () => {
     setIsSaving(true);
 
     try {
-      const inmetaProject = inmetaProjects.find(p => p.id === selectedInmetaProjectId);
+      const inmetaAlvo = inmetaAlvos.find(p => p.id === selectedInmetaAlvoId);
       const projectData = {
-        vessel_name: vesselName || inmetaProject?.nome,
+        vessel_name: vesselName || inmetaAlvo?.nome,
         start_date: startDate,
         project_type: projectType,
         engineer: engineer,
         captain: captain,
         crew_count: crewCount ? parseInt(crewCount) : null,
         client_id: selectedCompanyId,
-        external_project_id: selectedInmetaProjectId
+        external_project_id: selectedInmetaAlvoId
       };
 
       if (isCreatingNew) {
@@ -161,7 +160,7 @@ export const ProjectForm = () => {
     setCaptain("");
     setCrewCount("");
     setSelectedCompanyId(null);
-    setSelectedInmetaProjectId(null);
+    setSelectedInmetaAlvoId(null);
   };
 
   return (
@@ -188,16 +187,16 @@ export const ProjectForm = () => {
         {(selectedProjectId || isCreatingNew) && (
           <div className="grid gap-4">
             <div>
-              <Label htmlFor="inmetaProjectId">Obra do Inmeta</Label>
+              <Label htmlFor="inmetaAlvoId">Obra do Inmeta</Label>
               <Select 
-                value={selectedInmetaProjectId || undefined}
-                onValueChange={setSelectedInmetaProjectId}
+                value={selectedInmetaAlvoId || undefined}
+                onValueChange={setSelectedInmetaAlvoId}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione uma obra" />
                 </SelectTrigger>
                 <SelectContent>
-                  {inmetaProjects.map((project) => (
+                  {inmetaAlvos.map((project) => (
                     <SelectItem key={project.id} value={project.id}>
                       {project.nome}
                     </SelectItem>
