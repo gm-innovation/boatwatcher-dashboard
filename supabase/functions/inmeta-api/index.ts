@@ -48,7 +48,7 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
     console.log('Raw response text:', text);
 
     if (!response.ok) {
-      throw new Error(`Failed to get token: ${response.statusText}`);
+      throw new Error(`Failed to get token: ${response.statusText}. Response: ${text}`);
     }
 
     try {
@@ -72,7 +72,7 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
 }
 
 async function getProjects(token: string): Promise<InmetaProject[]> {
-  const url = new URL(`${API_BASE_URL}/v1/obras`);
+  const url = `${API_BASE_URL}/v1/obras`;
   
   try {
     const headers = {
@@ -81,9 +81,10 @@ async function getProjects(token: string): Promise<InmetaProject[]> {
       'modulo': 'CONTROLE_ACESSO'
     };
 
+    console.log('Projects request URL:', url);
     console.log('Request headers:', headers);
 
-    const response = await fetch(url.toString(), {
+    const response = await fetch(url, {
       method: 'GET',
       headers
     });
@@ -91,19 +92,19 @@ async function getProjects(token: string): Promise<InmetaProject[]> {
     console.log('Projects response status:', response.status);
     console.log('Projects response headers:', Object.fromEntries(response.headers.entries()));
 
-    if (!response.ok) {
-      throw new Error(`Failed to get projects: ${response.statusText}`);
-    }
-
     const text = await response.text();
     console.log('Projects response text:', text);
 
+    if (!response.ok) {
+      throw new Error(`Failed to get projects: ${response.statusText}. Response: ${text}`);
+    }
+
     const data = JSON.parse(text);
-    console.log('Successfully fetched projects:', data);
+    console.log('Successfully parsed projects response:', data);
 
     if (!data?.content || !Array.isArray(data.content)) {
       console.error('Invalid response structure:', data);
-      throw new Error('Formato de resposta inválido');
+      throw new Error(`Invalid response format. Full response: ${text}`);
     }
 
     return data.content.map((project: any) => ({
@@ -131,6 +132,7 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
       'modulo': 'CONTROLE_ACESSO'
     };
 
+    console.log('Access events request URL:', url.toString());
     console.log('Request headers:', headers);
 
     const response = await fetch(url.toString(), {
@@ -141,19 +143,19 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
     console.log('Access events response status:', response.status);
     console.log('Access events response headers:', Object.fromEntries(response.headers.entries()));
 
-    if (!response.ok) {
-      throw new Error(`Failed to get access events: ${response.statusText}`);
-    }
-
     const text = await response.text();
     console.log('Access events response text:', text);
 
+    if (!response.ok) {
+      throw new Error(`Failed to get access events: ${response.statusText}. Response: ${text}`);
+    }
+
     const data = JSON.parse(text);
-    console.log('Successfully fetched access events:', data);
+    console.log('Successfully parsed access events response:', data);
 
     if (!data?.content || !Array.isArray(data.content)) {
       console.error('Invalid response structure:', data);
-      throw new Error('Formato de resposta inválido');
+      throw new Error(`Invalid response format. Full response: ${text}`);
     }
 
     return data.content.map((event: any) => ({
@@ -190,7 +192,11 @@ serve(async (req) => {
       throw new Error('Credenciais da API Inmeta não configuradas');
     }
 
+    console.log('Using credentials:', { email: credentials.email, password: '***' });
+
     const token = await getToken(credentials);
+    console.log('Successfully obtained token');
+
     let result;
     
     switch (action) {
