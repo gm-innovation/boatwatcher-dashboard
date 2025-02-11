@@ -79,52 +79,6 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
   }
 }
 
-async function getProjects(token: string): Promise<InmetaProject[]> {
-  const url = `${API_BASE_URL}/v1/alvo`;
-  
-  try {
-    const headers = {
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/json',
-      'modulo': 'CONTROLE_ACESSO'
-    };
-
-    console.log('Projects request URL:', url);
-    console.log('Request headers:', headers);
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers
-    });
-
-    console.log('Projects response status:', response.status);
-    console.log('Projects response headers:', Object.fromEntries(response.headers.entries()));
-
-    const text = await response.text();
-    console.log('Projects response text:', text);
-
-    if (!response.ok) {
-      throw new Error(`Failed to get projects: ${response.statusText}. Response: ${text}`);
-    }
-
-    const data = JSON.parse(text);
-    console.log('Successfully parsed projects response:', data);
-
-    if (!data?.content || !Array.isArray(data.content)) {
-      console.error('Invalid response structure:', data);
-      throw new Error(`Invalid response format. Full response: ${text}`);
-    }
-
-    return data.content.map((project: any) => ({
-      id: project.id,
-      nome: project.nome
-    }));
-  } catch (error) {
-    console.error('Error fetching projects:', error);
-    throw error;
-  }
-}
-
 async function getAccessEvents(token: string, startDate: string, endDate: string, projectId?: string): Promise<AccessEvent[]> {
   // Garantir que as datas incluam o timezone
   const formattedStartDate = `${startDate}T00:00:00-03:00`;
@@ -220,6 +174,40 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   }
 }
 
+async function getProjectsFromEvents(token: string): Promise<InmetaProject[]> {
+  // Usar um período maior para ter mais chances de encontrar todos os projetos
+  const today = new Date();
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(today.getMonth() - 6);
+
+  const startDate = sixMonthsAgo.toISOString().split('T')[0];
+  const endDate = today.toISOString().split('T')[0];
+
+  try {
+    const events = await getAccessEvents(token, startDate, endDate);
+    
+    // Extrair projetos únicos dos eventos usando um Set
+    const uniqueProjects = new Set<string>();
+    const projects: InmetaProject[] = [];
+
+    events.forEach(event => {
+      if (event.alvo && event.alvo.id && !uniqueProjects.has(event.alvo.id)) {
+        uniqueProjects.add(event.alvo.id);
+        projects.push({
+          id: event.alvo.id,
+          nome: event.alvo.nome || 'Nome não informado'
+        });
+      }
+    });
+
+    console.log('Projects extracted from events:', projects);
+    return projects;
+  } catch (error) {
+    console.error('Error getting projects from events:', error);
+    throw error;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -247,7 +235,7 @@ serve(async (req) => {
     
     switch (action) {
       case 'getProjects':
-        result = await getProjects(token);
+        result = await getProjectsFromEvents(token);
         break;
 
       case 'getAccessEvents':
