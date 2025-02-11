@@ -5,10 +5,18 @@ import { toast } from "@/components/ui/use-toast";
 
 interface InmetaEvent {
   id: string;
-  name: string;
-  role: string;
-  arrival_time: string;
-  photo_url: string;
+  tipo: string;
+  data: string;
+  alvo: {
+    id: string;
+    nome: string;
+  };
+  agente: string;
+  cpfPessoa: string;
+  tipoPessoa: string;
+  nomePessoa: string;
+  cargoPessoa: string;
+  observacoes: string;
   vinculoColaborador: {
     empresa: string;
   };
@@ -45,8 +53,8 @@ export const useInmetaProjects = () => {
         if (error) {
           console.error("Error fetching Inmeta projects:", error);
           toast({
-            title: "Erro ao buscar projetos",
-            description: "Não foi possível obter os projetos do Inmeta. Por favor, tente novamente mais tarde.",
+            title: "Erro ao buscar obras",
+            description: "Não foi possível obter as obras do Inmeta. Por favor, tente novamente mais tarde.",
             variant: "destructive",
           });
           throw error;
@@ -57,8 +65,8 @@ export const useInmetaProjects = () => {
       } catch (error) {
         console.error("Error in useInmetaProjects:", error);
         toast({
-          title: "Erro ao buscar projetos",
-          description: "Ocorreu um erro ao buscar os projetos do Inmeta. Por favor, tente novamente mais tarde.",
+          title: "Erro ao buscar obras",
+          description: "Ocorreu um erro ao buscar as obras do Inmeta. Por favor, tente novamente mais tarde.",
           variant: "destructive",
         });
         return [];
@@ -69,14 +77,14 @@ export const useInmetaProjects = () => {
   });
 };
 
-export const useInmetaEvents = (projectId?: string) => {
+export const useInmetaEvents = (alvoId?: string) => {
   return useQuery({
-    queryKey: ["inmeta-events", projectId],
+    queryKey: ["inmeta-events", alvoId],
     queryFn: async (): Promise<InmetaEvent[]> => {
       try {
         const { startDate, endDate } = getDateRange();
 
-        console.log('Fetching Inmeta events for dates:', { startDate, endDate, projectId });
+        console.log('Fetching Inmeta events for dates:', { startDate, endDate, alvoId });
 
         const { data, error } = await supabase.functions.invoke("inmeta-api", {
           method: "POST",
@@ -84,7 +92,7 @@ export const useInmetaEvents = (projectId?: string) => {
             action: "getAccessEvents",
             startDate,
             endDate,
-            alvoId: projectId
+            alvoId
           })
         });
 

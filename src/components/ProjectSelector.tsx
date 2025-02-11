@@ -16,23 +16,19 @@ interface ProjectSelectorProps {
 }
 
 export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectSelectorProps) => {
-  const { data: dbProjects = [], isLoading: isLoadingDb } = useProjects();
   const { data: inmetaProjects = [], isLoading: isLoadingInmeta } = useInmetaProjects();
 
-  const isLoading = isLoadingDb || isLoadingInmeta;
-
-  if (isLoading) {
+  if (isLoadingInmeta) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Carregando projetos...</span>
+        <span>Carregando obras...</span>
       </div>
     );
   }
 
-  // Encontrar o projeto selecionado em ambas as fontes
-  const selectedProject = dbProjects.find(p => p.id === selectedProjectId);
-  const selectedInmetaProject = inmetaProjects.find(p => p.id === selectedProject?.external_project_id);
+  // Encontrar o projeto selecionado no Inmeta
+  const selectedInmetaProject = inmetaProjects.find(p => p.id === selectedProjectId);
 
   return (
     <Select 
@@ -40,20 +36,16 @@ export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectS
       onValueChange={onProjectSelect}
     >
       <SelectTrigger className="w-[300px]">
-        <SelectValue placeholder="Selecione um projeto">
-          {selectedProject?.vessel_name || selectedInmetaProject?.nome || 'Selecione um projeto'}
+        <SelectValue placeholder="Selecione uma obra">
+          {selectedInmetaProject?.nome || 'Selecione uma obra'}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {dbProjects.map((project) => {
-          // Encontrar o projeto correspondente no Inmeta
-          const inmetaProject = inmetaProjects.find(p => p.id === project.external_project_id);
-          return (
-            <SelectItem key={project.id} value={project.id}>
-              {project.vessel_name || inmetaProject?.nome || 'Projeto sem nome'}
-            </SelectItem>
-          );
-        })}
+        {inmetaProjects.map((project) => (
+          <SelectItem key={project.id} value={project.id}>
+            {project.nome || 'Obra sem nome'}
+          </SelectItem>
+        ))}
       </SelectContent>
     </Select>
   );
