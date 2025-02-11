@@ -174,40 +174,6 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   }
 }
 
-async function getProjectsFromEvents(token: string): Promise<InmetaProject[]> {
-  // Usar um período maior para ter mais chances de encontrar todos os projetos
-  const today = new Date();
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(today.getMonth() - 6);
-
-  const startDate = sixMonthsAgo.toISOString().split('T')[0];
-  const endDate = today.toISOString().split('T')[0];
-
-  try {
-    const events = await getAccessEvents(token, startDate, endDate);
-    
-    // Extrair projetos únicos dos eventos usando um Set
-    const uniqueProjects = new Set<string>();
-    const projects: InmetaProject[] = [];
-
-    events.forEach(event => {
-      if (event.alvo && event.alvo.id && !uniqueProjects.has(event.alvo.id)) {
-        uniqueProjects.add(event.alvo.id);
-        projects.push({
-          id: event.alvo.id,
-          nome: event.alvo.nome || 'Nome não informado'
-        });
-      }
-    });
-
-    console.log('Projects extracted from events:', projects);
-    return projects;
-  } catch (error) {
-    console.error('Error getting projects from events:', error);
-    throw error;
-  }
-}
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -235,7 +201,29 @@ serve(async (req) => {
     
     switch (action) {
       case 'getProjects':
-        result = await getProjectsFromEvents(token);
+        // Buscamos os eventos dos últimos 30 dias para obter os alvos
+        const today = new Date();
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(today.getDate() - 30);
+
+        const events = await getAccessEvents(
+          token, 
+          thirtyDaysAgo.toISOString().split('T')[0], 
+          today.toISOString().split('T')[0]
+        );
+        
+        // Extrair alvos únicos dos eventos
+        const uniqueAlvos = new Map<string, InmetaProject>();
+        events.forEach(event => {
+          if (event.alvo?.id && !uniqueAlvos.has(event.alvo.id)) {
+            uniqueAlvos.set(event.alvo.id, {
+              id: event.alvo.id,
+              nome: event.alvo.nome || 'Nome não informado'
+            });
+          }
+        });
+        
+        result = Array.from(uniqueAlvos.values());
         break;
 
       case 'getAccessEvents':
