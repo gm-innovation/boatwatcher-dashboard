@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 
@@ -28,7 +27,7 @@ interface AccessEvent {
   }
 }
 
-interface InmetaProject {
+interface Alvo {
   id: string
   nome: string
 }
@@ -79,7 +78,7 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
   }
 }
 
-async function getAccessEvents(token: string, startDate: string, endDate: string, projectId?: string): Promise<AccessEvent[]> {
+async function getAccessEvents(token: string, startDate: string, endDate: string, alvoId?: string): Promise<AccessEvent[]> {
   // Garantir que as datas incluam o timezone
   const formattedStartDate = `${startDate}T00:00:00-03:00`;
   const formattedEndDate = `${endDate}T23:59:59-03:00`;
@@ -87,8 +86,8 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   const url = new URL(`${API_BASE_URL}/v1/eventos-acesso`);
   url.searchParams.append('dataInicial', formattedStartDate);
   url.searchParams.append('dataFinal', formattedEndDate);
-  if (projectId) {
-    url.searchParams.append('alvoId', projectId);
+  if (alvoId) {
+    url.searchParams.append('alvoId', alvoId);
   }
 
   try {
@@ -105,7 +104,7 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
         start: formattedStartDate,
         end: formattedEndDate
       },
-      projectId: projectId || 'not specified'
+      alvoId: alvoId || 'not specified'
     });
 
     const response = await fetch(url.toString(), {
@@ -180,8 +179,8 @@ serve(async (req) => {
   }
 
   try {
-    const { action, startDate, endDate, projectId } = await req.json();
-    console.log('Received request with params:', { action, startDate, endDate, projectId });
+    const { action, startDate, endDate, alvoId } = await req.json();
+    console.log('Received request with params:', { action, startDate, endDate, alvoId });
 
     const credentials = {
       email: Deno.env.get('INMETA_EMAIL'),
@@ -213,7 +212,7 @@ serve(async (req) => {
         );
         
         // Extrair alvos únicos dos eventos
-        const uniqueAlvos = new Map<string, InmetaProject>();
+        const uniqueAlvos = new Map<string, Alvo>();
         events.forEach(event => {
           if (event.alvo?.id && !uniqueAlvos.has(event.alvo.id)) {
             uniqueAlvos.set(event.alvo.id, {
@@ -230,7 +229,7 @@ serve(async (req) => {
         if (!startDate || !endDate) {
           throw new Error('Datas inicial e final são obrigatórias');
         }
-        result = await getAccessEvents(token, startDate, endDate, projectId);
+        result = await getAccessEvents(token, startDate, endDate, alvoId);
         break;
       
       default:
