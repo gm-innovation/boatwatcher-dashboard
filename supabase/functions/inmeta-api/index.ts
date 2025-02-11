@@ -11,10 +11,18 @@ interface InmetaCredentials {
 
 interface AccessEvent {
   id: string
-  name: string
-  role: string
-  arrival_time: string
-  photo_url: string
+  tipo: string
+  data: string
+  alvo: {
+    id: string
+    nome: string
+  }
+  agente: string
+  cpfPessoa: string
+  tipoPessoa: string
+  nomePessoa: string
+  cargoPessoa: string
+  observacoes: string
   vinculoColaborador: {
     empresa: string
   }
@@ -72,7 +80,7 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
 }
 
 async function getProjects(token: string): Promise<InmetaProject[]> {
-  const url = `${API_BASE_URL}/v1/obras`;
+  const url = `${API_BASE_URL}/v1/alvos`;
   
   try {
     const headers = {
@@ -122,7 +130,7 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   url.searchParams.append('dataInicial', `${startDate}T00:00:00`);
   url.searchParams.append('dataFinal', `${endDate}T23:59:59`);
   if (projectId) {
-    url.searchParams.append('obraId', projectId);
+    url.searchParams.append('alvoId', projectId);
   }
 
   try {
@@ -160,10 +168,18 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
 
     return data.content.map((event: any) => ({
       id: event.id || String(Math.random()),
-      name: event.nomePessoa,
-      role: event.cargoPessoa,
-      arrival_time: event.data,
-      photo_url: event.photoUrl || '',
+      tipo: event.tipo,
+      data: event.data,
+      alvo: {
+        id: event.alvo?.id,
+        nome: event.alvo?.nome
+      },
+      agente: event.agente,
+      cpfPessoa: event.cpfPessoa,
+      tipoPessoa: event.tipoPessoa,
+      nomePessoa: event.nomePessoa,
+      cargoPessoa: event.cargoPessoa,
+      observacoes: event.observacoes,
       vinculoColaborador: {
         empresa: event.vinculoColaborador?.empresa || 'Empresa não informada'
       }
