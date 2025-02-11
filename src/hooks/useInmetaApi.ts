@@ -44,8 +44,14 @@ export const useInmetaEvents = () => {
           throw error;
         }
 
+        // Garantir que data é um array
+        if (!Array.isArray(data)) {
+          console.error("Received non-array data from API:", data);
+          return [];
+        }
+
         console.log('Successfully fetched Inmeta events:', data);
-        return data || [];
+        return data;
       } catch (error) {
         console.error("Error in useInmetaEvents:", error);
         toast({
@@ -53,7 +59,8 @@ export const useInmetaEvents = () => {
           description: "Ocorreu um erro ao buscar os eventos do Inmeta. Por favor, tente novamente mais tarde.",
           variant: "destructive",
         });
-        throw error;
+        // Retornar array vazio em caso de erro para evitar erros de renderização
+        return [];
       }
     },
     retry: 2,
