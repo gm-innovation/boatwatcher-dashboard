@@ -22,6 +22,10 @@ interface AccessEvent {
   vinculoColaborador: object
 }
 
+interface TokenResponse {
+  token: string
+}
+
 async function getToken(credentials: InmetaCredentials): Promise<string> {
   console.log('Getting token with email:', credentials.email);
   const url = `${API_BASE_URL}/v1/token`;
@@ -52,9 +56,15 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
       throw new Error(`Failed to get token: ${response.statusText} (${response.status}). Response: ${errorText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as TokenResponse;
+    console.log('Token response data:', data);
+    
+    if (!data.token) {
+      throw new Error('Token not found in response');
+    }
+
     console.log('Token obtained successfully');
-    return data.token;
+    return data.token.trim(); // Ensure no whitespace in token
   } catch (error) {
     console.error('Error in getToken:', error);
     console.error('Error details:', {
@@ -84,18 +94,23 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   url.searchParams.append('dataFinal', formattedEndDate);
   
   console.log('Access events request URL:', url.toString());
+  console.log('Using authorization token:', token);
   
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
+    const headers = {
+      'Authorization': `Bearer ${token.trim()}`,
+      'Accept': 'application/json',
+      'modulo': 'CONTROLE_ACESSO'
+    };
+
+    console.log('Request headers:', headers);
+
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-        'modulo': 'CONTROLE_ACESSO'
-      },
+      headers,
       signal: controller.signal,
     });
 
