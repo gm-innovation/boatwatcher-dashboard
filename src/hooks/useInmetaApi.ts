@@ -43,6 +43,7 @@ export const useInmetaProjects = () => {
     queryKey: ["inmeta-projects"],
     queryFn: async (): Promise<InmetaProject[]> => {
       try {
+        console.log('Fetching Inmeta projects...');
         const { data, error } = await supabase.functions.invoke("inmeta-api", {
           method: "POST",
           body: JSON.stringify({
@@ -58,6 +59,11 @@ export const useInmetaProjects = () => {
             variant: "destructive",
           });
           throw error;
+        }
+
+        if (!Array.isArray(data)) {
+          console.error("Invalid response format from Inmeta API:", data);
+          return [];
         }
 
         console.log('Successfully fetched Inmeta projects:', data);

@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 
@@ -199,7 +200,7 @@ serve(async (req) => {
     let result;
     
     switch (action) {
-      case 'getProjects':
+      case 'getProjects': {
         // Buscamos os eventos dos últimos 30 dias para obter os alvos
         const today = new Date();
         const thirtyDaysAgo = new Date();
@@ -211,26 +212,29 @@ serve(async (req) => {
           today.toISOString().split('T')[0]
         );
         
-        // Extrair alvos únicos dos eventos
+        // Extrair alvos únicos dos eventos e garantir que nenhum é undefined
         const uniqueAlvos = new Map<string, Alvo>();
         events.forEach(event => {
-          if (event.alvo?.id && !uniqueAlvos.has(event.alvo.id)) {
+          if (event.alvo?.id && event.alvo?.nome) {
             uniqueAlvos.set(event.alvo.id, {
               id: event.alvo.id,
-              nome: event.alvo.nome || 'Nome não informado'
+              nome: event.alvo.nome
             });
           }
         });
         
         result = Array.from(uniqueAlvos.values());
+        console.log('Extracted unique alvos:', result);
         break;
+      }
 
-      case 'getAccessEvents':
+      case 'getAccessEvents': {
         if (!startDate || !endDate) {
           throw new Error('Datas inicial e final são obrigatórias');
         }
         result = await getAccessEvents(token, startDate, endDate, alvoId);
         break;
+      }
       
       default:
         throw new Error('Ação inválida');
