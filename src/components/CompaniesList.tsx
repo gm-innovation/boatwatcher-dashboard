@@ -16,13 +16,13 @@ export const CompaniesList = () => {
     if (!acc[company]) {
       acc[company] = {
         name: company,
-        entryTime: new Date(event.arrival_time),
+        entryTime: new Date(event.data),
         workersCount: 1,
       };
     } else {
       // Update entry time if this event is earlier
-      if (new Date(event.arrival_time) < acc[company].entryTime) {
-        acc[company].entryTime = new Date(event.arrival_time);
+      if (new Date(event.data) < acc[company].entryTime) {
+        acc[company].entryTime = new Date(event.data);
       }
       acc[company].workersCount++;
     }

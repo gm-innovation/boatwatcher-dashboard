@@ -11,15 +11,15 @@ export const WorkersList = ({ className = "" }) => {
   const { data: workers = [], isLoading: isLoadingWorkers } = useWorkers();
   const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useInmetaEvents();
 
-  // Combine workers from both sources
+  // Combinar trabalhadores de ambas as fontes
   const allWorkers = [
     ...workers,
     ...inmetaEvents.map(event => ({
       id: event.id,
-      name: event.name,
-      role: event.role,
-      arrival_time: event.arrival_time,
-      photo_url: event.photo_url,
+      name: event.nomePessoa,
+      role: event.cargoPessoa,
+      arrival_time: event.data,
+      photo_url: "",
       company: event.vinculoColaborador?.empresa || 'N/A',
     })),
   ];
