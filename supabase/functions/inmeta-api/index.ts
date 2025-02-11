@@ -4,51 +4,96 @@ import { corsHeaders } from "../_shared/cors.ts"
 
 const API_BASE_URL = 'https://api.homologacao.inmeta.com.br/api'
 
-// Dados fictícios para teste
+// Dados fictícios baseados nas imagens fornecidas
 const mockEvents = [
   {
     id: "1",
-    nomePessoa: "João Silva",
-    cargoPessoa: "Soldador",
-    data: new Date().toISOString(),
+    nomePessoa: "Colaborador 17",
+    cargoPessoa: "Técnico",
+    data: "2025-02-06T11:04:17",
     vinculoColaborador: {
-      empresa: "Metalúrgica ABC"
+      empresa: "NOVA ALAMEDA"
     }
   },
   {
     id: "2",
-    nomePessoa: "Maria Santos",
-    cargoPessoa: "Engenheira",
-    data: new Date().toISOString(),
+    nomePessoa: "Colaborador 13",
+    cargoPessoa: "Assistente",
+    data: "2025-02-06T11:02:49",
     vinculoColaborador: {
-      empresa: "Construtora XYZ"
+      empresa: "BEN MOINHOS SMART LIFE"
     }
   },
   {
     id: "3",
-    nomePessoa: "Pedro Oliveira",
-    cargoPessoa: "Técnico",
-    data: new Date().toISOString(),
+    nomePessoa: "Colaborador 02 da empresa terceirizada RHS",
+    cargoPessoa: "Encanador",
+    data: "2023-01-14T17:16:19",
     vinculoColaborador: {
-      empresa: "Metalúrgica ABC"
+      empresa: "RHS INSTALACOES ELETRICAS"
     }
   },
   {
     id: "4",
-    nomePessoa: "Ana Costa",
-    cargoPessoa: "Inspetora",
-    data: new Date().toISOString(),
+    nomePessoa: "Colaborador 01 da empresa terceirizada RHS",
+    cargoPessoa: "Encanador",
+    data: "2023-01-14T17:14:33",
     vinculoColaborador: {
-      empresa: "Qualidade Total Ltda"
+      empresa: "RHS INSTALACOES ELETRICAS"
     }
   },
   {
     id: "5",
-    nomePessoa: "Carlos Souza",
-    cargoPessoa: "Montador",
-    data: new Date().toISOString(),
+    nomePessoa: "Colaborador terceirizado 7",
+    cargoPessoa: "Analista",
+    data: "2023-01-14T14:34:43",
     vinculoColaborador: {
-      empresa: "Construtora XYZ"
+      empresa: "Empresa terceirizada 7"
+    }
+  },
+  {
+    id: "6",
+    nomePessoa: "Colaborador terceirizado 5",
+    cargoPessoa: "Coordenador da Qualidade",
+    data: "2023-01-14T14:18:45",
+    vinculoColaborador: {
+      empresa: "Empresa terceirizada 5"
+    }
+  },
+  {
+    id: "7",
+    nomePessoa: "Ranieri Francisco Serafin",
+    cargoPessoa: "Engenheiro Civil",
+    data: "2023-01-14T14:15:18",
+    vinculoColaborador: {
+      empresa: "Empresa terceirizada 5"
+    }
+  },
+  {
+    id: "8",
+    nomePessoa: "Colaborador 14",
+    cargoPessoa: "Encanador",
+    data: "2023-01-14T14:26:20",
+    vinculoColaborador: {
+      empresa: "Empresa terceirizada 7"
+    }
+  },
+  {
+    id: "9",
+    nomePessoa: "Colaborador terceirizado 10",
+    cargoPessoa: "Encanador",
+    data: "2023-01-14T14:27:24",
+    vinculoColaborador: {
+      empresa: "RHS INSTALACOES ELETRICAS"
+    }
+  },
+  {
+    id: "10",
+    nomePessoa: "Colaborador terceirizado 11",
+    cargoPessoa: "Encanador",
+    data: "2023-01-14T14:27:48",
+    vinculoColaborador: {
+      empresa: "Empresa terceirizada 7"
     }
   }
 ];
@@ -67,17 +112,6 @@ interface AccessEvent {
   vinculoColaborador: {
     empresa: string
   }
-}
-
-interface TokenResponse {
-  content: {
-    token: string
-  }
-}
-
-async function getToken(credentials: InmetaCredentials): Promise<string> {
-  // Simulando um token válido para teste
-  return "token-mock-12345";
 }
 
 async function getAccessEvents(token: string, startDate: string, endDate: string): Promise<AccessEvent[]> {
