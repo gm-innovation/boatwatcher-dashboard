@@ -37,9 +37,9 @@ export const useInmetaProjects = () => {
       try {
         const { data, error } = await supabase.functions.invoke("inmeta-api", {
           method: "POST",
-          body: {
+          body: JSON.stringify({
             action: "getProjects"
-          }
+          })
         });
 
         if (error) {
@@ -80,12 +80,12 @@ export const useInmetaEvents = (projectId?: string) => {
 
         const { data, error } = await supabase.functions.invoke("inmeta-api", {
           method: "POST",
-          body: {
+          body: JSON.stringify({
             action: "getAccessEvents",
             startDate,
             endDate,
             projectId
-          }
+          })
         });
 
         if (error) {
