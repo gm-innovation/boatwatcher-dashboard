@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { ProjectSelector } from "@/components/ProjectSelector";
 import { Label } from "@/components/ui/label";
@@ -34,7 +35,7 @@ export const ProjectForm = () => {
   const [captain, setCaptain] = useState("");
   const [crewCount, setCrewCount] = useState("");
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
-  const [selectedInmetaEventId, setSelectedInmetaEventId] = useState<string | null>(null);
+  const [selectedInmetaAlvoId, setSelectedInmetaAlvoId] = useState<string | null>(null);
 
   // Fetch project data when selected
   const { data: projectData } = useProjectById(selectedProjectId);
@@ -49,7 +50,7 @@ export const ProjectForm = () => {
       setCaptain(projectData.captain || "");
       setCrewCount(projectData.crew_count?.toString() || "");
       setSelectedCompanyId(projectData.client_id || null);
-      setSelectedInmetaEventId(projectData.external_project_id || null);
+      setSelectedInmetaAlvoId(projectData.external_project_id || null);
     } else {
       setVesselName("");
       setStartDate("");
@@ -58,7 +59,7 @@ export const ProjectForm = () => {
       setCaptain("");
       setCrewCount("");
       setSelectedCompanyId(null);
-      setSelectedInmetaEventId(null);
+      setSelectedInmetaAlvoId(null);
     }
   }, [projectData]);
 
@@ -72,10 +73,10 @@ export const ProjectForm = () => {
       return;
     }
 
-    if (!selectedInmetaEventId) {
+    if (!selectedInmetaAlvoId) {
       toast({
         title: "Erro ao salvar",
-        description: "Selecione uma obra do Inmeta",
+        description: "Selecione um alvo do Inmeta",
         variant: "destructive",
       });
       return;
@@ -84,16 +85,16 @@ export const ProjectForm = () => {
     setIsSaving(true);
 
     try {
-      const inmetaEvent = inmetaEvents.find(p => p.id === selectedInmetaEventId);
+      const selectedAlvo = inmetaEvents.find(e => e.alvo?.id === selectedInmetaAlvoId)?.alvo;
       const projectData = {
-        vessel_name: vesselName || inmetaEvent?.nome,
+        vessel_name: vesselName || selectedAlvo?.nome,
         start_date: startDate,
         project_type: projectType,
         engineer: engineer,
         captain: captain,
         crew_count: crewCount ? parseInt(crewCount) : null,
         client_id: selectedCompanyId,
-        external_project_id: selectedInmetaEventId
+        external_project_id: selectedInmetaAlvoId
       };
 
       if (isCreatingNew) {
@@ -151,8 +152,17 @@ export const ProjectForm = () => {
     setCaptain("");
     setCrewCount("");
     setSelectedCompanyId(null);
-    setSelectedInmetaEventId(null);
+    setSelectedInmetaAlvoId(null);
   };
+
+  // Extrair alvos únicos dos eventos
+  const alvosMap = new Map<string, { id: string; nome: string }>();
+  inmetaEvents.forEach(event => {
+    if (event.alvo?.id && event.alvo?.nome) {
+      alvosMap.set(event.alvo.id, event.alvo);
+    }
+  });
+  const alvosUnicos = Array.from(alvosMap.values());
 
   return (
     <div className="border rounded-lg p-6">
@@ -178,18 +188,18 @@ export const ProjectForm = () => {
         {(selectedProjectId || isCreatingNew) && (
           <div className="grid gap-4">
             <div>
-              <Label htmlFor="inmetaEventId">Obra do Inmeta</Label>
+              <Label htmlFor="inmetaAlvoId">Alvo do Inmeta</Label>
               <Select 
-                value={selectedInmetaEventId || undefined}
-                onValueChange={setSelectedInmetaEventId}
+                value={selectedInmetaAlvoId || undefined}
+                onValueChange={setSelectedInmetaAlvoId}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma obra" />
+                  <SelectValue placeholder="Selecione um alvo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {inmetaEvents.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.nome}
+                  {alvosUnicos.map((alvo) => (
+                    <SelectItem key={alvo.id} value={alvo.id}>
+                      {alvo.nome}
                     </SelectItem>
                   ))}
                 </SelectContent>
