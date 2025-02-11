@@ -14,6 +14,11 @@ interface InmetaEvent {
   };
 }
 
+interface InmetaProject {
+  id: string;
+  nome: string;
+}
+
 function getDateRange() {
   const today = new Date();
   const startDate = new Date();
@@ -25,21 +30,61 @@ function getDateRange() {
   };
 }
 
-export const useInmetaEvents = () => {
+export const useInmetaProjects = () => {
   return useQuery({
-    queryKey: ["inmeta-events"],
+    queryKey: ["inmeta-projects"],
+    queryFn: async (): Promise<InmetaProject[]> => {
+      try {
+        const { data, error } = await supabase.functions.invoke("inmeta-api", {
+          method: "POST",
+          body: {
+            action: "getProjects"
+          }
+        });
+
+        if (error) {
+          console.error("Error fetching Inmeta projects:", error);
+          toast({
+            title: "Erro ao buscar projetos",
+            description: "Não foi possível obter os projetos do Inmeta. Por favor, tente novamente mais tarde.",
+            variant: "destructive",
+          });
+          throw error;
+        }
+
+        console.log('Successfully fetched Inmeta projects:', data);
+        return data;
+      } catch (error) {
+        console.error("Error in useInmetaProjects:", error);
+        toast({
+          title: "Erro ao buscar projetos",
+          description: "Ocorreu um erro ao buscar os projetos do Inmeta. Por favor, tente novamente mais tarde.",
+          variant: "destructive",
+        });
+        return [];
+      }
+    },
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+  });
+};
+
+export const useInmetaEvents = (projectId?: string) => {
+  return useQuery({
+    queryKey: ["inmeta-events", projectId],
     queryFn: async (): Promise<InmetaEvent[]> => {
       try {
         const { startDate, endDate } = getDateRange();
 
-        console.log('Fetching Inmeta events for dates:', { startDate, endDate });
+        console.log('Fetching Inmeta events for dates:', { startDate, endDate, projectId });
 
         const { data, error } = await supabase.functions.invoke("inmeta-api", {
           method: "POST",
           body: {
             action: "getAccessEvents",
             startDate,
-            endDate
+            endDate,
+            projectId
           }
         });
 

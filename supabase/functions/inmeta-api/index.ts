@@ -74,8 +74,6 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
 async function getProjects(token: string): Promise<InmetaProject[]> {
   const url = new URL(`${API_BASE_URL}/v1/obras`);
   
-  console.log('Projects request URL:', url.toString());
-
   try {
     const headers = {
       'Authorization': `Bearer ${token}`,
@@ -126,8 +124,6 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
     url.searchParams.append('obraId', projectId);
   }
 
-  console.log('Access events request URL:', url.toString());
-
   try {
     const headers = {
       'Authorization': `Bearer ${token}`,
@@ -142,4 +138,90 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
       headers
     });
 
-    console.log('Access
+    console.log('Access events response status:', response.status);
+    console.log('Access events response headers:', Object.fromEntries(response.headers.entries()));
+
+    if (!response.ok) {
+      throw new Error(`Failed to get access events: ${response.statusText}`);
+    }
+
+    const text = await response.text();
+    console.log('Access events response text:', text);
+
+    const data = JSON.parse(text);
+    console.log('Successfully fetched access events:', data);
+
+    if (!data?.content || !Array.isArray(data.content)) {
+      console.error('Invalid response structure:', data);
+      throw new Error('Formato de resposta inválido');
+    }
+
+    return data.content.map((event: any) => ({
+      id: event.id || String(Math.random()),
+      name: event.nomePessoa,
+      role: event.cargoPessoa,
+      arrival_time: event.data,
+      photo_url: event.photoUrl || '',
+      vinculoColaborador: {
+        empresa: event.vinculoColaborador?.empresa || 'Empresa não informada'
+      }
+    }));
+  } catch (error) {
+    console.error('Error fetching access events:', error);
+    throw error;
+  }
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { action, startDate, endDate, projectId } = await req.json();
+    console.log('Received request with params:', { action, startDate, endDate, projectId });
+
+    const credentials = {
+      email: Deno.env.get('INMETA_EMAIL'),
+      senha: Deno.env.get('INMETA_PASSWORD')
+    };
+
+    if (!credentials.email || !credentials.senha) {
+      throw new Error('Credenciais da API Inmeta não configuradas');
+    }
+
+    const token = await getToken(credentials);
+    let result;
+    
+    switch (action) {
+      case 'getProjects':
+        result = await getProjects(token);
+        break;
+
+      case 'getAccessEvents':
+        if (!startDate || !endDate) {
+          throw new Error('Datas inicial e final são obrigatórias');
+        }
+        result = await getAccessEvents(token, startDate, endDate, projectId);
+        break;
+      
+      default:
+        throw new Error('Ação inválida');
+    }
+
+    return new Response(
+      JSON.stringify(result),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (error) {
+    console.error('Error in Edge Function:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { 
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
+  }
+});
