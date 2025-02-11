@@ -53,7 +53,6 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
     console.log('Token request status:', response.status);
     console.log('Token response headers:', Object.fromEntries(response.headers.entries()));
     
-    // Log the raw response text first
     const responseText = await response.text();
     console.log('Raw response text:', responseText);
     
@@ -102,7 +101,6 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   const formattedStartDate = `${startDate}T00:00:00`;
   const formattedEndDate = `${endDate}T23:59:59`;
   
-  // Construct URL with query parameters
   const url = new URL(`${API_BASE_URL}/v1/eventos-acesso`);
   url.searchParams.append('dataInicial', formattedStartDate);
   url.searchParams.append('dataFinal', formattedEndDate);
@@ -133,15 +131,44 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
     console.log('Access events response status:', response.status);
     console.log('Access events response headers:', Object.fromEntries(response.headers.entries()));
     
+    const responseText = await response.text();
+    console.log('Raw access events response:', responseText);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Access events request failed:', response.status, errorText);
-      throw new Error(`Failed to get access events: ${response.statusText} (${response.status}). Response: ${errorText}`);
+      console.error('Access events request failed:', response.status, responseText);
+      throw new Error(`Failed to get access events: ${response.statusText} (${response.status}). Response: ${responseText}`);
     }
 
-    const data = await response.json();
-    console.log(`Successfully fetched ${data.length} access events`);
-    return data;
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Error parsing access events response:', parseError);
+      throw new Error(`Failed to parse access events response: ${responseText}`);
+    }
+
+    console.log('Parsed access events response:', data);
+
+    // Garantir que temos um array de eventos
+    if (!data?.content || !Array.isArray(data.content)) {
+      console.error('Invalid access events response structure:', data);
+      return [];
+    }
+
+    // Mapear os eventos para o formato esperado
+    const events = data.content.map((event: any) => ({
+      id: event.id || String(Math.random()),
+      name: event.nomePessoa || 'Nome não informado',
+      role: event.cargoPessoa || 'Cargo não informado',
+      arrival_time: event.data || new Date().toISOString(),
+      photo_url: event.photoUrl || '',
+      vinculoColaborador: {
+        empresa: event.vinculoColaborador?.empresa || 'Empresa não informada'
+      }
+    }));
+
+    console.log('Processed events:', events);
+    return events;
   } catch (error) {
     console.error('Error in getAccessEvents:', error);
     console.error('Error details:', {
@@ -197,6 +224,8 @@ serve(async (req) => {
         console.error('Invalid action:', action);
         throw new Error('Invalid action');
     }
+
+    console.log('Returning result:', result);
 
     return new Response(
       JSON.stringify(result),
