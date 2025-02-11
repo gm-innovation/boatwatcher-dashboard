@@ -24,6 +24,9 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
   const url = `${API_BASE_URL}/v1/token`;
   
   try {
+    console.log('Token request URL:', url);
+    console.log('Request body:', JSON.stringify(credentials));
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -33,17 +36,30 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
       body: JSON.stringify(credentials)
     });
 
+    console.log('Token request status:', response.status);
+    console.log('Token response headers:', Object.fromEntries(response.headers.entries()));
+
+    const text = await response.text();
+    console.log('Raw response text:', text);
+
     if (!response.ok) {
       throw new Error(`Failed to get token: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    
-    if (!data?.content?.token) {
-      throw new Error('Token não encontrado na resposta');
-    }
+    try {
+      const data = JSON.parse(text);
+      console.log('Parsed token response:', data);
 
-    return data.content.token;
+      if (!data?.content?.token) {
+        console.error('Invalid token response structure:', data);
+        throw new Error(`Token not found in response. Full response: ${text}`);
+      }
+
+      return data.content.token;
+    } catch (parseError) {
+      console.error('Error parsing token response:', parseError);
+      throw new Error(`Failed to parse token response: ${text}`);
+    }
   } catch (error) {
     console.error('Error getting token:', error);
     throw error;
@@ -55,22 +71,35 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   url.searchParams.append('dataInicial', `${startDate}T00:00:00`);
   url.searchParams.append('dataFinal', `${endDate}T23:59:59`);
 
+  console.log('Access events request URL:', url.toString());
+
   try {
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/json',
+      'modulo': 'CONTROLE_ACESSO'
+    };
+
+    console.log('Request headers:', headers);
+
     const response = await fetch(url.toString(), {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-        'modulo': 'CONTROLE_ACESSO'
-      }
+      headers
     });
+
+    console.log('Access events response status:', response.status);
+    console.log('Access events response headers:', Object.fromEntries(response.headers.entries()));
 
     if (!response.ok) {
       throw new Error(`Failed to get access events: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    
+    const text = await response.text();
+    console.log('Access events response text:', text);
+
+    const data = JSON.parse(text);
+    console.log('Successfully fetched access events:', data);
+
     if (!data?.content || !Array.isArray(data.content)) {
       console.error('Invalid response structure:', data);
       throw new Error('Formato de resposta inválido');
@@ -109,6 +138,9 @@ serve(async (req) => {
     if (!credentials.email || !credentials.senha) {
       throw new Error('Credenciais da API Inmeta não configuradas');
     }
+
+    console.log('Using credentials with email:', credentials.email);
+    console.log('Getting token and fetching access events...');
 
     let result;
     

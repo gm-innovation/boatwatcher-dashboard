@@ -14,14 +14,23 @@ interface InmetaEvent {
   };
 }
 
+function getDateRange() {
+  const today = new Date();
+  const startDate = new Date();
+  startDate.setDate(today.getDate() - 7); // Últimos 7 dias
+  
+  return {
+    startDate: startDate.toISOString().split('T')[0],
+    endDate: today.toISOString().split('T')[0]
+  };
+}
+
 export const useInmetaEvents = () => {
   return useQuery({
     queryKey: ["inmeta-events"],
     queryFn: async (): Promise<InmetaEvent[]> => {
       try {
-        const today = new Date();
-        const startDate = today.toISOString().split('T')[0];
-        const endDate = today.toISOString().split('T')[0];
+        const { startDate, endDate } = getDateRange();
 
         console.log('Fetching Inmeta events for dates:', { startDate, endDate });
 
@@ -59,7 +68,6 @@ export const useInmetaEvents = () => {
           description: "Ocorreu um erro ao buscar os eventos do Inmeta. Por favor, tente novamente mais tarde.",
           variant: "destructive",
         });
-        // Retornar array vazio em caso de erro para evitar erros de renderização
         return [];
       }
     },
