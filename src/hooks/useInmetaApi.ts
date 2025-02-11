@@ -22,7 +22,7 @@ interface InmetaEvent {
   };
 }
 
-interface InmetaProject {
+interface InmetaObra {
   id: string;
   nome: string;
 }
@@ -38,21 +38,25 @@ function getDateRange() {
   };
 }
 
-export const useInmetaProjects = () => {
+export const useInmetaObras = () => {
   return useQuery({
-    queryKey: ["inmeta-projects"],
-    queryFn: async (): Promise<InmetaProject[]> => {
+    queryKey: ["inmeta-obras"],
+    queryFn: async (): Promise<InmetaObra[]> => {
       try {
-        console.log('Fetching Inmeta projects...');
-        const { data, error } = await supabase.functions.invoke("inmeta-api", {
+        console.log('Buscando obras do Inmeta...');
+        const { startDate, endDate } = getDateRange();
+        
+        const { data: events, error } = await supabase.functions.invoke("inmeta-api", {
           method: "POST",
           body: JSON.stringify({
-            action: "getProjects"
+            action: "getAccessEvents",
+            startDate,
+            endDate
           })
         });
 
         if (error) {
-          console.error("Error fetching Inmeta projects:", error);
+          console.error("Erro ao buscar eventos Inmeta:", error);
           toast({
             title: "Erro ao buscar obras",
             description: "Não foi possível obter as obras do Inmeta. Por favor, tente novamente mais tarde.",
@@ -61,15 +65,27 @@ export const useInmetaProjects = () => {
           throw error;
         }
 
-        if (!Array.isArray(data)) {
-          console.error("Invalid response format from Inmeta API:", data);
+        if (!Array.isArray(events)) {
+          console.error("Formato de resposta inválido da API Inmeta:", events);
           return [];
         }
 
-        console.log('Successfully fetched Inmeta projects:', data);
-        return data;
+        // Extrair obras únicas dos eventos
+        const obrasUnicas = new Map<string, InmetaObra>();
+        events.forEach(event => {
+          if (event.alvo?.id && event.alvo?.nome) {
+            obrasUnicas.set(event.alvo.id, {
+              id: event.alvo.id,
+              nome: event.alvo.nome
+            });
+          }
+        });
+
+        const obras = Array.from(obrasUnicas.values());
+        console.log('Obras encontradas:', obras);
+        return obras;
       } catch (error) {
-        console.error("Error in useInmetaProjects:", error);
+        console.error("Erro em useInmetaObras:", error);
         toast({
           title: "Erro ao buscar obras",
           description: "Ocorreu um erro ao buscar as obras do Inmeta. Por favor, tente novamente mais tarde.",
@@ -90,7 +106,7 @@ export const useInmetaEvents = (alvoId?: string) => {
       try {
         const { startDate, endDate } = getDateRange();
 
-        console.log('Fetching Inmeta events for dates:', { startDate, endDate, alvoId });
+        console.log('Buscando eventos Inmeta:', { startDate, endDate, alvoId });
 
         const { data, error } = await supabase.functions.invoke("inmeta-api", {
           method: "POST",
@@ -103,7 +119,7 @@ export const useInmetaEvents = (alvoId?: string) => {
         });
 
         if (error) {
-          console.error("Error fetching Inmeta events:", error);
+          console.error("Erro ao buscar eventos:", error);
           toast({
             title: "Erro ao buscar eventos",
             description: "Não foi possível obter os eventos do Inmeta. Por favor, tente novamente mais tarde.",
@@ -112,16 +128,15 @@ export const useInmetaEvents = (alvoId?: string) => {
           throw error;
         }
 
-        // Garantir que data é um array
         if (!Array.isArray(data)) {
-          console.error("Received non-array data from API:", data);
+          console.error("Dados recebidos não são um array:", data);
           return [];
         }
 
-        console.log('Successfully fetched Inmeta events:', data);
+        console.log('Eventos encontrados:', data);
         return data;
       } catch (error) {
-        console.error("Error in useInmetaEvents:", error);
+        console.error("Erro em useInmetaEvents:", error);
         toast({
           title: "Erro ao buscar eventos",
           description: "Ocorreu um erro ao buscar os eventos do Inmeta. Por favor, tente novamente mais tarde.",

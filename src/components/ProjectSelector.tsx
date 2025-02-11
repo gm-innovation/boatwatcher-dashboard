@@ -1,6 +1,6 @@
 
 import { useProjects } from '@/hooks/useSupabase';
-import { useInmetaProjects } from '@/hooks/useInmetaApi';
+import { useInmetaObras } from '@/hooks/useInmetaApi';
 import {
   Select,
   SelectContent,
@@ -17,7 +17,7 @@ interface ProjectSelectorProps {
 
 export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectSelectorProps) => {
   const { data: dbProjects = [], isLoading: isLoadingDb } = useProjects();
-  const { data: inmetaProjects = [], isLoading: isLoadingInmeta } = useInmetaProjects();
+  const { data: obras = [], isLoading: isLoadingInmeta } = useInmetaObras();
 
   const isLoading = isLoadingDb || isLoadingInmeta;
 
@@ -30,19 +30,19 @@ export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectS
     );
   }
 
-  // Encontrar o projeto selecionado no banco ou no Inmeta
-  const selectedInmetaProject = inmetaProjects.find(p => p.id === selectedProjectId);
+  // Encontrar a obra selecionada no banco ou no Inmeta
+  const selectedObra = obras.find(p => p.id === selectedProjectId);
   const selectedDbProject = dbProjects.find(p => p.id === selectedProjectId);
 
-  // Mesclar projetos do banco com os do Inmeta, evitando duplicatas
+  // Mesclar projetos do banco com as obras do Inmeta, evitando duplicatas
   const allProjects = [
-    ...inmetaProjects.map(p => ({
-      id: p.id,
-      name: p.nome,
+    ...obras.map(obra => ({
+      id: obra.id,
+      name: obra.nome,
       source: 'inmeta' as const
     })),
     ...dbProjects
-      .filter(p => !inmetaProjects.some(ip => ip.id === p.external_project_id))
+      .filter(p => !obras.some(o => o.id === p.external_project_id))
       .map(p => ({
         id: p.id,
         name: p.vessel_name || 'Sem nome',
@@ -57,7 +57,7 @@ export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectS
     >
       <SelectTrigger className="w-[300px]">
         <SelectValue placeholder="Selecione uma obra">
-          {selectedInmetaProject?.nome || selectedDbProject?.vessel_name || 'Selecione uma obra'}
+          {selectedObra?.nome || selectedDbProject?.vessel_name || 'Selecione uma obra'}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>

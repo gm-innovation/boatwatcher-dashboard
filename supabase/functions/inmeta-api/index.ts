@@ -28,17 +28,11 @@ interface AccessEvent {
   }
 }
 
-interface Alvo {
-  id: string
-  nome: string
-}
-
 async function getToken(credentials: InmetaCredentials): Promise<string> {
   const url = `${API_BASE_URL}/v1/token`;
   
   try {
     console.log('Token request URL:', url);
-    console.log('Request body:', JSON.stringify(credentials));
 
     const response = await fetch(url, {
       method: 'POST',
@@ -50,7 +44,6 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
     });
 
     console.log('Token request status:', response.status);
-    console.log('Token response headers:', Object.fromEntries(response.headers.entries()));
 
     const text = await response.text();
     console.log('Raw response text:', text);
@@ -114,7 +107,6 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
     });
 
     console.log('Access events response status:', response.status);
-    console.log('Access events response headers:', Object.fromEntries(response.headers.entries()));
 
     const text = await response.text();
     console.log('Access events raw response:', text);
@@ -127,10 +119,6 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
       const data = JSON.parse(text);
       console.log('Access events parsed response:', JSON.stringify(data, null, 2));
 
-      if (data?.message) {
-        console.log('API Message:', data.message);
-      }
-
       if (!data?.content) {
         console.error('Invalid response structure:', data);
         throw new Error(`Invalid response format. Full response: ${text}`);
@@ -138,11 +126,6 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
 
       if (!Array.isArray(data.content)) {
         console.log('Content is not an array:', data.content);
-        return [];
-      }
-
-      if (data.content.length === 0) {
-        console.log('No events found for the specified period');
         return [];
       }
 
@@ -197,51 +180,16 @@ serve(async (req) => {
     const token = await getToken(credentials);
     console.log('Successfully obtained token');
 
-    let result;
-    
-    switch (action) {
-      case 'getProjects': {
-        // Buscamos os eventos dos últimos 30 dias para obter os alvos
-        const today = new Date();
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(today.getDate() - 30);
-
-        const events = await getAccessEvents(
-          token, 
-          thirtyDaysAgo.toISOString().split('T')[0], 
-          today.toISOString().split('T')[0]
-        );
-        
-        // Extrair alvos únicos dos eventos e garantir que nenhum é undefined
-        const uniqueAlvos = new Map<string, Alvo>();
-        events.forEach(event => {
-          if (event.alvo?.id && event.alvo?.nome) {
-            uniqueAlvos.set(event.alvo.id, {
-              id: event.alvo.id,
-              nome: event.alvo.nome
-            });
-          }
-        });
-        
-        result = Array.from(uniqueAlvos.values());
-        console.log('Extracted unique alvos:', result);
-        break;
-      }
-
-      case 'getAccessEvents': {
-        if (!startDate || !endDate) {
-          throw new Error('Datas inicial e final são obrigatórias');
-        }
-        result = await getAccessEvents(token, startDate, endDate, alvoId);
-        break;
-      }
-      
-      default:
-        throw new Error('Ação inválida');
-    }
+    // Como só temos eventos de acesso na API, sempre chamamos getAccessEvents
+    const events = await getAccessEvents(
+      token,
+      startDate || new Date().toISOString().split('T')[0],
+      endDate || new Date().toISOString().split('T')[0],
+      alvoId
+    );
 
     return new Response(
-      JSON.stringify(result),
+      JSON.stringify(events),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
