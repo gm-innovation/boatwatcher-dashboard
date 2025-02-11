@@ -80,7 +80,7 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
 }
 
 async function getProjects(token: string): Promise<InmetaProject[]> {
-  const url = `${API_BASE_URL}/v1/alvos`;
+  const url = `${API_BASE_URL}/v1/alvo`;
   
   try {
     const headers = {
