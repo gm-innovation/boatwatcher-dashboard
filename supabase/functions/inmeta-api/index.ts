@@ -23,7 +23,9 @@ interface AccessEvent {
 }
 
 interface TokenResponse {
-  token: string
+  content: {
+    token: string
+  }
 }
 
 async function getToken(credentials: InmetaCredentials): Promise<string> {
@@ -70,13 +72,13 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
 
     console.log('Parsed token response:', data);
     
-    if (!data || !data.token) {
+    if (!data?.content?.token) {
       console.error('Invalid token response structure:', data);
       throw new Error('Token not found in response. Full response: ' + JSON.stringify(data));
     }
 
     console.log('Token obtained successfully');
-    return data.token.trim();
+    return data.content.token.trim();
   } catch (error) {
     console.error('Error in getToken:', error);
     console.error('Error details:', {
