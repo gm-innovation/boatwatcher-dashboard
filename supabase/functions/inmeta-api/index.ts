@@ -4,100 +4,6 @@ import { corsHeaders } from "../_shared/cors.ts"
 
 const API_BASE_URL = 'https://api.homologacao.inmeta.com.br/api'
 
-// Dados fictícios baseados nas imagens fornecidas
-const mockEvents = [
-  {
-    id: "1",
-    nomePessoa: "Colaborador 17",
-    cargoPessoa: "Técnico",
-    data: "2025-02-06T11:04:17",
-    vinculoColaborador: {
-      empresa: "NOVA ALAMEDA"
-    }
-  },
-  {
-    id: "2",
-    nomePessoa: "Colaborador 13",
-    cargoPessoa: "Assistente",
-    data: "2025-02-06T11:02:49",
-    vinculoColaborador: {
-      empresa: "BEN MOINHOS SMART LIFE"
-    }
-  },
-  {
-    id: "3",
-    nomePessoa: "Colaborador 02 da empresa terceirizada RHS",
-    cargoPessoa: "Encanador",
-    data: "2023-01-14T17:16:19",
-    vinculoColaborador: {
-      empresa: "RHS INSTALACOES ELETRICAS"
-    }
-  },
-  {
-    id: "4",
-    nomePessoa: "Colaborador 01 da empresa terceirizada RHS",
-    cargoPessoa: "Encanador",
-    data: "2023-01-14T17:14:33",
-    vinculoColaborador: {
-      empresa: "RHS INSTALACOES ELETRICAS"
-    }
-  },
-  {
-    id: "5",
-    nomePessoa: "Colaborador terceirizado 7",
-    cargoPessoa: "Analista",
-    data: "2023-01-14T14:34:43",
-    vinculoColaborador: {
-      empresa: "Empresa terceirizada 7"
-    }
-  },
-  {
-    id: "6",
-    nomePessoa: "Colaborador terceirizado 5",
-    cargoPessoa: "Coordenador da Qualidade",
-    data: "2023-01-14T14:18:45",
-    vinculoColaborador: {
-      empresa: "Empresa terceirizada 5"
-    }
-  },
-  {
-    id: "7",
-    nomePessoa: "Ranieri Francisco Serafin",
-    cargoPessoa: "Engenheiro Civil",
-    data: "2023-01-14T14:15:18",
-    vinculoColaborador: {
-      empresa: "Empresa terceirizada 5"
-    }
-  },
-  {
-    id: "8",
-    nomePessoa: "Colaborador 14",
-    cargoPessoa: "Encanador",
-    data: "2023-01-14T14:26:20",
-    vinculoColaborador: {
-      empresa: "Empresa terceirizada 7"
-    }
-  },
-  {
-    id: "9",
-    nomePessoa: "Colaborador terceirizado 10",
-    cargoPessoa: "Encanador",
-    data: "2023-01-14T14:27:24",
-    vinculoColaborador: {
-      empresa: "RHS INSTALACOES ELETRICAS"
-    }
-  },
-  {
-    id: "10",
-    nomePessoa: "Colaborador terceirizado 11",
-    cargoPessoa: "Encanador",
-    data: "2023-01-14T14:27:48",
-    vinculoColaborador: {
-      empresa: "Empresa terceirizada 7"
-    }
-  }
-];
-
 interface InmetaCredentials {
   email: string
   senha: string
@@ -114,23 +20,76 @@ interface AccessEvent {
   }
 }
 
-async function getAccessEvents(token: string, startDate: string, endDate: string): Promise<AccessEvent[]> {
-  console.log(`Mock data being used for date range: ${startDate} to ${endDate}`);
+async function getToken(credentials: InmetaCredentials): Promise<string> {
+  const url = `${API_BASE_URL}/v1/token`;
   
-  // Mapear os eventos mock para o formato esperado
-  const events = mockEvents.map((event) => ({
-    id: event.id,
-    name: event.nomePessoa,
-    role: event.cargoPessoa,
-    arrival_time: event.data,
-    photo_url: '',
-    vinculoColaborador: {
-      empresa: event.vinculoColaborador.empresa
-    }
-  }));
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(credentials)
+    });
 
-  console.log('Returning mock events:', events);
-  return events;
+    if (!response.ok) {
+      throw new Error(`Failed to get token: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    if (!data?.content?.token) {
+      throw new Error('Token não encontrado na resposta');
+    }
+
+    return data.content.token;
+  } catch (error) {
+    console.error('Error getting token:', error);
+    throw error;
+  }
+}
+
+async function getAccessEvents(token: string, startDate: string, endDate: string): Promise<AccessEvent[]> {
+  const url = new URL(`${API_BASE_URL}/v1/eventos-acesso`);
+  url.searchParams.append('dataInicial', `${startDate}T00:00:00`);
+  url.searchParams.append('dataFinal', `${endDate}T23:59:59`);
+
+  try {
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json',
+        'modulo': 'CONTROLE_ACESSO'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get access events: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    if (!data?.content || !Array.isArray(data.content)) {
+      console.error('Invalid response structure:', data);
+      throw new Error('Formato de resposta inválido');
+    }
+
+    return data.content.map((event: any) => ({
+      id: event.id || String(Math.random()),
+      name: event.nomePessoa,
+      role: event.cargoPessoa,
+      arrival_time: event.data,
+      photo_url: event.photoUrl || '',
+      vinculoColaborador: {
+        empresa: event.vinculoColaborador?.empresa || 'Empresa não informada'
+      }
+    }));
+  } catch (error) {
+    console.error('Error fetching access events:', error);
+    throw error;
+  }
 }
 
 serve(async (req) => {
@@ -142,24 +101,29 @@ serve(async (req) => {
     const { action, startDate, endDate } = await req.json();
     console.log('Received request with params:', { action, startDate, endDate });
 
+    const credentials = {
+      email: Deno.env.get('INMETA_EMAIL'),
+      senha: Deno.env.get('INMETA_PASSWORD')
+    };
+
+    if (!credentials.email || !credentials.senha) {
+      throw new Error('Credenciais da API Inmeta não configuradas');
+    }
+
     let result;
     
     switch (action) {
       case 'getAccessEvents':
         if (!startDate || !endDate) {
-          console.error('Missing required date parameters');
-          throw new Error('Missing required date parameters');
+          throw new Error('Datas inicial e final são obrigatórias');
         }
-        console.log('Getting mock events...');
-        result = await getAccessEvents("mock-token", startDate, endDate);
+        const token = await getToken(credentials);
+        result = await getAccessEvents(token, startDate, endDate);
         break;
       
       default:
-        console.error('Invalid action:', action);
-        throw new Error('Invalid action');
+        throw new Error('Ação inválida');
     }
-
-    console.log('Returning result:', result);
 
     return new Response(
       JSON.stringify(result),
