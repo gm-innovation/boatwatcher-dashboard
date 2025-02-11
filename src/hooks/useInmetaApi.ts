@@ -84,7 +84,7 @@ export const useInmetaEvents = (projectId?: string) => {
             action: "getAccessEvents",
             startDate,
             endDate,
-            projectId
+            alvoId: projectId
           })
         });
 
