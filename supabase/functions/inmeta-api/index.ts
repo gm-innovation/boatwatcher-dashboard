@@ -126,9 +126,13 @@ async function getProjects(token: string): Promise<InmetaProject[]> {
 }
 
 async function getAccessEvents(token: string, startDate: string, endDate: string, projectId?: string): Promise<AccessEvent[]> {
+  // Garantir que as datas incluam o timezone
+  const formattedStartDate = `${startDate}T00:00:00-03:00`;
+  const formattedEndDate = `${endDate}T23:59:59-03:00`;
+  
   const url = new URL(`${API_BASE_URL}/v1/eventos-acesso`);
-  url.searchParams.append('dataInicial', `${startDate}T00:00:00`);
-  url.searchParams.append('dataFinal', `${endDate}T23:59:59`);
+  url.searchParams.append('dataInicial', formattedStartDate);
+  url.searchParams.append('dataFinal', formattedEndDate);
   if (projectId) {
     url.searchParams.append('alvoId', projectId);
   }
@@ -140,8 +144,15 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
       'modulo': 'CONTROLE_ACESSO'
     };
 
-    console.log('Access events request URL:', url.toString());
-    console.log('Request headers:', headers);
+    console.log('Access events request details:', {
+      url: url.toString(),
+      headers,
+      dates: {
+        start: formattedStartDate,
+        end: formattedEndDate
+      },
+      projectId: projectId || 'not specified'
+    });
 
     const response = await fetch(url.toString(), {
       method: 'GET',
@@ -152,38 +163,57 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
     console.log('Access events response headers:', Object.fromEntries(response.headers.entries()));
 
     const text = await response.text();
-    console.log('Access events response text:', text);
+    console.log('Access events raw response:', text);
 
     if (!response.ok) {
       throw new Error(`Failed to get access events: ${response.statusText}. Response: ${text}`);
     }
 
-    const data = JSON.parse(text);
-    console.log('Successfully parsed access events response:', data);
+    try {
+      const data = JSON.parse(text);
+      console.log('Access events parsed response:', JSON.stringify(data, null, 2));
 
-    if (!data?.content || !Array.isArray(data.content)) {
-      console.error('Invalid response structure:', data);
-      throw new Error(`Invalid response format. Full response: ${text}`);
-    }
-
-    return data.content.map((event: any) => ({
-      id: event.id || String(Math.random()),
-      tipo: event.tipo,
-      data: event.data,
-      alvo: {
-        id: event.alvo?.id,
-        nome: event.alvo?.nome
-      },
-      agente: event.agente,
-      cpfPessoa: event.cpfPessoa,
-      tipoPessoa: event.tipoPessoa,
-      nomePessoa: event.nomePessoa,
-      cargoPessoa: event.cargoPessoa,
-      observacoes: event.observacoes,
-      vinculoColaborador: {
-        empresa: event.vinculoColaborador?.empresa || 'Empresa não informada'
+      if (data?.message) {
+        console.log('API Message:', data.message);
       }
-    }));
+
+      if (!data?.content) {
+        console.error('Invalid response structure:', data);
+        throw new Error(`Invalid response format. Full response: ${text}`);
+      }
+
+      if (!Array.isArray(data.content)) {
+        console.log('Content is not an array:', data.content);
+        return [];
+      }
+
+      if (data.content.length === 0) {
+        console.log('No events found for the specified period');
+        return [];
+      }
+
+      return data.content.map((event: any) => ({
+        id: event.id || String(Math.random()),
+        tipo: event.tipo,
+        data: event.data,
+        alvo: {
+          id: event.alvo?.id,
+          nome: event.alvo?.nome
+        },
+        agente: event.agente,
+        cpfPessoa: event.cpfPessoa,
+        tipoPessoa: event.tipoPessoa,
+        nomePessoa: event.nomePessoa,
+        cargoPessoa: event.cargoPessoa,
+        observacoes: event.observacoes,
+        vinculoColaborador: {
+          empresa: event.vinculoColaborador?.empresa || 'Empresa não informada'
+        }
+      }));
+    } catch (parseError) {
+      console.error('Error parsing access events response:', parseError);
+      throw parseError;
+    }
   } catch (error) {
     console.error('Error fetching access events:', error);
     throw error;
