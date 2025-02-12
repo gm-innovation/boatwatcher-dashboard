@@ -14,28 +14,58 @@ export const CompaniesList = () => {
     if (!company) return acc;
 
     const eventDate = new Date(event.data);
+    console.log(`Processando evento para empresa ${company}:`, {
+      data: event.data,
+      eventDate,
+      nomePessoa: event.nomePessoa,
+      currentEntryTime: acc[company]?.entryTime ? format(acc[company].entryTime, 'HH:mm') : 'N/A'
+    });
     
     if (!acc[company]) {
       acc[company] = {
         name: company,
         entryTime: eventDate,
         workersCount: 1,
+        firstWorker: event.nomePessoa
       };
+      console.log(`Primeira entrada da empresa ${company}:`, {
+        time: format(eventDate, 'HH:mm'),
+        worker: event.nomePessoa
+      });
     } else {
       // Update entry time if this event is earlier
       if (eventDate < acc[company].entryTime) {
+        console.log(`Atualizando horário de entrada da empresa ${company}:`, {
+          oldTime: format(acc[company].entryTime, 'HH:mm'),
+          newTime: format(eventDate, 'HH:mm'),
+          worker: event.nomePessoa
+        });
         acc[company].entryTime = eventDate;
+        acc[company].firstWorker = event.nomePessoa;
       }
-      // Incrementar contagem apenas para trabalhadores atualmente a bordo
-      acc[company].workersCount++;
+      // Incrementar contagem apenas para trabalhadores atuais
+      const isNewWorker = !inmetaEvents
+        .filter(e => e.data < event.data && e.vinculoColaborador?.empresa === company)
+        .some(e => e.nomePessoa === event.nomePessoa);
+      
+      if (isNewWorker) {
+        acc[company].workersCount++;
+      }
     }
     return acc;
-  }, {} as Record<string, { name: string; entryTime: Date; workersCount: number }>);
+  }, {} as Record<string, { name: string; entryTime: Date; workersCount: number; firstWorker: string }>);
 
   // Converter para array e ordenar por nome da empresa
   const companiesOnBoard = Object.values(companiesData).sort((a, b) => 
     a.name.localeCompare(b.name)
   );
+
+  console.log('Dados finais das empresas:', companiesOnBoard.map(company => ({
+    name: company.name,
+    entryTime: format(company.entryTime, 'HH:mm'),
+    workersCount: company.workersCount,
+    firstWorker: company.firstWorker
+  })));
 
   return (
     <div className="bg-card/80 backdrop-blur-sm rounded-lg border border-border">
