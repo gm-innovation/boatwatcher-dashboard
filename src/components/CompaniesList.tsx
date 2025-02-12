@@ -8,74 +8,47 @@ export const CompaniesList = () => {
   const { data: companies = [] } = useCompanies();
   const { data: inmetaEvents = [] } = useInmetaEvents();
 
-  // Primeiro, ordenar todos os eventos por data
+  // Primeiro, ordenar todos os eventos por data (do mais antigo para o mais recente)
   const sortedEvents = [...inmetaEvents].sort((a, b) => 
     new Date(a.data).getTime() - new Date(b.data).getTime()
   );
 
-  // Get unique companies and their earliest entry time from Inmeta events
-  const companiesData = sortedEvents
-    .reduce((acc, event) => {
-      const company = event.vinculoColaborador?.empresa;
-      if (!company) return acc;
+  // Agrupar eventos por empresa
+  const companiesData = sortedEvents.reduce((acc, event) => {
+    const company = event.vinculoColaborador?.empresa;
+    if (!company) return acc;
 
-      const eventDate = new Date(event.data);
-      console.log(`Processando evento para empresa ${company}:`, {
-        data: event.data,
-        eventDate,
-        nomePessoa: event.nomePessoa,
-        currentEntryTime: acc[company]?.entryTime ? format(acc[company].entryTime, 'HH:mm') : 'N/A'
-      });
-      
-      if (!acc[company]) {
-        // Primeira ocorrência da empresa
-        acc[company] = {
-          name: company,
-          entryTime: eventDate,
-          workersCount: 1,
-          firstWorker: event.nomePessoa,
-          workers: new Set([event.nomePessoa])
-        };
-        console.log(`Primeira entrada da empresa ${company}:`, {
-          time: format(eventDate, 'HH:mm'),
-          worker: event.nomePessoa
-        });
-      } else {
-        // Atualizar conjunto de trabalhadores
-        acc[company].workers.add(event.nomePessoa);
-        acc[company].workersCount = acc[company].workers.size;
-
-        // Como os eventos já estão ordenados, só atualizamos o horário
-        // se ainda não tivermos um horário de entrada
-        if (!acc[company].entryTime || eventDate < acc[company].entryTime) {
-          console.log(`Atualizando horário de entrada da empresa ${company}:`, {
-            oldTime: acc[company].entryTime ? format(acc[company].entryTime, 'HH:mm') : 'N/A',
-            newTime: format(eventDate, 'HH:mm'),
-            worker: event.nomePessoa
-          });
-          acc[company].entryTime = eventDate;
-          acc[company].firstWorker = event.nomePessoa;
-        }
-      }
-      return acc;
-    }, {} as Record<string, { 
-      name: string; 
-      entryTime: Date; 
-      workersCount: number; 
-      firstWorker: string;
-      workers: Set<string>;
-    }>);
+    if (!acc[company]) {
+      // Se é a primeira vez que vemos esta empresa, este é o horário de entrada
+      // pois os eventos estão ordenados do mais antigo para o mais recente
+      acc[company] = {
+        name: company,
+        entryTime: new Date(event.data),
+        workers: new Set([event.nomePessoa])
+      };
+    } else {
+      // Apenas adicionar o trabalhador ao conjunto de trabalhadores únicos
+      acc[company].workers.add(event.nomePessoa);
+    }
+    return acc;
+  }, {} as Record<string, { 
+    name: string; 
+    entryTime: Date; 
+    workers: Set<string>;
+  }>);
 
   // Converter para array e ordenar por nome da empresa
-  const companiesOnBoard = Object.values(companiesData).sort((a, b) => 
-    a.name.localeCompare(b.name)
-  );
+  const companiesOnBoard = Object.values(companiesData)
+    .map(company => ({
+      ...company,
+      workersCount: company.workers.size
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   console.log('Dados finais das empresas:', companiesOnBoard.map(company => ({
     name: company.name,
     entryTime: format(company.entryTime, 'HH:mm'),
     workersCount: company.workersCount,
-    firstWorker: company.firstWorker,
     workers: Array.from(company.workers)
   })));
 
