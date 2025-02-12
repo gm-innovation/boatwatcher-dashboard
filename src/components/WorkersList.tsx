@@ -11,7 +11,7 @@ export const WorkersList = ({ className = "" }) => {
   const { data: workers = [], isLoading: isLoadingWorkers } = useWorkers();
   const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useInmetaEvents();
 
-  // Combinar trabalhadores de ambas as fontes
+  // Combinar trabalhadores de ambas as fontes e ordenar por horário de chegada
   const allWorkers = [
     ...workers,
     ...inmetaEvents.map(event => ({
@@ -22,7 +22,7 @@ export const WorkersList = ({ className = "" }) => {
       photo_url: "",
       company: event.vinculoColaborador?.empresa || 'N/A',
     })),
-  ];
+  ].sort((a, b) => new Date(b.arrival_time).getTime() - new Date(a.arrival_time).getTime());
 
   const filteredWorkers = allWorkers.filter(worker =>
     worker.name.toLowerCase().includes(searchTerm.toLowerCase())

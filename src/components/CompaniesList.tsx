@@ -8,10 +8,13 @@ export const CompaniesList = () => {
   const { data: companies = [] } = useCompanies();
   const { data: inmetaEvents = [] } = useInmetaEvents();
 
+  // Primeiro, ordenar todos os eventos por data
+  const sortedEvents = [...inmetaEvents].sort((a, b) => 
+    new Date(a.data).getTime() - new Date(b.data).getTime()
+  );
+
   // Get unique companies and their earliest entry time from Inmeta events
-  const companiesData = inmetaEvents
-    // Ordenar eventos por data, do mais antigo para o mais recente
-    .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
+  const companiesData = sortedEvents
     .reduce((acc, event) => {
       const company = event.vinculoColaborador?.empresa;
       if (!company) return acc;
@@ -42,10 +45,11 @@ export const CompaniesList = () => {
         acc[company].workers.add(event.nomePessoa);
         acc[company].workersCount = acc[company].workers.size;
 
-        // Atualizar horário de entrada se for mais antigo
-        if (eventDate < acc[company].entryTime) {
+        // Como os eventos já estão ordenados, só atualizamos o horário
+        // se ainda não tivermos um horário de entrada
+        if (!acc[company].entryTime || eventDate < acc[company].entryTime) {
           console.log(`Atualizando horário de entrada da empresa ${company}:`, {
-            oldTime: format(acc[company].entryTime, 'HH:mm'),
+            oldTime: acc[company].entryTime ? format(acc[company].entryTime, 'HH:mm') : 'N/A',
             newTime: format(eventDate, 'HH:mm'),
             worker: event.nomePessoa
           });
