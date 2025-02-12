@@ -8,28 +8,31 @@ export const CompaniesList = () => {
   const { data: companies = [] } = useCompanies();
   const { data: inmetaEvents = [] } = useInmetaEvents();
 
-  // Get unique companies and their data from Inmeta events
+  // Get unique companies and their earliest entry time from Inmeta events
   const companiesData = inmetaEvents.reduce((acc, event) => {
     const company = event.vinculoColaborador?.empresa;
     if (!company) return acc;
 
+    const eventDate = new Date(event.data);
+    
     if (!acc[company]) {
       acc[company] = {
         name: company,
-        entryTime: new Date(event.data),
+        entryTime: eventDate,
         workersCount: 1,
       };
     } else {
       // Update entry time if this event is earlier
-      if (new Date(event.data) < acc[company].entryTime) {
-        acc[company].entryTime = new Date(event.data);
+      if (eventDate < acc[company].entryTime) {
+        acc[company].entryTime = eventDate;
       }
+      // Incrementar contagem apenas para trabalhadores atualmente a bordo
       acc[company].workersCount++;
     }
     return acc;
   }, {} as Record<string, { name: string; entryTime: Date; workersCount: number }>);
 
-  // Convert to array and sort alphabetically by company name
+  // Converter para array e ordenar por nome da empresa
   const companiesOnBoard = Object.values(companiesData).sort((a, b) => 
     a.name.localeCompare(b.name)
   );

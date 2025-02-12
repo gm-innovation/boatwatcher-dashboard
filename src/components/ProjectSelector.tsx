@@ -64,8 +64,8 @@ export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectS
       onValueChange={onProjectSelect}
     >
       <SelectTrigger className="w-[300px]">
-        <SelectValue placeholder="Selecione um alvo">
-          {selectedAlvo?.nome || selectedDbProject?.vessel_name || 'Selecione um alvo'}
+        <SelectValue placeholder="Selecione um projeto">
+          {selectedAlvo?.nome || selectedDbProject?.vessel_name || 'Selecione um projeto'}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
