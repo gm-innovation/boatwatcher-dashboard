@@ -1,3 +1,4 @@
+
 import { Search } from 'lucide-react';
 import { useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -15,9 +16,9 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
   const { data: workers = [], isLoading: isLoadingWorkers } = useWorkers();
   const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useInmetaEvents(projectId);
 
-  // Combinar trabalhadores de ambas as fontes e ordenar por horário de chegada
-  const allWorkers = [
-    ...workers,
+  // Combinar trabalhadores apenas quando houver um projeto selecionado
+  const allWorkers = projectId ? [
+    ...workers.filter(worker => worker.project_id === projectId),
     ...inmetaEvents.map(event => ({
       id: event.id,
       name: event.nomePessoa,
@@ -26,9 +27,14 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
       photo_url: "",
       company: event.vinculoColaborador?.empresa || 'N/A',
     })),
-  ].sort((a, b) => new Date(b.arrival_time).getTime() - new Date(a.arrival_time).getTime());
+  ] : [];
 
-  const filteredWorkers = allWorkers.filter(worker =>
+  // Ordenar por horário de chegada
+  const sortedWorkers = allWorkers.sort((a, b) => 
+    new Date(b.arrival_time).getTime() - new Date(a.arrival_time).getTime()
+  );
+
+  const filteredWorkers = sortedWorkers.filter(worker =>
     worker.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -76,7 +82,7 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-          ) : (
+          ) : projectId ? (
             <table className="w-full">
               <tbody>
                 {filteredWorkers.map((worker) => (
@@ -89,8 +95,19 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
                     </td>
                   </tr>
                 ))}
+                {filteredWorkers.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-3 text-sm text-muted-foreground text-center">
+                      Nenhum trabalhador encontrado
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
+          ) : (
+            <div className="py-3 text-sm text-muted-foreground text-center">
+              Selecione um projeto para ver os trabalhadores
+            </div>
           )}
         </div>
       </ScrollArea>

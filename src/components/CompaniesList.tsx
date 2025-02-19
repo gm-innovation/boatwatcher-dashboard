@@ -1,3 +1,4 @@
+
 import { useCompanies } from '@/hooks/useSupabase';
 import { useInmetaEvents } from '@/hooks/useInmetaApi';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -9,7 +10,7 @@ interface CompaniesListProps {
 
 export const CompaniesList = ({ projectId }: CompaniesListProps) => {
   const { data: companies = [] } = useCompanies();
-  const { data: inmetaEvents = [] } = useInmetaEvents(projectId);
+  const { data: inmetaEvents = [], isLoading } = useInmetaEvents(projectId);
 
   // Primeiro, ordenar todos os eventos por data (do mais antigo para o mais recente)
   const sortedEvents = [...inmetaEvents].sort((a, b) => 
@@ -22,15 +23,12 @@ export const CompaniesList = ({ projectId }: CompaniesListProps) => {
     if (!company) return acc;
 
     if (!acc[company]) {
-      // Se é a primeira vez que vemos esta empresa, este é o horário de entrada
-      // pois os eventos estão ordenados do mais antigo para o mais recente
       acc[company] = {
         name: company,
         entryTime: new Date(event.data),
         workers: new Set([event.nomePessoa])
       };
     } else {
-      // Apenas adicionar o trabalhador ao conjunto de trabalhadores únicos
       acc[company].workers.add(event.nomePessoa);
     }
     return acc;
@@ -48,13 +46,6 @@ export const CompaniesList = ({ projectId }: CompaniesListProps) => {
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  console.log('Dados finais das empresas:', companiesOnBoard.map(company => ({
-    name: company.name,
-    entryTime: format(company.entryTime, 'HH:mm'),
-    workersCount: company.workersCount,
-    workers: Array.from(company.workers)
-  })));
-
   return (
     <div className="bg-card/80 backdrop-blur-sm rounded-lg border border-border">
       <div className="p-6 border-b border-border">
@@ -70,35 +61,45 @@ export const CompaniesList = ({ projectId }: CompaniesListProps) => {
 
       <ScrollArea className="h-[400px]">
         <div className="p-6">
-          <table className="w-full">
-            <thead>
-              <tr>
-                <th className="text-left py-3 text-sm font-medium text-muted-foreground">Nome</th>
-                <th className="text-center py-3 text-sm font-medium text-muted-foreground">Entrada</th>
-                <th className="text-center py-3 text-sm font-medium text-muted-foreground">Equipe</th>
-              </tr>
-            </thead>
-            <tbody>
-              {companiesOnBoard.map((company, index) => (
-                <tr key={index} className="border-b border-border hover:bg-muted/50">
-                  <td className="py-3 text-sm text-foreground">{company.name}</td>
-                  <td className="py-3 text-sm text-muted-foreground text-center">
-                    {format(company.entryTime, 'HH:mm')}
-                  </td>
-                  <td className="py-3 text-sm text-muted-foreground text-center">
-                    {company.workersCount}
-                  </td>
-                </tr>
-              ))}
-              {companiesOnBoard.length === 0 && (
+          {isLoading ? (
+            <div className="flex justify-center items-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : projectId ? (
+            <table className="w-full">
+              <thead>
                 <tr>
-                  <td colSpan={3} className="py-3 text-sm text-muted-foreground text-center">
-                    Nenhuma empresa a bordo
-                  </td>
+                  <th className="text-left py-3 text-sm font-medium text-muted-foreground">Nome</th>
+                  <th className="text-center py-3 text-sm font-medium text-muted-foreground">Entrada</th>
+                  <th className="text-center py-3 text-sm font-medium text-muted-foreground">Equipe</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {companiesOnBoard.map((company, index) => (
+                  <tr key={index} className="border-b border-border hover:bg-muted/50">
+                    <td className="py-3 text-sm text-foreground">{company.name}</td>
+                    <td className="py-3 text-sm text-muted-foreground text-center">
+                      {format(company.entryTime, 'HH:mm')}
+                    </td>
+                    <td className="py-3 text-sm text-muted-foreground text-center">
+                      {company.workersCount}
+                    </td>
+                  </tr>
+                ))}
+                {companiesOnBoard.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="py-3 text-sm text-muted-foreground text-center">
+                      Nenhuma empresa a bordo
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          ) : (
+            <div className="py-3 text-sm text-muted-foreground text-center">
+              Selecione um projeto para ver as empresas
+            </div>
+          )}
         </div>
       </ScrollArea>
     </div>
