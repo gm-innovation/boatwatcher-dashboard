@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useWorkers } from '@/hooks/useSupabase';
 import { useInmetaEvents } from '@/hooks/useInmetaApi';
 import { format } from 'date-fns';
+import type { Worker } from '@/types/supabase';
 
 interface WorkersListProps {
   className?: string;
@@ -26,7 +27,10 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
       arrival_time: event.data,
       photo_url: "",
       company: event.vinculoColaborador?.empresa || 'N/A',
-    })),
+      company_id: "",  // Campo obrigatório da interface Worker
+      created_at: event.data, // Usando a data do evento como created_at
+      project_id: projectId // Adicionando o project_id do projeto atual
+    } as Worker)),
   ] : [];
 
   // Ordenar por horário de chegada
