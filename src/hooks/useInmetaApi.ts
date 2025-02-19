@@ -2,6 +2,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/use-toast";
+import { startOfDay, subDays, subMonths, format } from "date-fns";
 
 interface InmetaEvent {
   id: string;
@@ -22,28 +23,47 @@ interface InmetaEvent {
   };
 }
 
-function getDateRange() {
+function getDateRange(period: string) {
   const endDate = new Date();
-  const startDate = new Date();
-  startDate.setMonth(startDate.getMonth() - 6); // Últimos 6 meses
+  let startDate: Date;
+
+  switch (period) {
+    case 'today':
+      startDate = startOfDay(endDate);
+      break;
+    case 'yesterday':
+      startDate = startOfDay(subDays(endDate, 1));
+      endDate.setHours(0, 0, 0, 0);
+      break;
+    case '7days':
+      startDate = subDays(endDate, 7);
+      break;
+    case '1month':
+      startDate = subMonths(endDate, 1);
+      break;
+    case 'all':
+      startDate = new Date(2020, 0, 1); // Uma data bem antiga para pegar todo o histórico
+      break;
+    default:
+      startDate = subMonths(endDate, 6); // 6 meses por padrão
+  }
   
   return {
-    startDate: startDate.toISOString().split('T')[0],
-    endDate: endDate.toISOString().split('T')[0]
+    startDate: format(startDate, 'yyyy-MM-dd'),
+    endDate: format(endDate, 'yyyy-MM-dd')
   };
 }
 
-export const useInmetaEvents = (alvoId?: string | null) => {
+export const useInmetaEvents = (alvoId?: string | null, period: string = '1month') => {
   return useQuery({
-    queryKey: ["inmeta-events", alvoId],
+    queryKey: ["inmeta-events", alvoId, period],
     queryFn: async (): Promise<InmetaEvent[]> => {
       try {
-        // Se não houver alvoId selecionado, retornar array vazio
         if (!alvoId) {
           return [];
         }
 
-        const { startDate, endDate } = getDateRange();
+        const { startDate, endDate } = getDateRange(period);
 
         console.log('Buscando eventos Inmeta:', { startDate, endDate, alvoId });
 
@@ -93,6 +113,6 @@ export const useInmetaEvents = (alvoId?: string | null) => {
     },
     retry: 2,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-    enabled: !!alvoId, // Só executar a query quando houver um alvoId
+    enabled: !!alvoId,
   });
 };

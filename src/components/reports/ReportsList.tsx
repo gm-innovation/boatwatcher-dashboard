@@ -6,14 +6,15 @@ import { Button } from '@/components/ui/button';
 import { useInmetaEvents } from '@/hooks/useInmetaApi';
 import { useProjects } from '@/hooks/useSupabase';
 import { format } from 'date-fns';
-import { FileText, Download, Filter, Search } from 'lucide-react';
+import { FileText, Download, Filter, Search, Calendar } from 'lucide-react';
 
 export const ReportsList = () => {
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState('1month');
   const [searchTerm, setSearchTerm] = useState('');
   const { data: projects = [] } = useProjects();
   const selectedProjectData = projects.find(p => p.id === selectedProject);
-  const { data: events = [], isLoading } = useInmetaEvents(selectedProjectData?.external_project_id);
+  const { data: events = [], isLoading } = useInmetaEvents(selectedProjectData?.external_project_id, selectedPeriod);
 
   const filteredEvents = events.filter(event => 
     event.nomePessoa.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -41,7 +42,7 @@ export const ReportsList = () => {
       </div>
 
       {/* Filtros */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Select value={selectedProject || ''} onValueChange={setSelectedProject}>
           <SelectTrigger>
             <SelectValue placeholder="Selecione o projeto" />
@@ -53,6 +54,21 @@ export const ReportsList = () => {
                   {project.vessel_name || 'Sem nome'}
                 </SelectItem>
               ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+
+        <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione o período" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="today">Hoje</SelectItem>
+              <SelectItem value="yesterday">Ontem</SelectItem>
+              <SelectItem value="7days">Últimos 7 dias</SelectItem>
+              <SelectItem value="1month">Último mês</SelectItem>
+              <SelectItem value="all">Todo o projeto</SelectItem>
             </SelectGroup>
           </SelectContent>
         </Select>
