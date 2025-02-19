@@ -23,18 +23,16 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
   // Combinar trabalhadores apenas quando houver um projeto selecionado
   const allWorkers = projectId ? [
     ...workers.filter(worker => worker.project_id === projectId || !worker.project_id),
-    ...inmetaEvents
-      .filter(event => event.alvo?.id === selectedProject?.external_project_id)
-      .map(event => ({
-        id: event.id,
-        name: event.nomePessoa,
-        role: event.cargoPessoa,
-        arrival_time: event.data,
-        photo_url: "",
-        company: event.vinculoColaborador?.empresa || 'N/A',
-        company_id: "",  // Campo obrigatório da interface Worker
-        created_at: event.data, // Usando a data do evento como created_at
-        project_id: projectId // Adicionando o project_id do projeto atual
+    ...inmetaEvents.map(event => ({
+      id: event.id,
+      name: event.nomePessoa,
+      role: event.cargoPessoa,
+      arrival_time: event.data,
+      photo_url: "",
+      company: event.vinculoColaborador?.empresa || 'N/A',
+      company_id: "",  // Campo obrigatório da interface Worker
+      created_at: event.data, // Usando a data do evento como created_at
+      project_id: projectId // Adicionando o project_id do projeto atual
     } as Worker)),
   ] : [];
 
