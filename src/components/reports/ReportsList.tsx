@@ -5,8 +5,16 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Button } from '@/components/ui/button';
 import { useInmetaEvents } from '@/hooks/useInmetaApi';
 import { useProjects } from '@/hooks/useSupabase';
-import { format } from 'date-fns';
+import { format, differenceInMinutes } from 'date-fns';
 import { FileText, Download, Filter, Search, Calendar } from 'lucide-react';
+
+interface CompanyGroup {
+  name: string;
+  workers: any[];
+  firstEntry: Date;
+  lastExit: Date;
+  duration: number;
+}
 
 export const ReportsList = () => {
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
@@ -21,6 +29,41 @@ export const ReportsList = () => {
     event.cargoPessoa.toLowerCase().includes(searchTerm.toLowerCase()) ||
     event.vinculoColaborador?.empresa?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Agrupar eventos por empresa
+  const groupedByCompany = filteredEvents.reduce((acc: { [key: string]: any[] }, event) => {
+    const companyName = event.vinculoColaborador?.empresa || 'Sem empresa';
+    if (!acc[companyName]) {
+      acc[companyName] = [];
+    }
+    acc[companyName].push(event);
+    return acc;
+  }, {});
+
+  // Calcular métricas por empresa
+  const companiesData: CompanyGroup[] = Object.entries(groupedByCompany).map(([companyName, companyEvents]) => {
+    const sortedEvents = companyEvents.sort((a, b) => 
+      new Date(a.data).getTime() - new Date(b.data).getTime()
+    );
+    
+    const firstEntry = new Date(sortedEvents[0].data);
+    const lastExit = new Date(sortedEvents[sortedEvents.length - 1].data);
+    const duration = differenceInMinutes(lastExit, firstEntry);
+
+    return {
+      name: companyName,
+      workers: companyEvents,
+      firstEntry,
+      lastExit,
+      duration
+    };
+  });
+
+  const formatDuration = (minutes: number) => {
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours}h${remainingMinutes}min`;
+  };
 
   const handleExport = () => {
     // Implementar exportação para Excel/CSV
@@ -98,10 +141,9 @@ export const ReportsList = () => {
           <table className="w-full">
             <thead>
               <tr>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Data | Evento</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Nome | Cargo</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Vínculo</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Projeto</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Nome</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Cargo</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Empresa</th>
               </tr>
             </thead>
           </table>
@@ -112,34 +154,51 @@ export const ReportsList = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} className="text-center py-4">
+                  <td colSpan={3} className="text-center py-4">
                     <div className="flex justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                     </div>
                   </td>
                 </tr>
-              ) : filteredEvents.length > 0 ? (
-                filteredEvents.map((event) => (
-                  <tr key={event.id} className="border-b last:border-b-0 hover:bg-muted/50">
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{format(new Date(event.data), 'dd/MM/yyyy HH:mm:ss')}</div>
-                      <div className="text-sm text-muted-foreground">{event.tipo}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{event.nomePessoa}</div>
-                      <div className="text-sm text-muted-foreground">{event.cargoPessoa}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm">{event.vinculoColaborador?.empresa || 'N/A'}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm">{selectedProjectData?.vessel_name || 'N/A'}</div>
-                    </td>
-                  </tr>
+              ) : companiesData.length > 0 ? (
+                companiesData.map((company) => (
+                  <>
+                    <tr key={company.name} className="bg-muted/30">
+                      <td colSpan={3} className="px-4 py-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="font-medium">{company.name}</span>
+                            <span className="ml-4 text-sm text-muted-foreground">
+                              {company.workers.length} trabalhadores
+                            </span>
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            <span className="mr-4">Primeiro acesso: {format(company.firstEntry, 'HH:mm')}</span>
+                            <span className="mr-4">Último acesso: {format(company.lastExit, 'HH:mm')}</span>
+                            <span>Permanência: {formatDuration(company.duration)}</span>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                    {company.workers.map((event) => (
+                      <tr key={event.id} className="border-b last:border-b-0 hover:bg-muted/50">
+                        <td className="px-4 py-3">
+                          <div className="font-medium">{event.nomePessoa}</div>
+                          <div className="text-sm text-muted-foreground">{format(new Date(event.data), 'HH:mm')}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-sm">{event.cargoPessoa}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-sm">{event.vinculoColaborador?.empresa || 'N/A'}</div>
+                        </td>
+                      </tr>
+                    ))}
+                  </>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={4} className="text-center py-4 text-muted-foreground">
+                  <td colSpan={3} className="text-center py-4 text-muted-foreground">
                     {selectedProject ? 'Nenhum registro encontrado' : 'Selecione um projeto para ver os registros'}
                   </td>
                 </tr>
