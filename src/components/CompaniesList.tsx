@@ -1,12 +1,15 @@
-
 import { useCompanies } from '@/hooks/useSupabase';
 import { useInmetaEvents } from '@/hooks/useInmetaApi';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { format } from 'date-fns';
 
-export const CompaniesList = () => {
+interface CompaniesListProps {
+  projectId: string | null;
+}
+
+export const CompaniesList = ({ projectId }: CompaniesListProps) => {
   const { data: companies = [] } = useCompanies();
-  const { data: inmetaEvents = [] } = useInmetaEvents();
+  const { data: inmetaEvents = [] } = useInmetaEvents(projectId);
 
   // Primeiro, ordenar todos os eventos por data (do mais antigo para o mais recente)
   const sortedEvents = [...inmetaEvents].sort((a, b) => 

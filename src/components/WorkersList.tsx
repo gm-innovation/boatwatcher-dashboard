@@ -1,4 +1,3 @@
-
 import { Search } from 'lucide-react';
 import { useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -6,10 +5,15 @@ import { useWorkers } from '@/hooks/useSupabase';
 import { useInmetaEvents } from '@/hooks/useInmetaApi';
 import { format } from 'date-fns';
 
-export const WorkersList = ({ className = "" }) => {
+interface WorkersListProps {
+  className?: string;
+  projectId: string | null;
+}
+
+export const WorkersList = ({ className = "", projectId }: WorkersListProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const { data: workers = [], isLoading: isLoadingWorkers } = useWorkers();
-  const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useInmetaEvents();
+  const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useInmetaEvents(projectId);
 
   // Combinar trabalhadores de ambas as fontes e ordenar por horário de chegada
   const allWorkers = [
