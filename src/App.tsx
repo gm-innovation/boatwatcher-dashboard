@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -8,6 +9,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import ProjectSettings from "./pages/ProjectSettings";
+import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
 import { useAuth } from "./hooks/useAuth";
 
@@ -48,6 +50,14 @@ const App = () => {
                       <Index />
                     </ProtectedRoute>
                   }
+                />
+                <Route 
+                  path="/reports" 
+                  element={
+                    <ProtectedRoute>
+                      <Reports />
+                    </ProtectedRoute>
+                  } 
                 />
                 <Route path="/settings" element={<ProjectSettings />} />
                 <Route path="*" element={<NotFound />} />
