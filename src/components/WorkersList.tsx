@@ -6,6 +6,7 @@ import { useWorkers } from '@/hooks/useSupabase';
 import { useInmetaEvents } from '@/hooks/useInmetaApi';
 import { format } from 'date-fns';
 import type { Worker } from '@/types/supabase';
+import { useProjects } from '@/hooks/useSupabase';
 
 interface WorkersListProps {
   className?: string;
@@ -15,7 +16,9 @@ interface WorkersListProps {
 export const WorkersList = ({ className = "", projectId }: WorkersListProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const { data: workers = [], isLoading: isLoadingWorkers } = useWorkers();
-  const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useInmetaEvents(projectId);
+  const { data: projects = [] } = useProjects();
+  const selectedProject = projects.find(p => p.id === projectId);
+  const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useInmetaEvents(selectedProject?.external_project_id || null);
 
   // Combinar trabalhadores apenas quando houver um projeto selecionado
   const allWorkers = projectId ? [
