@@ -20,6 +20,7 @@ export interface Worker {
   arrival_time: string
   photo_url: string
   created_at: string
+  project_id?: string | null
 }
 
 export interface Project {

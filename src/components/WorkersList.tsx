@@ -18,7 +18,7 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
 
   // Combinar trabalhadores apenas quando houver um projeto selecionado
   const allWorkers = projectId ? [
-    ...workers.filter(worker => worker.project_id === projectId),
+    ...workers.filter(worker => worker.project_id === projectId || !worker.project_id),
     ...inmetaEvents.map(event => ({
       id: event.id,
       name: event.nomePessoa,
