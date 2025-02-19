@@ -33,7 +33,7 @@ function getDateRange() {
   };
 }
 
-export const useInmetaEvents = (alvoId?: string) => {
+export const useInmetaEvents = (alvoId?: string | null) => {
   return useQuery({
     queryKey: ["inmeta-events", alvoId],
     queryFn: async (): Promise<InmetaEvent[]> => {
