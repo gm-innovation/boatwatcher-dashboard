@@ -38,6 +38,11 @@ export const useInmetaEvents = (alvoId?: string) => {
     queryKey: ["inmeta-events", alvoId],
     queryFn: async (): Promise<InmetaEvent[]> => {
       try {
+        // Se não houver alvoId selecionado, retornar array vazio
+        if (!alvoId) {
+          return [];
+        }
+
         const { startDate, endDate } = getDateRange();
 
         console.log('Buscando eventos Inmeta:', { startDate, endDate, alvoId });
@@ -88,5 +93,6 @@ export const useInmetaEvents = (alvoId?: string) => {
     },
     retry: 2,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    enabled: !!alvoId, // Só executar a query quando houver um alvoId
   });
 };
