@@ -23,13 +23,13 @@ interface InmetaEvent {
 }
 
 function getDateRange() {
-  const today = new Date();
+  const endDate = new Date();
   const startDate = new Date();
-  startDate.setDate(today.getDate() - 7); // Últimos 7 dias
+  startDate.setMonth(startDate.getMonth() - 6); // Últimos 6 meses
   
   return {
     startDate: startDate.toISOString().split('T')[0],
-    endDate: today.toISOString().split('T')[0]
+    endDate: endDate.toISOString().split('T')[0]
   };
 }
 
@@ -68,7 +68,14 @@ export const useInmetaEvents = (alvoId?: string) => {
         }
 
         console.log('Eventos encontrados:', data);
-        return data;
+        
+        // Filtrar apenas eventos de entrada
+        const entryEvents = data.filter(event => 
+          event.tipo.toLowerCase().includes('entrada') || 
+          event.tipo.toLowerCase().includes('pendência')
+        );
+
+        return entryEvents;
       } catch (error) {
         console.error("Erro em useInmetaEvents:", error);
         toast({
