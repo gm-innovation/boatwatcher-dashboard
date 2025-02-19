@@ -47,6 +47,7 @@ export type Database = {
       }
       projects: {
         Row: {
+          active: boolean | null
           captain: string | null
           client_id: string | null
           created_at: string | null
@@ -59,6 +60,7 @@ export type Database = {
           vessel_name: string | null
         }
         Insert: {
+          active?: boolean | null
           captain?: string | null
           client_id?: string | null
           created_at?: string | null
@@ -71,6 +73,7 @@ export type Database = {
           vessel_name?: string | null
         }
         Update: {
+          active?: boolean | null
           captain?: string | null
           client_id?: string | null
           created_at?: string | null
@@ -192,7 +195,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      update_company: {
+        Args: {
+          p_company_id: string
+          p_name: string
+          p_project_managers: string[]
+          p_vessels: string[]
+          p_logo_url_light: string
+          p_logo_url_dark: string
+          p_updated_at: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       app_role: "admin" | "user"
