@@ -101,8 +101,8 @@ export const exportToPDF = async (
     
     // Project information
     doc.setFontSize(12);
-    doc.text(`Projeto: ${projectName}`, margin, yPosition);
-    doc.text(`Data: ${format(new Date(selectedDate), 'dd/MM/yyyy')}`, pageWidth - margin, yPosition, { align: 'right' });
+    doc.text(String(`Projeto: ${projectName}`), margin, yPosition);
+    doc.text(String(`Data: ${format(new Date(selectedDate), 'dd/MM/yyyy')}`), pageWidth - margin, yPosition, { align: 'right' });
     
     yPosition += 10;
 
@@ -118,9 +118,9 @@ export const exportToPDF = async (
       doc.setFillColor(240, 240, 240);
       doc.rect(margin, yPosition, pageWidth - (2 * margin), 20, 'F');
       doc.setFontSize(12);
-      doc.text(company.name, margin + 5, yPosition + 7);
-      doc.text(`${company.workers.length} trabalhadores`, margin + 5, yPosition + 15);
-      doc.text(`Permanência: ${formatDuration(company.duration)}`, pageWidth - margin - 50, yPosition + 15);
+      doc.text(String(company.name || 'Sem nome'), margin + 5, yPosition + 7);
+      doc.text(String(`${company.workers.length} trabalhadores`), margin + 5, yPosition + 15);
+      doc.text(String(`Permanência: ${formatDuration(company.duration)}`), pageWidth - margin - 50, yPosition + 15);
       
       yPosition += 25;
 
@@ -142,10 +142,10 @@ export const exportToPDF = async (
           yPosition = margin;
         }
 
-        doc.text(worker.name, margin + 5, yPosition);
-        doc.text(worker.role, margin + 60, yPosition);
-        doc.text(format(worker.firstEntry, 'HH:mm'), margin + 120, yPosition);
-        doc.text(format(worker.lastExit, 'HH:mm'), margin + 150, yPosition);
+        doc.text(String(worker.name || 'Sem nome'), margin + 5, yPosition);
+        doc.text(String(worker.role || 'Sem cargo'), margin + 60, yPosition);
+        doc.text(String(format(worker.firstEntry, 'HH:mm')), margin + 120, yPosition);
+        doc.text(String(format(worker.lastExit, 'HH:mm')), margin + 150, yPosition);
         
         yPosition += 10;
       });
