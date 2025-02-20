@@ -25,6 +25,27 @@ const formatDuration = (minutes: number) => {
   return `${hours}h${remainingMinutes}min`;
 };
 
+const loadImage = async (url: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';  // This is important for CORS
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error('Could not load image'));
+    img.src = url;
+  });
+};
+
 export const exportToPDF = async (
   companiesData: CompanyData[],
   projectName: string,
@@ -36,80 +57,87 @@ export const exportToPDF = async (
   const margin = 20;
   let yPosition = margin;
 
-  // Adicionar logos
-  const inmetaLogo = 'public/lovable-uploads/f59c0f54-3c10-436f-a3a4-3d578d4e34ca.png';
-  
-  // Adicionar logo da Inmeta (esquerda)
-  doc.addImage(inmetaLogo, 'PNG', margin, yPosition, 40, 15);
+  try {
+    // Load logos
+    const inmetaLogoUrl = '/lovable-uploads/f59c0f54-3c10-436f-a3a4-3d578d4e34ca.png';
+    const inmetaLogoData = await loadImage(inmetaLogoUrl);
+    
+    // Add Inmeta logo (left)
+    doc.addImage(inmetaLogoData, 'PNG', margin, yPosition, 40, 15);
 
-  // Adicionar logo do cliente (direita) se disponível
-  if (clientLogoUrl) {
-    doc.addImage(clientLogoUrl, 'PNG', pageWidth - 60, yPosition, 40, 15);
-  }
-
-  yPosition += 25;
-
-  // Título do relatório
-  doc.setFontSize(16);
-  doc.text('Relatório de Acessos', pageWidth / 2, yPosition, { align: 'center' });
-  
-  yPosition += 10;
-  
-  // Informações do projeto
-  doc.setFontSize(12);
-  doc.text(`Projeto: ${projectName}`, margin, yPosition);
-  doc.text(`Data: ${format(new Date(selectedDate), 'dd/MM/yyyy')}`, pageWidth - margin, yPosition, { align: 'right' });
-  
-  yPosition += 10;
-
-  // Dados das empresas
-  companiesData.forEach(company => {
-    // Verificar se precisa adicionar nova página
-    if (yPosition > doc.internal.pageSize.getHeight() - 20) {
-      doc.addPage();
-      yPosition = margin;
+    // Add client logo (right) if available
+    if (clientLogoUrl) {
+      const clientLogoData = await loadImage(clientLogoUrl);
+      doc.addImage(clientLogoData, 'PNG', pageWidth - 60, yPosition, 40, 15);
     }
 
-    // Cabeçalho da empresa
-    doc.setFillColor(240, 240, 240);
-    doc.rect(margin, yPosition, pageWidth - (2 * margin), 20, 'F');
-    doc.setFontSize(12);
-    doc.text(company.name, margin + 5, yPosition + 7);
-    doc.text(`${company.workers.length} trabalhadores`, margin + 5, yPosition + 15);
-    doc.text(`Permanência: ${formatDuration(company.duration)}`, pageWidth - margin - 50, yPosition + 15);
-    
     yPosition += 25;
 
-    // Cabeçalho da tabela
-    doc.setFillColor(245, 245, 245);
-    doc.rect(margin, yPosition, pageWidth - (2 * margin), 10, 'F');
-    doc.setFontSize(10);
-    doc.text('Nome', margin + 5, yPosition + 7);
-    doc.text('Cargo', margin + 60, yPosition + 7);
-    doc.text('Entrada', margin + 120, yPosition + 7);
-    doc.text('Saída', margin + 150, yPosition + 7);
+    // Title
+    doc.setFontSize(16);
+    doc.text('Relatório de Acessos', pageWidth / 2, yPosition, { align: 'center' });
     
-    yPosition += 15;
+    yPosition += 10;
+    
+    // Project information
+    doc.setFontSize(12);
+    doc.text(`Projeto: ${projectName}`, margin, yPosition);
+    doc.text(`Data: ${format(new Date(selectedDate), 'dd/MM/yyyy')}`, pageWidth - margin, yPosition, { align: 'right' });
+    
+    yPosition += 10;
 
-    // Dados dos trabalhadores
-    company.workers.forEach(worker => {
+    // Company data
+    companiesData.forEach(company => {
+      // Check if need new page
       if (yPosition > doc.internal.pageSize.getHeight() - 20) {
         doc.addPage();
         yPosition = margin;
       }
 
-      doc.text(worker.name, margin + 5, yPosition);
-      doc.text(worker.role, margin + 60, yPosition);
-      doc.text(format(worker.firstEntry, 'HH:mm'), margin + 120, yPosition);
-      doc.text(format(worker.lastExit, 'HH:mm'), margin + 150, yPosition);
+      // Company header
+      doc.setFillColor(240, 240, 240);
+      doc.rect(margin, yPosition, pageWidth - (2 * margin), 20, 'F');
+      doc.setFontSize(12);
+      doc.text(company.name, margin + 5, yPosition + 7);
+      doc.text(`${company.workers.length} trabalhadores`, margin + 5, yPosition + 15);
+      doc.text(`Permanência: ${formatDuration(company.duration)}`, pageWidth - margin - 50, yPosition + 15);
       
+      yPosition += 25;
+
+      // Table header
+      doc.setFillColor(245, 245, 245);
+      doc.rect(margin, yPosition, pageWidth - (2 * margin), 10, 'F');
+      doc.setFontSize(10);
+      doc.text('Nome', margin + 5, yPosition + 7);
+      doc.text('Cargo', margin + 60, yPosition + 7);
+      doc.text('Entrada', margin + 120, yPosition + 7);
+      doc.text('Saída', margin + 150, yPosition + 7);
+      
+      yPosition += 15;
+
+      // Workers data
+      company.workers.forEach(worker => {
+        if (yPosition > doc.internal.pageSize.getHeight() - 20) {
+          doc.addPage();
+          yPosition = margin;
+        }
+
+        doc.text(worker.name, margin + 5, yPosition);
+        doc.text(worker.role, margin + 60, yPosition);
+        doc.text(format(worker.firstEntry, 'HH:mm'), margin + 120, yPosition);
+        doc.text(format(worker.lastExit, 'HH:mm'), margin + 150, yPosition);
+        
+        yPosition += 10;
+      });
+
       yPosition += 10;
     });
 
-    yPosition += 10;
-  });
-
-  doc.save(`relatorio-acessos-${format(new Date(), 'dd-MM-yyyy')}.pdf`);
+    doc.save(`relatorio-acessos-${format(new Date(), 'dd-MM-yyyy')}.pdf`);
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    throw error;
+  }
 };
 
 export const exportToExcel = (
