@@ -3,9 +3,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { useInmetaEvents } from '@/hooks/useInmetaApi';
-import { useProjects } from '@/hooks/useSupabase';
+import { useProjects, useCompanyLogo } from '@/hooks/useSupabase';
 import { format, differenceInMinutes } from 'date-fns';
 import { FileText, Download, Filter, Search } from 'lucide-react';
+import { exportToPDF, exportToExcel } from '@/utils/exportReports';
 
 interface CompanyGroup {
   name: string;
@@ -28,6 +29,7 @@ export const ReportsList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const { data: projects = [] } = useProjects();
   const selectedProjectData = projects.find(p => p.id === selectedProject);
+  const { data: clientLogo } = useCompanyLogo(selectedProjectData?.client_id || null);
   const { data: events = [], isLoading } = useInmetaEvents(selectedProjectData?.external_project_id, selectedPeriod);
 
   const filteredEvents = events.filter(event => {
@@ -107,8 +109,23 @@ export const ReportsList = () => {
     return `${hours}h${remainingMinutes}min`;
   };
 
-  const handleExport = () => {
-    console.log('Exportar relatório');
+  const handleExport = async (type: 'pdf' | 'excel') => {
+    if (!selectedProjectData) return;
+
+    if (type === 'pdf') {
+      await exportToPDF(
+        companiesData,
+        selectedProjectData.vessel_name || 'Sem nome',
+        selectedDate,
+        clientLogo || undefined
+      );
+    } else {
+      exportToExcel(
+        companiesData,
+        selectedProjectData.vessel_name || 'Sem nome',
+        selectedDate
+      );
+    }
   };
 
   return (
@@ -118,10 +135,16 @@ export const ReportsList = () => {
           <FileText className="h-5 w-5" />
           <h1 className="text-2xl font-semibold">Relatório de Acessos</h1>
         </div>
-        <Button onClick={handleExport} className="gap-2">
-          <Download className="h-4 w-4" />
-          Exportar
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => handleExport('excel')} variant="outline" className="gap-2">
+            <Download className="h-4 w-4" />
+            Excel
+          </Button>
+          <Button onClick={() => handleExport('pdf')} className="gap-2">
+            <Download className="h-4 w-4" />
+            PDF
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
