@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -43,11 +42,10 @@ export const ReportsList = () => {
     return matchesSearch && matchesDate;
   });
 
-  // Agrupar eventos por empresa e trabalhador
   const groupedByCompany = filteredEvents.reduce((acc: { [key: string]: { [key: string]: any[] } }, event) => {
     const companyName = event.vinculoColaborador?.empresa || 'Sem empresa';
-    const workerId = event.idPessoa;
-    
+    const workerId = event.cpfPessoa;
+
     if (!acc[companyName]) {
       acc[companyName] = {};
     }
@@ -58,7 +56,6 @@ export const ReportsList = () => {
     return acc;
   }, {});
 
-  // Calcular métricas por empresa
   const companiesData: CompanyGroup[] = Object.entries(groupedByCompany).map(([companyName, workersEvents]) => {
     const workers = Object.entries(workersEvents).map(([workerId, events]) => {
       const entryEvents = events.filter(event => 
@@ -111,13 +108,11 @@ export const ReportsList = () => {
   };
 
   const handleExport = () => {
-    // Implementar exportação para Excel/CSV
     console.log('Exportar relatório');
   };
 
   return (
     <div className="space-y-4">
-      {/* Cabeçalho */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <FileText className="h-5 w-5" />
@@ -129,7 +124,6 @@ export const ReportsList = () => {
         </Button>
       </div>
 
-      {/* Filtros */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Select value={selectedProject || ''} onValueChange={setSelectedProject}>
           <SelectTrigger>
@@ -190,7 +184,6 @@ export const ReportsList = () => {
         </div>
       </div>
 
-      {/* Tabela de Resultados */}
       <div className="bg-card rounded-lg border">
         <div className="border-b">
           <table className="w-full">
