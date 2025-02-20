@@ -19,16 +19,23 @@ interface CompanyGroup {
 export const ReportsList = () => {
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState('1month');
+  const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [searchTerm, setSearchTerm] = useState('');
   const { data: projects = [] } = useProjects();
   const selectedProjectData = projects.find(p => p.id === selectedProject);
   const { data: events = [], isLoading } = useInmetaEvents(selectedProjectData?.external_project_id, selectedPeriod);
 
-  const filteredEvents = events.filter(event => 
-    event.nomePessoa.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    event.cargoPessoa.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    event.vinculoColaborador?.empresa?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredEvents = events.filter(event => {
+    const matchesSearch = 
+      event.nomePessoa.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      event.cargoPessoa.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      event.vinculoColaborador?.empresa?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const eventDate = format(new Date(event.data), 'yyyy-MM-dd');
+    const matchesDate = selectedPeriod === 'specific' ? eventDate === selectedDate : true;
+
+    return matchesSearch && matchesDate;
+  });
 
   // Agrupar eventos por empresa
   const groupedByCompany = filteredEvents.reduce((acc: { [key: string]: any[] }, event) => {
@@ -42,12 +49,28 @@ export const ReportsList = () => {
 
   // Calcular métricas por empresa
   const companiesData: CompanyGroup[] = Object.entries(groupedByCompany).map(([companyName, companyEvents]) => {
-    const sortedEvents = companyEvents.sort((a, b) => 
+    // Separar eventos de entrada e saída
+    const entryEvents = companyEvents.filter(event => 
+      event.tipo.toLowerCase().includes('entrada') || 
+      event.tipo.toLowerCase().includes('pendência')
+    );
+    const exitEvents = companyEvents.filter(event => 
+      event.tipo.toLowerCase().includes('saída')
+    );
+
+    const sortedEntries = entryEvents.sort((a, b) => 
       new Date(a.data).getTime() - new Date(b.data).getTime()
     );
     
-    const firstEntry = new Date(sortedEvents[0].data);
-    const lastExit = new Date(sortedEvents[sortedEvents.length - 1].data);
+    const sortedExits = exitEvents.sort((a, b) => 
+      new Date(a.data).getTime() - new Date(b.data).getTime()
+    );
+    
+    const firstEntry = sortedEntries.length > 0 ? new Date(sortedEntries[0].data) : new Date();
+    const lastExit = sortedExits.length > 0 
+      ? new Date(sortedExits[sortedExits.length - 1].data)
+      : new Date(sortedEntries[sortedEntries.length - 1]?.data || firstEntry);
+
     const duration = differenceInMinutes(lastExit, firstEntry);
 
     return {
@@ -85,7 +108,7 @@ export const ReportsList = () => {
       </div>
 
       {/* Filtros */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Select value={selectedProject || ''} onValueChange={setSelectedProject}>
           <SelectTrigger>
             <SelectValue placeholder="Selecione o projeto" />
@@ -107,6 +130,7 @@ export const ReportsList = () => {
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
+              <SelectItem value="specific">Dia específico</SelectItem>
               <SelectItem value="today">Hoje</SelectItem>
               <SelectItem value="yesterday">Ontem</SelectItem>
               <SelectItem value="7days">Últimos 7 dias</SelectItem>
@@ -115,6 +139,15 @@ export const ReportsList = () => {
             </SelectGroup>
           </SelectContent>
         </Select>
+
+        {selectedPeriod === 'specific' && (
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="px-4 py-2 border rounded-md"
+          />
+        )}
 
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -174,7 +207,7 @@ export const ReportsList = () => {
                           <div className="flex items-center justify-between text-sm text-muted-foreground">
                             <div className="space-x-4">
                               <span>Primeiro acesso: {format(company.firstEntry, 'HH:mm')}</span>
-                              <span>Último acesso: {format(company.lastExit, 'HH:mm')}</span>
+                              <span>Última saída: {format(company.lastExit, 'HH:mm')}</span>
                             </div>
                             <span className="font-medium">
                               Permanência: {formatDuration(company.duration)}
