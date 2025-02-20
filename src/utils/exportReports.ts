@@ -101,10 +101,8 @@ export const exportToPDF = async (
     
     // Project information
     doc.setFontSize(12);
-    const projectText = `Projeto: ${projectName || 'Sem nome'}`;
-    const dateText = `Data: ${format(new Date(selectedDate), 'dd/MM/yyyy')}`;
-    doc.text(projectText, margin, yPosition);
-    doc.text(dateText, pageWidth - margin, yPosition, { align: 'right' });
+    doc.text(String(`Projeto: ${projectName}`), margin, yPosition);
+    doc.text(String(`Data: ${format(new Date(selectedDate), 'dd/MM/yyyy')}`), pageWidth - margin, yPosition, { align: 'right' });
     
     yPosition += 10;
 
@@ -120,14 +118,9 @@ export const exportToPDF = async (
       doc.setFillColor(240, 240, 240);
       doc.rect(margin, yPosition, pageWidth - (2 * margin), 20, 'F');
       doc.setFontSize(12);
-      
-      const companyName = company.name || 'Sem nome';
-      const workersCount = `${company.workers.length} trabalhadores`;
-      const durationText = `Permanência: ${formatDuration(company.duration)}`;
-      
-      doc.text(companyName, margin + 5, yPosition + 7);
-      doc.text(workersCount, margin + 5, yPosition + 15);
-      doc.text(durationText, pageWidth - margin - 50, yPosition + 15);
+      doc.text(String(company.name || 'Sem nome'), margin + 5, yPosition + 7);
+      doc.text(String(`${company.workers.length} trabalhadores`), margin + 5, yPosition + 15);
+      doc.text(String(`Permanência: ${formatDuration(company.duration)}`), pageWidth - margin - 50, yPosition + 15);
       
       yPosition += 25;
 
@@ -149,15 +142,10 @@ export const exportToPDF = async (
           yPosition = margin;
         }
 
-        const workerName = worker.name || 'Sem nome';
-        const workerRole = worker.role || 'Sem cargo';
-        const entryTime = format(worker.firstEntry, 'HH:mm');
-        const exitTime = format(worker.lastExit, 'HH:mm');
-
-        doc.text(workerName, margin + 5, yPosition);
-        doc.text(workerRole, margin + 60, yPosition);
-        doc.text(entryTime, margin + 120, yPosition);
-        doc.text(exitTime, margin + 150, yPosition);
+        doc.text(String(worker.name || 'Sem nome'), margin + 5, yPosition);
+        doc.text(String(worker.role || 'Sem cargo'), margin + 60, yPosition);
+        doc.text(String(format(worker.firstEntry, 'HH:mm')), margin + 120, yPosition);
+        doc.text(String(format(worker.lastExit, 'HH:mm')), margin + 150, yPosition);
         
         yPosition += 10;
       });
