@@ -10,7 +10,13 @@ import { FileText, Download, Filter, Search } from 'lucide-react';
 
 interface CompanyGroup {
   name: string;
-  workers: any[];
+  workers: Array<{
+    id: string;
+    name: string;
+    role: string;
+    firstEntry: Date;
+    lastExit: Date;
+  }>;
   firstEntry: Date;
   lastExit: Date;
   duration: number;
@@ -37,47 +43,63 @@ export const ReportsList = () => {
     return matchesSearch && matchesDate;
   });
 
-  // Agrupar eventos por empresa
-  const groupedByCompany = filteredEvents.reduce((acc: { [key: string]: any[] }, event) => {
+  // Agrupar eventos por empresa e trabalhador
+  const groupedByCompany = filteredEvents.reduce((acc: { [key: string]: { [key: string]: any[] } }, event) => {
     const companyName = event.vinculoColaborador?.empresa || 'Sem empresa';
+    const workerId = event.idPessoa;
+    
     if (!acc[companyName]) {
-      acc[companyName] = [];
+      acc[companyName] = {};
     }
-    acc[companyName].push(event);
+    if (!acc[companyName][workerId]) {
+      acc[companyName][workerId] = [];
+    }
+    acc[companyName][workerId].push(event);
     return acc;
   }, {});
 
   // Calcular métricas por empresa
-  const companiesData: CompanyGroup[] = Object.entries(groupedByCompany).map(([companyName, companyEvents]) => {
-    // Separar eventos de entrada e saída
-    const entryEvents = companyEvents.filter(event => 
-      event.tipo.toLowerCase().includes('entrada') || 
-      event.tipo.toLowerCase().includes('pendência')
-    );
-    const exitEvents = companyEvents.filter(event => 
-      event.tipo.toLowerCase().includes('saída')
-    );
+  const companiesData: CompanyGroup[] = Object.entries(groupedByCompany).map(([companyName, workersEvents]) => {
+    const workers = Object.entries(workersEvents).map(([workerId, events]) => {
+      const entryEvents = events.filter(event => 
+        event.tipo.toLowerCase().includes('entrada') || 
+        event.tipo.toLowerCase().includes('pendência')
+      );
+      const exitEvents = events.filter(event => 
+        event.tipo.toLowerCase().includes('saída')
+      );
 
-    const sortedEntries = entryEvents.sort((a, b) => 
-      new Date(a.data).getTime() - new Date(b.data).getTime()
-    );
-    
-    const sortedExits = exitEvents.sort((a, b) => 
-      new Date(a.data).getTime() - new Date(b.data).getTime()
-    );
-    
-    const firstEntry = sortedEntries.length > 0 ? new Date(sortedEntries[0].data) : new Date();
-    const lastExit = sortedExits.length > 0 
-      ? new Date(sortedExits[sortedExits.length - 1].data)
-      : new Date(sortedEntries[sortedEntries.length - 1]?.data || firstEntry);
+      const sortedEntries = entryEvents.sort((a, b) => 
+        new Date(a.data).getTime() - new Date(b.data).getTime()
+      );
+      
+      const sortedExits = exitEvents.sort((a, b) => 
+        new Date(a.data).getTime() - new Date(b.data).getTime()
+      );
 
-    const duration = differenceInMinutes(lastExit, firstEntry);
+      const firstEntry = sortedEntries.length > 0 ? new Date(sortedEntries[0].data) : new Date();
+      const lastExit = sortedExits.length > 0 
+        ? new Date(sortedExits[sortedExits.length - 1].data)
+        : new Date(sortedEntries[sortedEntries.length - 1]?.data || firstEntry);
+
+      return {
+        id: workerId,
+        name: events[0].nomePessoa,
+        role: events[0].cargoPessoa,
+        firstEntry,
+        lastExit
+      };
+    });
+
+    const companyFirstEntry = new Date(Math.min(...workers.map(w => w.firstEntry.getTime())));
+    const companyLastExit = new Date(Math.max(...workers.map(w => w.lastExit.getTime())));
+    const duration = differenceInMinutes(companyLastExit, companyFirstEntry);
 
     return {
       name: companyName,
-      workers: companyEvents,
-      firstEntry,
-      lastExit,
+      workers,
+      firstEntry: companyFirstEntry,
+      lastExit: companyLastExit,
       duration
     };
   });
@@ -174,8 +196,10 @@ export const ReportsList = () => {
           <table className="w-full">
             <thead>
               <tr>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground w-1/2">Nome</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground w-1/2">Cargo</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Nome</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Cargo</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Entrada</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Saída</th>
               </tr>
             </thead>
           </table>
@@ -186,7 +210,7 @@ export const ReportsList = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={2} className="text-center py-4">
+                  <td colSpan={4} className="text-center py-4">
                     <div className="flex justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                     </div>
@@ -196,7 +220,7 @@ export const ReportsList = () => {
                 companiesData.map((company) => (
                   <>
                     <tr key={company.name} className="bg-muted/30">
-                      <td colSpan={2} className="px-4 py-3">
+                      <td colSpan={4} className="px-4 py-3">
                         <div className="flex flex-col space-y-1">
                           <div className="flex items-center justify-between">
                             <span className="font-medium text-lg">{company.name}</span>
@@ -216,14 +240,19 @@ export const ReportsList = () => {
                         </div>
                       </td>
                     </tr>
-                    {company.workers.map((event) => (
-                      <tr key={event.id} className="border-b last:border-b-0 hover:bg-muted/50">
+                    {company.workers.map((worker) => (
+                      <tr key={worker.id} className="border-b last:border-b-0 hover:bg-muted/50">
                         <td className="px-4 py-3">
-                          <div className="font-medium">{event.nomePessoa}</div>
-                          <div className="text-sm text-muted-foreground">{format(new Date(event.data), 'HH:mm')}</div>
+                          <div className="font-medium">{worker.name}</div>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="text-sm">{event.cargoPessoa}</div>
+                          <div className="text-sm">{worker.role}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-sm">{format(worker.firstEntry, 'HH:mm')}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-sm">{format(worker.lastExit, 'HH:mm')}</div>
                         </td>
                       </tr>
                     ))}
@@ -231,7 +260,7 @@ export const ReportsList = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={2} className="text-center py-4 text-muted-foreground">
+                  <td colSpan={4} className="text-center py-4 text-muted-foreground">
                     {selectedProject ? 'Nenhum registro encontrado' : 'Selecione um projeto para ver os registros'}
                   </td>
                 </tr>
