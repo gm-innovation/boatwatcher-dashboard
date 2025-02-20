@@ -39,10 +39,20 @@ const loadImage = async (url: string): Promise<string> => {
         return;
       }
       ctx.drawImage(img, 0, 0);
-      resolve(canvas.toDataURL('image/png'));
+      try {
+        const dataUrl = canvas.toDataURL('image/png');
+        resolve(dataUrl);
+      } catch (e) {
+        reject(new Error('Failed to convert image to data URL'));
+      }
     };
-    img.onerror = () => reject(new Error('Could not load image'));
-    img.src = url;
+    img.onerror = () => {
+      console.error('Failed to load image:', url);
+      reject(new Error('Could not load image'));
+    };
+    // Append timestamp to bypass cache
+    const urlWithCache = `${url}?t=${Date.now()}`;
+    img.src = urlWithCache;
   });
 };
 
@@ -58,17 +68,27 @@ export const exportToPDF = async (
   let yPosition = margin;
 
   try {
-    // Load logos
-    const inmetaLogoUrl = '/lovable-uploads/f59c0f54-3c10-436f-a3a4-3d578d4e34ca.png';
-    const inmetaLogoData = await loadImage(inmetaLogoUrl);
+    // Use the full URL path for the Inmeta logo
+    const inmetaLogoUrl = `${window.location.origin}/lovable-uploads/f59c0f54-3c10-436f-a3a4-3d578d4e34ca.png`;
+    console.log('Loading Inmeta logo from:', inmetaLogoUrl);
     
-    // Add Inmeta logo (left)
-    doc.addImage(inmetaLogoData, 'PNG', margin, yPosition, 40, 15);
+    try {
+      const inmetaLogoData = await loadImage(inmetaLogoUrl);
+      doc.addImage(inmetaLogoData, 'PNG', margin, yPosition, 40, 15);
+    } catch (logoError) {
+      console.error('Failed to load Inmeta logo:', logoError);
+      // Continue without the logo
+    }
 
-    // Add client logo (right) if available
+    // Add client logo if available
     if (clientLogoUrl) {
-      const clientLogoData = await loadImage(clientLogoUrl);
-      doc.addImage(clientLogoData, 'PNG', pageWidth - 60, yPosition, 40, 15);
+      try {
+        const clientLogoData = await loadImage(clientLogoUrl);
+        doc.addImage(clientLogoData, 'PNG', pageWidth - 60, yPosition, 40, 15);
+      } catch (clientLogoError) {
+        console.error('Failed to load client logo:', clientLogoError);
+        // Continue without the client logo
+      }
     }
 
     yPosition += 25;
