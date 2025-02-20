@@ -9,6 +9,7 @@ import { useTheme } from '@/components/theme-provider';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 import { ProjectSelector } from '@/components/ProjectSelector';
+import { Separator } from '@/components/ui/separator';
 
 interface ProjectData {
   project: {
@@ -99,100 +100,111 @@ export const Header = ({ selectedProjectId, onProjectSelect }: HeaderProps) => {
 
   return (
     <header className="fixed top-0 left-0 right-0 w-full bg-background/80 backdrop-blur-sm border-b border-border animate-fade-in z-50">
-      <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4">
-        {/* Left Side - Client Logo */}
-        <div className="flex items-center space-x-2">
+      {/* Upper section - Logos */}
+      <div className="w-full border-b border-border/50">
+        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 py-2">
+          {/* Client Logo */}
           {clientLogo ? (
-            <img src={clientLogo} alt="Logo do Cliente" className="h-10 w-32 object-contain" />
+            <img src={clientLogo} alt="Logo do Cliente" className="h-8 w-28 object-contain" />
           ) : (
-            <div className="h-10 w-32 bg-muted rounded animate-pulse" />
+            <div className="h-8 w-28 bg-muted rounded animate-pulse" />
+          )}
+
+          {/* System Logo */}
+          {systemLogo ? (
+            <img src={systemLogo} alt="Logo do Sistema" className="h-8 w-28 object-contain" />
+          ) : (
+            <div className="h-8 w-28 bg-muted rounded animate-pulse" />
           )}
         </div>
-        
-        {/* Center - Controls and Navigation */}
-        <div className="flex items-center gap-4">
-          {/* Navigation Links */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/')}
-            className={location.pathname === '/' ? 'bg-accent' : ''}
-          >
-            <LayoutDashboard className="h-4 w-4 mr-2" />
-            Dashboard
-          </Button>
+      </div>
 
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/reports')}
-            className={location.pathname === '/reports' ? 'bg-accent' : ''}
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Relatórios
-          </Button>
-
-          {/* Project Selector - Only show on index page */}
-          {isIndexPage && (
-            <ProjectSelector
-              selectedProjectId={selectedProjectId}
-              onProjectSelect={onProjectSelect}
-            />
-          )}
-
-          <div className="flex flex-col items-center">
-            <div className="flex items-center space-x-2 text-foreground/80">
-              <Clock className="h-4 w-4" />
-              <span className="text-sm font-medium">
-                {format(currentTime, 'HH:mm:ss')}
-              </span>
-            </div>
-            <span className="text-xs text-muted-foreground">
-              {format(currentTime, 'dd/MM/yyyy')}
-            </span>
+      {/* Lower section - Navigation and Controls */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+        <div className="flex items-center justify-between">
+          {/* Left - Navigation */}
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/')}
+              className={location.pathname === '/' ? 'bg-accent' : ''}
+            >
+              <LayoutDashboard className="h-4 w-4 mr-2" />
+              Dashboard
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/reports')}
+              className={location.pathname === '/reports' ? 'bg-accent' : ''}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Relatórios
+            </Button>
           </div>
 
-          <Toggle
-            variant="outline"
-            size="sm"
-            pressed={theme === 'dark'}
-            onPressedChange={(pressed) => setTheme(pressed ? 'dark' : 'light')}
-          >
-            {theme === 'dark' ? (
-              <Moon className="h-4 w-4" />
-            ) : (
-              <Sun className="h-4 w-4" />
+          {/* Center - Project Selector */}
+          <div className="flex items-center">
+            {isIndexPage && (
+              <ProjectSelector
+                selectedProjectId={selectedProjectId}
+                onProjectSelect={onProjectSelect}
+              />
             )}
-          </Toggle>
+          </div>
 
-          {isAdmin && (
+          {/* Right - Controls */}
+          <div className="flex items-center gap-2">
+            <div className="flex flex-col items-end mr-4 border-r pr-4">
+              <div className="flex items-center gap-2 text-foreground/80">
+                <Clock className="h-4 w-4" />
+                <span className="text-sm font-medium">
+                  {format(currentTime, 'HH:mm:ss')}
+                </span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {format(currentTime, 'dd/MM/yyyy')}
+              </span>
+            </div>
+
+            <Toggle
+              variant="outline"
+              size="sm"
+              pressed={theme === 'dark'}
+              onPressedChange={(pressed) => setTheme(pressed ? 'dark' : 'light')}
+            >
+              {theme === 'dark' ? (
+                <Moon className="h-4 w-4" />
+              ) : (
+                <Sun className="h-4 w-4" />
+              )}
+            </Toggle>
+
+            {isAdmin && (
+              <>
+                <Separator orientation="vertical" className="h-6" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => navigate('/settings')}
+                  className={location.pathname === '/settings' ? 'bg-accent' : ''}
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+
+            <Separator orientation="vertical" className="h-6" />
+
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate('/settings')}
-              className={`ml-4 ${location.pathname === '/settings' ? 'bg-accent' : ''}`}
+              onClick={handleLogout}
             >
-              <Settings className="h-4 w-4" />
+              <LogOut className="h-4 w-4" />
             </Button>
-          )}
-
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleLogout}
-            className="ml-4"
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* Right Side - System Logo */}
-        <div className="flex items-center space-x-2">
-          {systemLogo ? (
-            <img src={systemLogo} alt="Logo do Sistema" className="h-10 w-32 object-contain" />
-          ) : (
-            <div className="h-10 w-32 bg-muted rounded animate-pulse" />
-          )}
+          </div>
         </div>
       </div>
     </header>
