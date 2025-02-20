@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { MainLayout } from "./components/layouts/MainLayout";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import ProjectSettings from "./pages/ProjectSettings";
@@ -19,10 +20,9 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   if (loading) return null;
   if (!user) return <Navigate to="/login" />;
   
-  return <>{children}</>;
+  return <MainLayout>{children}</MainLayout>;
 };
 
-// Move queryClient outside of component
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -59,7 +59,14 @@ const App = () => {
                     </ProtectedRoute>
                   } 
                 />
-                <Route path="/settings" element={<ProjectSettings />} />
+                <Route 
+                  path="/settings" 
+                  element={
+                    <ProtectedRoute>
+                      <ProjectSettings />
+                    </ProtectedRoute>
+                  } 
+                />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
