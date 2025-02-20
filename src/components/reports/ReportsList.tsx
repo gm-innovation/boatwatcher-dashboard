@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useInmetaEvents } from '@/hooks/useInmetaApi';
 import { useProjects } from '@/hooks/useSupabase';
 import { format, differenceInMinutes } from 'date-fns';
-import { FileText, Download, Filter, Search, Calendar } from 'lucide-react';
+import { FileText, Download, Filter, Search } from 'lucide-react';
 
 interface CompanyGroup {
   name: string;
@@ -141,9 +141,8 @@ export const ReportsList = () => {
           <table className="w-full">
             <thead>
               <tr>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Nome</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Cargo</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Empresa</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground w-1/2">Nome</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground w-1/2">Cargo</th>
               </tr>
             </thead>
           </table>
@@ -154,7 +153,7 @@ export const ReportsList = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={3} className="text-center py-4">
+                  <td colSpan={2} className="text-center py-4">
                     <div className="flex justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                     </div>
@@ -164,18 +163,22 @@ export const ReportsList = () => {
                 companiesData.map((company) => (
                   <>
                     <tr key={company.name} className="bg-muted/30">
-                      <td colSpan={3} className="px-4 py-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="font-medium">{company.name}</span>
-                            <span className="ml-4 text-sm text-muted-foreground">
+                      <td colSpan={2} className="px-4 py-3">
+                        <div className="flex flex-col space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-lg">{company.name}</span>
+                            <span className="text-sm text-muted-foreground">
                               {company.workers.length} trabalhadores
                             </span>
                           </div>
-                          <div className="text-sm text-muted-foreground">
-                            <span className="mr-4">Primeiro acesso: {format(company.firstEntry, 'HH:mm')}</span>
-                            <span className="mr-4">Último acesso: {format(company.lastExit, 'HH:mm')}</span>
-                            <span>Permanência: {formatDuration(company.duration)}</span>
+                          <div className="flex items-center justify-between text-sm text-muted-foreground">
+                            <div className="space-x-4">
+                              <span>Primeiro acesso: {format(company.firstEntry, 'HH:mm')}</span>
+                              <span>Último acesso: {format(company.lastExit, 'HH:mm')}</span>
+                            </div>
+                            <span className="font-medium">
+                              Permanência: {formatDuration(company.duration)}
+                            </span>
                           </div>
                         </div>
                       </td>
@@ -189,16 +192,13 @@ export const ReportsList = () => {
                         <td className="px-4 py-3">
                           <div className="text-sm">{event.cargoPessoa}</div>
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="text-sm">{event.vinculoColaborador?.empresa || 'N/A'}</div>
-                        </td>
                       </tr>
                     ))}
                   </>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={3} className="text-center py-4 text-muted-foreground">
+                  <td colSpan={2} className="text-center py-4 text-muted-foreground">
                     {selectedProject ? 'Nenhum registro encontrado' : 'Selecione um projeto para ver os registros'}
                   </td>
                 </tr>
