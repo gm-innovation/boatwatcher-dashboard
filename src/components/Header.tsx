@@ -1,7 +1,8 @@
+
 import { format } from 'date-fns';
-import { Clock, Settings, Moon, Sun, LogOut } from 'lucide-react';
+import { Clock, Settings, Moon, Sun, LogOut, LayoutDashboard, FileText } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
 import { useTheme } from '@/components/theme-provider';
@@ -25,12 +26,15 @@ interface HeaderProps {
 
 export const Header = ({ selectedProjectId, onProjectSelect }: HeaderProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [currentTime, setCurrentTime] = useState(new Date());
   const { theme, setTheme } = useTheme();
   const [isAdmin, setIsAdmin] = useState(false);
   const [clientLogoLight, setClientLogoLight] = useState<string | null>(null);
   const [clientLogoDark, setClientLogoDark] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const isIndexPage = location.pathname === '/';
 
   // Get system logo based on current theme
   const systemLogo = localStorage.getItem(`company_${theme}`);
@@ -105,12 +109,36 @@ export const Header = ({ selectedProjectId, onProjectSelect }: HeaderProps) => {
           )}
         </div>
         
-        {/* Center - Controls */}
+        {/* Center - Controls and Navigation */}
         <div className="flex items-center gap-4">
-          <ProjectSelector
-            selectedProjectId={selectedProjectId}
-            onProjectSelect={onProjectSelect}
-          />
+          {/* Navigation Links */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/')}
+            className={location.pathname === '/' ? 'bg-accent' : ''}
+          >
+            <LayoutDashboard className="h-4 w-4 mr-2" />
+            Dashboard
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/reports')}
+            className={location.pathname === '/reports' ? 'bg-accent' : ''}
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Relatórios
+          </Button>
+
+          {/* Project Selector - Only show on index page */}
+          {isIndexPage && (
+            <ProjectSelector
+              selectedProjectId={selectedProjectId}
+              onProjectSelect={onProjectSelect}
+            />
+          )}
 
           <div className="flex flex-col items-center">
             <div className="flex items-center space-x-2 text-foreground/80">
@@ -142,7 +170,7 @@ export const Header = ({ selectedProjectId, onProjectSelect }: HeaderProps) => {
               variant="ghost"
               size="icon"
               onClick={() => navigate('/settings')}
-              className="ml-4"
+              className={`ml-4 ${location.pathname === '/settings' ? 'bg-accent' : ''}`}
             >
               <Settings className="h-4 w-4" />
             </Button>
