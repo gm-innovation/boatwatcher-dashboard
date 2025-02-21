@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 
@@ -13,10 +12,7 @@ interface AccessEvent {
   id: string
   tipo: string
   data: string
-  alvo: {
-    id: string
-    nome: string
-  }
+  alvo: string
   agente: string
   cpfPessoa: string
   tipoPessoa: string
@@ -28,12 +24,15 @@ interface AccessEvent {
   }
 }
 
-async function getToken(credentials: InmetaCredentials): Promise<string> {
+async function getToken(): Promise<string> {
   const url = `${API_BASE_URL}/v1/token`;
+  const credentials = {
+    email: "googlemarine@teste.com.br",
+    senha: "rXYAYKSUI8EExfM"
+  };
   
   try {
     console.log('Token request URL:', url);
-    console.log('Request body:', JSON.stringify(credentials));
 
     const response = await fetch(url, {
       method: 'POST',
@@ -44,30 +43,18 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
       body: JSON.stringify(credentials)
     });
 
-    console.log('Token request status:', response.status);
-    console.log('Token response headers:', Object.fromEntries(response.headers.entries()));
-
-    const text = await response.text();
-    console.log('Raw response text:', text);
-
     if (!response.ok) {
+      const text = await response.text();
       throw new Error(`Failed to get token: ${response.statusText}. Response: ${text}`);
     }
 
-    try {
-      const data = JSON.parse(text);
-      console.log('Parsed token response:', data);
-
-      if (!data?.content?.token) {
-        console.error('Invalid token response structure:', data);
-        throw new Error(`Token not found in response. Full response: ${text}`);
-      }
-
-      return data.content.token;
-    } catch (parseError) {
-      console.error('Error parsing token response:', parseError);
-      throw new Error(`Failed to parse token response: ${text}`);
+    const data = await response.json();
+    
+    if (!data?.content?.token) {
+      throw new Error('Token not found in response');
     }
+
+    return data.content.token;
   } catch (error) {
     console.error('Error getting token:', error);
     throw error;
@@ -75,7 +62,6 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
 }
 
 async function getAccessEvents(token: string, startDate: string, endDate: string, alvoId?: string): Promise<AccessEvent[]> {
-  // Garantir que as datas incluam o timezone
   const formattedStartDate = `${startDate}T00:00:00-03:00`;
   const formattedEndDate = `${endDate}T23:59:59-03:00`;
   
@@ -93,67 +79,41 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
       'modulo': 'CONTROLE_ACESSO'
     };
 
-    console.log('Access events request details:', {
-      url: url.toString(),
-      headers,
-      dates: {
-        start: formattedStartDate,
-        end: formattedEndDate
-      },
-      alvoId: alvoId || 'not specified'
-    });
-
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers
     });
 
-    console.log('Access events response status:', response.status);
-    console.log('Access events response headers:', Object.fromEntries(response.headers.entries()));
-
-    const text = await response.text();
-    console.log('Access events raw response:', text);
-
     if (!response.ok) {
+      const text = await response.text();
       throw new Error(`Failed to get access events: ${response.statusText}. Response: ${text}`);
     }
 
-    try {
-      const data = JSON.parse(text);
-      console.log('Access events parsed response:', JSON.stringify(data, null, 2));
+    const data = await response.json();
 
-      if (!data?.content) {
-        console.error('Invalid response structure:', data);
-        throw new Error(`Invalid response format. Full response: ${text}`);
-      }
-
-      if (!Array.isArray(data.content)) {
-        console.log('Content is not an array:', data.content);
-        return [];
-      }
-
-      return data.content.map((event: any) => ({
-        id: event.id || String(Math.random()),
-        tipo: event.tipo,
-        data: event.data,
-        alvo: {
-          id: event.alvo?.id,
-          nome: event.alvo?.nome
-        },
-        agente: event.agente,
-        cpfPessoa: event.cpfPessoa,
-        tipoPessoa: event.tipoPessoa,
-        nomePessoa: event.nomePessoa,
-        cargoPessoa: event.cargoPessoa,
-        observacoes: event.observacoes,
-        vinculoColaborador: {
-          empresa: event.vinculoColaborador?.empresa || 'Empresa não informada'
-        }
-      }));
-    } catch (parseError) {
-      console.error('Error parsing access events response:', parseError);
-      throw parseError;
+    if (!data?.content) {
+      throw new Error('Invalid response format');
     }
+
+    if (!Array.isArray(data.content)) {
+      return [];
+    }
+
+    return data.content.map((event: any) => ({
+      id: event.id || String(Math.random()),
+      tipo: event.tipo,
+      data: event.data,
+      alvo: event.alvo || '',
+      agente: event.agente,
+      cpfPessoa: event.cpfPessoa,
+      tipoPessoa: event.tipoPessoa,
+      nomePessoa: event.nomePessoa,
+      cargoPessoa: event.cargoPessoa,
+      observacoes: event.observacoes,
+      vinculoColaborador: {
+        empresa: event.vinculoColaborador?.empresa || 'Empresa não informada'
+      }
+    }));
   } catch (error) {
     console.error('Error fetching access events:', error);
     throw error;
@@ -162,43 +122,42 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { 
+      headers: { 
+        ...corsHeaders,
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+      }
+    });
   }
 
   try {
-    const { action, startDate, endDate, alvoId } = await req.json();
-    console.log('Received request with params:', { action, startDate, endDate, alvoId });
+    const { startDate, endDate, alvoId } = await req.json();
 
-    const credentials = {
-      email: Deno.env.get('INMETA_EMAIL'),
-      senha: Deno.env.get('INMETA_PASSWORD')
-    };
-
-    if (!credentials.email || !credentials.senha) {
-      throw new Error('Credenciais da API Inmeta não configuradas');
+    if (!startDate || !endDate) {
+      throw new Error('startDate and endDate are required');
     }
 
-    console.log('Using credentials:', { email: credentials.email, password: '***' });
-
-    const token = await getToken(credentials);
-    console.log('Successfully obtained token');
-
-    const events = await getAccessEvents(
-      token,
-      startDate || new Date().toISOString().split('T')[0],
-      endDate || new Date().toISOString().split('T')[0],
-      alvoId
-    );
+    const token = await getToken();
+    const events = await getAccessEvents(token, startDate, endDate, alvoId);
 
     return new Response(
-      JSON.stringify(events),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ data: events }),
+      { 
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json'
+        } 
+      }
     );
 
   } catch (error) {
     console.error('Error in Edge Function:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        success: false
+      }),
       { 
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
