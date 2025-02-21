@@ -1,12 +1,59 @@
 import { Ship, Calendar, User, Building2, Anchor } from 'lucide-react';
-import { useProjectById } from '@/hooks/useSupabase';
+import { format } from 'date-fns';
+import { supabase } from '@/lib/supabase';
+import { useQuery } from '@tanstack/react-query';
+import type { Project } from '@/types/supabase';
 
 interface ProjectInfoProps {
   projectId: string | null;
 }
 
+interface ProjectDetails extends Project {
+  client_name: string;
+  logo_url_light: string;
+  logo_url_dark: string;
+}
+
 export const ProjectInfo = ({ projectId }: ProjectInfoProps) => {
-  const { data: projectInfo, isLoading } = useProjectById(projectId);
+  console.log("ProjectInfo - Received projectId:", projectId);
+
+  const { data: projectInfo, isLoading, error } = useQuery<ProjectDetails | null>({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      
+      console.log("ProjectInfo - Fetching data for projectId:", projectId);
+      
+      const { data, error } = await supabase
+        .from('projects')
+        .select(`
+          *,
+          companies!projects_client_id_fkey (
+            name,
+            logo_url_light,
+            logo_url_dark
+          )
+        `)
+        .eq('id', projectId)
+        .single();
+      
+      if (error) {
+        console.error('ProjectInfo - Error fetching project:', error);
+        throw error;
+      }
+
+      console.log("ProjectInfo - Fetched data:", data);
+      return {
+        ...data,
+        client_name: data.companies?.name || 'Não definido',
+        logo_url_light: data.companies?.logo_url_light || '',
+        logo_url_dark: data.companies?.logo_url_dark || ''
+      } as ProjectDetails;
+    },
+    enabled: !!projectId
+  });
+
+  console.log("ProjectInfo - Query result:", { isLoading, error, projectInfo });
 
   if (isLoading) {
     return (
@@ -36,7 +83,6 @@ export const ProjectInfo = ({ projectId }: ProjectInfoProps) => {
       </div>
     );
   }
-
   return (
     <div className="bg-card/80 backdrop-blur-sm rounded-lg border border-border p-4 mb-6 animate-fade-up">
       <h2 className="text-lg font-semibold mb-3 text-foreground">Informações do Projeto</h2>
@@ -52,7 +98,9 @@ export const ProjectInfo = ({ projectId }: ProjectInfoProps) => {
           <Calendar className="h-4 w-4 text-muted-foreground" />
           <div>
             <p className="text-xs text-muted-foreground">Data de Início</p>
-            <p className="text-sm font-medium text-foreground">{projectInfo.start_date || 'Não informado'}</p>
+            <p className="text-sm font-medium text-foreground">
+              {projectInfo.start_date ? format(new Date(projectInfo.start_date), 'dd/MM/yyyy') : 'Não informado'}
+            </p>
           </div>
         </div>
         <div className="flex items-center space-x-2">
@@ -73,7 +121,7 @@ export const ProjectInfo = ({ projectId }: ProjectInfoProps) => {
           <Building2 className="h-4 w-4 text-muted-foreground" />
           <div>
             <p className="text-xs text-muted-foreground">Armador</p>
-            <p className="text-sm font-medium text-foreground">{projectInfo.company || 'Não informado'}</p>
+            <p className="text-sm font-medium text-foreground">{projectInfo.client_name}</p>
           </div>
         </div>
         <div className="flex items-center space-x-2">

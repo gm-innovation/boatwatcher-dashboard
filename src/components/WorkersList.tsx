@@ -15,14 +15,22 @@ interface WorkersListProps {
 
 export const WorkersList = ({ className = "", projectId }: WorkersListProps) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const { data: workers = [], isLoading: isLoadingWorkers } = useWorkers();
+  const { data: workers = [], isLoading: isLoadingWorkers } = useWorkers(projectId);
   const { data: projects = [] } = useProjects();
   const selectedProject = projects.find(p => p.id === projectId);
   const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useInmetaEvents(selectedProject?.external_project_id);
 
+  console.log('Debug Info:', {
+    projectId,
+    selectedProjectId: selectedProject?.id,
+    externalProjectId: selectedProject?.external_project_id,
+    workersCount: workers.length,
+    inmetaEventsCount: inmetaEvents.length
+  });
+
   // Combinar trabalhadores apenas quando houver um projeto selecionado
   const allWorkers = projectId ? [
-    ...workers.filter(worker => worker.project_id === projectId || !worker.project_id),
+    ...workers,
     ...inmetaEvents.map(event => ({
       id: event.id,
       name: event.nomePessoa,
@@ -40,11 +48,20 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
   const sortedWorkers = allWorkers.sort((a, b) => 
     new Date(b.arrival_time).getTime() - new Date(a.arrival_time).getTime()
   );
-
-  const filteredWorkers = sortedWorkers.filter(worker =>
-    worker.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
+  const filteredWorkers = sortedWorkers
+    // Remove duplicates by keeping only the most recent entry for each worker
+    .reduce((acc: Worker[], current) => {
+      const existingWorkerIndex = acc.findIndex(w => w.name === current.name);
+      if (existingWorkerIndex === -1) {
+        acc.push(current);
+      } else if (new Date(current.arrival_time).getTime() > new Date(acc[existingWorkerIndex].arrival_time).getTime()) {
+        acc[existingWorkerIndex] = current;
+      }
+      return acc;
+    }, [])
+    .filter(worker =>
+      worker.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
   const isLoading = isLoadingWorkers || isLoadingInmeta;
 
   return (
@@ -54,7 +71,7 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold text-foreground">Trabalhadores</h2>
             <span className="px-2 py-1 bg-muted rounded-md text-sm text-muted-foreground">
-              {allWorkers.length}
+              {filteredWorkers.length}
             </span>
           </div>
           <div className="relative">
@@ -75,8 +92,8 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
           <thead>
             <tr>
               <th className="w-[200px] text-center py-3 text-sm font-medium text-muted-foreground">Nome</th>
-              <th className="w-[200px] text-center py-3 text-sm font-medium text-muted-foreground">Empresa</th>
               <th className="w-[200px] text-center py-3 text-sm font-medium text-muted-foreground">Função</th>
+              <th className="w-[200px] text-center py-3 text-sm font-medium text-muted-foreground">Empresa</th>
               <th className="w-[150px] text-center py-3 text-sm font-medium text-muted-foreground">Entrada</th>
             </tr>
           </thead>
@@ -95,8 +112,8 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
                 {filteredWorkers.map((worker) => (
                   <tr key={worker.id} className="border-b border-border hover:bg-muted/50">
                     <td className="w-[200px] py-3 text-sm text-foreground text-center">{worker.name}</td>
-                    <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.company}</td>
                     <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.role}</td>
+                    <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.company}</td>
                     <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">
                       {format(new Date(worker.arrival_time), 'HH:mm')}
                     </td>

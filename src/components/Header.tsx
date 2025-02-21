@@ -8,7 +8,6 @@ import { Toggle } from '@/components/ui/toggle';
 import { useTheme } from '@/components/theme-provider';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
-import { ProjectSelector } from '@/components/ProjectSelector';
 import { Separator } from '@/components/ui/separator';
 
 interface ProjectData {
@@ -20,12 +19,9 @@ interface ProjectData {
   } | null;
 }
 
-interface HeaderProps {
-  selectedProjectId: string | null;
-  onProjectSelect: (projectId: string) => void;
-}
+interface HeaderProps {}
 
-export const Header = ({ selectedProjectId, onProjectSelect }: HeaderProps) => {
+export const Header = ({}: HeaderProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -80,7 +76,7 @@ export const Header = ({ selectedProjectId, onProjectSelect }: HeaderProps) => {
 
     checkAdminRole();
     return () => clearInterval(timer);
-  }, [selectedProjectId]);
+  }, []);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -146,12 +142,7 @@ export const Header = ({ selectedProjectId, onProjectSelect }: HeaderProps) => {
 
           {/* Center - Project Selector */}
           <div className="flex items-center">
-            {isIndexPage && (
-              <ProjectSelector
-                selectedProjectId={selectedProjectId}
-                onProjectSelect={onProjectSelect}
-              />
-            )}
+            {/* ProjectSelector removed from here */}
           </div>
 
           {/* Right - Controls */}

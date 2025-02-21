@@ -17,9 +17,16 @@ interface ProjectSelectorProps {
 
 export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectSelectorProps) => {
   const { data: dbProjects = [], isLoading: isLoadingDb } = useProjects();
-  const { data: events = [], isLoading: isLoadingInmeta } = useInmetaEvents();
-
+  const { data: events = [], isLoading: isLoadingInmeta } = useInmetaEvents(selectedProjectId);
   const isLoading = isLoadingDb || isLoadingInmeta;
+
+  console.log('ProjectSelector - Debug Info:', {
+    selectedProjectId,
+    dbProjects,
+    events,
+    isLoadingDb,
+    isLoadingInmeta
+  });
 
   if (isLoading) {
     return (
@@ -29,7 +36,6 @@ export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectS
       </div>
     );
   }
-
   // Extrair alvo único dos eventos
   const alvosMap = new Map<string, { id: string; nome: string }>();
   events.forEach(event => {

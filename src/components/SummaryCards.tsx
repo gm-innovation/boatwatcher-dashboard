@@ -36,11 +36,14 @@ interface SummaryCardsProps {
 
 export const SummaryCards = ({ projectId }: SummaryCardsProps) => {
   const { data: projectInfo } = useProjectById(projectId);
-  const { data: inmetaEvents = [] } = useInmetaEvents();
-
+  const { data: inmetaEvents = [] } = useInmetaEvents(projectId);
   const crewCount = projectInfo?.crew_count || 0;
-  const inmetaCount = inmetaEvents.length;
-  const totalCount = crewCount + inmetaCount;
+  // Get unique workers from Inmeta events
+  const uniqueWorkers = new Set(
+    inmetaEvents.map(event => event.nomePessoa)
+  );
+  const workersCount = uniqueWorkers.size;
+  const totalCount = crewCount + workersCount;
 
   // Get unique companies from Inmeta events
   const uniqueCompanies = new Set(

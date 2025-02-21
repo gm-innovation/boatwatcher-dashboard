@@ -17,11 +17,11 @@ export const useCompanies = () => {
   });
 };
 
-export const useWorkers = () => {
+export const useWorkers = (projectId?: string) => {
   return useQuery({
-    queryKey: ['workers'],
+    queryKey: ['workers', projectId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('workers')
         .select(`
           *,
@@ -31,13 +31,20 @@ export const useWorkers = () => {
         `)
         .order('name');
       
+      if (projectId) {
+        query = query.eq('project_id', projectId);
+      }
+      
+      const { data, error } = await query;
+      
       if (error) throw error;
       
       return data.map((worker: any) => ({
         ...worker,
         company: worker.companies?.name || 'N/A'
       })) as Worker[];
-    }
+    },
+    enabled: true
   });
 };
 
