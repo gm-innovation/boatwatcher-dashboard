@@ -36,22 +36,23 @@ interface SummaryCardsProps {
 
 export const SummaryCards = ({ projectId }: SummaryCardsProps) => {
   const { data: projectInfo } = useProjectById(projectId);
-  const { data: inmetaEvents = [] } = useInmetaEvents();
+  const { data: inmetaEvents } = useInmetaEvents();
 
+  const events = inmetaEvents || [];
   const crewCount = projectInfo?.crew_count || 0;
-  const inmetaCount = inmetaEvents.length;
+  const inmetaCount = events.length;
   const totalCount = crewCount + inmetaCount;
 
   // Get unique companies from Inmeta events
   const uniqueCompanies = new Set(
-    inmetaEvents
+    events
       .map(event => event.vinculoColaborador?.empresa)
       .filter(Boolean)
   );
   const companiesCount = uniqueCompanies.size;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
       <Card
         title="Tripulação a Bordo"
         value={crewCount}
@@ -63,13 +64,13 @@ export const SummaryCards = ({ projectId }: SummaryCardsProps) => {
         value={totalCount}
         icon={Users}
         color="bg-purple-500"
-        highlight={true}
+        highlight
       />
       <Card
         title="Total de Empresas"
         value={companiesCount}
         icon={Building}
-        color="bg-emerald-500"
+        color="bg-green-500"
       />
     </div>
   );

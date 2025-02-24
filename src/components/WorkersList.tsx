@@ -1,4 +1,3 @@
-
 import { Search } from 'lucide-react';
 import { useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -9,26 +8,40 @@ import { format } from 'date-fns';
 export const WorkersList = ({ className = "" }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const { data: workers = [], isLoading: isLoadingWorkers } = useWorkers();
-  const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useInmetaEvents();
+  const { data: inmetaEvents, isLoading: isLoadingInmeta } = useInmetaEvents();
+
+  const events = inmetaEvents || [];
 
   // Combine workers from both sources
   const allWorkers = [
     ...workers,
-    ...inmetaEvents.map(event => ({
-      id: event.id,
-      name: event.name,
-      role: event.role,
-      arrival_time: event.arrival_time,
-      photo_url: event.photo_url,
+    ...events.map(event => ({
+      id: event.id || '',
+      name: event.name || '',
+      role: event.role || '',
+      arrival_time: event.arrival_time || '',
+      photo_url: event.photo_url || '',
       company: event.vinculoColaborador?.empresa || 'N/A',
     })),
   ];
 
   const filteredWorkers = allWorkers.filter(worker =>
-    worker.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (worker.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (worker.company || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (worker.role || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const isLoading = isLoadingWorkers || isLoadingInmeta;
+
+  if (isLoading) {
+    return (
+      <div className={`bg-card/80 backdrop-blur-sm rounded-lg border border-border p-6 ${className}`}>
+        <div className="flex items-center justify-center h-32">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`bg-card/80 backdrop-blur-sm rounded-lg border border-border flex flex-col ${className}`}>
@@ -37,7 +50,7 @@ export const WorkersList = ({ className = "" }) => {
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold text-foreground">Trabalhadores</h2>
             <span className="px-2 py-1 bg-muted rounded-md text-sm text-muted-foreground">
-              {allWorkers.length}
+              {filteredWorkers.length}
             </span>
           </div>
           <div className="relative">
@@ -53,40 +66,31 @@ export const WorkersList = ({ className = "" }) => {
         </div>
       </div>
 
-      <div className="px-6 border-b border-border">
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th className="w-[200px] text-center py-3 text-sm font-medium text-muted-foreground">Nome</th>
-              <th className="w-[200px] text-center py-3 text-sm font-medium text-muted-foreground">Empresa</th>
-              <th className="w-[200px] text-center py-3 text-sm font-medium text-muted-foreground">Função</th>
-              <th className="w-[150px] text-center py-3 text-sm font-medium text-muted-foreground">Entrada</th>
-            </tr>
-          </thead>
-        </table>
-      </div>
-
-      <ScrollArea className="flex-1 h-[400px]">
-        <div className="px-6">
-          {isLoading ? (
-            <div className="flex justify-center items-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <ScrollArea className="flex-1">
+        <div className="p-6">
+          {filteredWorkers.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">
+              Nenhum trabalhador encontrado
             </div>
           ) : (
-            <table className="w-full">
-              <tbody>
-                {filteredWorkers.map((worker) => (
-                  <tr key={worker.id} className="border-b border-border hover:bg-muted/50">
-                    <td className="w-[200px] py-3 text-sm text-foreground text-center">{worker.name}</td>
-                    <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.company}</td>
-                    <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.role}</td>
-                    <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">
-                      {format(new Date(worker.arrival_time), 'HH:mm')}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="space-y-4">
+              {filteredWorkers.map(worker => (
+                <div
+                  key={worker.id}
+                  className="flex items-center gap-4 p-4 rounded-lg bg-background/50 hover:bg-background/80 transition-colors"
+                >
+                  <div className="flex-1">
+                    <h3 className="font-medium text-foreground">{worker.name}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {worker.company} • {worker.role}
+                    </p>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {worker.arrival_time ? format(new Date(worker.arrival_time), 'HH:mm') : '-'}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </ScrollArea>

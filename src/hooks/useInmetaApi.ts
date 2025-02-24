@@ -1,4 +1,3 @@
-
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/use-toast";
@@ -41,22 +40,37 @@ export const useInmetaEvents = () => {
             description: "Não foi possível obter os eventos do Inmeta. Por favor, tente novamente mais tarde.",
             variant: "destructive",
           });
-          throw error;
+          return [];
         }
 
         console.log('Successfully fetched Inmeta events:', data);
-        return data || [];
+        
+        // Garantir que data é um array
+        if (!Array.isArray(data)) {
+          console.warn('Inmeta events data is not an array:', data);
+          return [];
+        }
+
+        return data.map(event => ({
+          id: event.id || '',
+          name: event.name || '',
+          role: event.role || '',
+          arrival_time: event.arrival_time || '',
+          photo_url: event.photo_url || '',
+          vinculoColaborador: {
+            empresa: event.vinculoColaborador?.empresa || ''
+          }
+        }));
       } catch (error) {
         console.error("Error in useInmetaEvents:", error);
         toast({
           title: "Erro ao buscar eventos",
-          description: "Ocorreu um erro ao buscar os eventos do Inmeta. Por favor, tente novamente mais tarde.",
+          description: "Ocorreu um erro ao buscar os eventos. Por favor, tente novamente mais tarde.",
           variant: "destructive",
         });
-        throw error;
+        return [];
       }
     },
-    retry: 2,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    refetchInterval: 30000, // Refetch every 30 seconds
   });
 };
