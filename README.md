@@ -4,6 +4,20 @@
 
 **URL**: https://lovable.dev/projects/3e981c04-bfa7-4702-822c-2908ab036748
 
+## Project Components
+
+### Main Dashboard Application
+The main React application for the Boatwatcher Dashboard.
+
+### Inmeta Service
+A Python microservice for integrating with the Inmeta Access Events API. This service provides:
+- Efficient data retrieval from Inmeta API
+- Caching capabilities for improved performance
+- Data processing with Pandas
+- Simulation mode for development and testing
+
+For more details, see the [Inmeta Service README](./inmeta-service/README.md).
+
 ## How can I edit this code?
 
 There are several ways of editing your application.

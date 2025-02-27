@@ -87,8 +87,8 @@ async function getToken(credentials: InmetaCredentials): Promise<string> {
   }
 }
 
-async function getAccessEvents(token: string, startDate: string, endDate: string): Promise<AccessEvent[]> {
-  console.log(`Fetching access events for date range: ${startDate} to ${endDate}`);
+async function getAccessEvents(token: string, startDate: string, endDate: string, projectId?: string): Promise<AccessEvent[]> {
+  console.log(`Fetching access events for date range: ${startDate} to ${endDate}, projectId: ${projectId}`);
   
   const formattedStartDate = `${startDate}T00:00:00`;
   const formattedEndDate = `${endDate}T23:59:59`;
@@ -96,7 +96,8 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
   const url = `${API_BASE_URL}/api/v1/eventos-acesso`;
   const requestBody = {
     dataInicial: formattedStartDate,
-    dataFinal: formattedEndDate
+    dataFinal: formattedEndDate,
+    projetoId: projectId
   };
   
   console.log('Access events request URL:', url);
@@ -135,6 +136,15 @@ async function getAccessEvents(token: string, startDate: string, endDate: string
     }
 
     const data = await response.json();
+    
+    // Log detalhado da resposta
+    console.log('API Response:', {
+      totalEvents: data.length,
+      firstEventDate: data[0]?.data,
+      lastEventDate: data[data.length - 1]?.data,
+      sampleEvent: data[0]
+    });
+    
     console.log(`Successfully fetched ${data.length} access events`);
     return data;
   } catch (error) {
@@ -164,33 +174,28 @@ serve(async (req) => {
   }
 
   try {
-    const { action, startDate, endDate } = await req.json();
-    
-    // Get token using predefined credentials
-    const token = await getToken(INMETA_CREDENTIALS);
+    const { action, startDate, endDate, projectId } = await req.json();
+    console.log('Received request with:', { action, startDate, endDate, projectId });
 
-    let result;
-    
-    switch (action) {
-      case 'getAccessEvents':
-        if (!startDate || !endDate) {
-          console.error('Missing required date parameters');
-          throw new Error('Missing required date parameters');
-        }
-        console.log('Getting access events...');
-        result = await getAccessEvents(token, startDate, endDate);
-        break;
-      
-      default:
-        console.error('Invalid action:', action);
-        throw new Error('Invalid action');
+    if (action !== 'getAccessEvents') {
+      throw new Error('Invalid action');
     }
 
-    return new Response(
-      JSON.stringify(result),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    const token = await getToken(INMETA_CREDENTIALS);
+    const events = await getAccessEvents(token, startDate, endDate, projectId);
 
+    return new Response(
+      JSON.stringify({
+        data: events,
+        success: true
+      }),
+      {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
   } catch (error) {
     console.error('Error in Edge Function:', error);
     return new Response(

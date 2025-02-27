@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Header } from "@/components/Header";
 import { ProjectInfo } from "@/components/ProjectInfo";
@@ -22,8 +21,8 @@ const Index = () => {
         </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-3 gap-6">
-            <WorkersList className="col-span-2" />
-            <CompaniesList />
+            <WorkersList className="col-span-2" projectId={selectedProjectId || undefined} />
+            <CompaniesList projectId={selectedProjectId || undefined} />
           </div>
         </div>
       </main>

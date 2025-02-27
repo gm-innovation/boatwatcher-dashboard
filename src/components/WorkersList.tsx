@@ -1,39 +1,33 @@
-import { Search } from 'lucide-react';
-import { useState } from 'react';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { useWorkers } from '@/hooks/useSupabase';
-import { useInmetaEvents } from '@/hooks/useInmetaApi';
+import { useState } from "react";
+import { Search } from "lucide-react";
 import { format } from 'date-fns';
+import { useInmetaEvents } from '@/hooks/useInmetaApi';
 
-export const WorkersList = ({ className = "" }) => {
+interface WorkersListProps {
+  className?: string;
+  projectId?: string;
+}
+
+export const WorkersList = ({ className = "", projectId }: WorkersListProps) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const { data: workers = [], isLoading: isLoadingWorkers } = useWorkers();
-  const { data: inmetaEvents, isLoading: isLoadingInmeta } = useInmetaEvents();
+  const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useInmetaEvents(projectId);
 
-  const events = inmetaEvents || [];
+  const workers = inmetaEvents.map(event => ({
+    id: event.data,
+    name: event.nomePessoa,
+    role: event.cargoPessoa,
+    company: event.vinculoColaborador?.empresa || 'N/A',
+    arrival_time: event.data,
+    type: event.tipo
+  }));
 
-  // Combine workers from both sources
-  const allWorkers = [
-    ...workers,
-    ...events.map(event => ({
-      id: event.id || '',
-      name: event.name || '',
-      role: event.role || '',
-      arrival_time: event.arrival_time || '',
-      photo_url: event.photo_url || '',
-      company: event.vinculoColaborador?.empresa || 'N/A',
-    })),
-  ];
-
-  const filteredWorkers = allWorkers.filter(worker =>
+  const filteredWorkers = workers.filter(worker =>
     (worker.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (worker.company || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (worker.role || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const isLoading = isLoadingWorkers || isLoadingInmeta;
-
-  if (isLoading) {
+  if (isLoadingInmeta) {
     return (
       <div className={`bg-card/80 backdrop-blur-sm rounded-lg border border-border p-6 ${className}`}>
         <div className="flex items-center justify-center h-32">
@@ -66,34 +60,45 @@ export const WorkersList = ({ className = "" }) => {
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
-        <div className="p-6">
-          {filteredWorkers.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8">
-              Nenhum trabalhador encontrado
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredWorkers.map(worker => (
-                <div
-                  key={worker.id}
-                  className="flex items-center gap-4 p-4 rounded-lg bg-background/50 hover:bg-background/80 transition-colors"
-                >
-                  <div className="flex-1">
-                    <h3 className="font-medium text-foreground">{worker.name}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {worker.company} • {worker.role}
-                    </p>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {worker.arrival_time ? format(new Date(worker.arrival_time), 'HH:mm') : '-'}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+      <div className="p-6">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Nome</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Função</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Empresa</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Entrada</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredWorkers.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="text-center py-8 text-muted-foreground">
+                    {projectId ? 'Nenhum trabalhador encontrado neste projeto' : 'Selecione um projeto para ver os trabalhadores'}
+                  </td>
+                </tr>
+              ) : (
+                filteredWorkers.map(worker => (
+                  <tr 
+                    key={worker.id} 
+                    className={`border-b border-border hover:bg-muted/50 ${
+                      worker.type === 'ENTRADA_COM_PENDENCIAS' ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''
+                    }`}
+                  >
+                    <td className="py-4 px-4 text-sm text-foreground">{worker.name}</td>
+                    <td className="py-4 px-4 text-sm text-muted-foreground">{worker.role}</td>
+                    <td className="py-4 px-4 text-sm text-muted-foreground">{worker.company}</td>
+                    <td className="py-4 px-4 text-sm text-muted-foreground">
+                      {worker.arrival_time ? format(new Date(worker.arrival_time), 'HH:mm') : '-'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 };
