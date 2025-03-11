@@ -15,6 +15,7 @@ class InmetaService:
         )
         self.use_mock = use_mock if use_mock is not None else settings.USE_MOCK
         self._token = None
+        self.was_cached = False
         
     async def get_token(self) -> str:
         """Obtém token de autenticação do Inmeta"""
@@ -55,22 +56,24 @@ class InmetaService:
         # Se não está em cache, buscar da API
         token = await self.get_token()
         
+        # Conforme documentação da API, os parâmetros corretos são dataInicial e dataFinal
         payload = {
-            "dataInicio": start_date.strftime("%Y-%m-%d"),
-            "dataFim": end_date.strftime("%Y-%m-%d")
+            "dataInicial": start_date.strftime("%Y-%m-%dT00:00:00"),
+            "dataFinal": end_date.strftime("%Y-%m-%dT23:59:00")
         }
         
         if project_id:
             payload["projectId"] = project_id
             
         async with httpx.AsyncClient(verify=False) as client:
-            response = await client.post(
+            response = await client.get(
                 f"{self.base_url}/api/v1/eventos-acesso",
-                json=payload,
+                params=payload,
                 headers={
                     'Authorization': f'Bearer {token}',
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'modulo': 'CONTROLE_ACESSO'
                 },
                 timeout=30.0
             )
@@ -95,8 +98,8 @@ class InmetaService:
                 # Converter de volta para dicionário
                 events = df.to_dict('records')
                 
-                # Converter para modelo Pydantic
-                processed_events = [AccessEvent(**event) for event in events]
+                # Converter para modelo Pydantic com suporte para aliases
+                processed_events = [AccessEvent.parse_obj(event) for event in events]
                 
                 return processed_events
                 

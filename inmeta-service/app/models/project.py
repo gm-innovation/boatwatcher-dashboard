@@ -58,13 +58,21 @@ class Event(BaseModel):
     project_id: Optional[str] = None
     device_id: Optional[str] = None
     user_id: Optional[str] = None
-    event_type: str
-    event_date: datetime
+    event_type: str = Field(alias="tipo")
+    event_date: datetime = Field(alias="data")
+    person_name: Optional[str] = Field(default=None, alias="nomePessoa")
+    person_role: Optional[str] = Field(default=None, alias="cargoPessoa")
+    person_cpf: Optional[str] = Field(default=None, alias="cpfPessoa")
+    person_type: Optional[str] = Field(default=None, alias="tipoPessoa")
+    company: Optional[str] = Field(default=None)
+    location: Optional[str] = Field(default=None)
+    observations: Optional[str] = Field(default=None, alias="observacoes")
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
     class Config:
         """Configuração do modelo"""
         orm_mode = True
+        allow_population_by_field_name = True
 
 
 class ProjectWithEvents(Project):

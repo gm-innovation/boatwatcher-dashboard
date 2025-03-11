@@ -9,11 +9,12 @@ interface InmetaEvent {
   cargoPessoa: string;
   vinculoColaborador: {
     empresa: string;
-  };
+  } | string | null;
   alvo: {
     _id: string;
     nome: string;
   };
+  id?: string;
 }
 
 const PROJECT_LOCATIONS: Record<string, string[]> = {
@@ -41,7 +42,12 @@ export const useInmetaEvents = (projectId?: string) => {
       }
 
       try {
-        const startDate = '2024-02-01';
+        // Calculate date 6 months ago for the start date
+        const today = new Date();
+        const sixMonthsAgo = new Date(today);
+        sixMonthsAgo.setMonth(today.getMonth() - 6);
+        
+        const startDate = formatDateToYYYYMMDD(sixMonthsAgo);
         const endDate = formatDateToYYYYMMDD(new Date());
 
         console.log('Fetching Inmeta events with params:', { startDate, endDate, projectId });
@@ -67,6 +73,8 @@ export const useInmetaEvents = (projectId?: string) => {
         }
 
         console.log('Raw response from Inmeta API:', response);
+        console.log('Response type:', typeof response);
+        console.log('Response keys:', response ? Object.keys(response) : 'No response');
         
         if (!response) {
           console.warn('No response data received');
@@ -97,6 +105,26 @@ export const useInmetaEvents = (projectId?: string) => {
           console.warn('Unexpected response format:', response);
           return [];
         }
+
+        // Add unique IDs to events if they don't have them
+        events = events.map((event, index) => ({
+          ...event,
+          id: event.id || `event-${index}`
+        }));
+
+        // Log detailed information about vinculoColaborador structure
+        console.log('vinculoColaborador structures in events:');
+        events.forEach((event, index) => {
+          if (index < 10) { // Limit to first 10 events to avoid console spam
+            console.log(`Event ${index}:`, {
+              vinculoColaborador: event.vinculoColaborador,
+              type: typeof event.vinculoColaborador,
+              isNull: event.vinculoColaborador === null,
+              hasEmpresa: typeof event.vinculoColaborador === 'object' && event.vinculoColaborador !== null ? 'empresa' in event.vinculoColaborador : false,
+              empresa: typeof event.vinculoColaborador === 'object' && event.vinculoColaborador !== null ? event.vinculoColaborador.empresa : 'N/A'
+            });
+          }
+        });
 
         // Filtrar eventos por tipo e local
         const validLocations = PROJECT_LOCATIONS[projectId] || [];
@@ -130,22 +158,33 @@ export const useInmetaEvents = (projectId?: string) => {
             
             return isValidType && isValidLocation;
           })
-          .map(event => ({
-            tipo: event.tipo,
-            data: event.data,
-            nomePessoa: event.nomePessoa || '',
-            cargoPessoa: event.cargoPessoa || '',
-            vinculoColaborador: {
-              empresa: event.vinculoColaborador?.empresa || ''
-            },
-            alvo: event.alvo
-          }));
+          .map(event => {
+            // Create a properly structured event with detailed logging
+            const processedEvent = {
+              id: event.id,
+              tipo: event.tipo,
+              data: event.data,
+              nomePessoa: event.nomePessoa || '',
+              cargoPessoa: event.cargoPessoa || '',
+              vinculoColaborador: event.vinculoColaborador,
+              alvo: event.alvo
+            };
+            
+            console.log('Processed event:', {
+              id: processedEvent.id,
+              tipo: processedEvent.tipo,
+              vinculoColaborador: processedEvent.vinculoColaborador,
+              vinculoColaboradorType: typeof processedEvent.vinculoColaborador
+            });
+            
+            return processedEvent;
+          });
 
         console.log('Filtered events for project:', { 
           projectId, 
           totalEvents: events.length,
           filteredCount: filteredEvents.length,
-          sampleEvent: filteredEvents[0]
+          sampleEvent: filteredEvents.length > 0 ? filteredEvents[0] : 'No events'
         });
 
         return filteredEvents;

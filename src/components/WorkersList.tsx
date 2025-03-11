@@ -12,14 +12,53 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
   const [searchTerm, setSearchTerm] = useState('');
   const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useInmetaEvents(projectId);
 
-  const workers = inmetaEvents.map(event => ({
-    id: event.data,
-    name: event.nomePessoa,
-    role: event.cargoPessoa,
-    company: event.vinculoColaborador?.empresa || 'N/A',
-    arrival_time: event.data,
-    type: event.tipo
-  }));
+  const workers = inmetaEvents.map(event => {
+    // Extract company name with better handling of different data structures
+    let companyName = '';
+    
+    if (typeof event.vinculoColaborador === 'object' && event.vinculoColaborador !== null) {
+      if ('empresa' in event.vinculoColaborador && event.vinculoColaborador.empresa) {
+        companyName = event.vinculoColaborador.empresa;
+      } else if ('nome' in event.vinculoColaborador && event.vinculoColaborador.nome) {
+        companyName = event.vinculoColaborador.nome;
+      } else {
+        const entries = Object.entries(event.vinculoColaborador);
+        const possibleCompanyProps = entries
+          .find(([key, value]) => 
+            typeof value === 'string' && 
+            value.length > 0 && 
+            key !== 'id' && 
+            value !== 'null' && 
+            value !== 'undefined' && 
+            value !== 'Empresa não informada'
+          );
+        
+        if (possibleCompanyProps) {
+          companyName = possibleCompanyProps[1];
+        }
+      }
+    } else if (typeof event.vinculoColaborador === 'string' && 
+               event.vinculoColaborador !== 'null' && 
+               event.vinculoColaborador !== 'undefined' && 
+               event.vinculoColaborador !== 'Empresa não informada') {
+      companyName = event.vinculoColaborador;
+    }
+    
+    // Filter out invalid company names and convert to empty string
+    if (companyName === 'Empresa não informada' || companyName === 'null' || companyName === 'undefined') {
+      companyName = '';
+    }
+    
+    return {
+      id: event.id,
+      name: event.nomePessoa,
+      role: event.cargoPessoa,
+      company: companyName,
+      arrival_time: event.data,
+      type: event.tipo
+    };
+  });
+
 
   const filteredWorkers = workers.filter(worker =>
     (worker.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -88,7 +127,7 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
                   >
                     <td className="py-4 px-4 text-sm text-foreground">{worker.name}</td>
                     <td className="py-4 px-4 text-sm text-muted-foreground">{worker.role}</td>
-                    <td className="py-4 px-4 text-sm text-muted-foreground">{worker.company}</td>
+                    <td className="py-4 px-4 text-sm text-muted-foreground">{worker.company || '-'}</td>
                     <td className="py-4 px-4 text-sm text-muted-foreground">
                       {worker.arrival_time ? format(new Date(worker.arrival_time), 'HH:mm') : '-'}
                     </td>
