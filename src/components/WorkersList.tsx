@@ -26,11 +26,17 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
   const [searchTerm, setSearchTerm] = useState('');
   const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useEventsWithFallback(projectId);
 
+  // Adicionar logs para depuração
+  console.log('WorkersList - Raw events:', inmetaEvents);
+
   const workers = inmetaEvents.map((event: AccessEvent) => {
     // Extract company name with better handling of different data structures
     let companyName = '';
     
     if (typeof event.vinculoColaborador === 'object' && event.vinculoColaborador !== null) {
+      // Log para depuração
+      console.log('Event vinculoColaborador:', event.vinculoColaborador);
+      
       if ('empresa' in event.vinculoColaborador && event.vinculoColaborador.empresa) {
         companyName = event.vinculoColaborador.empresa;
       } else if ('nome' in event.vinculoColaborador && event.vinculoColaborador.nome) {
@@ -42,13 +48,13 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
             typeof value === 'string' && 
             value.length > 0 && 
             key !== 'id' && 
-            value !== 'null' && 
-            value !== 'undefined' && 
-            value !== 'Empresa não informada'
+            String(value) !== 'null' && 
+            String(value) !== 'undefined' && 
+            String(value) !== 'Empresa não informada'
           );
         
         if (possibleCompanyProps) {
-          companyName = possibleCompanyProps[1];
+          companyName = String(possibleCompanyProps[1]);
         }
       }
     } else if (typeof event.vinculoColaborador === 'string' && 
@@ -62,6 +68,13 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
     if (companyName === 'Empresa não informada' || companyName === 'null' || companyName === 'undefined') {
       companyName = '';
     }
+
+    // Log para depuração
+    console.log('Extracted company name:', {
+      worker: event.nomePessoa,
+      companyName,
+      originalVinculo: event.vinculoColaborador
+    });
 
     return {
       id: event.alvo._id + event.data + event.nomePessoa,
@@ -136,7 +149,7 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
                     key={worker.id} 
                     className={`border-b border-border hover:bg-muted/50 ${
                       worker.entryTime ? format(worker.entryTime, 'HH:mm') === '00:00' ? 'bg-yellow-50 dark:bg-yellow-900/20' : '' : ''
-                    }`}
+                     }`}
                   >
                     <td className="py-4 px-4 text-sm text-foreground">{worker.name}</td>
                     <td className="py-4 px-4 text-sm text-muted-foreground">{worker.role}</td>

@@ -81,7 +81,7 @@ export const useEventsWithFallback = (projectId?: string) => {
             nomePessoa: event.nomePessoa || '',
             cargoPessoa: event.cargoPessoa || '',
             vinculoColaborador: {
-              empresa: event.vinculoColaborador?.nome || event.vinculoColaborador?.empresa || ''
+              empresa: event.vinculoColaborador?.empresa || event.vinculoColaborador?.nome || ''
             },
             alvo: event.alvo
           }));
