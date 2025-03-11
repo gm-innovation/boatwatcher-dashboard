@@ -80,9 +80,12 @@ export const useEventsWithFallback = (projectId?: string) => {
             data: event.data,
             nomePessoa: event.nomePessoa || '',
             cargoPessoa: event.cargoPessoa || '',
-            vinculoColaborador: {
-              empresa: event.vinculoColaborador?.empresa || event.vinculoColaborador?.nome || ''
-            },
+            vinculoColaborador: event.vinculoColaborador ? {
+              empresa: event.vinculoColaborador?.empresa || 
+                       event.vinculoColaborador?.nome || 
+                       event.vinculoColaborador?.razaoSocial || 
+                       (typeof event.vinculoColaborador === 'string' ? event.vinculoColaborador : '')
+            } : null,
             alvo: event.alvo
           }));
 

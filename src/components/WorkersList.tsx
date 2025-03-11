@@ -38,9 +38,11 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
       console.log('Event vinculoColaborador:', event.vinculoColaborador);
       
       if ('empresa' in event.vinculoColaborador && event.vinculoColaborador.empresa) {
-        companyName = event.vinculoColaborador.empresa;
+        companyName = String(event.vinculoColaborador.empresa);
       } else if ('nome' in event.vinculoColaborador && event.vinculoColaborador.nome) {
-        companyName = event.vinculoColaborador.nome;
+        companyName = String(event.vinculoColaborador.nome);
+      } else if ('razaoSocial' in event.vinculoColaborador && event.vinculoColaborador.razaoSocial) {
+        companyName = String(event.vinculoColaborador.razaoSocial);
       } else {
         const entries = Object.entries(event.vinculoColaborador);
         const possibleCompanyProps = entries
@@ -48,6 +50,7 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
             typeof value === 'string' && 
             value.length > 0 && 
             key !== 'id' && 
+            key !== 'cnpj' &&
             String(value) !== 'null' && 
             String(value) !== 'undefined' && 
             String(value) !== 'Empresa não informada'

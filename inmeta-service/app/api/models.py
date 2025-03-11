@@ -7,7 +7,11 @@ class InmetaCredentials(BaseModel):
     senha: str
 
 class VinculoColaborador(BaseModel):
-    empresa: str
+    empresa: Optional[str] = None
+    nome: Optional[str] = None
+    id: Optional[str] = None
+    razao_social: Optional[str] = Field(None, alias="razaoSocial")
+    cnpj: Optional[str] = None
 
 class AccessEvent(BaseModel):
     tipo: str
@@ -19,7 +23,7 @@ class AccessEvent(BaseModel):
     nome_pessoa: str = Field(alias="nomePessoa")
     cargo_pessoa: str = Field(alias="cargoPessoa")
     observacoes: str
-    vinculo_colaborador: VinculoColaborador = Field(alias="vinculoColaborador")
+    vinculo_colaborador: Optional[VinculoColaborador] = Field(None, alias="vinculoColaborador")
 
     class Config:
         allow_population_by_field_name = True
