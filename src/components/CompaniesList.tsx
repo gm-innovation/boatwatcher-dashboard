@@ -3,38 +3,75 @@ import { useInmetaEvents } from '@/hooks/useInmetaApi';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { format } from 'date-fns';
 
-export const CompaniesList = () => {
-  const { data: companies = [] } = useCompanies();
-  const { data: inmetaEvents } = useInmetaEvents();
+interface CompaniesListProps {
+  projectId?: string;
+  className?: string;
+}
 
+export const CompaniesList = ({ projectId, className = '' }: CompaniesListProps) => {
+  const { data: companies = [] } = useCompanies();
+  const { data: inmetaEvents } = useInmetaEvents(projectId);
+
+  console.log('CompaniesList - Raw inmetaEvents data:', inmetaEvents);
+  
   const events = inmetaEvents || [];
+  console.log('CompaniesList - Events count:', events.length);
 
   // Get unique companies and their data from Inmeta events
   const companiesData = events.reduce((acc, event) => {
-    const company = event.vinculoColaborador?.empresa;
-    if (!company) return acc;
+    console.log('Processing event:', {
+      eventId: event.id,
+      eventType: event.tipo,
+      eventDate: event.data,
+      rawVinculoColaborador: event.vinculoColaborador
+    });
+    
+    // Ensure we're properly accessing the company name, handling different possible structures
+    const company = typeof event.vinculoColaborador === 'object' && event.vinculoColaborador !== null
+      ? event.vinculoColaborador.empresa
+      : typeof event.vinculoColaborador === 'string'
+        ? event.vinculoColaborador
+        : '';
+    
+    console.log('Extracted company name:', {
+      company,
+      vinculoColaboradorType: typeof event.vinculoColaborador,
+      hasEmpresaProperty: typeof event.vinculoColaborador === 'object' && event.vinculoColaborador !== null ? 'empresa' in event.vinculoColaborador : false
+    });
+    
+    // Skip if company is null, undefined, or empty string
+    if (!company || company.trim() === '') {
+      console.log('Skipping event due to missing company name');
+      return acc;
+    }
 
     if (!acc[company]) {
       acc[company] = {
         name: company,
-        entryTime: new Date(event.arrival_time || new Date()),
+        entryTime: new Date(event.data || new Date()),
         workersCount: 1,
       };
+      console.log(`Created new company entry: ${company}`);
     } else {
       // Update entry time if this event is earlier
-      const eventTime = new Date(event.arrival_time || new Date());
+      const eventTime = new Date(event.data || new Date());
       if (eventTime < acc[company].entryTime) {
         acc[company].entryTime = eventTime;
       }
       acc[company].workersCount++;
+      console.log(`Updated existing company entry: ${company}, workers count: ${acc[company].workersCount}`);
     }
     return acc;
   }, {} as Record<string, { name: string; entryTime: Date; workersCount: number }>);
+
+  console.log('CompaniesList - Processed companies data:', companiesData);
 
   // Convert to array and sort alphabetically by company name
   const companiesOnBoard = Object.values(companiesData).sort((a, b) => 
     a.name.localeCompare(b.name)
   );
+
+  console.log('CompaniesList - Final companies on board:', companiesOnBoard);
 
   return (
     <div className="bg-card/80 backdrop-blur-sm rounded-lg border border-border">

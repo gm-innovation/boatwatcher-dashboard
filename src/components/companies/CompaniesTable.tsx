@@ -34,7 +34,7 @@ export const CompaniesTable = ({ companies, onEditCompany }: CompaniesTableProps
                   className="border-b border-border hover:bg-muted/50 cursor-pointer" 
                   onClick={() => onEditCompany(company)}
                 >
-                  <td className="w-[200px] py-3 text-sm text-foreground text-center">{company.name}</td>
+                  <td className="w-[200px] py-3 text-sm text-foreground text-center">{typeof company.vinculoColaborador === 'object' && company.vinculoColaborador !== null ? company.vinculoColaborador.empresa : typeof company.vinculoColaborador === 'string' ? company.vinculoColaborador : company.name || '-'}</td>
                   <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">
                     {company.entry_time ? format(new Date(company.entry_time), 'HH:mm') : '-'}
                   </td>

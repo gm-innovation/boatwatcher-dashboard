@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 
@@ -14,12 +14,15 @@ class AccessEvent(BaseModel):
     data: datetime
     alvo: str
     agente: str
-    cpf_pessoa: str
-    tipo_pessoa: str
-    nome_pessoa: str
-    cargo_pessoa: str
+    cpf_pessoa: str = Field(alias="cpfPessoa")
+    tipo_pessoa: str = Field(alias="tipoPessoa")
+    nome_pessoa: str = Field(alias="nomePessoa")
+    cargo_pessoa: str = Field(alias="cargoPessoa")
     observacoes: str
-    vinculo_colaborador: VinculoColaborador
+    vinculo_colaborador: VinculoColaborador = Field(alias="vinculoColaborador")
+
+    class Config:
+        allow_population_by_field_name = True
 
 class AccessEventRequest(BaseModel):
     start_date: datetime
