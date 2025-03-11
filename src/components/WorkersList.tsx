@@ -1,7 +1,21 @@
 import { useState } from "react";
 import { Search } from "lucide-react";
 import { format } from 'date-fns';
-import { useInmetaEvents } from '@/hooks/useInmetaApi';
+import { useEventsWithFallback } from '@/hooks/useEventsWithFallback';
+
+interface AccessEvent {
+  tipo: string;
+  data: string;
+  nomePessoa: string;
+  cargoPessoa: string;
+  vinculoColaborador: {
+    empresa: string;
+  };
+  alvo: {
+    _id: string;
+    nome: string;
+  };
+}
 
 interface WorkersListProps {
   className?: string;
@@ -10,9 +24,9 @@ interface WorkersListProps {
 
 export const WorkersList = ({ className = "", projectId }: WorkersListProps) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useInmetaEvents(projectId);
+  const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useEventsWithFallback(projectId);
 
-  const workers = inmetaEvents.map(event => {
+  const workers = inmetaEvents.map((event: AccessEvent) => {
     // Extract company name with better handling of different data structures
     let companyName = '';
     
@@ -48,17 +62,16 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
     if (companyName === 'Empresa não informada' || companyName === 'null' || companyName === 'undefined') {
       companyName = '';
     }
-    
+
     return {
-      id: event.id,
+      id: event.alvo._id + event.data + event.nomePessoa,
       name: event.nomePessoa,
       role: event.cargoPessoa,
       company: companyName,
-      arrival_time: event.data,
-      type: event.tipo
+      entryTime: event.data ? new Date(event.data) : new Date(),
+      location: event.alvo.nome
     };
   });
-
 
   const filteredWorkers = workers.filter(worker =>
     (worker.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -122,14 +135,14 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
                   <tr 
                     key={worker.id} 
                     className={`border-b border-border hover:bg-muted/50 ${
-                      worker.type === 'ENTRADA_COM_PENDENCIAS' ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''
+                      worker.entryTime ? format(worker.entryTime, 'HH:mm') === '00:00' ? 'bg-yellow-50 dark:bg-yellow-900/20' : '' : ''
                     }`}
                   >
                     <td className="py-4 px-4 text-sm text-foreground">{worker.name}</td>
                     <td className="py-4 px-4 text-sm text-muted-foreground">{worker.role}</td>
                     <td className="py-4 px-4 text-sm text-muted-foreground">{worker.company || '-'}</td>
                     <td className="py-4 px-4 text-sm text-muted-foreground">
-                      {worker.arrival_time ? format(new Date(worker.arrival_time), 'HH:mm') : '-'}
+                      {worker.entryTime ? format(worker.entryTime, 'HH:mm') : '-'}
                     </td>
                   </tr>
                 ))

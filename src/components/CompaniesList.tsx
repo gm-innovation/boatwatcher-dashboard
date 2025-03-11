@@ -1,7 +1,21 @@
 import { useCompanies } from '@/hooks/useSupabase';
-import { useInmetaEvents } from '@/hooks/useInmetaApi';
+import { useEventsWithFallback } from '@/hooks/useEventsWithFallback';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { format } from 'date-fns';
+
+interface AccessEvent {
+  tipo: string;
+  data: string;
+  nomePessoa: string;
+  cargoPessoa: string;
+  vinculoColaborador: {
+    empresa: string;
+  };
+  alvo: {
+    _id: string;
+    nome: string;
+  };
+}
 
 interface CompaniesListProps {
   projectId?: string;
@@ -10,7 +24,7 @@ interface CompaniesListProps {
 
 export const CompaniesList = ({ projectId, className = '' }: CompaniesListProps) => {
   const { data: companies = [] } = useCompanies();
-  const { data: inmetaEvents } = useInmetaEvents(projectId);
+  const { data: inmetaEvents } = useEventsWithFallback(projectId);
 
   console.log('CompaniesList - Raw inmetaEvents data:', inmetaEvents);
   
@@ -18,9 +32,8 @@ export const CompaniesList = ({ projectId, className = '' }: CompaniesListProps)
   console.log('CompaniesList - Events count:', events.length);
 
   // Get unique companies and their data from Inmeta events
-  const companiesData = events.reduce((acc, event) => {
+  const companiesData = events.reduce((acc: Record<string, any>, event: AccessEvent) => {
     console.log('Processing event:', {
-      eventId: event.id,
       eventType: event.tipo,
       eventDate: event.data,
       rawVinculoColaborador: event.vinculoColaborador
