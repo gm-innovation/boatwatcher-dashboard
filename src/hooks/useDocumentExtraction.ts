@@ -66,6 +66,17 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
 
   const extractDocument = async (file: File, workerId?: string): Promise<ProcessedDocument | null> => {
     try {
+      // 0. Verificar se usuário está autenticado
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: 'Autenticação necessária',
+          description: 'Você precisa estar logado para extrair dados de documentos.',
+          variant: 'destructive'
+        });
+        return null;
+      }
+
       // 1. Upload do arquivo
       const fileUrl = await uploadToStorage(file);
       if (!fileUrl) {
@@ -91,8 +102,19 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
       });
 
       if (error) {
-        console.error('Erro na extração:', error);
-        // Retornar documento com dados mínimos
+        console.error('Extraction error:', error);
+        
+        // Verificar se é erro de autenticação (401)
+        if (error.message?.includes('401') || error.message?.includes('non-2xx')) {
+          toast({
+            title: 'Sessão expirada',
+            description: 'Sua sessão expirou. Por favor, faça login novamente.',
+            variant: 'destructive'
+          });
+          return null;
+        }
+        
+        // Retornar documento com dados mínimos para outros erros
         return {
           filename: file.name,
           file_url: fileUrl,
