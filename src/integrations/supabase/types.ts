@@ -324,6 +324,62 @@ export type Database = {
           },
         ]
       }
+      report_schedules: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          filters: Json | null
+          frequency: string
+          id: string
+          is_active: boolean | null
+          last_run_at: string | null
+          name: string
+          next_run_at: string | null
+          project_id: string | null
+          recipients: string[]
+          report_type: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          filters?: Json | null
+          frequency: string
+          id?: string
+          is_active?: boolean | null
+          last_run_at?: string | null
+          name: string
+          next_run_at?: string | null
+          project_id?: string | null
+          recipients?: string[]
+          report_type: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          filters?: Json | null
+          frequency?: string
+          id?: string
+          is_active?: boolean | null
+          last_run_at?: string | null
+          name?: string
+          next_run_at?: string | null
+          project_id?: string | null
+          recipients?: string[]
+          report_type?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_schedules_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       required_documents: {
         Row: {
           created_at: string
