@@ -2,7 +2,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ReportsList } from "@/components/reports/ReportsList";
 import { PresenceReport } from "@/components/reports/PresenceReport";
 import { ComplianceReport } from "@/components/reports/ComplianceReport";
-import { FileText, Clock, FileCheck } from "lucide-react";
+import { ReportScheduler } from "@/components/reports/ReportScheduler";
+import { FileText, Clock, FileCheck, Calendar } from "lucide-react";
 
 const Reports = () => {
   return (
@@ -26,6 +27,10 @@ const Reports = () => {
             <FileCheck className="h-4 w-4" />
             Conformidade
           </TabsTrigger>
+          <TabsTrigger value="scheduler" className="gap-2">
+            <Calendar className="h-4 w-4" />
+            Agendamentos
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="access">
@@ -38,6 +43,10 @@ const Reports = () => {
 
         <TabsContent value="compliance">
           <ComplianceReport />
+        </TabsContent>
+
+        <TabsContent value="scheduler">
+          <ReportScheduler />
         </TabsContent>
       </Tabs>
     </div>

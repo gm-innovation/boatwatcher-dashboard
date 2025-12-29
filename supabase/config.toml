@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.worker-enrollment]
 verify_jwt = true
+
+[functions.notification-service]
+verify_jwt = true
+
+[functions.scheduled-reports]
+verify_jwt = true
