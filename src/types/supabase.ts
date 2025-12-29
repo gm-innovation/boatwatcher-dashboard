@@ -34,6 +34,11 @@ export interface Project {
   status: string | null;
   location: string | null;
   allowed_worker_ids: string[];
+  start_date: string | null;
+  commander: string | null;
+  chief_engineer: string | null;
+  project_type: string | null;
+  crew_size: number | null;
   created_at: string;
   updated_at: string;
   client?: {

@@ -20,8 +20,6 @@ export const Header = () => {
   const { toast } = useToast();
   const { selectedProject, selectedProjectId, setSelectedProjectId } = useProject();
 
-  const isIndexPage = location.pathname === '/';
-
   // Get logos from selected project
   const clientLogo = theme === 'dark' 
     ? selectedProject?.client?.logo_url_dark 
@@ -106,14 +104,12 @@ export const Header = () => {
             </Button>
           </div>
 
-          {/* Center - Project Selector */}
+          {/* Center - Project Selector (always visible on dashboard) */}
           <div className="flex items-center">
-            {isIndexPage && (
-              <ProjectSelector
-                selectedProjectId={selectedProjectId}
-                onProjectSelect={setSelectedProjectId}
-              />
-            )}
+            <ProjectSelector
+              selectedProjectId={selectedProjectId}
+              onProjectSelect={setSelectedProjectId}
+            />
           </div>
 
           {/* Right - Controls */}
