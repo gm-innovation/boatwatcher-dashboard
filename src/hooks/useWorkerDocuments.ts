@@ -74,14 +74,22 @@ export const useCreateWorkerDocument = () => {
       worker_id: string;
       document_type: string;
       document_url?: string;
-      issue_date?: string;
-      expiry_date?: string;
+      filename?: string;
+      issue_date?: string | null;
+      expiry_date?: string | null;
+      extracted_data?: Record<string, any> | null;
       status?: string;
     }) => {
       const { data: result, error } = await supabase
         .from('worker_documents')
         .insert({
-          ...data,
+          worker_id: data.worker_id,
+          document_type: data.document_type,
+          document_url: data.document_url,
+          filename: data.filename,
+          issue_date: data.issue_date,
+          expiry_date: data.expiry_date,
+          extracted_data: data.extracted_data,
           status: data.status || 'valid',
         })
         .select()
