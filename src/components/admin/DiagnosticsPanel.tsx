@@ -18,10 +18,15 @@ import {
   HardDrive,
   LogOut,
   User,
-  ShieldCheck
+  ShieldCheck,
+  Globe,
+  Zap,
+  Copy,
+  CheckCheck
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { getSessionDiagnostics, forceLogout } from '@/utils/ensureValidSession';
+import { toast } from '@/hooks/use-toast';
 
 interface DiagnosticItem {
   id: string;
@@ -39,12 +44,26 @@ interface AuthDiagnostics {
   errorMessage: string | null;
 }
 
+interface EdgeFunctionTestResult {
+  status: 'pending' | 'success' | 'error';
+  statusCode?: number;
+  data?: any;
+  error?: string;
+}
+
 export const DiagnosticsPanel = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DiagnosticItem[]>([]);
   const [lastRunTime, setLastRunTime] = useState<Date | null>(null);
   const [authDiagnostics, setAuthDiagnostics] = useState<AuthDiagnostics | null>(null);
   const [isTestingAuth, setIsTestingAuth] = useState(false);
+  
+  // Edge function test results
+  const [authPingResult, setAuthPingResult] = useState<EdgeFunctionTestResult>({ status: 'pending' });
+  const [echoAuthResult, setEchoAuthResult] = useState<EdgeFunctionTestResult>({ status: 'pending' });
+  const [isTestingAuthPing, setIsTestingAuthPing] = useState(false);
+  const [isTestingEchoAuth, setIsTestingEchoAuth] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const runAuthDiagnostics = async () => {
     setIsTestingAuth(true);
@@ -55,6 +74,111 @@ export const DiagnosticsPanel = () => {
 
   const handleForceLogout = async () => {
     await forceLogout('Logout forçado pelo administrador.');
+  };
+
+  const testAuthPing = async () => {
+    setIsTestingAuthPing(true);
+    setAuthPingResult({ status: 'pending' });
+    
+    try {
+      console.log('[DiagnosticsPanel] Testing auth-ping...');
+      const { data, error } = await supabase.functions.invoke('auth-ping', {
+        method: 'POST',
+      });
+      
+      if (error) {
+        console.error('[DiagnosticsPanel] auth-ping error:', error);
+        setAuthPingResult({
+          status: 'error',
+          error: error.message,
+          statusCode: (error as any)?.status || 0,
+        });
+      } else {
+        console.log('[DiagnosticsPanel] auth-ping success:', data);
+        setAuthPingResult({
+          status: 'success',
+          data,
+          statusCode: 200,
+        });
+      }
+    } catch (e: any) {
+      console.error('[DiagnosticsPanel] auth-ping exception:', e);
+      setAuthPingResult({
+        status: 'error',
+        error: e.message,
+      });
+    }
+    
+    setIsTestingAuthPing(false);
+  };
+
+  const testEchoAuth = async () => {
+    setIsTestingEchoAuth(true);
+    setEchoAuthResult({ status: 'pending' });
+    
+    try {
+      console.log('[DiagnosticsPanel] Testing echo-auth...');
+      const { data, error } = await supabase.functions.invoke('echo-auth', {
+        method: 'POST',
+      });
+      
+      if (error) {
+        console.error('[DiagnosticsPanel] echo-auth error:', error);
+        setEchoAuthResult({
+          status: 'error',
+          error: error.message,
+          statusCode: (error as any)?.status || 0,
+        });
+      } else {
+        console.log('[DiagnosticsPanel] echo-auth success:', data);
+        setEchoAuthResult({
+          status: 'success',
+          data,
+          statusCode: 200,
+        });
+      }
+    } catch (e: any) {
+      console.error('[DiagnosticsPanel] echo-auth exception:', e);
+      setEchoAuthResult({
+        status: 'error',
+        error: e.message,
+      });
+    }
+    
+    setIsTestingEchoAuth(false);
+  };
+
+  const copyDiagnostics = async () => {
+    const diagnosticData = {
+      timestamp: new Date().toISOString(),
+      origin: window.location.origin,
+      userAgent: navigator.userAgent,
+      authDiagnostics,
+      authPingResult,
+      echoAuthResult,
+      systemDiagnostics: diagnostics.map(d => ({
+        id: d.id,
+        name: d.name,
+        status: d.status,
+        message: d.message,
+      })),
+    };
+    
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(diagnosticData, null, 2));
+      setCopied(true);
+      toast({
+        title: 'Diagnóstico copiado',
+        description: 'Os dados de diagnóstico foram copiados para a área de transferência.',
+      });
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      toast({
+        title: 'Erro ao copiar',
+        description: 'Não foi possível copiar os dados de diagnóstico.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const runDiagnostics = async () => {
@@ -312,6 +436,16 @@ export const DiagnosticsPanel = () => {
     return `${minutes}m`;
   };
 
+  const getEdgeFunctionStatusBadge = (result: EdgeFunctionTestResult) => {
+    if (result.status === 'pending') {
+      return <Badge variant="outline">Não testado</Badge>;
+    }
+    if (result.status === 'success') {
+      return <Badge className="bg-green-500/10 text-green-500 border-green-500/20">OK ({result.statusCode})</Badge>;
+    }
+    return <Badge className="bg-red-500/10 text-red-500 border-red-500/20">Erro{result.statusCode ? ` (${result.statusCode})` : ''}</Badge>;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -326,11 +460,39 @@ export const DiagnosticsPanel = () => {
             )}
           </p>
         </div>
-        <Button onClick={runDiagnostics} disabled={isRunning} className="gap-2">
-          <RefreshCw className={`h-4 w-4 ${isRunning ? 'animate-spin' : ''}`} />
-          {isRunning ? 'Executando...' : 'Executar Diagnóstico'}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={copyDiagnostics} className="gap-2">
+            {copied ? <CheckCheck className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copied ? 'Copiado!' : 'Copiar Diagnóstico'}
+          </Button>
+          <Button onClick={runDiagnostics} disabled={isRunning} className="gap-2">
+            <RefreshCw className={`h-4 w-4 ${isRunning ? 'animate-spin' : ''}`} />
+            {isRunning ? 'Executando...' : 'Executar Diagnóstico'}
+          </Button>
+        </div>
       </div>
+
+      {/* Environment Info */}
+      <Card className="border border-border/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Globe className="h-5 w-5 text-muted-foreground" />
+            Informações do Ambiente
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Origin</p>
+              <p className="text-sm font-mono bg-muted/50 px-2 py-1 rounded">{window.location.origin}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Data/Hora Local</p>
+              <p className="text-sm font-mono bg-muted/50 px-2 py-1 rounded">{new Date().toLocaleString()}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Auth Status Card */}
       <Card className="border-2 border-primary/20">
@@ -422,6 +584,104 @@ export const DiagnosticsPanel = () => {
         </CardContent>
       </Card>
 
+      {/* Edge Function Tests */}
+      <Card className="border-2 border-orange-500/20">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Zap className="h-5 w-5 text-orange-500" />
+            Testes de Edge Functions (Diagnóstico de JWT)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Estes testes ajudam a identificar problemas de autenticação com Edge Functions.
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* auth-ping test */}
+              <div className="p-4 rounded-lg border bg-card">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h4 className="font-medium">auth-ping</h4>
+                    <p className="text-xs text-muted-foreground">verify_jwt = true</p>
+                  </div>
+                  {getEdgeFunctionStatusBadge(authPingResult)}
+                </div>
+                
+                {authPingResult.status === 'success' && authPingResult.data && (
+                  <div className="p-2 rounded bg-green-500/10 text-xs font-mono mb-3">
+                    {JSON.stringify(authPingResult.data, null, 2)}
+                  </div>
+                )}
+                
+                {authPingResult.status === 'error' && (
+                  <div className="p-2 rounded bg-red-500/10 text-xs text-red-600 mb-3">
+                    {authPingResult.error}
+                  </div>
+                )}
+                
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={testAuthPing}
+                  disabled={isTestingAuthPing}
+                  className="w-full gap-2"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isTestingAuthPing ? 'animate-spin' : ''}`} />
+                  {isTestingAuthPing ? 'Testando...' : 'Testar auth-ping'}
+                </Button>
+              </div>
+
+              {/* echo-auth test */}
+              <div className="p-4 rounded-lg border bg-card">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h4 className="font-medium">echo-auth</h4>
+                    <p className="text-xs text-muted-foreground">verify_jwt = false (mostra headers)</p>
+                  </div>
+                  {getEdgeFunctionStatusBadge(echoAuthResult)}
+                </div>
+                
+                {echoAuthResult.status === 'success' && echoAuthResult.data && (
+                  <div className="p-2 rounded bg-green-500/10 text-xs font-mono mb-3 max-h-40 overflow-auto">
+                    <pre>{JSON.stringify(echoAuthResult.data, null, 2)}</pre>
+                  </div>
+                )}
+                
+                {echoAuthResult.status === 'error' && (
+                  <div className="p-2 rounded bg-red-500/10 text-xs text-red-600 mb-3">
+                    {echoAuthResult.error}
+                  </div>
+                )}
+                
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={testEchoAuth}
+                  disabled={isTestingEchoAuth}
+                  className="w-full gap-2"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isTestingEchoAuth ? 'animate-spin' : ''}`} />
+                  {isTestingEchoAuth ? 'Testando...' : 'Testar echo-auth'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Interpretation guide */}
+            <div className="p-3 rounded-lg bg-muted/50 text-sm space-y-2">
+              <p className="font-medium">Interpretação dos resultados:</p>
+              <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                <li><strong>auth-ping OK + echo-auth mostra Authorization:</strong> JWT está funcionando corretamente</li>
+                <li><strong>auth-ping 401 + echo-auth mostra Authorization:</strong> O gateway está rejeitando o JWT (token inválido/expirado)</li>
+                <li><strong>echo-auth mostra hasAuthHeader: false:</strong> O header Authorization não está sendo enviado</li>
+                <li><strong>echo-auth mostra hasDoubleBearerPrefix: true:</strong> Header duplicado (Bearer Bearer ...)</li>
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
@@ -484,29 +744,24 @@ export const DiagnosticsPanel = () => {
                 </p>
               )}
               {diagnostics.map((item) => (
-                <div 
-                  key={item.id} 
-                  className="flex items-center justify-between p-4 rounded-lg border bg-card"
+                <div
+                  key={item.id}
+                  className="flex items-start gap-4 p-4 rounded-lg border bg-card hover:bg-accent/5 transition-colors"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="p-2 rounded-lg bg-muted">
-                      {getIcon(item.id)}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">{item.name}</p>
-                        {getStatusBadge(item.status)}
-                      </div>
-                      <p className="text-sm text-muted-foreground">{item.message}</p>
-                    </div>
+                  <div className="flex-shrink-0 mt-0.5">
+                    {getIcon(item.id)}
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {item.lastCheck.toLocaleTimeString()}
-                      </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-medium truncate">{item.name}</h3>
+                      {getStatusBadge(item.status)}
                     </div>
+                    <p className="text-sm text-muted-foreground">{item.message}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Verificado: {item.lastCheck.toLocaleTimeString()}
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0">
                     {getStatusIcon(item.status)}
                   </div>
                 </div>
