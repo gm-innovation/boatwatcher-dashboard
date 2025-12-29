@@ -14,3 +14,6 @@ verify_jwt = true
 
 [functions.scheduled-reports]
 verify_jwt = true
+
+[functions.extract-document-data]
+verify_jwt = true

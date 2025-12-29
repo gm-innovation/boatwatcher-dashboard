@@ -149,6 +149,41 @@ export type Database = {
         }
         Relationships: []
       }
+      company_documents: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          document_type: string
+          file_url: string | null
+          filename: string
+          id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          document_type: string
+          file_url?: string | null
+          filename: string
+          id?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          document_type?: string
+          file_url?: string | null
+          filename?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_documents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       devices: {
         Row: {
           api_credentials: Json | null
@@ -524,6 +559,8 @@ export type Database = {
           document_type: string
           document_url: string | null
           expiry_date: string | null
+          extracted_data: Json | null
+          filename: string | null
           id: string
           issue_date: string | null
           status: string | null
@@ -535,6 +572,8 @@ export type Database = {
           document_type: string
           document_url?: string | null
           expiry_date?: string | null
+          extracted_data?: Json | null
+          filename?: string | null
           id?: string
           issue_date?: string | null
           status?: string | null
@@ -546,6 +585,8 @@ export type Database = {
           document_type?: string
           document_url?: string | null
           expiry_date?: string | null
+          extracted_data?: Json | null
+          filename?: string | null
           id?: string
           issue_date?: string | null
           status?: string | null
