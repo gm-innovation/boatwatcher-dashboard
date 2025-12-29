@@ -1,6 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WorkerManagement } from "@/components/workers/WorkerManagement";
 import { CompanyManagement } from "@/components/people/CompanyManagement";
+import { JobFunctionManagement } from "@/components/people/JobFunctionManagement";
 import { Users, Building2, Briefcase } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
@@ -45,11 +46,7 @@ const PeopleManagement = () => {
         </TabsContent>
 
         <TabsContent value="job-functions">
-          <div className="text-center py-12 text-muted-foreground">
-            <Briefcase className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Gestão de Cargos e Requisitos</p>
-            <p className="text-sm">Em desenvolvimento</p>
-          </div>
+          <JobFunctionManagement />
         </TabsContent>
       </Tabs>
     </div>
