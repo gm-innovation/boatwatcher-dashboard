@@ -5,10 +5,11 @@ import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanies, useProjects } from '@/hooks/useSupabase';
 import { useCreateWorkerDocument } from '@/hooks/useWorkerDocuments';
+import { useDocumentExtraction, ProcessedDocument } from '@/hooks/useDocumentExtraction';
 import { toast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,7 +26,6 @@ import {
   User,
   FileText,
   Building2,
-  Briefcase,
   Calendar,
   Droplets,
   Camera,
@@ -36,6 +36,8 @@ import {
   Sparkles,
   X,
   Loader2,
+  RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
 
 interface NewWorkerDialogProps {
@@ -62,8 +64,12 @@ interface UploadedDocument {
   id: string;
   file: File;
   type: string;
+  file_url?: string;
+  completion_date?: string | null;
+  expiry_date?: string | null;
   extractedData?: Record<string, any>;
   isExtracting?: boolean;
+  error?: 'auth' | 'server' | null;
 }
 
 export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDialogProps) => {
@@ -82,6 +88,9 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
   const { data: projects = [] } = useProjects();
   const createDocument = useCreateWorkerDocument();
   const queryClient = useQueryClient();
+  
+  // Use the extraction hook that handles auth and proper payload
+  const { extractDocument, isExtracting, progress } = useDocumentExtraction();
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<WorkerFormData>({
     resolver: zodResolver(workerSchema),
@@ -102,56 +111,96 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
     }
   };
 
+  // Process a single document using the extraction hook
+  const processDocument = async (file: File, docId: string) => {
+    // Mark as extracting
+    setUploadedDocuments(prev => prev.map(doc => 
+      doc.id === docId 
+        ? { ...doc, isExtracting: true, error: null }
+        : doc
+    ));
+
+    try {
+      const result = await extractDocument(file);
+      
+      if (!result) {
+        // extractDocument returns null on auth failure or other critical errors
+        setUploadedDocuments(prev => prev.map(doc => 
+          doc.id === docId 
+            ? { ...doc, isExtracting: false, error: 'auth' as const }
+            : doc
+        ));
+        return;
+      }
+
+      // Update document with extracted data
+      setUploadedDocuments(prev => prev.map(doc => 
+        doc.id === docId 
+          ? { 
+              ...doc, 
+              file_url: result.file_url,
+              type: result.document_type || 'Documento',
+              completion_date: result.completion_date,
+              expiry_date: result.expiry_date,
+              extractedData: result.extracted_data,
+              isExtracting: false,
+              error: null
+            }
+          : doc
+      ));
+
+      // Auto-fill form with extracted data
+      const data = result.extracted_data;
+      if (data) {
+        if (data.full_name) setValue('name', data.full_name);
+        if (data.document_number) setValue('document_number', data.document_number);
+        if (data.birth_date) setValue('birth_date', data.birth_date);
+        if (data.job_function) setValue('role', data.job_function);
+        if (data.gender) setValue('gender', data.gender?.toLowerCase());
+        if (data.blood_type) setValue('blood_type', data.blood_type);
+      }
+
+      if (Object.keys(result.extracted_data || {}).length > 0) {
+        toast({ title: 'Dados extraídos com sucesso' });
+      }
+    } catch (error) {
+      console.error('Document processing error:', error);
+      setUploadedDocuments(prev => prev.map(doc => 
+        doc.id === docId 
+          ? { ...doc, isExtracting: false, error: 'server' as const }
+          : doc
+      ));
+    }
+  };
+
   const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
 
-    for (const file of Array.from(files)) {
-      const docId = crypto.randomUUID();
-      const newDoc: UploadedDocument = {
-        id: docId,
-        file,
-        type: 'Documento',
-        isExtracting: true,
-      };
-      
-      setUploadedDocuments(prev => [...prev, newDoc]);
+    // Add all files to state first
+    const newDocs: UploadedDocument[] = Array.from(files).map(file => ({
+      id: crypto.randomUUID(),
+      file,
+      type: 'Documento',
+      isExtracting: true,
+      error: null,
+    }));
+    
+    setUploadedDocuments(prev => [...prev, ...newDocs]);
 
-      // Call AI extraction edge function
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
+    // Process each document
+    for (const doc of newDocs) {
+      await processDocument(doc.file, doc.id);
+    }
+    
+    // Reset input so the same files can be selected again if needed
+    e.target.value = '';
+  };
 
-        const { data, error } = await supabase.functions.invoke('extract-document-data', {
-          body: formData,
-        });
-
-        if (error) throw error;
-
-        setUploadedDocuments(prev => prev.map(doc => 
-          doc.id === docId 
-            ? { ...doc, extractedData: data, type: data?.documentType || 'Documento', isExtracting: false }
-            : doc
-        ));
-
-        // Auto-fill form with extracted data
-        if (data) {
-          if (data.name) setValue('name', data.name);
-          if (data.cpf) setValue('document_number', data.cpf);
-          if (data.birthDate) setValue('birth_date', data.birthDate);
-          if (data.role) setValue('role', data.role);
-        }
-
-        toast({ title: 'Dados extraídos com sucesso' });
-      } catch (error) {
-        console.error('Extraction error:', error);
-        setUploadedDocuments(prev => prev.map(doc => 
-          doc.id === docId 
-            ? { ...doc, isExtracting: false }
-            : doc
-        ));
-        toast({ title: 'Erro na extração', description: 'Preencha os dados manualmente', variant: 'destructive' });
-      }
+  const retryExtraction = async (docId: string) => {
+    const doc = uploadedDocuments.find(d => d.id === docId);
+    if (doc) {
+      await processDocument(doc.file, docId);
     }
   };
 
@@ -179,28 +228,37 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
     return data.publicUrl;
   };
 
-  const uploadDocuments = async (workerId: string) => {
+  const saveDocuments = async (workerId: string) => {
     for (const doc of uploadedDocuments) {
-      const fileExt = doc.file.name.split('.').pop();
-      const fileName = `${workerId}/${doc.id}.${fileExt}`;
+      // Use file_url from extraction if available (already uploaded)
+      // Otherwise, upload the file now
+      let documentUrl = doc.file_url;
+      
+      if (!documentUrl) {
+        const fileExt = doc.file.name.split('.').pop();
+        const fileName = `${workerId}/${doc.id}.${fileExt}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('worker-documents')
-        .upload(fileName, doc.file, { upsert: true });
+        const { error: uploadError } = await supabase.storage
+          .from('worker-documents')
+          .upload(fileName, doc.file, { upsert: true });
 
-      if (uploadError) {
-        console.error('Document upload error:', uploadError);
-        continue;
+        if (uploadError) {
+          console.error('Document upload error:', uploadError);
+          continue;
+        }
+
+        const { data: urlData } = supabase.storage.from('worker-documents').getPublicUrl(fileName);
+        documentUrl = urlData.publicUrl;
       }
-
-      const { data: urlData } = supabase.storage.from('worker-documents').getPublicUrl(fileName);
 
       await createDocument.mutateAsync({
         worker_id: workerId,
         document_type: doc.type,
-        document_url: urlData.publicUrl,
-        expiry_date: doc.extractedData?.expiryDate || null,
-        issue_date: doc.extractedData?.issueDate || null,
+        document_url: documentUrl,
+        filename: doc.file.name,
+        expiry_date: doc.expiry_date || null,
+        issue_date: doc.completion_date || null,
+        extracted_data: doc.extractedData || null,
         status: 'valid',
       });
     }
@@ -236,9 +294,9 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
         }
       }
 
-      // Upload documents
+      // Save documents (uses already uploaded files when available)
       if (uploadedDocuments.length > 0 && newWorker) {
-        await uploadDocuments(newWorker.id);
+        await saveDocuments(newWorker.id);
       }
 
       toast({ title: 'Trabalhador cadastrado com sucesso' });
@@ -271,7 +329,43 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
     onOpenChange(false);
   };
 
-  // Documents card component to avoid duplication
+  // Get status badge for document
+  const getDocumentStatusBadge = (doc: UploadedDocument) => {
+    if (doc.isExtracting) {
+      return (
+        <Badge variant="outline" className="gap-1">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Extraindo...
+        </Badge>
+      );
+    }
+    
+    if (doc.error === 'auth') {
+      return (
+        <Badge variant="destructive" className="gap-1">
+          <AlertCircle className="h-3 w-3" />
+          Sessão expirada
+        </Badge>
+      );
+    }
+    
+    if (doc.error === 'server') {
+      return (
+        <Badge variant="destructive" className="gap-1">
+          <AlertCircle className="h-3 w-3" />
+          Erro no servidor
+        </Badge>
+      );
+    }
+    
+    if (doc.extractedData && Object.keys(doc.extractedData).length > 0) {
+      return <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Dados extraídos</Badge>;
+    }
+    
+    return <Badge variant="secondary">Sem extração</Badge>;
+  };
+
+  // Documents card component
   const DocumentsCard = () => (
     <Card>
       <CardHeader className="pb-3">
@@ -324,15 +418,17 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {doc.isExtracting ? (
-                    <Badge variant="outline" className="gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Extraindo...
-                    </Badge>
-                  ) : doc.extractedData ? (
-                    <Badge className="bg-green-500/10 text-green-600">Dados extraídos</Badge>
-                  ) : (
-                    <Badge variant="secondary">Sem extração</Badge>
+                  {getDocumentStatusBadge(doc)}
+                  {doc.error && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => retryExtraction(doc.id)}
+                      title="Tentar novamente"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
                   )}
                   <Button
                     type="button"
@@ -371,9 +467,9 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
               />
             </div>
           </div>
-          <p className="text-sm text-muted-foreground">
+          <DialogDescription>
             Preencha os dados do novo trabalhador. Os campos obrigatórios estão marcados com (*)
-          </p>
+          </DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="flex-1 min-h-0 h-[calc(95vh-180px)] pr-4">
@@ -584,6 +680,9 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Selecionar Projetos Autorizados</DialogTitle>
+              <DialogDescription>
+                Selecione os projetos nos quais o trabalhador terá acesso autorizado.
+              </DialogDescription>
             </DialogHeader>
             <ScrollArea className="max-h-80">
               <div className="space-y-2 pr-4">
