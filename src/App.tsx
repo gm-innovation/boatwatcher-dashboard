@@ -9,8 +9,12 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import ProjectSettings from "./pages/ProjectSettings";
 import Reports from "./pages/Reports";
+import PeopleManagement from "./pages/PeopleManagement";
+import Admin from "./pages/Admin";
+import CompanyPortal from "./pages/CompanyPortal";
 import NotFound from "./pages/NotFound";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { MainLayout } from "./components/layouts/MainLayout";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,7 +39,9 @@ const App = () => {
                 path="/"
                 element={
                   <ProtectedRoute>
-                    <Index />
+                    <MainLayout>
+                      <Index />
+                    </MainLayout>
                   </ProtectedRoute>
                 }
               />
@@ -43,7 +49,39 @@ const App = () => {
                 path="/reports" 
                 element={
                   <ProtectedRoute>
-                    <Reports />
+                    <MainLayout>
+                      <Reports />
+                    </MainLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/people/*" 
+                element={
+                  <ProtectedRoute>
+                    <MainLayout>
+                      <PeopleManagement />
+                    </MainLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/*" 
+                element={
+                  <ProtectedRoute>
+                    <MainLayout>
+                      <Admin />
+                    </MainLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/company-portal/*" 
+                element={
+                  <ProtectedRoute>
+                    <MainLayout>
+                      <CompanyPortal />
+                    </MainLayout>
                   </ProtectedRoute>
                 } 
               />
@@ -51,7 +89,9 @@ const App = () => {
                 path="/settings" 
                 element={
                   <ProtectedRoute>
-                    <ProjectSettings />
+                    <MainLayout>
+                      <ProjectSettings />
+                    </MainLayout>
                   </ProtectedRoute>
                 } 
               />

@@ -77,6 +77,39 @@ export type Database = {
           },
         ]
       }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          entity_id: string | null
+          entity_type: string
+          id: string
+          ip_address: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          ip_address?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          ip_address?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       companies: {
         Row: {
           cnpj: string | null
@@ -172,6 +205,69 @@ export type Database = {
           },
         ]
       }
+      job_functions: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean | null
+          message: string | null
+          priority: string | null
+          related_entity_id: string | null
+          related_entity_type: string | null
+          title: string
+          type: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          message?: string | null
+          priority?: string | null
+          related_entity_id?: string | null
+          related_entity_type?: string | null
+          title: string
+          type: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          message?: string | null
+          priority?: string | null
+          related_entity_id?: string | null
+          related_entity_type?: string | null
+          title?: string
+          type?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       projects: {
         Row: {
           allowed_worker_ids: string[] | null
@@ -228,6 +324,97 @@ export type Database = {
           },
         ]
       }
+      required_documents: {
+        Row: {
+          created_at: string
+          document_name: string
+          id: string
+          is_mandatory: boolean | null
+          job_function_id: string | null
+          validity_days: number | null
+        }
+        Insert: {
+          created_at?: string
+          document_name: string
+          id?: string
+          is_mandatory?: boolean | null
+          job_function_id?: string | null
+          validity_days?: number | null
+        }
+        Update: {
+          created_at?: string
+          document_name?: string
+          id?: string
+          is_mandatory?: boolean | null
+          job_function_id?: string | null
+          validity_days?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "required_documents_job_function_id_fkey"
+            columns: ["job_function_id"]
+            isOneToOne: false
+            referencedRelation: "job_functions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      system_settings: {
+        Row: {
+          description: string | null
+          id: string
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          description?: string | null
+          id?: string
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value: Json
+        }
+        Update: {
+          description?: string | null
+          id?: string
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
+      user_companies: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_companies_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_projects: {
         Row: {
           created_at: string
@@ -275,6 +462,50 @@ export type Database = {
         }
         Relationships: []
       }
+      worker_documents: {
+        Row: {
+          created_at: string
+          document_type: string
+          document_url: string | null
+          expiry_date: string | null
+          id: string
+          issue_date: string | null
+          status: string | null
+          updated_at: string
+          worker_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          document_type: string
+          document_url?: string | null
+          expiry_date?: string | null
+          id?: string
+          issue_date?: string | null
+          status?: string | null
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          document_type?: string
+          document_url?: string | null
+          expiry_date?: string | null
+          id?: string
+          issue_date?: string | null
+          status?: string | null
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "worker_documents_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workers: {
         Row: {
           allowed_project_ids: string[] | null
@@ -284,6 +515,7 @@ export type Database = {
           document_number: string | null
           facial_template_data: Json | null
           id: string
+          job_function_id: string | null
           name: string
           photo_url: string | null
           role: string | null
@@ -298,6 +530,7 @@ export type Database = {
           document_number?: string | null
           facial_template_data?: Json | null
           id?: string
+          job_function_id?: string | null
           name: string
           photo_url?: string | null
           role?: string | null
@@ -312,6 +545,7 @@ export type Database = {
           document_number?: string | null
           facial_template_data?: Json | null
           id?: string
+          job_function_id?: string | null
           name?: string
           photo_url?: string | null
           role?: string | null
@@ -326,6 +560,13 @@ export type Database = {
             referencedRelation: "companies"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "workers_job_function_id_fkey"
+            columns: ["job_function_id"]
+            isOneToOne: false
+            referencedRelation: "job_functions"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
@@ -334,6 +575,7 @@ export type Database = {
     }
     Functions: {
       create_initial_admin: { Args: { _user_id: string }; Returns: boolean }
+      get_user_company_id: { Args: { _user_id: string }; Returns: string }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
@@ -350,7 +592,7 @@ export type Database = {
     Enums: {
       access_direction: "entry" | "exit" | "unknown"
       access_status: "granted" | "denied"
-      app_role: "admin" | "moderator" | "user"
+      app_role: "admin" | "moderator" | "user" | "company_admin"
       device_status: "online" | "offline" | "error" | "configuring"
       device_type: "facial_reader" | "turnstile" | "terminal"
       worker_status: "active" | "inactive" | "blocked" | "pending_review"
@@ -483,7 +725,7 @@ export const Constants = {
     Enums: {
       access_direction: ["entry", "exit", "unknown"],
       access_status: ["granted", "denied"],
-      app_role: ["admin", "moderator", "user"],
+      app_role: ["admin", "moderator", "user", "company_admin"],
       device_status: ["online", "offline", "error", "configuring"],
       device_type: ["facial_reader", "turnstile", "terminal"],
       worker_status: ["active", "inactive", "blocked", "pending_review"],
