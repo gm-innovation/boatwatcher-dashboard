@@ -23,6 +23,7 @@ export interface Worker {
   facial_template_data: any | null;
   allowed_project_ids: string[];
   devices_enrolled: string[];
+  job_function_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -50,7 +51,7 @@ export interface Project {
   } | null;
 }
 
-export type AppRole = 'admin' | 'moderator' | 'user';
+export type AppRole = 'admin' | 'moderator' | 'user' | 'company_admin';
 
 export interface UserRole {
   id: string;
@@ -62,6 +63,13 @@ export interface UserProject {
   id: string;
   user_id: string;
   project_id: string;
+  created_at: string;
+}
+
+export interface UserCompany {
+  id: string;
+  user_id: string;
+  company_id: string;
   created_at: string;
 }
 
@@ -104,4 +112,66 @@ export interface AccessLog {
   created_at: string;
   worker?: Worker | null;
   device?: Device | null;
+}
+
+export interface JobFunction {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RequiredDocument {
+  id: string;
+  job_function_id: string;
+  document_name: string;
+  validity_days: number | null;
+  is_mandatory: boolean;
+  created_at: string;
+}
+
+export interface WorkerDocument {
+  id: string;
+  worker_id: string;
+  document_type: string;
+  document_url: string | null;
+  issue_date: string | null;
+  expiry_date: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuditLog {
+  id: string;
+  user_id: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  details: Record<string, any> | null;
+  ip_address: string | null;
+  created_at: string;
+}
+
+export interface SystemSetting {
+  id: string;
+  key: string;
+  value: Record<string, any>;
+  description: string | null;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string | null;
+  type: string;
+  title: string;
+  message: string | null;
+  is_read: boolean;
+  priority: string;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
+  created_at: string;
 }
