@@ -7,7 +7,8 @@ import { ClientsManagement } from "@/components/admin/ClientsManagement";
 import { ProjectsManagement } from "@/components/admin/ProjectsManagement";
 import { ReportScheduler } from "@/components/reports/ReportScheduler";
 import { DiagnosticsPanel } from "@/components/admin/DiagnosticsPanel";
-import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope } from "lucide-react";
+import { PendingRegistrations } from "@/components/people/PendingRegistrations";
+import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, UserCheck } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
 const Admin = () => {
@@ -21,6 +22,7 @@ const Admin = () => {
     if (location.pathname.includes('/audit')) return 'audit';
     if (location.pathname.includes('/schedules')) return 'schedules';
     if (location.pathname.includes('/diagnostics')) return 'diagnostics';
+    if (location.pathname.includes('/pending')) return 'pending';
     return 'projects';
   };
 
@@ -33,6 +35,10 @@ const Admin = () => {
 
       <Tabs defaultValue={getDefaultTab()} className="space-y-6">
         <TabsList className="flex-wrap">
+          <TabsTrigger value="pending" className="gap-2">
+            <UserCheck className="h-4 w-4" />
+            Aprovações
+          </TabsTrigger>
           <TabsTrigger value="projects" className="gap-2">
             <FolderKanban className="h-4 w-4" />
             Projetos
@@ -66,6 +72,10 @@ const Admin = () => {
             Auditoria
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="pending">
+          <PendingRegistrations />
+        </TabsContent>
 
         <TabsContent value="projects">
           <ProjectsManagement />
