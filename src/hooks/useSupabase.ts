@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import type { Company, Worker, Project } from '@/types/supabase';
 
 export const useCompanies = () => {
@@ -49,10 +49,12 @@ export const useProjects = () => {
         .from('projects')
         .select(`
           *,
-          company:companies!projects_client_id_fkey (
+          client:companies (
             name,
             vessels,
-            project_managers
+            project_managers,
+            logo_url_light,
+            logo_url_dark
           )
         `)
         .order('created_at', { ascending: false });
@@ -62,10 +64,7 @@ export const useProjects = () => {
         throw error;
       }
       
-      return data.map((project: any) => ({
-        ...project,
-        company: project.company?.name || ''
-      })) as Project[];
+      return data as Project[];
     }
   });
 };
@@ -80,10 +79,12 @@ export const useProjectById = (projectId: string | null) => {
         .from('projects')
         .select(`
           *,
-          company:companies!projects_client_id_fkey (
+          client:companies (
             name,
             vessels,
-            project_managers
+            project_managers,
+            logo_url_light,
+            logo_url_dark
           )
         `)
         .eq('id', projectId)
@@ -94,10 +95,7 @@ export const useProjectById = (projectId: string | null) => {
         throw error;
       }
 
-      return {
-        ...data,
-        company: data.company?.name || ''
-      } as Project;
+      return data as Project;
     },
     enabled: !!projectId
   });
@@ -111,12 +109,12 @@ export const useCompanyLogo = (companyId: string | null) => {
       
       const { data, error } = await supabase
         .from('companies')
-        .select('logo_url')
+        .select('logo_url_light, logo_url_dark')
         .eq('id', companyId)
         .single();
       
       if (error) throw error;
-      return data?.logo_url;
+      return data;
     },
     enabled: !!companyId
   });

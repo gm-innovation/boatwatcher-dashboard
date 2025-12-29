@@ -1,38 +1,52 @@
-
 export interface Company {
-  id: string
-  name: string
-  entry_time: string
-  workers_count: number
-  created_at: string
-  logo_url_light: string | null
-  logo_url_dark: string | null
-  project_managers: string[]
-  vessels: string[]
+  id: string;
+  name: string;
+  logo_url_light: string | null;
+  logo_url_dark: string | null;
+  vessels: string[];
+  project_managers: string[];
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Worker {
-  id: string
-  name: string
-  company_id: string
-  company?: string
-  role: string
-  arrival_time: string
-  photo_url: string
-  created_at: string
-  project_id?: string | null
+  id: string;
+  name: string;
+  company_id: string | null;
+  company?: string;
+  role: string | null;
+  status: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Project {
-  id: string
-  vessel_name: string
-  start_date: string
-  project_type: string
-  engineer: string
-  company: string
-  captain: string
-  created_at: string
-  crew_count?: number
-  client_id?: string
-  external_project_id?: string
+  id: string;
+  name: string;
+  client_id: string | null;
+  status: string | null;
+  created_at: string;
+  updated_at: string;
+  client?: {
+    name: string;
+    vessels: string[];
+    project_managers: string[];
+    logo_url_light: string | null;
+    logo_url_dark: string | null;
+  } | null;
+}
+
+export type AppRole = 'admin' | 'moderator' | 'user';
+
+export interface UserRole {
+  id: string;
+  user_id: string;
+  role: AppRole;
+}
+
+export interface UserProject {
+  id: string;
+  user_id: string;
+  project_id: string;
+  created_at: string;
 }

@@ -1,6 +1,5 @@
-import { Users, Building, Anchor } from 'lucide-react';
-import { useProjectById } from '@/hooks/useSupabase';
-import { useInmetaEvents } from '@/hooks/useInmetaApi';
+import { Users, Building } from 'lucide-react';
+import { useCompanies, useWorkers } from '@/hooks/useSupabase';
 
 const Card = ({ title, value, icon: Icon, color, highlight = false }: { 
   title: string;
@@ -35,32 +34,17 @@ interface SummaryCardsProps {
 }
 
 export const SummaryCards = ({ projectId }: SummaryCardsProps) => {
-  const { data: projectInfo } = useProjectById(projectId);
-  const { data: inmetaEvents = [] } = useInmetaEvents();
+  const { data: workers = [] } = useWorkers();
+  const { data: companies = [] } = useCompanies();
 
-  const crewCount = projectInfo?.crew_count || 0;
-  const inmetaCount = inmetaEvents.length;
-  const totalCount = crewCount + inmetaCount;
-
-  // Get unique companies from Inmeta events
-  const uniqueCompanies = new Set(
-    inmetaEvents
-      .map(event => event.vinculoColaborador?.empresa)
-      .filter(Boolean)
-  );
-  const companiesCount = uniqueCompanies.size;
+  const workersCount = workers.length;
+  const companiesCount = companies.length;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
       <Card
-        title="Tripulação a Bordo"
-        value={crewCount}
-        icon={Anchor}
-        color="bg-blue-500"
-      />
-      <Card
-        title="Total de Pessoas a Bordo"
-        value={totalCount}
+        title="Total de Trabalhadores"
+        value={workersCount}
         icon={Users}
         color="bg-purple-500"
         highlight={true}

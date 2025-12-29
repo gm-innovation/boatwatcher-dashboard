@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 import { useCompanies } from "@/hooks/useSupabase";
 import { format } from "date-fns";
 import {
@@ -268,8 +268,6 @@ export const CompanyForm = () => {
           <TableHeader>
             <TableRow>
               <TableHead>Nome da Empresa</TableHead>
-              <TableHead>Horário de Entrada</TableHead>
-              <TableHead>Quantidade de Trabalhadores</TableHead>
               <TableHead>Data de Cadastro</TableHead>
             </TableRow>
           </TableHeader>
@@ -277,10 +275,6 @@ export const CompanyForm = () => {
             {companies?.map((company) => (
               <TableRow key={company.id}>
                 <TableCell className="font-medium">{company.name}</TableCell>
-                <TableCell>
-                  {company.entry_time ? format(new Date(company.entry_time), 'HH:mm') : '-'}
-                </TableCell>
-                <TableCell>{company.workers_count || 0}</TableCell>
                 <TableCell>
                   {company.created_at ? format(new Date(company.created_at), 'dd/MM/yyyy') : '-'}
                 </TableCell>

@@ -1,12 +1,7 @@
-
 import { Search } from 'lucide-react';
 import { useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useWorkers } from '@/hooks/useSupabase';
-import { useInmetaEvents } from '@/hooks/useInmetaApi';
-import { format } from 'date-fns';
-import type { Worker } from '@/types/supabase';
-import { useProjects } from '@/hooks/useSupabase';
 
 interface WorkersListProps {
   className?: string;
@@ -15,37 +10,11 @@ interface WorkersListProps {
 
 export const WorkersList = ({ className = "", projectId }: WorkersListProps) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const { data: workers = [], isLoading: isLoadingWorkers } = useWorkers();
-  const { data: projects = [] } = useProjects();
-  const selectedProject = projects.find(p => p.id === projectId);
-  const { data: inmetaEvents = [], isLoading: isLoadingInmeta } = useInmetaEvents(selectedProject?.external_project_id);
+  const { data: workers = [], isLoading } = useWorkers();
 
-  // Combinar trabalhadores apenas quando houver um projeto selecionado
-  const allWorkers = projectId ? [
-    ...workers.filter(worker => worker.project_id === projectId || !worker.project_id),
-    ...inmetaEvents.map(event => ({
-      id: event.id,
-      name: event.nomePessoa,
-      role: event.cargoPessoa,
-      arrival_time: event.data,
-      photo_url: "",
-      company: event.vinculoColaborador?.empresa || 'N/A',
-      company_id: "",  // Campo obrigatório da interface Worker
-      created_at: event.data, // Usando a data do evento como created_at
-      project_id: projectId // Adicionando o project_id do projeto atual
-    } as Worker)),
-  ] : [];
-
-  // Ordenar por horário de chegada
-  const sortedWorkers = allWorkers.sort((a, b) => 
-    new Date(b.arrival_time).getTime() - new Date(a.arrival_time).getTime()
-  );
-
-  const filteredWorkers = sortedWorkers.filter(worker =>
+  const filteredWorkers = workers.filter(worker =>
     worker.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const isLoading = isLoadingWorkers || isLoadingInmeta;
 
   return (
     <div className={`bg-card/80 backdrop-blur-sm rounded-lg border border-border flex flex-col ${className}`}>
@@ -54,7 +23,7 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold text-foreground">Trabalhadores</h2>
             <span className="px-2 py-1 bg-muted rounded-md text-sm text-muted-foreground">
-              {allWorkers.length}
+              {workers.length}
             </span>
           </div>
           <div className="relative">
@@ -77,7 +46,7 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
               <th className="w-[200px] text-center py-3 text-sm font-medium text-muted-foreground">Nome</th>
               <th className="w-[200px] text-center py-3 text-sm font-medium text-muted-foreground">Empresa</th>
               <th className="w-[200px] text-center py-3 text-sm font-medium text-muted-foreground">Função</th>
-              <th className="w-[150px] text-center py-3 text-sm font-medium text-muted-foreground">Entrada</th>
+              <th className="w-[150px] text-center py-3 text-sm font-medium text-muted-foreground">Status</th>
             </tr>
           </thead>
         </table>
@@ -89,17 +58,15 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-          ) : projectId ? (
+          ) : (
             <table className="w-full">
               <tbody>
                 {filteredWorkers.map((worker) => (
                   <tr key={worker.id} className="border-b border-border hover:bg-muted/50">
                     <td className="w-[200px] py-3 text-sm text-foreground text-center">{worker.name}</td>
-                    <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.company}</td>
-                    <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.role}</td>
-                    <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">
-                      {format(new Date(worker.arrival_time), 'HH:mm')}
-                    </td>
+                    <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.company || 'N/A'}</td>
+                    <td className="w-[200px] py-3 text-sm text-muted-foreground text-center">{worker.role || 'N/A'}</td>
+                    <td className="w-[150px] py-3 text-sm text-muted-foreground text-center">{worker.status || 'Ativo'}</td>
                   </tr>
                 ))}
                 {filteredWorkers.length === 0 && (
@@ -111,10 +78,6 @@ export const WorkersList = ({ className = "", projectId }: WorkersListProps) => 
                 )}
               </tbody>
             </table>
-          ) : (
-            <div className="py-3 text-sm text-muted-foreground text-center">
-              Selecione um projeto para ver os trabalhadores
-            </div>
           )}
         </div>
       </ScrollArea>

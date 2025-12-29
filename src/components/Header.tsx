@@ -1,4 +1,3 @@
-
 import { format } from 'date-fns';
 import { Clock, Settings, Moon, Sun, LogOut, LayoutDashboard, FileText } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -6,39 +5,27 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
 import { useTheme } from '@/components/theme-provider';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
 import { ProjectSelector } from '@/components/ProjectSelector';
 import { Separator } from '@/components/ui/separator';
+import { useProject } from '@/contexts/ProjectContext';
 
-interface ProjectData {
-  project: {
-    client: {
-      logo_url_light: string | null;
-      logo_url_dark: string | null;
-    } | null;
-  } | null;
-}
-
-interface HeaderProps {
-  selectedProjectId: string | null;
-  onProjectSelect: (projectId: string) => void;
-}
-
-export const Header = ({ selectedProjectId, onProjectSelect }: HeaderProps) => {
+export const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [currentTime, setCurrentTime] = useState(new Date());
   const { theme, setTheme } = useTheme();
   const [isAdmin, setIsAdmin] = useState(false);
-  const [clientLogoLight, setClientLogoLight] = useState<string | null>(null);
-  const [clientLogoDark, setClientLogoDark] = useState<string | null>(null);
   const { toast } = useToast();
+  const { selectedProject, selectedProjectId, setSelectedProjectId } = useProject();
 
   const isIndexPage = location.pathname === '/';
 
-  // Get system logo based on current theme
-  const systemLogo = localStorage.getItem(`company_${theme}`);
+  // Get logos from selected project
+  const clientLogo = theme === 'dark' 
+    ? selectedProject?.client?.logo_url_dark 
+    : selectedProject?.client?.logo_url_light;
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -52,35 +39,15 @@ export const Header = ({ selectedProjectId, onProjectSelect }: HeaderProps) => {
           .from('user_roles')
           .select('role')
           .eq('user_id', session.user.id)
-          .single();
+          .maybeSingle();
         
         setIsAdmin(roleData?.role === 'admin');
-
-        // Fetch client logos from user's projects using the correct foreign key
-        const { data: projectData } = await supabase
-          .from('user_projects')
-          .select(`
-            project:projects (
-              client:companies!projects_client_id_fkey (
-                logo_url_light,
-                logo_url_dark
-              )
-            )
-          `)
-          .eq('user_id', session.user.id)
-          .maybeSingle();
-
-        const typedProjectData = projectData as unknown as ProjectData;
-        if (typedProjectData?.project?.client) {
-          setClientLogoLight(typedProjectData.project.client.logo_url_light);
-          setClientLogoDark(typedProjectData.project.client.logo_url_dark);
-        }
       }
     };
 
     checkAdminRole();
     return () => clearInterval(timer);
-  }, [selectedProjectId]);
+  }, []);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -95,9 +62,6 @@ export const Header = ({ selectedProjectId, onProjectSelect }: HeaderProps) => {
     navigate('/login');
   };
 
-  // Get the appropriate logo based on current theme
-  const clientLogo = theme === 'dark' ? clientLogoDark : clientLogoLight;
-
   return (
     <header className="fixed top-0 left-0 right-0 w-full bg-background/80 backdrop-blur-sm border-b border-border animate-fade-in z-50">
       {/* Upper section - Logos */}
@@ -107,15 +71,13 @@ export const Header = ({ selectedProjectId, onProjectSelect }: HeaderProps) => {
           {clientLogo ? (
             <img src={clientLogo} alt="Logo do Cliente" className="h-8 w-28 object-contain" />
           ) : (
-            <div className="h-8 w-28 bg-muted rounded animate-pulse" />
+            <div className="h-8 w-28 bg-muted rounded" />
           )}
 
-          {/* System Logo */}
-          {systemLogo ? (
-            <img src={systemLogo} alt="Logo do Sistema" className="h-8 w-28 object-contain" />
-          ) : (
-            <div className="h-8 w-28 bg-muted rounded animate-pulse" />
-          )}
+          {/* System Logo - placeholder */}
+          <div className="h-8 w-28 bg-muted rounded flex items-center justify-center">
+            <span className="text-xs text-muted-foreground">Sistema</span>
+          </div>
         </div>
       </div>
 
@@ -149,7 +111,7 @@ export const Header = ({ selectedProjectId, onProjectSelect }: HeaderProps) => {
             {isIndexPage && (
               <ProjectSelector
                 selectedProjectId={selectedProjectId}
-                onProjectSelect={onProjectSelect}
+                onProjectSelect={setSelectedProjectId}
               />
             )}
           </div>
