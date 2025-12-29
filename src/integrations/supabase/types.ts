@@ -175,31 +175,46 @@ export type Database = {
       projects: {
         Row: {
           allowed_worker_ids: string[] | null
+          chief_engineer: string | null
           client_id: string | null
+          commander: string | null
           created_at: string
+          crew_size: number | null
           id: string
           location: string | null
           name: string
+          project_type: string | null
+          start_date: string | null
           status: string | null
           updated_at: string
         }
         Insert: {
           allowed_worker_ids?: string[] | null
+          chief_engineer?: string | null
           client_id?: string | null
+          commander?: string | null
           created_at?: string
+          crew_size?: number | null
           id?: string
           location?: string | null
           name: string
+          project_type?: string | null
+          start_date?: string | null
           status?: string | null
           updated_at?: string
         }
         Update: {
           allowed_worker_ids?: string[] | null
+          chief_engineer?: string | null
           client_id?: string | null
+          commander?: string | null
           created_at?: string
+          crew_size?: number | null
           id?: string
           location?: string | null
           name?: string
+          project_type?: string | null
+          start_date?: string | null
           status?: string | null
           updated_at?: string
         }
