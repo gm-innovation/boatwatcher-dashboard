@@ -14,8 +14,73 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_logs: {
+        Row: {
+          access_status: Database["public"]["Enums"]["access_status"]
+          created_at: string
+          device_id: string | null
+          device_name: string | null
+          direction: Database["public"]["Enums"]["access_direction"] | null
+          id: string
+          photo_capture_url: string | null
+          reason: string | null
+          score: number | null
+          timestamp: string
+          worker_document: string | null
+          worker_id: string | null
+          worker_name: string | null
+        }
+        Insert: {
+          access_status: Database["public"]["Enums"]["access_status"]
+          created_at?: string
+          device_id?: string | null
+          device_name?: string | null
+          direction?: Database["public"]["Enums"]["access_direction"] | null
+          id?: string
+          photo_capture_url?: string | null
+          reason?: string | null
+          score?: number | null
+          timestamp?: string
+          worker_document?: string | null
+          worker_id?: string | null
+          worker_name?: string | null
+        }
+        Update: {
+          access_status?: Database["public"]["Enums"]["access_status"]
+          created_at?: string
+          device_id?: string | null
+          device_name?: string | null
+          direction?: Database["public"]["Enums"]["access_direction"] | null
+          id?: string
+          photo_capture_url?: string | null
+          reason?: string | null
+          score?: number | null
+          timestamp?: string
+          worker_document?: string | null
+          worker_id?: string | null
+          worker_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "access_logs_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "access_logs_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
+          cnpj: string | null
+          contact_email: string | null
           created_at: string
           id: string
           logo_url_dark: string | null
@@ -26,6 +91,8 @@ export type Database = {
           vessels: string[] | null
         }
         Insert: {
+          cnpj?: string | null
+          contact_email?: string | null
           created_at?: string
           id?: string
           logo_url_dark?: string | null
@@ -36,6 +103,8 @@ export type Database = {
           vessels?: string[] | null
         }
         Update: {
+          cnpj?: string | null
+          contact_email?: string | null
           created_at?: string
           id?: string
           logo_url_dark?: string | null
@@ -47,27 +116,89 @@ export type Database = {
         }
         Relationships: []
       }
+      devices: {
+        Row: {
+          api_credentials: Json | null
+          configuration: Json | null
+          controlid_ip_address: string
+          controlid_serial_number: string
+          created_at: string
+          id: string
+          last_event_timestamp: string | null
+          location: string | null
+          name: string
+          project_id: string | null
+          status: Database["public"]["Enums"]["device_status"]
+          type: Database["public"]["Enums"]["device_type"]
+          updated_at: string
+        }
+        Insert: {
+          api_credentials?: Json | null
+          configuration?: Json | null
+          controlid_ip_address: string
+          controlid_serial_number: string
+          created_at?: string
+          id?: string
+          last_event_timestamp?: string | null
+          location?: string | null
+          name: string
+          project_id?: string | null
+          status?: Database["public"]["Enums"]["device_status"]
+          type?: Database["public"]["Enums"]["device_type"]
+          updated_at?: string
+        }
+        Update: {
+          api_credentials?: Json | null
+          configuration?: Json | null
+          controlid_ip_address?: string
+          controlid_serial_number?: string
+          created_at?: string
+          id?: string
+          last_event_timestamp?: string | null
+          location?: string | null
+          name?: string
+          project_id?: string | null
+          status?: Database["public"]["Enums"]["device_status"]
+          type?: Database["public"]["Enums"]["device_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "devices_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
+          allowed_worker_ids: string[] | null
           client_id: string | null
           created_at: string
           id: string
+          location: string | null
           name: string
           status: string | null
           updated_at: string
         }
         Insert: {
+          allowed_worker_ids?: string[] | null
           client_id?: string | null
           created_at?: string
           id?: string
+          location?: string | null
           name: string
           status?: string | null
           updated_at?: string
         }
         Update: {
+          allowed_worker_ids?: string[] | null
           client_id?: string | null
           created_at?: string
           id?: string
+          location?: string | null
           name?: string
           status?: string | null
           updated_at?: string
@@ -131,28 +262,43 @@ export type Database = {
       }
       workers: {
         Row: {
+          allowed_project_ids: string[] | null
           company_id: string | null
           created_at: string
+          devices_enrolled: string[] | null
+          document_number: string | null
+          facial_template_data: Json | null
           id: string
           name: string
+          photo_url: string | null
           role: string | null
           status: string | null
           updated_at: string
         }
         Insert: {
+          allowed_project_ids?: string[] | null
           company_id?: string | null
           created_at?: string
+          devices_enrolled?: string[] | null
+          document_number?: string | null
+          facial_template_data?: Json | null
           id?: string
           name: string
+          photo_url?: string | null
           role?: string | null
           status?: string | null
           updated_at?: string
         }
         Update: {
+          allowed_project_ids?: string[] | null
           company_id?: string | null
           created_at?: string
+          devices_enrolled?: string[] | null
+          document_number?: string | null
+          facial_template_data?: Json | null
           id?: string
           name?: string
+          photo_url?: string | null
           role?: string | null
           status?: string | null
           updated_at?: string
@@ -185,7 +331,12 @@ export type Database = {
       }
     }
     Enums: {
+      access_direction: "entry" | "exit" | "unknown"
+      access_status: "granted" | "denied"
       app_role: "admin" | "moderator" | "user"
+      device_status: "online" | "offline" | "error" | "configuring"
+      device_type: "facial_reader" | "turnstile" | "terminal"
+      worker_status: "active" | "inactive" | "blocked" | "pending_review"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -313,7 +464,12 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      access_direction: ["entry", "exit", "unknown"],
+      access_status: ["granted", "denied"],
       app_role: ["admin", "moderator", "user"],
+      device_status: ["online", "offline", "error", "configuring"],
+      device_type: ["facial_reader", "turnstile", "terminal"],
+      worker_status: ["active", "inactive", "blocked", "pending_review"],
     },
   },
 } as const

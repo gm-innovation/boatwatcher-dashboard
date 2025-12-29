@@ -1,8 +1,7 @@
-
+import { useAccessLogs } from '@/hooks/useControlID';
 import { useCompanies } from '@/hooks/useSupabase';
-import { useInmetaEvents } from '@/hooks/useInmetaApi';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { format } from 'date-fns';
+import { format, startOfDay } from 'date-fns';
 
 interface CompaniesListProps {
   projectId: string | null;
@@ -10,26 +9,36 @@ interface CompaniesListProps {
 
 export const CompaniesList = ({ projectId }: CompaniesListProps) => {
   const { data: companies = [] } = useCompanies();
-  const { data: inmetaEvents = [], isLoading } = useInmetaEvents(projectId);
+  const today = format(startOfDay(new Date()), 'yyyy-MM-dd');
+  const { data: accessLogs = [], isLoading } = useAccessLogs(projectId, today, today, 500);
 
-  // Primeiro, ordenar todos os eventos por data (do mais antigo para o mais recente)
-  const sortedEvents = [...inmetaEvents].sort((a, b) => 
-    new Date(a.data).getTime() - new Date(b.data).getTime()
+  // Filtrar apenas acessos concedidos (entrada)
+  const entryLogs = accessLogs.filter(log => 
+    log.access_status === 'granted' && 
+    (log.direction === 'entry' || log.direction === 'unknown')
   );
 
-  // Agrupar eventos por empresa
-  const companiesData = sortedEvents.reduce((acc, event) => {
-    const company = event.vinculoColaborador?.empresa;
-    if (!company) return acc;
+  // Agrupar por empresa (usando worker.company_id ou worker_name como fallback)
+  const companiesData = entryLogs.reduce((acc, log) => {
+    // Usar o nome do trabalhador como identificador temporário
+    const workerName = log.worker_name || 'Desconhecido';
+    const companyName = log.worker?.company_id 
+      ? companies.find(c => c.id === log.worker?.company_id)?.name || 'Empresa não identificada'
+      : 'Empresa não identificada';
 
-    if (!acc[company]) {
-      acc[company] = {
-        name: company,
-        entryTime: new Date(event.data),
-        workers: new Set([event.nomePessoa])
+    if (!acc[companyName]) {
+      acc[companyName] = {
+        name: companyName,
+        entryTime: new Date(log.timestamp),
+        workers: new Set([workerName])
       };
     } else {
-      acc[company].workers.add(event.nomePessoa);
+      acc[companyName].workers.add(workerName);
+      // Manter o horário de entrada mais antigo
+      const logTime = new Date(log.timestamp);
+      if (logTime < acc[companyName].entryTime) {
+        acc[companyName].entryTime = logTime;
+      }
     }
     return acc;
   }, {} as Record<string, { 
@@ -41,7 +50,8 @@ export const CompaniesList = ({ projectId }: CompaniesListProps) => {
   // Converter para array e ordenar por nome da empresa
   const companiesOnBoard = Object.values(companiesData)
     .map(company => ({
-      ...company,
+      name: company.name,
+      entryTime: company.entryTime,
       workersCount: company.workers.size
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
