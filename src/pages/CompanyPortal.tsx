@@ -1,19 +1,39 @@
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, FolderKanban, FileText, Building2 } from "lucide-react";
 import { MyWorkers } from "@/components/company-portal/MyWorkers";
 import { MyProjects } from "@/components/company-portal/MyProjects";
 import { CompanyReports } from "@/components/company-portal/CompanyReports";
 import { CompanyProfile } from "@/components/company-portal/CompanyProfile";
+import { CompanyRegistrationForm } from "@/components/company-portal/CompanyRegistrationForm";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 const CompanyPortal = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const [showRegistration, setShowRegistration] = useState(false);
 
-  if (loading) {
+  // Check if user has a company associated
+  const { data: userCompany, isLoading: companyLoading } = useQuery({
+    queryKey: ['user-company', user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data } = await supabase
+        .from('user_companies')
+        .select('company_id, companies(*)')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      return data?.companies || null;
+    },
+    enabled: !!user
+  });
+
+  if (loading || companyLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -40,6 +60,11 @@ const CompanyPortal = () => {
         </Card>
       </div>
     );
+  }
+
+  // Show registration form if user doesn't have a company
+  if (!userCompany || showRegistration) {
+    return <CompanyRegistrationForm onSuccess={() => setShowRegistration(false)} />;
   }
 
   return (
