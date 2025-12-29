@@ -318,6 +318,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_initial_admin: { Args: { _user_id: string }; Returns: boolean }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
@@ -329,6 +330,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      needs_initial_setup: { Args: never; Returns: boolean }
     }
     Enums: {
       access_direction: "entry" | "exit" | "unknown"
