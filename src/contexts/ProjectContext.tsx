@@ -20,6 +20,8 @@ interface ProjectContextType {
   selectedProject: Project | null;
   projects: Project[];
   loading: boolean;
+  isFullscreenMode: boolean;
+  toggleFullscreen: () => void;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -29,6 +31,11 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isFullscreenMode, setIsFullscreenMode] = useState(false);
+
+  const toggleFullscreen = () => {
+    setIsFullscreenMode(prev => !prev);
+  };
 
   // Fetch projects when component mounts
   useEffect(() => {
@@ -97,7 +104,9 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       setSelectedProjectId,
       selectedProject,
       projects,
-      loading
+      loading,
+      isFullscreenMode,
+      toggleFullscreen
     }}>
       {children}
     </ProjectContext.Provider>

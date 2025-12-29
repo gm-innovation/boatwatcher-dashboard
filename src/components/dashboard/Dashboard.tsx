@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useProjectById, useWorkersOnBoard, useCompaniesOnBoard } from '@/hooks/useSupabase';
 import { useRealtimeAccessLogs } from '@/hooks/useRealtimeAccessLogs';
+import { useProject } from '@/contexts/ProjectContext';
 import { ProjectInfoCard } from './ProjectInfoCard';
 import { StatisticsCards } from './StatisticsCards';
 import { WorkersOnBoardTable, WorkerOnBoard } from './WorkersOnBoardTable';
@@ -9,7 +10,7 @@ import { DeviceStatusPanel } from './DeviceStatusPanel';
 import { RecentActivityFeed } from './RecentActivityFeed';
 import { AlertsPanel } from './AlertsPanel';
 import { QuickActionsPanel } from './QuickActionsPanel';
-import { RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react';
+import { RefreshCw, ToggleLeft, ToggleRight, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { useQueryClient } from '@tanstack/react-query';
@@ -20,6 +21,7 @@ interface DashboardProps {
 
 export const Dashboard = ({ projectId }: DashboardProps) => {
   const queryClient = useQueryClient();
+  const { isFullscreenMode, toggleFullscreen } = useProject();
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [autoRefresh, setAutoRefresh] = useState(true);
 
@@ -104,6 +106,19 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
               <ToggleLeft className="h-5 w-5 text-muted-foreground" />
             )}
             Auto
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleFullscreen}
+            className="gap-2"
+          >
+            {isFullscreenMode ? (
+              <Minimize2 className="h-4 w-4" />
+            ) : (
+              <Maximize2 className="h-4 w-4" />
+            )}
+            {isFullscreenMode ? 'Sair' : 'Tela Cheia'}
           </Button>
         </div>
       </div>
