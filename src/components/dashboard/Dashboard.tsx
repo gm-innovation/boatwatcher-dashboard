@@ -1,9 +1,14 @@
 import { useState, useCallback } from 'react';
 import { useProjectById, useWorkersOnBoard, useCompaniesOnBoard } from '@/hooks/useSupabase';
+import { useRealtimeAccessLogs } from '@/hooks/useRealtimeAccessLogs';
 import { ProjectInfoCard } from './ProjectInfoCard';
 import { StatisticsCards } from './StatisticsCards';
 import { WorkersOnBoardTable, WorkerOnBoard } from './WorkersOnBoardTable';
 import { CompaniesOnBoardList } from './CompaniesOnBoardList';
+import { DeviceStatusPanel } from './DeviceStatusPanel';
+import { RecentActivityFeed } from './RecentActivityFeed';
+import { AlertsPanel } from './AlertsPanel';
+import { QuickActionsPanel } from './QuickActionsPanel';
 import { RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
@@ -22,6 +27,17 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
   const { data: workersOnBoard = [], refetch: refetchWorkers } = useWorkersOnBoard(projectId);
   const companiesOnBoard = useCompaniesOnBoard(workersOnBoard);
 
+  // Enable realtime updates
+  useRealtimeAccessLogs({
+    projectId,
+    onNewLog: () => {
+      if (autoRefresh) {
+        refetchWorkers();
+        setLastUpdate(new Date());
+      }
+    }
+  });
+
   // Map workers to expected format
   const formattedWorkers: WorkerOnBoard[] = workersOnBoard.map((w: any) => ({
     id: w.id,
@@ -35,11 +51,12 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
   const handleRefresh = useCallback(() => {
     refetchWorkers();
     queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+    queryClient.invalidateQueries({ queryKey: ['devices'] });
+    queryClient.invalidateQueries({ queryKey: ['access-logs'] });
     setLastUpdate(new Date());
   }, [refetchWorkers, queryClient, projectId]);
 
   const handleExport = () => {
-    // Export logic - pode ser expandido
     const csvContent = [
       ['Nº', 'Nome', 'Local', 'Função', 'Empresa', 'Entrada'].join(','),
       ...formattedWorkers.map((w, i) => 
@@ -65,27 +82,30 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
   return (
     <div className="space-y-6">
       {/* Refresh Controls */}
-      <div className="flex items-center justify-end gap-4">
-        <span className="text-sm text-muted-foreground">
-          Atualizado: {format(lastUpdate, 'HH:mm:ss')}
-        </span>
-        <Button variant="outline" size="sm" onClick={handleRefresh}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Atualizar
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setAutoRefresh(!autoRefresh)}
-          className="gap-2"
-        >
-          {autoRefresh ? (
-            <ToggleRight className="h-5 w-5 text-primary" />
-          ) : (
-            <ToggleLeft className="h-5 w-5 text-muted-foreground" />
-          )}
-          Auto
-        </Button>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-muted-foreground">
+            Atualizado: {format(lastUpdate, 'HH:mm:ss')}
+          </span>
+          <Button variant="outline" size="sm" onClick={handleRefresh}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Atualizar
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setAutoRefresh(!autoRefresh)}
+            className="gap-2"
+          >
+            {autoRefresh ? (
+              <ToggleRight className="h-5 w-5 text-primary" />
+            ) : (
+              <ToggleLeft className="h-5 w-5 text-muted-foreground" />
+            )}
+            Auto
+          </Button>
+        </div>
       </div>
 
       {/* Project Info Card */}
@@ -98,18 +118,33 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
         companiesOnBoard={companiesOnBoard.length}
       />
 
-      {/* Workers Table and Companies List */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-[400px]">
-        <div className="lg:col-span-2">
+      {/* Quick Actions */}
+      <QuickActionsPanel />
+
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+        {/* Workers Table - 2 columns */}
+        <div className="xl:col-span-2">
           <WorkersOnBoardTable 
             workers={formattedWorkers}
             onExport={handleExport}
           />
         </div>
-        <div className="lg:col-span-1">
+
+        {/* Companies List - 1 column */}
+        <div className="xl:col-span-1">
           <CompaniesOnBoardList companies={companiesOnBoard} />
         </div>
+
+        {/* Side Panel - 1 column */}
+        <div className="xl:col-span-1 space-y-6">
+          <DeviceStatusPanel />
+          <AlertsPanel />
+        </div>
       </div>
+
+      {/* Recent Activity Feed - Full width */}
+      <RecentActivityFeed projectId={projectId} />
     </div>
   );
 };
