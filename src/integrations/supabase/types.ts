@@ -603,17 +603,60 @@ export type Database = {
           },
         ]
       }
+      worker_strikes: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          reason: string
+          severity: string | null
+          worker_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          reason: string
+          severity?: string | null
+          worker_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          reason?: string
+          severity?: string | null
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "worker_strikes_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workers: {
         Row: {
           allowed_project_ids: string[] | null
+          birth_date: string | null
+          blood_type: string | null
+          code: number
           company_id: string | null
           created_at: string
           devices_enrolled: string[] | null
           document_number: string | null
           facial_template_data: Json | null
+          gender: string | null
           id: string
           job_function_id: string | null
           name: string
+          observations: string | null
           photo_url: string | null
           role: string | null
           status: string | null
@@ -621,14 +664,19 @@ export type Database = {
         }
         Insert: {
           allowed_project_ids?: string[] | null
+          birth_date?: string | null
+          blood_type?: string | null
+          code?: number
           company_id?: string | null
           created_at?: string
           devices_enrolled?: string[] | null
           document_number?: string | null
           facial_template_data?: Json | null
+          gender?: string | null
           id?: string
           job_function_id?: string | null
           name: string
+          observations?: string | null
           photo_url?: string | null
           role?: string | null
           status?: string | null
@@ -636,14 +684,19 @@ export type Database = {
         }
         Update: {
           allowed_project_ids?: string[] | null
+          birth_date?: string | null
+          blood_type?: string | null
+          code?: number
           company_id?: string | null
           created_at?: string
           devices_enrolled?: string[] | null
           document_number?: string | null
           facial_template_data?: Json | null
+          gender?: string | null
           id?: string
           job_function_id?: string | null
           name?: string
+          observations?: string | null
           photo_url?: string | null
           role?: string | null
           status?: string | null
