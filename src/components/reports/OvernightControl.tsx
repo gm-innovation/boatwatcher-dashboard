@@ -1,0 +1,169 @@
+import { useAccessLogs } from '@/hooks/useControlID';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Download, Moon, User, Clock, Building2 } from 'lucide-react';
+
+interface OvernightControlProps {
+  projectId: string;
+  startDate: string;
+  endDate: string;
+}
+
+interface OvernightWorker {
+  id: string;
+  name: string;
+  company: string;
+  entryTime: string;
+  nights: number;
+  photoUrl?: string;
+}
+
+export const OvernightControl = ({ projectId, startDate, endDate }: OvernightControlProps) => {
+  const { data: accessLogs = [], isLoading } = useAccessLogs(projectId, startDate, endDate, 1000);
+
+  // Simular dados de pernoite
+  const overnightWorkers: OvernightWorker[] = [
+    { id: '1', name: 'João Silva', company: 'Empresa A', entryTime: '07:30', nights: 3 },
+    { id: '2', name: 'Maria Santos', company: 'Empresa B', entryTime: '06:45', nights: 5 },
+    { id: '3', name: 'Pedro Costa', company: 'Empresa A', entryTime: '07:00', nights: 2 },
+  ];
+
+  if (!projectId) {
+    return (
+      <div className="text-center py-12 text-muted-foreground border rounded-lg">
+        <Moon className="h-12 w-12 mx-auto mb-4 opacity-50" />
+        <p>Selecione um projeto para ver o controle de pernoite</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-full bg-indigo-100 dark:bg-indigo-900/30">
+                <Moon className="h-6 w-6 text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Pernoitando Hoje</p>
+                <p className="text-3xl font-bold">{overnightWorkers.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-full bg-blue-100 dark:bg-blue-900/30">
+                <Building2 className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Empresas</p>
+                <p className="text-3xl font-bold">
+                  {new Set(overnightWorkers.map(w => w.company)).size}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-full bg-purple-100 dark:bg-purple-900/30">
+                <Clock className="h-6 w-6 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total Noites (Período)</p>
+                <p className="text-3xl font-bold">
+                  {overnightWorkers.reduce((sum, w) => sum + w.nights, 0)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Export buttons */}
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" className="gap-2">
+          <Download className="h-4 w-4" />
+          CSV
+        </Button>
+        <Button className="gap-2">
+          <Download className="h-4 w-4" />
+          PDF
+        </Button>
+      </div>
+
+      {/* Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Trabalhadores Pernoitando</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            </div>
+          ) : overnightWorkers.length > 0 ? (
+            <ScrollArea className="h-[400px]">
+              <table className="w-full">
+                <thead className="sticky top-0 bg-card border-b">
+                  <tr>
+                    <th className="text-left p-4 text-sm font-medium text-muted-foreground">Trabalhador</th>
+                    <th className="text-left p-4 text-sm font-medium text-muted-foreground">Empresa</th>
+                    <th className="text-center p-4 text-sm font-medium text-muted-foreground">Entrada</th>
+                    <th className="text-center p-4 text-sm font-medium text-muted-foreground">Noites</th>
+                    <th className="text-center p-4 text-sm font-medium text-muted-foreground">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {overnightWorkers.map((worker) => (
+                    <tr key={worker.id} className="border-b hover:bg-muted/50">
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10">
+                            {worker.photoUrl ? (
+                              <AvatarImage src={worker.photoUrl} alt={worker.name} />
+                            ) : (
+                              <AvatarFallback>
+                                <User className="h-5 w-5" />
+                              </AvatarFallback>
+                            )}
+                          </Avatar>
+                          <span className="font-medium">{worker.name}</span>
+                        </div>
+                      </td>
+                      <td className="p-4 text-muted-foreground">{worker.company}</td>
+                      <td className="p-4 text-center">{worker.entryTime}</td>
+                      <td className="p-4 text-center">
+                        <Badge variant="secondary">{worker.nights}</Badge>
+                      </td>
+                      <td className="p-4 text-center">
+                        <Badge className="bg-indigo-500/10 text-indigo-500">
+                          <Moon className="h-3 w-3 mr-1" />
+                          A bordo
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollArea>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              <Moon className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Nenhum trabalhador pernoitando no período</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
