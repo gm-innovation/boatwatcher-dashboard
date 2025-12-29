@@ -1,0 +1,192 @@
+import { useState } from 'react';
+import { useSystemSettings, useUpdateSystemSetting } from '@/hooks/useSystemSettings';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
+import { Settings, Save, RefreshCw } from 'lucide-react';
+
+export const GlobalSettings = () => {
+  const { data: settings = [], isLoading, refetch } = useSystemSettings();
+  const updateSetting = useUpdateSystemSetting();
+
+  const [facialThreshold, setFacialThreshold] = useState(0.7);
+  const [logRetentionDays, setLogRetentionDays] = useState(365);
+  const [deviceOfflineMinutes, setDeviceOfflineMinutes] = useState(5);
+  const [documentWarningDays, setDocumentWarningDays] = useState([30, 15, 7]);
+
+  // Load current settings
+  useState(() => {
+    const facialSetting = settings.find(s => s.key === 'facial_recognition_threshold');
+    if (facialSetting?.value?.min_score) {
+      setFacialThreshold(facialSetting.value.min_score);
+    }
+
+    const retentionSetting = settings.find(s => s.key === 'log_retention_days');
+    if (retentionSetting?.value?.days) {
+      setLogRetentionDays(retentionSetting.value.days);
+    }
+
+    const notificationSetting = settings.find(s => s.key === 'notification_settings');
+    if (notificationSetting?.value) {
+      if (notificationSetting.value.device_offline_minutes) {
+        setDeviceOfflineMinutes(notificationSetting.value.device_offline_minutes);
+      }
+      if (notificationSetting.value.document_expiry_warning_days) {
+        setDocumentWarningDays(notificationSetting.value.document_expiry_warning_days);
+      }
+    }
+  });
+
+  const handleSaveFacialThreshold = () => {
+    updateSetting.mutate({
+      key: 'facial_recognition_threshold',
+      value: { min_score: facialThreshold },
+      description: 'Limiar mínimo de confiança para reconhecimento facial',
+    });
+  };
+
+  const handleSaveRetention = () => {
+    updateSetting.mutate({
+      key: 'log_retention_days',
+      value: { days: logRetentionDays },
+      description: 'Dias de retenção de logs de acesso',
+    });
+  };
+
+  const handleSaveNotifications = () => {
+    updateSetting.mutate({
+      key: 'notification_settings',
+      value: { 
+        device_offline_minutes: deviceOfflineMinutes,
+        document_expiry_warning_days: documentWarningDays,
+      },
+      description: 'Configurações de notificações automáticas',
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold flex items-center gap-2">
+            <Settings className="h-5 w-5" />
+            Configurações do Sistema
+          </h2>
+          <p className="text-sm text-muted-foreground">Ajuste os parâmetros globais do sistema</p>
+        </div>
+        <Button variant="outline" onClick={() => refetch()}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Recarregar
+        </Button>
+      </div>
+
+      {/* Facial Recognition */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Reconhecimento Facial</CardTitle>
+          <CardDescription>Configurações do sistema de reconhecimento facial</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label>Limiar de Confiança Mínimo</Label>
+              <span className="text-sm font-medium">{(facialThreshold * 100).toFixed(0)}%</span>
+            </div>
+            <Slider
+              value={[facialThreshold * 100]}
+              onValueChange={([value]) => setFacialThreshold(value / 100)}
+              min={50}
+              max={100}
+              step={5}
+            />
+            <p className="text-xs text-muted-foreground">
+              Acessos com score abaixo deste valor serão negados. Valores mais altos são mais seguros, mas podem gerar mais negações.
+            </p>
+          </div>
+          <Button onClick={handleSaveFacialThreshold} disabled={updateSetting.isPending}>
+            <Save className="h-4 w-4 mr-2" />
+            Salvar
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Log Retention */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Retenção de Dados</CardTitle>
+          <CardDescription>Período de armazenamento de logs e registros</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="retention">Dias de Retenção de Logs</Label>
+            <Input
+              id="retention"
+              type="number"
+              value={logRetentionDays}
+              onChange={(e) => setLogRetentionDays(parseInt(e.target.value) || 365)}
+              min={30}
+              max={3650}
+            />
+            <p className="text-xs text-muted-foreground">
+              Logs de acesso mais antigos que este período serão arquivados.
+            </p>
+          </div>
+          <Button onClick={handleSaveRetention} disabled={updateSetting.isPending}>
+            <Save className="h-4 w-4 mr-2" />
+            Salvar
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Notifications */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Notificações Automáticas</CardTitle>
+          <CardDescription>Configurações de alertas e notificações</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="offlineMinutes">Alerta de Dispositivo Offline (minutos)</Label>
+            <Input
+              id="offlineMinutes"
+              type="number"
+              value={deviceOfflineMinutes}
+              onChange={(e) => setDeviceOfflineMinutes(parseInt(e.target.value) || 5)}
+              min={1}
+              max={60}
+            />
+            <p className="text-xs text-muted-foreground">
+              Gerar alerta quando um dispositivo ficar offline por mais de X minutos.
+            </p>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <Label>Alertas de Vencimento de Documentos</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Dias de antecedência para avisar sobre documentos vencendo: {documentWarningDays.join(', ')} dias
+            </p>
+          </div>
+
+          <Button onClick={handleSaveNotifications} disabled={updateSetting.isPending}>
+            <Save className="h-4 w-4 mr-2" />
+            Salvar
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};

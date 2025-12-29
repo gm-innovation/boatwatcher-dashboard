@@ -1,6 +1,8 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeviceManagement } from "@/components/devices/DeviceManagement";
 import UserManagement from "@/components/UserManagement";
+import { GlobalSettings } from "@/components/admin/GlobalSettings";
+import { AuditLog } from "@/components/admin/AuditLog";
 import { Server, FolderKanban, Shield, Cog, Activity } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
@@ -28,10 +30,6 @@ const Admin = () => {
             <Server className="h-4 w-4" />
             Dispositivos
           </TabsTrigger>
-          <TabsTrigger value="projects" className="gap-2">
-            <FolderKanban className="h-4 w-4" />
-            Projetos
-          </TabsTrigger>
           <TabsTrigger value="users" className="gap-2">
             <Shield className="h-4 w-4" />
             Usuários
@@ -50,32 +48,16 @@ const Admin = () => {
           <DeviceManagement />
         </TabsContent>
 
-        <TabsContent value="projects">
-          <div className="text-center py-12 text-muted-foreground">
-            <FolderKanban className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Gestão de Projetos</p>
-            <p className="text-sm">Em desenvolvimento</p>
-          </div>
-        </TabsContent>
-
         <TabsContent value="users">
           <UserManagement />
         </TabsContent>
 
         <TabsContent value="settings">
-          <div className="text-center py-12 text-muted-foreground">
-            <Cog className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Configurações do Sistema</p>
-            <p className="text-sm">Em desenvolvimento</p>
-          </div>
+          <GlobalSettings />
         </TabsContent>
 
         <TabsContent value="audit">
-          <div className="text-center py-12 text-muted-foreground">
-            <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Logs de Auditoria</p>
-            <p className="text-sm">Em desenvolvimento</p>
-          </div>
+          <AuditLog />
         </TabsContent>
       </Tabs>
     </div>
