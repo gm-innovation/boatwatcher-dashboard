@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import {
   Table,
   TableBody,
@@ -19,15 +20,22 @@ import {
   FileText,
   CheckCircle,
   AlertCircle,
-  Clock
+  Clock,
+  Plus,
+  Eye
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { EmployeeForm } from './EmployeeForm';
+import { WorkerDocumentsDialog } from './WorkerDocumentsDialog';
+import { getValidityStatus } from '@/utils/documentParser';
 
 export const MyWorkers = () => {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [viewingDocumentsWorker, setViewingDocumentsWorker] = useState<any>(null);
 
   // Get company ID for current user
   const { data: userCompany } = useQuery({
@@ -48,7 +56,7 @@ export const MyWorkers = () => {
   });
 
   // Get workers for company
-  const { data: workers = [], isLoading } = useQuery({
+  const { data: workers = [], isLoading, refetch } = useQuery({
     queryKey: ['company-workers', userCompany],
     queryFn: async () => {
       if (!userCompany) return [];
@@ -91,11 +99,21 @@ export const MyWorkers = () => {
     
     const hasExpired = workerDocs.some(d => {
       if (!d.expiry_date) return false;
-      return new Date(d.expiry_date) < new Date();
+      return getValidityStatus(d.expiry_date) === 'expired';
+    });
+    
+    const hasExpiringSoon = workerDocs.some(d => {
+      if (!d.expiry_date) return false;
+      return getValidityStatus(d.expiry_date) === 'expiring_soon';
     });
     
     if (hasExpired) return 'expired';
+    if (hasExpiringSoon) return 'expiring_soon';
     return 'valid';
+  };
+
+  const getDocumentCount = (workerId: string) => {
+    return documents.filter(d => d.worker_id === workerId).length;
   };
 
   const getStatusBadge = (status: string) => {
@@ -107,6 +125,13 @@ export const MyWorkers = () => {
             Regular
           </Badge>
         );
+      case 'expiring_soon':
+        return (
+          <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">
+            <Clock className="h-3 w-3 mr-1" />
+            Vencendo
+          </Badge>
+        );
       case 'expired':
         return (
           <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/30">
@@ -116,7 +141,7 @@ export const MyWorkers = () => {
         );
       default:
         return (
-          <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">
+          <Badge variant="outline" className="bg-gray-500/10 text-gray-600 border-gray-500/30">
             <Clock className="h-3 w-3 mr-1" />
             Pendente
           </Badge>
@@ -137,14 +162,39 @@ export const MyWorkers = () => {
             <Users className="h-5 w-5" />
             Meus Trabalhadores ({workers.length})
           </CardTitle>
-          <div className="relative w-64">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar trabalhador..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
-            />
+          <div className="flex items-center gap-3">
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar trabalhador..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Novo Funcionário
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Cadastrar Novo Funcionário</DialogTitle>
+                </DialogHeader>
+                {userCompany && (
+                  <EmployeeForm 
+                    companyId={userCompany}
+                    onSuccess={() => {
+                      setIsAddDialogOpen(false);
+                      refetch();
+                    }}
+                    onCancel={() => setIsAddDialogOpen(false)}
+                  />
+                )}
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       </CardHeader>
@@ -157,6 +207,7 @@ export const MyWorkers = () => {
           <div className="text-center py-12 text-muted-foreground">
             <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>Nenhum trabalhador encontrado</p>
+            <p className="text-sm mt-2">Clique em "Novo Funcionário" para adicionar</p>
           </div>
         ) : (
           <ScrollArea className="h-[500px]">
@@ -168,6 +219,7 @@ export const MyWorkers = () => {
                   <TableHead>Documento</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Documentação</TableHead>
+                  <TableHead className="text-center">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -176,9 +228,13 @@ export const MyWorkers = () => {
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
-                          <AvatarFallback>
-                            {worker.name.slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
+                          {worker.photo_url ? (
+                            <AvatarImage src={worker.photo_url} alt={worker.name} />
+                          ) : (
+                            <AvatarFallback>
+                              {worker.name.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          )}
                         </Avatar>
                         <span className="font-medium">{worker.name}</span>
                       </div>
@@ -190,7 +246,24 @@ export const MyWorkers = () => {
                         {worker.status === 'active' ? 'Ativo' : worker.status}
                       </Badge>
                     </TableCell>
-                    <TableCell>{getStatusBadge(getDocumentStatus(worker.id))}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {getStatusBadge(getDocumentStatus(worker.id))}
+                        <Badge variant="outline" className="text-xs">
+                          {getDocumentCount(worker.id)} doc(s)
+                        </Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => setViewingDocumentsWorker(worker)}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        Ver Docs
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -198,6 +271,22 @@ export const MyWorkers = () => {
           </ScrollArea>
         )}
       </CardContent>
+
+      {/* Worker Documents Dialog */}
+      <Dialog open={!!viewingDocumentsWorker} onOpenChange={(open) => !open && setViewingDocumentsWorker(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Documentos de {viewingDocumentsWorker?.name}</DialogTitle>
+          </DialogHeader>
+          {viewingDocumentsWorker && (
+            <WorkerDocumentsDialog 
+              workerId={viewingDocumentsWorker.id}
+              workerName={viewingDocumentsWorker.name}
+              onClose={() => setViewingDocumentsWorker(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

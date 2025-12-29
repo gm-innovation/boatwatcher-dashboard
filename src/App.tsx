@@ -12,6 +12,7 @@ import Reports from "./pages/Reports";
 import PeopleManagement from "./pages/PeopleManagement";
 import Admin from "./pages/Admin";
 import CompanyPortal from "./pages/CompanyPortal";
+import UserRegistration from "./pages/UserRegistration";
 import NotFound from "./pages/NotFound";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { MainLayout } from "./components/layouts/MainLayout";
@@ -33,8 +34,9 @@ const App = () => {
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <Routes>
+          <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/cadastro" element={<UserRegistration />} />
               <Route
                 path="/"
                 element={
