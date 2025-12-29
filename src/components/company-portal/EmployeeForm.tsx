@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
+import { ensureValidSession } from '@/utils/ensureValidSession';
 import { useDocumentExtraction, ProcessedDocument, ExtractedDocumentData } from '@/hooks/useDocumentExtraction';
 import { useJobFunctions } from '@/hooks/useJobFunctions';
 import { Button } from '@/components/ui/button';
@@ -184,6 +185,17 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
   const uploadPhoto = async (workerId: string): Promise<string | null> => {
     if (!photoFile) return null;
 
+    // Validate session before upload
+    const validSession = await ensureValidSession();
+    if (!validSession) {
+      toast({
+        title: 'Sessão expirada',
+        description: 'Sua sessão expirou. Faça login novamente.',
+        variant: 'destructive'
+      });
+      return null;
+    }
+
     const fileExt = photoFile.name.split('.').pop();
     const fileName = `${workerId}.${fileExt}`;
     const filePath = `workers/${fileName}`;
@@ -193,7 +205,12 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
       .upload(filePath, photoFile, { upsert: true });
 
     if (error) {
-      console.error('Upload error:', error);
+      console.error('[uploadPhoto] Upload error:', error);
+      toast({
+        title: 'Erro no upload da foto',
+        description: error.message,
+        variant: 'destructive'
+      });
       return null;
     }
 

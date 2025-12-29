@@ -7,6 +7,7 @@ import { useCompanies, useProjects } from '@/hooks/useSupabase';
 import { useCreateWorkerDocument } from '@/hooks/useWorkerDocuments';
 import { useDocumentExtraction, ProcessedDocument } from '@/hooks/useDocumentExtraction';
 import { toast } from '@/hooks/use-toast';
+import { ensureValidSession } from '@/utils/ensureValidSession';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -211,6 +212,17 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
   const uploadPhoto = async (workerId: string): Promise<string | null> => {
     if (!photoFile) return null;
 
+    // Validate session before upload
+    const validSession = await ensureValidSession();
+    if (!validSession) {
+      toast({
+        title: 'Sessão expirada',
+        description: 'Sua sessão expirou. Faça login novamente.',
+        variant: 'destructive'
+      });
+      return null;
+    }
+
     const fileExt = photoFile.name.split('.').pop();
     const fileName = `${workerId}.${fileExt}`;
     const filePath = `workers/${fileName}`;
@@ -220,7 +232,12 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
       .upload(filePath, photoFile, { upsert: true });
 
     if (uploadError) {
-      console.error('Upload error:', uploadError);
+      console.error('[uploadPhoto] Upload error:', uploadError);
+      toast({
+        title: 'Erro no upload da foto',
+        description: uploadError.message,
+        variant: 'destructive'
+      });
       return null;
     }
 

@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { ensureValidSession } from '@/utils/ensureValidSession';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -192,6 +193,14 @@ const UserRegistration = () => {
   const uploadPhoto = async (workerId: string): Promise<string | null> => {
     if (!photoFile) return null;
 
+    // Validate session before upload (if user is logged in)
+    const validSession = await ensureValidSession();
+    if (!validSession) {
+      // For public registration, we may not have a session
+      // Continue anyway as storage might be public
+      console.warn('[uploadPhoto] No valid session, attempting upload anyway');
+    }
+
     const fileExt = photoFile.name.split('.').pop();
     const fileName = `${workerId}.${fileExt}`;
     const filePath = `workers/${fileName}`;
@@ -201,7 +210,12 @@ const UserRegistration = () => {
       .upload(filePath, photoFile, { upsert: true });
 
     if (error) {
-      console.error('Upload error:', error);
+      console.error('[uploadPhoto] Upload error:', error);
+      toast({
+        title: 'Erro no upload da foto',
+        description: error.message,
+        variant: 'destructive'
+      });
       return null;
     }
 
