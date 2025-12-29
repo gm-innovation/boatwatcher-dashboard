@@ -1,12 +1,11 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WorkerManagement } from "@/components/workers/WorkerManagement";
-import { CompaniesList } from "@/components/CompaniesList";
+import { CompanyManagement } from "@/components/people/CompanyManagement";
 import { Users, Building2, Briefcase } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 const PeopleManagement = () => {
   const location = useLocation();
-  const navigate = useNavigate();
   
   const getDefaultTab = () => {
     if (location.pathname.includes('/companies')) return 'companies';
@@ -42,7 +41,7 @@ const PeopleManagement = () => {
         </TabsContent>
 
         <TabsContent value="companies">
-          <CompaniesList />
+          <CompanyManagement />
         </TabsContent>
 
         <TabsContent value="job-functions">

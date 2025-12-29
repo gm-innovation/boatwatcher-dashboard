@@ -1,6 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeviceManagement } from "@/components/devices/DeviceManagement";
-import { UserManagement } from "@/components/UserManagement";
+import UserManagement from "@/components/UserManagement";
 import { Server, FolderKanban, Shield, Cog, Activity } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
