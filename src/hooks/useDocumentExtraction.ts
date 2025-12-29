@@ -91,24 +91,40 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
       // 2. Identificar tipo preliminar pelo nome
       const preliminaryType = identifyDocumentType(file.name);
 
-      // 3. Chamar edge function para extração via IA (forçando Authorization)
-      const invokeExtraction = (accessToken: string) =>
-        supabase.functions.invoke('extract-document-data', {
+      // 3. Chamar backend function para extração via IA (forçando Authorization)
+      const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-document-data`;
+
+      const invokeExtraction = async (accessToken: string) => {
+        const res = await fetch(functionUrl, {
+          method: 'POST',
           headers: {
+            'Content-Type': 'application/json',
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             Authorization: `Bearer ${accessToken}`,
           },
-          body: {
+          body: JSON.stringify({
             file_url: fileUrl,
             filename: file.name,
             document_type: preliminaryType,
             worker_id: workerId,
-          },
+          }),
         });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          return {
+            data: null,
+            error: { message: `Function returned ${res.status}: ${text || res.statusText}` },
+          };
+        }
+
+        return { data: await res.json(), error: null as null };
+      };
 
       let { data, error } = await invokeExtraction(session.access_token);
 
       // Se retornar 401, tenta 1 refresh de sessão e repete
-      if (error && (error.message?.includes('401') || error.message?.includes('non-2xx'))) {
+      if (error && error.message?.includes('401')) {
         const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
         const newToken = refreshed.session?.access_token;
         if (!refreshError && newToken) {
