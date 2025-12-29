@@ -271,9 +271,89 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
     onOpenChange(false);
   };
 
+  // Documents card component to avoid duplication
+  const DocumentsCard = () => (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Documentos
+            <Badge variant="secondary">{uploadedDocuments.length}</Badge>
+          </CardTitle>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => documentInputRef.current?.click()}
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Adicionar Documentos
+          </Button>
+          <input
+            ref={documentInputRef}
+            type="file"
+            accept="image/*,.pdf"
+            multiple
+            className="hidden"
+            onChange={handleDocumentUpload}
+          />
+        </div>
+      </CardHeader>
+      <CardContent>
+        {uploadedDocuments.length === 0 ? (
+          <div
+            className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+            onClick={() => documentInputRef.current?.click()}
+          >
+            <Sparkles className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+            <p className="text-sm font-medium">Arraste documentos ou clique para enviar</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              A IA irá extrair automaticamente os dados dos documentos
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {uploadedDocuments.map(doc => (
+              <div key={doc.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                <div className="flex items-center gap-3">
+                  <FileText className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium text-sm">{doc.file.name}</p>
+                    <p className="text-xs text-muted-foreground">{doc.type}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {doc.isExtracting ? (
+                    <Badge variant="outline" className="gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Extraindo...
+                    </Badge>
+                  ) : doc.extractedData ? (
+                    <Badge className="bg-green-500/10 text-green-600">Dados extraídos</Badge>
+                  ) : (
+                    <Badge variant="secondary">Sem extração</Badge>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeDocument(doc.id)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-3xl max-h-[95vh] overflow-hidden flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
@@ -296,15 +376,20 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
           </p>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
+        <ScrollArea className="flex-1 min-h-0 h-[calc(95vh-180px)] pr-4">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 pb-4">
             {isDocumentMode && (
-              <Alert className="bg-blue-500/10 border-blue-500/20">
-                <Info className="h-4 w-4 text-blue-600" />
-                <AlertDescription className="text-blue-600">
-                  Envie documentos do trabalhador (RG, CPF, ASO, certificados) e a IA irá extrair os dados automaticamente.
-                </AlertDescription>
-              </Alert>
+              <>
+                <Alert className="bg-blue-500/10 border-blue-500/20">
+                  <Info className="h-4 w-4 text-blue-600" />
+                  <AlertDescription className="text-blue-600">
+                    Envie documentos do trabalhador (RG, CPF, ASO, certificados) e a IA irá extrair os dados automaticamente.
+                  </AlertDescription>
+                </Alert>
+                
+                {/* Documents Card - appears first in document mode */}
+                <DocumentsCard />
+              </>
             )}
 
             {/* Worker Data Card */}
@@ -489,83 +574,8 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
               </CardContent>
             </Card>
 
-            {/* Documents Card */}
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    Documentos
-                    <Badge variant="secondary">{uploadedDocuments.length}</Badge>
-                  </CardTitle>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => documentInputRef.current?.click()}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Adicionar Documentos
-                  </Button>
-                  <input
-                    ref={documentInputRef}
-                    type="file"
-                    accept="image/*,.pdf"
-                    multiple
-                    className="hidden"
-                    onChange={handleDocumentUpload}
-                  />
-                </div>
-              </CardHeader>
-              <CardContent>
-                {uploadedDocuments.length === 0 ? (
-                  <div
-                    className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
-                    onClick={() => documentInputRef.current?.click()}
-                  >
-                    <Sparkles className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-sm font-medium">Arraste documentos ou clique para enviar</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      A IA irá extrair automaticamente os dados dos documentos
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {uploadedDocuments.map(doc => (
-                      <div key={doc.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                        <div className="flex items-center gap-3">
-                          <FileText className="h-5 w-5 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium text-sm">{doc.file.name}</p>
-                            <p className="text-xs text-muted-foreground">{doc.type}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {doc.isExtracting ? (
-                            <Badge variant="outline" className="gap-1">
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                              Extraindo...
-                            </Badge>
-                          ) : doc.extractedData ? (
-                            <Badge className="bg-green-500/10 text-green-600">Dados extraídos</Badge>
-                          ) : (
-                            <Badge variant="secondary">Sem extração</Badge>
-                          )}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeDocument(doc.id)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            {/* Documents Card - appears at end in manual mode */}
+            {!isDocumentMode && <DocumentsCard />}
           </form>
         </ScrollArea>
 
