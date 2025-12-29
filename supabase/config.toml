@@ -20,3 +20,9 @@ verify_jwt = true
 
 [functions.check-expiring-documents]
 verify_jwt = false
+
+[functions.auth-ping]
+verify_jwt = true
+
+[functions.echo-auth]
+verify_jwt = false
