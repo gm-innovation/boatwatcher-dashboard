@@ -17,3 +17,6 @@ verify_jwt = true
 
 [functions.extract-document-data]
 verify_jwt = true
+
+[functions.check-expiring-documents]
+verify_jwt = false
