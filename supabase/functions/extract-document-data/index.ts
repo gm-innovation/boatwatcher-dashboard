@@ -88,7 +88,7 @@ const identifyDocumentType = (filename: string): string => {
 serve(async (req) => {
   // Log de debug para autenticação
   const authHeader = req.headers.get('authorization');
-  console.log('[extract-document-data] Authorization header:', authHeader ? 'present' : 'missing');
+  console.log(`[extract-document-data] ${req.method} Authorization header:`, authHeader ? 'present' : 'missing');
   
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {

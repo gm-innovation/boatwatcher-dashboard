@@ -68,7 +68,7 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
     try {
       // 0. Verificar se usuário está autenticado
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      if (!session?.access_token) {
         toast({
           title: 'Autenticação necessária',
           description: 'Você precisa estar logado para extrair dados de documentos.',
@@ -91,15 +91,30 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
       // 2. Identificar tipo preliminar pelo nome
       const preliminaryType = identifyDocumentType(file.name);
 
-      // 3. Chamar edge function para extração via IA
-      const { data, error } = await supabase.functions.invoke('extract-document-data', {
-        body: {
-          file_url: fileUrl,
-          filename: file.name,
-          document_type: preliminaryType,
-          worker_id: workerId
+      // 3. Chamar edge function para extração via IA (forçando Authorization)
+      const invokeExtraction = (accessToken: string) =>
+        supabase.functions.invoke('extract-document-data', {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: {
+            file_url: fileUrl,
+            filename: file.name,
+            document_type: preliminaryType,
+            worker_id: workerId,
+          },
+        });
+
+      let { data, error } = await invokeExtraction(session.access_token);
+
+      // Se retornar 401, tenta 1 refresh de sessão e repete
+      if (error && (error.message?.includes('401') || error.message?.includes('non-2xx'))) {
+        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+        const newToken = refreshed.session?.access_token;
+        if (!refreshError && newToken) {
+          ({ data, error } = await invokeExtraction(newToken));
         }
-      });
+      }
 
       if (error) {
         console.error('Extraction error:', error);
