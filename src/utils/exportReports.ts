@@ -3,6 +3,7 @@ import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import type { AccessLog } from '@/types/supabase';
 
 interface WorkerData {
   name: string;
@@ -189,5 +190,87 @@ export const exportToExcel = (
     XLSX.utils.book_append_sheet(workbook, worksheet, company.name.slice(0, 31));
   });
 
+  XLSX.writeFile(workbook, `relatorio-acessos-${format(new Date(), 'dd-MM-yyyy')}.xlsx`);
+};
+
+// New functions for AccessLog export
+export const exportAccessLogsToPdf = async (
+  logs: AccessLog[],
+  projectName: string,
+  startDate: string,
+  endDate: string
+) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 20;
+  let yPosition = margin;
+
+  doc.setFontSize(16);
+  doc.text('Relatório de Acessos', pageWidth / 2, yPosition, { align: 'center' });
+  yPosition += 10;
+
+  doc.setFontSize(12);
+  doc.text(`Projeto: ${projectName}`, margin, yPosition);
+  doc.text(`Período: ${format(new Date(startDate), 'dd/MM/yyyy')} - ${format(new Date(endDate), 'dd/MM/yyyy')}`, pageWidth - margin, yPosition, { align: 'right' });
+  yPosition += 15;
+
+  // Table header
+  doc.setFillColor(240, 240, 240);
+  doc.rect(margin, yPosition, pageWidth - (2 * margin), 10, 'F');
+  doc.setFontSize(9);
+  doc.text('Data/Hora', margin + 2, yPosition + 7);
+  doc.text('Trabalhador', margin + 35, yPosition + 7);
+  doc.text('CPF', margin + 80, yPosition + 7);
+  doc.text('Status', margin + 115, yPosition + 7);
+  doc.text('Motivo', margin + 140, yPosition + 7);
+  yPosition += 15;
+
+  logs.forEach(log => {
+    if (yPosition > doc.internal.pageSize.getHeight() - 20) {
+      doc.addPage();
+      yPosition = margin;
+    }
+
+    doc.setFontSize(8);
+    doc.text(format(new Date(log.timestamp), 'dd/MM HH:mm'), margin + 2, yPosition);
+    doc.text((log.worker_name || '-').slice(0, 20), margin + 35, yPosition);
+    doc.text(log.worker_document || '-', margin + 80, yPosition);
+    doc.text(log.access_status === 'granted' ? 'Liberado' : 'Negado', margin + 115, yPosition);
+    doc.text((log.reason || '-').slice(0, 20), margin + 140, yPosition);
+    yPosition += 8;
+  });
+
+  doc.save(`relatorio-acessos-${format(new Date(), 'dd-MM-yyyy')}.pdf`);
+};
+
+export const exportAccessLogsToExcel = (
+  logs: AccessLog[],
+  projectName: string,
+  startDate: string,
+  endDate: string
+) => {
+  const worksheetData = [
+    [`Relatório de Acessos - ${projectName}`],
+    [`Período: ${format(new Date(startDate), 'dd/MM/yyyy')} - ${format(new Date(endDate), 'dd/MM/yyyy')}`],
+    [],
+    ['Data/Hora', 'Trabalhador', 'CPF', 'Dispositivo', 'Direção', 'Status', 'Motivo', 'Score']
+  ];
+
+  logs.forEach(log => {
+    worksheetData.push([
+      format(new Date(log.timestamp), 'dd/MM/yyyy HH:mm:ss'),
+      log.worker_name || '-',
+      log.worker_document || '-',
+      log.device_name || '-',
+      log.direction === 'entry' ? 'Entrada' : log.direction === 'exit' ? 'Saída' : '-',
+      log.access_status === 'granted' ? 'Liberado' : 'Negado',
+      log.reason || '-',
+      log.score?.toString() || '-'
+    ]);
+  });
+
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Acessos');
   XLSX.writeFile(workbook, `relatorio-acessos-${format(new Date(), 'dd-MM-yyyy')}.xlsx`);
 };

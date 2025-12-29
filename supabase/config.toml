@@ -1,1 +1,10 @@
 project_id = "qdscawiwjhzgiqroqkik"
+
+[functions.controlid-api]
+verify_jwt = true
+
+[functions.controlid-webhook]
+verify_jwt = false
+
+[functions.worker-enrollment]
+verify_jwt = true
