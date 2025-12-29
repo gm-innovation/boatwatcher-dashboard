@@ -309,6 +309,12 @@ const Login = () => {
                   {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                   Entrar
                 </Button>
+                <p className="text-center text-sm text-muted-foreground">
+                  É trabalhador?{' '}
+                  <a href="/cadastro" className="text-primary hover:underline">
+                    Fazer cadastro
+                  </a>
+                </p>
               </form>
             </>
           )}
