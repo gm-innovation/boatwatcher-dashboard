@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { ensureValidSession } from '@/utils/ensureValidSession';
 import { identifyDocumentType, parseDocumentDate, calculateExpiryDate, normalizeDocumentType, DocumentType } from '@/utils/documentParser';
 
 export interface ExtractedDocumentData {
@@ -49,7 +50,7 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
         .upload(filePath, file);
 
       if (uploadError) {
-        console.error('Erro no upload:', uploadError);
+        console.error('[uploadToStorage] Erro no upload:', uploadError);
         return null;
       }
 
@@ -59,25 +60,24 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
 
       return publicUrl.publicUrl;
     } catch (error) {
-      console.error('Erro ao fazer upload:', error);
+      console.error('[uploadToStorage] Erro ao fazer upload:', error);
       return null;
     }
   };
 
   const extractDocument = async (file: File, workerId?: string): Promise<ProcessedDocument | null> => {
     try {
-      // 0. Verificar se usuário está autenticado
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        toast({
-          title: 'Autenticação necessária',
-          description: 'Você precisa estar logado para extrair dados de documentos.',
-          variant: 'destructive'
-        });
+      // 1. Validate session with the server FIRST
+      const validSession = await ensureValidSession();
+      
+      if (!validSession) {
+        // ensureValidSession already handles toast and redirect for expired sessions
+        // If it returns null without redirect, user is simply not logged in
+        console.warn('[extractDocument] No valid session');
         return null;
       }
 
-      // 1. Upload do arquivo
+      // 2. Upload do arquivo
       const fileUrl = await uploadToStorage(file);
       if (!fileUrl) {
         toast({
@@ -88,55 +88,54 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
         return null;
       }
 
-      // 2. Identificar tipo preliminar pelo nome
+      // 3. Identificar tipo preliminar pelo nome
       const preliminaryType = identifyDocumentType(file.name);
 
-      // 3. Chamar backend function para extração via IA (forçando Authorization)
-      const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-document-data`;
+      // 4. Chamar edge function usando supabase.functions.invoke (mais seguro)
+      console.log('[extractDocument] Calling edge function with valid token');
+      
+      let { data, error } = await supabase.functions.invoke('extract-document-data', {
+        headers: {
+          Authorization: `Bearer ${validSession.accessToken}`,
+        },
+        body: {
+          file_url: fileUrl,
+          filename: file.name,
+          document_type: preliminaryType,
+          worker_id: workerId,
+        },
+      });
 
-      const invokeExtraction = async (accessToken: string) => {
-        const res = await fetch(functionUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            file_url: fileUrl,
-            filename: file.name,
-            document_type: preliminaryType,
-            worker_id: workerId,
-          }),
-        });
-
-        if (!res.ok) {
-          const text = await res.text().catch(() => '');
-          return {
-            data: null,
-            error: { message: `Function returned ${res.status}: ${text || res.statusText}` },
-          };
-        }
-
-        return { data: await res.json(), error: null as null };
-      };
-
-      let { data, error } = await invokeExtraction(session.access_token);
-
-      // Se retornar 401, tenta 1 refresh de sessão e repete
-      if (error && error.message?.includes('401')) {
+      // Se retornar erro de autenticação, tenta refresh e repete
+      if (error && (error.message?.includes('401') || error.message?.includes('Invalid JWT'))) {
+        console.log('[extractDocument] Got 401, attempting token refresh...');
+        
         const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
         const newToken = refreshed.session?.access_token;
+        
         if (!refreshError && newToken) {
-          ({ data, error } = await invokeExtraction(newToken));
+          console.log('[extractDocument] Token refreshed, retrying...');
+          ({ data, error } = await supabase.functions.invoke('extract-document-data', {
+            headers: {
+              Authorization: `Bearer ${newToken}`,
+            },
+            body: {
+              file_url: fileUrl,
+              filename: file.name,
+              document_type: preliminaryType,
+              worker_id: workerId,
+            },
+          }));
+        } else {
+          console.error('[extractDocument] Token refresh failed:', refreshError);
         }
       }
 
       if (error) {
-        console.error('Extraction error:', error);
+        console.error('[extractDocument] Edge function error:', error);
         
         // Verificar se é erro de autenticação (401)
-        if (error.message?.includes('401') || error.message?.includes('non-2xx')) {
+        if (error.message?.includes('401') || error.message?.includes('Invalid JWT')) {
           toast({
             title: 'Sessão expirada',
             description: 'Sua sessão expirou. Por favor, faça login novamente.',
@@ -145,7 +144,13 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
           return null;
         }
         
-        // Retornar documento com dados mínimos para outros erros
+        // Para outros erros, retornar documento com dados mínimos
+        toast({
+          title: 'Erro na extração',
+          description: 'Não foi possível extrair dados do documento. Tente novamente.',
+          variant: 'destructive'
+        });
+        
         return {
           filename: file.name,
           file_url: fileUrl,
@@ -160,11 +165,13 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
 
       const extractedData: ExtractedDocumentData = data?.extracted_data || {};
       
-      // 4. Processar datas
+      // 5. Processar datas
       const completionDate = parseDocumentDate(extractedData.completion_date);
       const documentType = normalizeDocumentType(extractedData.document_type || preliminaryType);
       const expiryDate = parseDocumentDate(extractedData.expiry_date) || 
                          calculateExpiryDate(completionDate, documentType);
+
+      console.log('[extractDocument] Success, extracted data:', Object.keys(extractedData));
 
       return {
         filename: file.name,
@@ -178,10 +185,10 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
       };
 
     } catch (error) {
-      console.error('Erro ao processar documento:', error);
+      console.error('[extractDocument] Erro ao processar documento:', error);
       toast({
         title: 'Erro ao processar documento',
-        description: `Erro ao processar ${file.name}`,
+        description: `Erro ao processar ${file.name}. Verifique sua conexão e tente novamente.`,
         variant: 'destructive'
       });
       return null;
@@ -191,6 +198,13 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
   const extractMultipleDocuments = async (files: File[], workerId?: string): Promise<ProcessedDocument[]> => {
     setIsExtracting(true);
     setProgress(0);
+    
+    // Validate session once before processing all files
+    const validSession = await ensureValidSession();
+    if (!validSession) {
+      setIsExtracting(false);
+      return [];
+    }
     
     const results: ProcessedDocument[] = [];
     const total = files.length;

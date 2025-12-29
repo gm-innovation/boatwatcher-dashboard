@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 import { 
   Stethoscope, 
   CheckCircle, 
@@ -14,9 +15,13 @@ import {
   Wifi,
   Clock,
   FileWarning,
-  HardDrive
+  HardDrive,
+  LogOut,
+  User,
+  ShieldCheck
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { getSessionDiagnostics, forceLogout } from '@/utils/ensureValidSession';
 
 interface DiagnosticItem {
   id: string;
@@ -26,14 +31,38 @@ interface DiagnosticItem {
   lastCheck: Date;
 }
 
+interface AuthDiagnostics {
+  hasLocalSession: boolean;
+  serverValidation: 'ok' | 'error' | 'no_session';
+  userEmail: string | null;
+  expiresAt: Date | null;
+  errorMessage: string | null;
+}
+
 export const DiagnosticsPanel = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DiagnosticItem[]>([]);
   const [lastRunTime, setLastRunTime] = useState<Date | null>(null);
+  const [authDiagnostics, setAuthDiagnostics] = useState<AuthDiagnostics | null>(null);
+  const [isTestingAuth, setIsTestingAuth] = useState(false);
+
+  const runAuthDiagnostics = async () => {
+    setIsTestingAuth(true);
+    const result = await getSessionDiagnostics();
+    setAuthDiagnostics(result);
+    setIsTestingAuth(false);
+  };
+
+  const handleForceLogout = async () => {
+    await forceLogout('Logout forçado pelo administrador.');
+  };
 
   const runDiagnostics = async () => {
     setIsRunning(true);
     const results: DiagnosticItem[] = [];
+
+    // Also run auth diagnostics
+    await runAuthDiagnostics();
 
     // 1. Testar conexão com banco de dados
     try {
@@ -57,24 +86,36 @@ export const DiagnosticsPanel = () => {
       });
     }
 
-    // 2. Testar serviço de autenticação
+    // 2. Testar serviço de autenticação (usando getUser para validação server-side)
     try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      let status: 'ok' | 'warning' | 'error' = 'ok';
+      let message = '';
+      
+      if (userError) {
+        status = 'error';
+        message = `JWT inválido: ${userError.message}`;
+      } else if (!session) {
+        status = 'warning';
+        message = 'Nenhuma sessão ativa';
+      } else if (user) {
+        status = 'ok';
+        message = `Sessão válida: ${user.email}`;
+      }
+      
       results.push({
         id: 'auth',
-        name: 'Serviço de Autenticação',
-        status: sessionError ? 'error' : sessionData?.session ? 'ok' : 'warning',
-        message: sessionError 
-          ? `Erro: ${sessionError.message}` 
-          : sessionData?.session 
-            ? 'Sessão ativa e válida' 
-            : 'Serviço OK, sem sessão ativa',
+        name: 'Autenticação (Server-Validated)',
+        status,
+        message,
         lastCheck: new Date()
       });
     } catch (e) {
       results.push({
         id: 'auth',
-        name: 'Serviço de Autenticação',
+        name: 'Autenticação (Server-Validated)',
         status: 'error',
         message: 'Falha ao verificar autenticação',
         lastCheck: new Date()
@@ -260,6 +301,17 @@ export const DiagnosticsPanel = () => {
   const warningCount = diagnostics.filter(d => d.status === 'warning').length;
   const errorCount = diagnostics.filter(d => d.status === 'error').length;
 
+  const getTimeRemaining = (expiresAt: Date | null) => {
+    if (!expiresAt) return 'N/A';
+    const now = new Date();
+    const diff = expiresAt.getTime() - now.getTime();
+    if (diff <= 0) return 'Expirado';
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    return `${minutes}m`;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -279,6 +331,96 @@ export const DiagnosticsPanel = () => {
           {isRunning ? 'Executando...' : 'Executar Diagnóstico'}
         </Button>
       </div>
+
+      {/* Auth Status Card */}
+      <Card className="border-2 border-primary/20">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-primary" />
+            Status da Autenticação (Validação Server-Side)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {authDiagnostics ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Sessão Local</p>
+                  <div className="flex items-center gap-2">
+                    {authDiagnostics.hasLocalSession ? (
+                      <Badge className="bg-green-500/10 text-green-500 border-green-500/20">Ativa</Badge>
+                    ) : (
+                      <Badge className="bg-red-500/10 text-red-500 border-red-500/20">Inativa</Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Validação Servidor</p>
+                  <div className="flex items-center gap-2">
+                    {authDiagnostics.serverValidation === 'ok' && (
+                      <Badge className="bg-green-500/10 text-green-500 border-green-500/20">JWT Válido</Badge>
+                    )}
+                    {authDiagnostics.serverValidation === 'error' && (
+                      <Badge className="bg-red-500/10 text-red-500 border-red-500/20">JWT Inválido</Badge>
+                    )}
+                    {authDiagnostics.serverValidation === 'no_session' && (
+                      <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">Sem Sessão</Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Usuário</p>
+                  <p className="text-sm font-medium flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    {authDiagnostics.userEmail || 'Não logado'}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Expira em</p>
+                  <p className="text-sm font-medium flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {getTimeRemaining(authDiagnostics.expiresAt)}
+                  </p>
+                </div>
+              </div>
+              
+              {authDiagnostics.errorMessage && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                  <p className="text-sm text-red-600">
+                    <strong>Erro:</strong> {authDiagnostics.errorMessage}
+                  </p>
+                </div>
+              )}
+
+              <Separator />
+              
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={runAuthDiagnostics}
+                  disabled={isTestingAuth}
+                  className="gap-2"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isTestingAuth ? 'animate-spin' : ''}`} />
+                  Testar Autenticação
+                </Button>
+                <Button 
+                  variant="destructive" 
+                  size="sm" 
+                  onClick={handleForceLogout}
+                  className="gap-2"
+                >
+                  <LogOut className="h-3 w-3" />
+                  Forçar Logout
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Carregando diagnóstico de autenticação...</p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
