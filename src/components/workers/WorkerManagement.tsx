@@ -24,10 +24,14 @@ import {
   Camera,
   CheckCircle,
   XCircle,
-  Fingerprint
+  Fingerprint,
+  Eye,
+  Hash
 } from 'lucide-react';
 import type { Worker, WorkerStatus } from '@/types/supabase';
 import { useQueryClient } from '@tanstack/react-query';
+import { WorkerDetailsDialog } from './WorkerDetailsDialog';
+import { NewWorkerDialog } from './NewWorkerDialog';
 
 const workerSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
@@ -385,8 +389,11 @@ const EnrollmentDialog = ({ worker, onClose }: EnrollmentDialogProps) => {
 };
 
 export const WorkerManagement = () => {
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
+  const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [enrollingWorker, setEnrollingWorker] = useState<Worker | null>(null);
   const { data: workers = [], isLoading, refetch } = useWorkers();
   const { data: companies = [] } = useCompanies();
@@ -426,31 +433,46 @@ export const WorkerManagement = () => {
           <h2 className="text-xl font-semibold">Trabalhadores</h2>
           <p className="text-sm text-muted-foreground">{workers.length} trabalhadores cadastrados</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => setEditingWorker(null)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Trabalhador
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>{editingWorker ? 'Editar Trabalhador' : 'Novo Trabalhador'}</DialogTitle>
-            </DialogHeader>
-            <WorkerForm 
-              worker={editingWorker} 
-              onSuccess={() => {
-                setIsDialogOpen(false);
-                setEditingWorker(null);
-              }}
-              onCancel={() => {
-                setIsDialogOpen(false);
-                setEditingWorker(null);
-              }}
-            />
-          </DialogContent>
-        </Dialog>
+        <Button onClick={() => setIsNewDialogOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Novo Trabalhador
+        </Button>
       </div>
+
+      {/* New Worker Dialog */}
+      <NewWorkerDialog
+        open={isNewDialogOpen}
+        onOpenChange={setIsNewDialogOpen}
+        onSuccess={() => refetch()}
+      />
+
+      {/* Worker Details Dialog */}
+      <WorkerDetailsDialog
+        worker={selectedWorker}
+        open={isDetailsOpen}
+        onOpenChange={setIsDetailsOpen}
+        onUpdate={() => refetch()}
+      />
+
+      {/* Edit Worker Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Editar Trabalhador</DialogTitle>
+          </DialogHeader>
+          <WorkerForm 
+            worker={editingWorker} 
+            onSuccess={() => {
+              setIsEditDialogOpen(false);
+              setEditingWorker(null);
+            }}
+            onCancel={() => {
+              setIsEditDialogOpen(false);
+              setEditingWorker(null);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* Enrollment Dialog */}
       <Dialog open={!!enrollingWorker} onOpenChange={(open) => !open && setEnrollingWorker(null)}>
@@ -468,18 +490,24 @@ export const WorkerManagement = () => {
         <table className="w-full">
           <thead className="sticky top-0 bg-card border-b">
             <tr>
+              <th className="text-left p-4 text-sm font-medium text-muted-foreground">Código</th>
               <th className="text-left p-4 text-sm font-medium text-muted-foreground">Trabalhador</th>
               <th className="text-left p-4 text-sm font-medium text-muted-foreground">CPF</th>
               <th className="text-left p-4 text-sm font-medium text-muted-foreground">Empresa</th>
               <th className="text-left p-4 text-sm font-medium text-muted-foreground">Função</th>
               <th className="text-center p-4 text-sm font-medium text-muted-foreground">Status</th>
-              <th className="text-center p-4 text-sm font-medium text-muted-foreground">Dispositivos</th>
               <th className="text-center p-4 text-sm font-medium text-muted-foreground">Ações</th>
             </tr>
           </thead>
           <tbody>
             {workers.map(worker => (
-              <tr key={worker.id} className="border-b hover:bg-muted/50">
+              <tr key={worker.id} className="border-b hover:bg-muted/50 cursor-pointer" onClick={() => { setSelectedWorker(worker); setIsDetailsOpen(true); }}>
+                <td className="p-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-1">
+                    <Hash className="h-3 w-3" />
+                    {(worker as any).code || '-'}
+                  </div>
+                </td>
                 <td className="p-4">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-8 w-8">
@@ -496,36 +524,18 @@ export const WorkerManagement = () => {
                 <td className="p-4 text-sm text-muted-foreground">{getCompanyName(worker.company_id)}</td>
                 <td className="p-4 text-sm text-muted-foreground">{worker.role || '-'}</td>
                 <td className="p-4 text-center">{getStatusBadge(worker.status)}</td>
-                <td className="p-4 text-center">
-                  <Badge variant="outline">
-                    {worker.devices_enrolled?.length || 0} dispositivo(s)
-                  </Badge>
-                </td>
                 <td className="p-4">
-                  <div className="flex justify-center gap-1">
-                    <Button 
-                      size="sm" 
-                      variant="ghost"
-                      onClick={() => setEnrollingWorker(worker)}
-                    >
+                  <div className="flex justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <Button size="sm" variant="ghost" onClick={() => { setSelectedWorker(worker); setIsDetailsOpen(true); }}>
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEnrollingWorker(worker)}>
                       <Fingerprint className="h-4 w-4" />
                     </Button>
-                    <Button 
-                      size="sm" 
-                      variant="ghost"
-                      onClick={() => {
-                        setEditingWorker(worker);
-                        setIsDialogOpen(true);
-                      }}
-                    >
+                    <Button size="sm" variant="ghost" onClick={() => { setEditingWorker(worker); setIsEditDialogOpen(true); }}>
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Button 
-                      size="sm" 
-                      variant="ghost" 
-                      className="text-destructive"
-                      onClick={() => handleDelete(worker)}
-                    >
+                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDelete(worker)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
