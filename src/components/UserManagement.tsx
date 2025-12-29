@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,37 +11,19 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
-import { Project } from "@/types/supabase";
+import { supabase } from "@/integrations/supabase/client";
+import { Project, AppRole } from "@/types/supabase";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useProjects } from "@/hooks/useSupabase";
 
 const UserManagement = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("user");
+  const [role, setRole] = useState<AppRole>("user");
   const [loading, setLoading] = useState(false);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const { data: projects = [] } = useProjects();
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const { toast } = useToast();
-
-  // Buscar projetos disponíveis
-  useEffect(() => {
-    const fetchProjects = async () => {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .order('vessel_name');
-      
-      if (error) {
-        console.error('Erro ao buscar projetos:', error);
-        return;
-      }
-
-      setProjects(data || []);
-    };
-
-    fetchProjects();
-  }, []);
 
   const handleToggleProject = (projectId: string) => {
     setSelectedProjects(prev => {
@@ -59,7 +40,7 @@ const UserManagement = () => {
     setLoading(true);
 
     try {
-      // Criar usuário no Supabase Auth
+      // Create user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -71,14 +52,14 @@ const UserManagement = () => {
       if (authError) throw authError;
 
       if (authData.user) {
-        // Adicionar role do usuário
+        // Add user role
         const { error: roleError } = await supabase
           .from('user_roles')
           .insert([{ user_id: authData.user.id, role }]);
 
         if (roleError) throw roleError;
 
-        // Vincular usuário aos projetos selecionados
+        // Link user to selected projects
         if (selectedProjects.length > 0) {
           const projectAssignments = selectedProjects.map(projectId => ({
             user_id: authData.user.id,
@@ -97,7 +78,7 @@ const UserManagement = () => {
           description: `O usuário ${email} foi criado com a role ${role} e vinculado a ${selectedProjects.length} projeto(s).`,
         });
 
-        // Limpar formulário
+        // Clear form
         setEmail("");
         setPassword("");
         setRole("user");
@@ -118,12 +99,12 @@ const UserManagement = () => {
     setLoading(true);
 
     try {
-      // Verificar se já existe um usuário admin
+      // Check if admin user already exists
       const { data: existingAdmin } = await supabase
         .from('user_roles')
         .select('*')
         .eq('role', 'admin')
-        .single();
+        .maybeSingle();
 
       if (existingAdmin) {
         toast({
@@ -134,7 +115,7 @@ const UserManagement = () => {
         return;
       }
 
-      // Criar usuário admin inicial
+      // Create initial admin user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: "admin@admin.com",
         password: "admin123",
@@ -146,14 +127,14 @@ const UserManagement = () => {
       if (authError) throw authError;
 
       if (authData.user) {
-        // Adicionar role admin
+        // Add admin role
         const { error: roleError } = await supabase
           .from('user_roles')
-          .insert([{ user_id: authData.user.id, role: 'admin' }]);
+          .insert([{ user_id: authData.user.id, role: 'admin' as AppRole }]);
 
         if (roleError) throw roleError;
 
-        // Fazer login automaticamente com o usuário admin
+        // Auto login with admin user
         const { error: loginError } = await supabase.auth.signInWithPassword({
           email: "admin@admin.com",
           password: "admin123"
@@ -221,12 +202,13 @@ const UserManagement = () => {
 
         <div className="space-y-2">
           <Label htmlFor="role">Nível de Acesso</Label>
-          <Select value={role} onValueChange={setRole}>
+          <Select value={role} onValueChange={(value) => setRole(value as AppRole)}>
             <SelectTrigger>
               <SelectValue placeholder="Selecione o nível de acesso" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="user">Usuário</SelectItem>
+              <SelectItem value="moderator">Moderador</SelectItem>
               <SelectItem value="admin">Administrador</SelectItem>
             </SelectContent>
           </Select>
@@ -235,18 +217,22 @@ const UserManagement = () => {
         <div className="space-y-2">
           <Label>Projetos</Label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border rounded-lg p-4">
-            {projects.map(project => (
-              <div key={project.id} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`project-${project.id}`}
-                  checked={selectedProjects.includes(project.id)}
-                  onCheckedChange={() => handleToggleProject(project.id)}
-                />
-                <Label htmlFor={`project-${project.id}`} className="cursor-pointer">
-                  {project.vessel_name || 'Projeto sem nome'}
-                </Label>
-              </div>
-            ))}
+            {projects.length === 0 ? (
+              <p className="text-sm text-muted-foreground col-span-2">Nenhum projeto cadastrado</p>
+            ) : (
+              projects.map(project => (
+                <div key={project.id} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`project-${project.id}`}
+                    checked={selectedProjects.includes(project.id)}
+                    onCheckedChange={() => handleToggleProject(project.id)}
+                  />
+                  <Label htmlFor={`project-${project.id}`} className="cursor-pointer">
+                    {project.name || 'Projeto sem nome'}
+                  </Label>
+                </div>
+              ))
+            )}
           </div>
         </div>
 

@@ -1,12 +1,11 @@
-
-import { useState } from "react";
 import { ProjectInfo } from "@/components/ProjectInfo";
 import { SummaryCards } from "@/components/SummaryCards";
 import { WorkersList } from "@/components/WorkersList";
 import { CompaniesList } from "@/components/CompaniesList";
+import { useProject } from "@/contexts/ProjectContext";
 
 const Index = () => {
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const { selectedProjectId } = useProject();
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

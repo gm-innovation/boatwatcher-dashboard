@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { ProjectSelector } from "@/components/ProjectSelector";
 import { Label } from "@/components/ui/label";
@@ -6,9 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Plus } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 import { useProjectById, useCompanies } from "@/hooks/useSupabase";
-import { useInmetaEvents } from "@/hooks/useInmetaApi";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Select,
@@ -25,17 +23,11 @@ export const ProjectForm = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: companies = [] } = useCompanies();
-  const { data: inmetaEvents = [] } = useInmetaEvents();
   
   // Form state
-  const [vesselName, setVesselName] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [projectType, setProjectType] = useState("");
-  const [engineer, setEngineer] = useState("");
-  const [captain, setCaptain] = useState("");
-  const [crewCount, setCrewCount] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [projectStatus, setProjectStatus] = useState("active");
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
-  const [selectedInmetaAlvoId, setSelectedInmetaAlvoId] = useState<string | null>(null);
 
   // Fetch project data when selected
   const { data: projectData } = useProjectById(selectedProjectId);
@@ -43,23 +35,13 @@ export const ProjectForm = () => {
   // Update form when project is selected
   useEffect(() => {
     if (projectData) {
-      setVesselName(projectData.vessel_name || "");
-      setStartDate(projectData.start_date || "");
-      setProjectType(projectData.project_type || "");
-      setEngineer(projectData.engineer || "");
-      setCaptain(projectData.captain || "");
-      setCrewCount(projectData.crew_count?.toString() || "");
+      setProjectName(projectData.name || "");
+      setProjectStatus(projectData.status || "active");
       setSelectedCompanyId(projectData.client_id || null);
-      setSelectedInmetaAlvoId(projectData.external_project_id || null);
     } else {
-      setVesselName("");
-      setStartDate("");
-      setProjectType("");
-      setEngineer("");
-      setCaptain("");
-      setCrewCount("");
+      setProjectName("");
+      setProjectStatus("active");
       setSelectedCompanyId(null);
-      setSelectedInmetaAlvoId(null);
     }
   }, [projectData]);
 
@@ -73,10 +55,10 @@ export const ProjectForm = () => {
       return;
     }
 
-    if (!selectedInmetaAlvoId) {
+    if (!projectName.trim()) {
       toast({
         title: "Erro ao salvar",
-        description: "Selecione um alvo do Inmeta",
+        description: "Digite o nome do projeto",
         variant: "destructive",
       });
       return;
@@ -85,22 +67,16 @@ export const ProjectForm = () => {
     setIsSaving(true);
 
     try {
-      const selectedAlvo = inmetaEvents.find(e => e.alvo?.id === selectedInmetaAlvoId)?.alvo;
-      const projectData = {
-        vessel_name: vesselName || selectedAlvo?.nome,
-        start_date: startDate,
-        project_type: projectType,
-        engineer: engineer,
-        captain: captain,
-        crew_count: crewCount ? parseInt(crewCount) : null,
+      const projectDataToSave = {
+        name: projectName,
+        status: projectStatus,
         client_id: selectedCompanyId,
-        external_project_id: selectedInmetaAlvoId
       };
 
       if (isCreatingNew) {
         const { data, error } = await supabase
           .from('projects')
-          .insert(projectData)
+          .insert(projectDataToSave)
           .select()
           .single();
 
@@ -118,7 +94,7 @@ export const ProjectForm = () => {
       } else {
         const { error } = await supabase
           .from('projects')
-          .update(projectData)
+          .update(projectDataToSave)
           .eq('id', selectedProjectId);
 
         if (error) throw error;
@@ -145,24 +121,10 @@ export const ProjectForm = () => {
   const handleNewProject = () => {
     setIsCreatingNew(true);
     setSelectedProjectId(null);
-    setVesselName("");
-    setStartDate("");
-    setProjectType("");
-    setEngineer("");
-    setCaptain("");
-    setCrewCount("");
+    setProjectName("");
+    setProjectStatus("active");
     setSelectedCompanyId(null);
-    setSelectedInmetaAlvoId(null);
   };
-
-  // Extrair alvos únicos dos eventos
-  const alvosMap = new Map<string, { id: string; nome: string }>();
-  inmetaEvents.forEach(event => {
-    if (event.alvo?.id && event.alvo?.nome) {
-      alvosMap.set(event.alvo.id, event.alvo);
-    }
-  });
-  const alvosUnicos = Array.from(alvosMap.values());
 
   return (
     <div className="border rounded-lg p-6">
@@ -188,26 +150,19 @@ export const ProjectForm = () => {
         {(selectedProjectId || isCreatingNew) && (
           <div className="grid gap-4">
             <div>
-              <Label htmlFor="inmetaAlvoId">Alvo do Inmeta</Label>
-              <Select 
-                value={selectedInmetaAlvoId || undefined}
-                onValueChange={setSelectedInmetaAlvoId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um alvo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {alvosUnicos.map((alvo) => (
-                    <SelectItem key={alvo.id} value={alvo.id}>
-                      {alvo.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="projectName">Nome do Projeto</Label>
+              <Input 
+                id="projectName" 
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                className="mt-1"
+                placeholder="Digite o nome do projeto"
+                required
+              />
             </div>
 
             <div>
-              <Label htmlFor="companyId">Empresa</Label>
+              <Label htmlFor="companyId">Empresa (Cliente)</Label>
               <Select 
                 value={selectedCompanyId || undefined}
                 onValueChange={setSelectedCompanyId}
@@ -226,65 +181,20 @@ export const ProjectForm = () => {
             </div>
 
             <div>
-              <Label htmlFor="vesselName">Nome da Embarcação</Label>
-              <Input 
-                id="vesselName" 
-                value={vesselName}
-                onChange={(e) => setVesselName(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="startDate">Data de Início</Label>
-              <Input 
-                id="startDate" 
-                type="date" 
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="mt-1" 
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="projectType">Tipo de Projeto</Label>
-              <Input 
-                id="projectType" 
-                value={projectType}
-                onChange={(e) => setProjectType(e.target.value)}
-                className="mt-1" 
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="engineer">Responsável</Label>
-              <Input 
-                id="engineer" 
-                value={engineer}
-                onChange={(e) => setEngineer(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="captain">Comandante</Label>
-              <Input 
-                id="captain" 
-                value={captain}
-                onChange={(e) => setCaptain(e.target.value)}
-                className="mt-1" 
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="crewCount">Quantidade de Tripulantes</Label>
-              <Input 
-                id="crewCount" 
-                type="number"
-                value={crewCount}
-                onChange={(e) => setCrewCount(e.target.value)}
-                className="mt-1" 
-              />
+              <Label htmlFor="projectStatus">Status</Label>
+              <Select 
+                value={projectStatus}
+                onValueChange={setProjectStatus}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Ativo</SelectItem>
+                  <SelectItem value="inactive">Inativo</SelectItem>
+                  <SelectItem value="completed">Concluído</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <Button 

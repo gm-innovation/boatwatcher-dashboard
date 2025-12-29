@@ -1,6 +1,4 @@
-
 import { useProjects } from '@/hooks/useSupabase';
-import { useInmetaEvents } from '@/hooks/useInmetaApi';
 import {
   Select,
   SelectContent,
@@ -16,10 +14,7 @@ interface ProjectSelectorProps {
 }
 
 export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectSelectorProps) => {
-  const { data: dbProjects = [], isLoading: isLoadingDb } = useProjects();
-  const { data: events = [], isLoading: isLoadingInmeta } = useInmetaEvents();
-
-  const isLoading = isLoadingDb || isLoadingInmeta;
+  const { data: projects = [], isLoading } = useProjects();
 
   if (isLoading) {
     return (
@@ -30,33 +25,7 @@ export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectS
     );
   }
 
-  // Extrair alvo único dos eventos
-  const alvosMap = new Map<string, { id: string; nome: string }>();
-  events.forEach(event => {
-    if (event.alvo?.id && event.alvo?.nome) {
-      alvosMap.set(event.alvo.id, event.alvo);
-    }
-  });
-  
-  // Encontrar o alvo selecionado
-  const selectedAlvo = Array.from(alvosMap.values()).find(a => a.id === selectedProjectId);
-  const selectedDbProject = dbProjects.find(p => p.id === selectedProjectId);
-
-  // Mesclar projetos do banco com os alvos dos eventos
-  const allProjects = [
-    ...Array.from(alvosMap.values()).map(alvo => ({
-      id: alvo.id,
-      name: alvo.nome,
-      source: 'inmeta' as const
-    })),
-    ...dbProjects
-      .filter(p => !alvosMap.has(p.external_project_id || ''))
-      .map(p => ({
-        id: p.id,
-        name: p.vessel_name || 'Sem nome',
-        source: 'db' as const
-      }))
-  ];
+  const selectedProject = projects.find(p => p.id === selectedProjectId);
 
   return (
     <Select 
@@ -65,11 +34,11 @@ export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectS
     >
       <SelectTrigger className="w-[300px]">
         <SelectValue placeholder="Selecione um projeto">
-          {selectedAlvo?.nome || selectedDbProject?.vessel_name || 'Selecione um projeto'}
+          {selectedProject?.name || 'Selecione um projeto'}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {allProjects.map((project) => (
+        {projects.map((project) => (
           <SelectItem key={project.id} value={project.id}>
             {project.name}
           </SelectItem>
