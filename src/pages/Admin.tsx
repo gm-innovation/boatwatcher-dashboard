@@ -8,7 +8,8 @@ import { ProjectsManagement } from "@/components/admin/ProjectsManagement";
 import { ReportScheduler } from "@/components/reports/ReportScheduler";
 import { DiagnosticsPanel } from "@/components/admin/DiagnosticsPanel";
 import { PendingRegistrations } from "@/components/people/PendingRegistrations";
-import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, UserCheck } from "lucide-react";
+import { DocumentExpirationCheck } from "@/components/admin/DocumentExpirationCheck";
+import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, UserCheck, FileWarning } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
 const Admin = () => {
@@ -23,6 +24,7 @@ const Admin = () => {
     if (location.pathname.includes('/schedules')) return 'schedules';
     if (location.pathname.includes('/diagnostics')) return 'diagnostics';
     if (location.pathname.includes('/pending')) return 'pending';
+    if (location.pathname.includes('/documents')) return 'documents';
     return 'projects';
   };
 
@@ -71,6 +73,10 @@ const Admin = () => {
             <Activity className="h-4 w-4" />
             Auditoria
           </TabsTrigger>
+          <TabsTrigger value="documents" className="gap-2">
+            <FileWarning className="h-4 w-4" />
+            Documentos
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="pending">
@@ -107,6 +113,10 @@ const Admin = () => {
 
         <TabsContent value="audit">
           <AuditLog />
+        </TabsContent>
+
+        <TabsContent value="documents">
+          <DocumentExpirationCheck />
         </TabsContent>
       </Tabs>
     </div>

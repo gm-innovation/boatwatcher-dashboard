@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Bell, Check, CheckCheck, AlertTriangle, Info, AlertCircle } from 'lucide-react';
+import { Bell, CheckCheck, AlertTriangle, Info, AlertCircle, FileWarning, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -18,26 +17,32 @@ import { ptBR } from 'date-fns/locale';
 export const NotificationsDropdown = () => {
   const { notifications, unreadCount, markAsRead, markAllAsRead, isLoading } = useNotifications();
 
-  const getPriorityIcon = (priority: string) => {
+  const getPriorityBadge = (priority: string) => {
     switch (priority) {
       case 'critical':
+        return <Badge variant="destructive" className="text-[10px] px-1 py-0">Crítico</Badge>;
       case 'high':
-        return <AlertCircle className="h-4 w-4 text-destructive" />;
+        return <Badge variant="destructive" className="text-[10px] px-1 py-0">Alta</Badge>;
       case 'normal':
-        return <Info className="h-4 w-4 text-primary" />;
+        return <Badge variant="secondary" className="text-[10px] px-1 py-0">Normal</Badge>;
       default:
-        return <Info className="h-4 w-4 text-muted-foreground" />;
+        return null;
     }
   };
 
-  const getTypeIcon = (type: string) => {
+  const getTypeIcon = (type: string, priority: string) => {
     switch (type) {
+      case 'document_expired':
+        return <FileWarning className="h-4 w-4 text-destructive" />;
+      case 'document_expiring':
+        if (priority === 'high') {
+          return <Clock className="h-4 w-4 text-orange-500" />;
+        }
+        return <Clock className="h-4 w-4 text-yellow-500" />;
       case 'device_offline':
         return <AlertTriangle className="h-4 w-4 text-orange-500" />;
       case 'access_denied':
         return <AlertCircle className="h-4 w-4 text-destructive" />;
-      case 'document_expiring':
-        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
       default:
         return <Info className="h-4 w-4 text-primary" />;
     }
@@ -89,11 +94,14 @@ export const NotificationsDropdown = () => {
                 onClick={() => !notification.is_read && markAsRead(notification.id)}
               >
                 <div className="flex items-start gap-2 w-full">
-                  {getTypeIcon(notification.type)}
+                  {getTypeIcon(notification.type, notification.priority || 'normal')}
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm ${!notification.is_read ? 'font-medium' : ''}`}>
-                      {notification.title}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className={`text-sm ${!notification.is_read ? 'font-medium' : ''}`}>
+                        {notification.title}
+                      </p>
+                      {getPriorityBadge(notification.priority || 'normal')}
+                    </div>
                     {notification.message && (
                       <p className="text-xs text-muted-foreground truncate">
                         {notification.message}
