@@ -88,6 +88,7 @@ export interface Device {
   type: DeviceType;
   status: DeviceStatus;
   project_id: string | null;
+  agent_id: string | null;
   configuration: Record<string, any>;
   api_credentials: Record<string, any>;
   last_event_timestamp: string | null;

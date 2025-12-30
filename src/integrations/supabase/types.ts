@@ -77,6 +77,63 @@ export type Database = {
           },
         ]
       }
+      agent_commands: {
+        Row: {
+          agent_id: string
+          command: string
+          created_at: string
+          created_by: string | null
+          device_id: string
+          error_message: string | null
+          executed_at: string | null
+          id: string
+          payload: Json | null
+          result: Json | null
+          status: string
+        }
+        Insert: {
+          agent_id: string
+          command: string
+          created_at?: string
+          created_by?: string | null
+          device_id: string
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          payload?: Json | null
+          result?: Json | null
+          status?: string
+        }
+        Update: {
+          agent_id?: string
+          command?: string
+          created_at?: string
+          created_by?: string | null
+          device_id?: string
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          payload?: Json | null
+          result?: Json | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_commands_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "local_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_commands_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -230,6 +287,7 @@ export type Database = {
       }
       devices: {
         Row: {
+          agent_id: string | null
           api_credentials: Json | null
           configuration: Json | null
           controlid_ip_address: string
@@ -245,6 +303,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          agent_id?: string | null
           api_credentials?: Json | null
           configuration?: Json | null
           controlid_ip_address: string
@@ -260,6 +319,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          agent_id?: string | null
           api_credentials?: Json | null
           configuration?: Json | null
           controlid_ip_address?: string
@@ -275,6 +335,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "devices_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "local_agents"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "devices_project_id_fkey"
             columns: ["project_id"]
@@ -307,6 +374,59 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      local_agents: {
+        Row: {
+          configuration: Json | null
+          created_at: string
+          created_by: string | null
+          id: string
+          ip_address: string | null
+          last_seen_at: string | null
+          name: string
+          project_id: string | null
+          status: string
+          token: string
+          updated_at: string
+          version: string | null
+        }
+        Insert: {
+          configuration?: Json | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          ip_address?: string | null
+          last_seen_at?: string | null
+          name: string
+          project_id?: string | null
+          status?: string
+          token: string
+          updated_at?: string
+          version?: string | null
+        }
+        Update: {
+          configuration?: Json | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          ip_address?: string | null
+          last_seen_at?: string | null
+          name?: string
+          project_id?: string | null
+          status?: string
+          token?: string
+          updated_at?: string
+          version?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "local_agents_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notifications: {
         Row: {
