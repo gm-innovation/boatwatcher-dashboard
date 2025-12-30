@@ -24,25 +24,106 @@ serve(async (req) => {
   )
 
   try {
+    // Extrair token de autenticação
+    const authHeader = req.headers.get('authorization') || req.headers.get('x-api-key')
+    const url = new URL(req.url)
+    const tokenFromQuery = url.searchParams.get('token')
+    const token = authHeader?.replace('Bearer ', '') || tokenFromQuery
+
+    console.log('Webhook request received:', {
+      hasToken: !!token,
+      method: req.method,
+      url: req.url
+    })
+
     const event: ControlIDEvent = await req.json()
     console.log('ControlID Webhook Event:', JSON.stringify(event, null, 2))
 
     // Buscar dispositivo pelo serial number
+    const deviceIdentifier = event.serial_number || event.device_id
     const { data: device, error: deviceError } = await supabase
       .from('devices')
       .select('id, name, project_id')
-      .eq('controlid_serial_number', event.serial_number || event.device_id)
+      .eq('controlid_serial_number', deviceIdentifier)
       .single()
 
     if (deviceError || !device) {
-      console.error('Device not found:', event.serial_number || event.device_id)
+      console.error('Device not found:', deviceIdentifier)
       return new Response(
         JSON.stringify({ 
           access: false, 
-          reason: 'device_not_registered' 
+          reason: 'device_not_registered',
+          message: 'Dispositivo não cadastrado'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
+    }
+
+    // Verificar token de autenticação (se token fornecido)
+    if (token) {
+      const { data: tokenData, error: tokenError } = await supabase
+        .from('device_api_tokens')
+        .select('id, device_id, is_active, expires_at')
+        .eq('token', token)
+        .single()
+
+      if (tokenError || !tokenData) {
+        console.warn('Invalid token provided for device:', device.id)
+        return new Response(
+          JSON.stringify({ 
+            access: false, 
+            reason: 'invalid_token',
+            message: 'Token inválido'
+          }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      if (!tokenData.is_active) {
+        console.warn('Token is inactive:', tokenData.id)
+        return new Response(
+          JSON.stringify({ 
+            access: false, 
+            reason: 'token_inactive',
+            message: 'Token inativo'
+          }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      if (tokenData.expires_at && new Date(tokenData.expires_at) < new Date()) {
+        console.warn('Token expired:', tokenData.id)
+        return new Response(
+          JSON.stringify({ 
+            access: false, 
+            reason: 'token_expired',
+            message: 'Token expirado'
+          }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      if (tokenData.device_id !== device.id) {
+        console.warn('Token does not match device:', { tokenDeviceId: tokenData.device_id, deviceId: device.id })
+        return new Response(
+          JSON.stringify({ 
+            access: false, 
+            reason: 'token_device_mismatch',
+            message: 'Token não pertence a este dispositivo'
+          }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Atualizar último uso do token
+      await supabase
+        .from('device_api_tokens')
+        .update({ last_used_at: new Date().toISOString() })
+        .eq('id', tokenData.id)
+
+      console.log('Token validated successfully for device:', device.id)
+    } else {
+      console.log('No token provided, proceeding without authentication (device:', device.id, ')')
     }
 
     // Atualizar timestamp do último evento do dispositivo
@@ -70,10 +151,12 @@ serve(async (req) => {
           photo_capture_url: event.photo || null
         })
 
+      console.log('Access denied: not recognized')
       return new Response(
         JSON.stringify({ 
           access: false, 
-          reason: 'not_recognized' 
+          reason: 'not_recognized',
+          message: 'Não Reconhecido'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -134,7 +217,7 @@ serve(async (req) => {
         photo_capture_url: event.photo || null
       })
 
-    console.log('Access decision:', { accessGranted, reason, workerId: worker?.id })
+    console.log('Access decision:', { accessGranted, reason, workerId: worker?.id, deviceId: device.id })
 
     // Retornar decisão para o dispositivo
     return new Response(
@@ -152,6 +235,7 @@ serve(async (req) => {
       JSON.stringify({ 
         access: false, 
         reason: 'system_error',
+        message: 'Erro do Sistema',
         error: error.message 
       }),
       { 

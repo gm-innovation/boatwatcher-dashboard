@@ -13,8 +13,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DeviceSetupInstructions } from './DeviceSetupInstructions';
 import { 
   Plus, 
   Wifi, 
@@ -24,7 +24,8 @@ import {
   RefreshCw,
   DoorOpen,
   Camera,
-  Server
+  Server,
+  Link
 } from 'lucide-react';
 import type { Device, DeviceType } from '@/types/supabase';
 import { useQueryClient } from '@tanstack/react-query';
@@ -44,6 +45,7 @@ type DeviceFormData = z.infer<typeof deviceSchema>;
 
 const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => void }) => {
   const { getDeviceStatus, releaseAccess, isLoading } = useControlIDActions();
+  const [showSetup, setShowSetup] = useState(false);
   const queryClient = useQueryClient();
 
   const handleCheckStatus = async () => {
@@ -97,50 +99,62 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
   const TypeIcon = getTypeIcon(device.type);
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <TypeIcon className="h-5 w-5 text-primary" />
+    <>
+      <Card className="hover:shadow-md transition-shadow">
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <TypeIcon className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-base">{device.name}</CardTitle>
+                <p className="text-sm text-muted-foreground">{device.controlid_ip_address}</p>
+              </div>
             </div>
-            <div>
-              <CardTitle className="text-base">{device.name}</CardTitle>
-              <p className="text-sm text-muted-foreground">{device.controlid_ip_address}</p>
-            </div>
+            <Badge variant="outline" className={getStatusColor(device.status)}>
+              {device.status === 'online' ? <Wifi className="h-3 w-3 mr-1" /> : <WifiOff className="h-3 w-3 mr-1" />}
+              {device.status}
+            </Badge>
           </div>
-          <Badge variant="outline" className={getStatusColor(device.status)}>
-            {device.status === 'online' ? <Wifi className="h-3 w-3 mr-1" /> : <WifiOff className="h-3 w-3 mr-1" />}
-            {device.status}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          <div className="text-sm text-muted-foreground">
-            <span className="font-medium">Serial:</span> {device.controlid_serial_number}
-          </div>
-          {device.location && (
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
             <div className="text-sm text-muted-foreground">
-              <span className="font-medium">Local:</span> {device.location}
+              <span className="font-medium">Serial:</span> {device.controlid_serial_number}
             </div>
-          )}
-          <div className="flex gap-2 pt-2">
-            <Button size="sm" variant="outline" onClick={handleCheckStatus} disabled={isLoading}>
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Status
-            </Button>
-            <Button size="sm" variant="outline" onClick={handleRelease} disabled={isLoading}>
-              <DoorOpen className="h-4 w-4 mr-1" />
-              Liberar
-            </Button>
-            <Button size="sm" variant="ghost" className="text-destructive" onClick={handleDelete}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {device.location && (
+              <div className="text-sm text-muted-foreground">
+                <span className="font-medium">Local:</span> {device.location}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2 pt-2">
+              <Button size="sm" variant="outline" onClick={() => setShowSetup(true)}>
+                <Link className="h-4 w-4 mr-1" />
+                Configurar
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleCheckStatus} disabled={isLoading}>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Status
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleRelease} disabled={isLoading}>
+                <DoorOpen className="h-4 w-4 mr-1" />
+                Liberar
+              </Button>
+              <Button size="sm" variant="ghost" className="text-destructive" onClick={handleDelete}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+      
+      <DeviceSetupInstructions 
+        device={device} 
+        open={showSetup} 
+        onOpenChange={setShowSetup} 
+      />
+    </>
   );
 };
 
