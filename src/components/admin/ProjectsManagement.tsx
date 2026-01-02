@@ -10,11 +10,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { Plus, Edit2, Trash2, FolderKanban, Building2, MapPin, Calendar } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Plus, Edit2, Trash2, FolderKanban, Building2, MapPin, Calendar as CalendarIcon, Check } from 'lucide-react';
 import type { Project } from '@/types/supabase';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/components/theme-provider';
 import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 interface ProjectFormProps {
   project?: Project | null;
@@ -26,12 +31,15 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
   const [name, setName] = useState(project?.name || '');
   const [location, setLocation] = useState(project?.location || '');
   const [clientId, setClientId] = useState(project?.client_id || '');
-  const [startDate, setStartDate] = useState(project?.start_date || '');
+  const [startDate, setStartDate] = useState<Date | undefined>(
+    project?.start_date ? new Date(project.start_date) : undefined
+  );
   const [commander, setCommander] = useState(project?.commander || '');
   const [chiefEngineer, setChiefEngineer] = useState(project?.chief_engineer || '');
-  const [projectType, setProjectType] = useState(project?.project_type || '');
+  const [projectType, setProjectType] = useState(project?.project_type || 'docagem');
   const [crewSize, setCrewSize] = useState(project?.crew_size?.toString() || '');
-  const [status, setStatus] = useState(project?.status || 'active');
+  const [armador, setArmador] = useState(project?.armador || '');
+  const [apiProjectId, setApiProjectId] = useState(project?.api_project_id || '');
   const [isLoading, setIsLoading] = useState(false);
   
   const { data: companies = [] } = useCompanies();
@@ -46,12 +54,14 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
         name,
         location: location || null,
         client_id: clientId || null,
-        start_date: startDate || null,
+        start_date: startDate ? format(startDate, 'yyyy-MM-dd') : null,
         commander: commander || null,
         chief_engineer: chiefEngineer || null,
         project_type: projectType || null,
         crew_size: crewSize ? parseInt(crewSize) : null,
-        status
+        armador: armador || null,
+        api_project_id: apiProjectId || null,
+        status: 'active'
       };
 
       if (project) {
@@ -79,19 +89,20 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Row 1: Nome do Projeto + Cliente */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="name">Nome do Projeto *</Label>
-          <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+          <Input 
+            id="name" 
+            value={name} 
+            onChange={(e) => setName(e.target.value)} 
+            placeholder="Nome do projeto"
+            required 
+          />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="location">Localização</Label>
-          <Input id="location" value={location} onChange={(e) => setLocation(e.target.value)} />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="clientId">Cliente (Armador)</Label>
+          <Label htmlFor="clientId">Cliente</Label>
           <Select value={clientId} onValueChange={setClientId}>
             <SelectTrigger>
               <SelectValue placeholder="Selecione um cliente" />
@@ -103,48 +114,128 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="startDate">Data de Início</Label>
-          <Input id="startDate" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-        </div>
       </div>
+
+      {/* Row 2: Armador + Localização */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="commander">Comandante</Label>
-          <Input id="commander" value={commander} onChange={(e) => setCommander(e.target.value)} />
+          <Label htmlFor="armador">Armador</Label>
+          <Input 
+            id="armador" 
+            value={armador} 
+            onChange={(e) => setArmador(e.target.value)} 
+            placeholder="Nome do armador"
+          />
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="location">Localização</Label>
+          <Input 
+            id="location" 
+            value={location} 
+            onChange={(e) => setLocation(e.target.value)} 
+            placeholder="Local do projeto"
+          />
+        </div>
+      </div>
+
+      {/* Row 3: Tipo de Projeto (Radio) + Data de Início (DatePicker) */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Tipo de Projeto</Label>
+          <RadioGroup 
+            value={projectType} 
+            onValueChange={setProjectType}
+            className="flex gap-6 pt-2"
+          >
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="docagem" id="docagem" />
+              <Label htmlFor="docagem" className="font-normal cursor-pointer">Docagem</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="mobilizacao" id="mobilizacao" />
+              <Label htmlFor="mobilizacao" className="font-normal cursor-pointer">Mobilização</Label>
+            </div>
+          </RadioGroup>
+        </div>
+        <div className="space-y-2">
+          <Label>Data de Início</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-full justify-start text-left font-normal",
+                  !startDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {startDate ? format(startDate, "d 'de' MMMM 'de' yyyy", { locale: ptBR }) : "Selecione uma data"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={startDate}
+                onSelect={setStartDate}
+                initialFocus
+                className="pointer-events-auto"
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+
+      {/* Row 4: Chefe de Máquinas + Comandante */}
+      <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="chiefEngineer">Chefe de Máquinas</Label>
-          <Input id="chiefEngineer" value={chiefEngineer} onChange={(e) => setChiefEngineer(e.target.value)} />
+          <Input 
+            id="chiefEngineer" 
+            value={chiefEngineer} 
+            onChange={(e) => setChiefEngineer(e.target.value)} 
+            placeholder="Nome do chefe de máquinas"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="commander">Comandante</Label>
+          <Input 
+            id="commander" 
+            value={commander} 
+            onChange={(e) => setCommander(e.target.value)} 
+            placeholder="Nome do comandante"
+          />
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-4">
+
+      {/* Row 5: Quantidade de Tripulantes + ID do Projeto na API */}
+      <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="projectType">Tipo</Label>
-          <Input id="projectType" value={projectType} onChange={(e) => setProjectType(e.target.value)} />
+          <Label htmlFor="crewSize">Quantidade de Tripulantes</Label>
+          <Input 
+            id="crewSize" 
+            type="number" 
+            value={crewSize} 
+            onChange={(e) => setCrewSize(e.target.value)} 
+            placeholder="0"
+          />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="crewSize">Tripulação</Label>
-          <Input id="crewSize" type="number" value={crewSize} onChange={(e) => setCrewSize(e.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="status">Status</Label>
-          <Select value={status} onValueChange={setStatus}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="active">Ativo</SelectItem>
-              <SelectItem value="inactive">Inativo</SelectItem>
-              <SelectItem value="completed">Concluído</SelectItem>
-            </SelectContent>
-          </Select>
+          <Label htmlFor="apiProjectId">ID do Projeto na API</Label>
+          <Input 
+            id="apiProjectId" 
+            value={apiProjectId} 
+            onChange={(e) => setApiProjectId(e.target.value)} 
+            placeholder="ID do projeto na API externa"
+          />
         </div>
       </div>
+
+      {/* Footer: Buttons */}
       <div className="flex justify-end gap-2 pt-4 border-t">
         <Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>
-        <Button type="submit" disabled={isLoading}>
-          {isLoading ? 'Salvando...' : project ? 'Atualizar' : 'Cadastrar'}
+        <Button type="submit" disabled={isLoading} className="gap-2">
+          <Check className="h-4 w-4" />
+          {isLoading ? 'Salvando...' : project ? 'Atualizar Projeto' : 'Criar Projeto'}
         </Button>
       </div>
     </form>

@@ -35,23 +35,19 @@ export interface Project {
   id: string;
   name: string;
   client_id: string | null;
+  client?: Company;
+  created_at: string;
+  updated_at: string;
+  allowed_worker_ids: string[] | null;
+  start_date: string | null;
+  crew_size: number | null;
   status: string | null;
   location: string | null;
-  allowed_worker_ids: string[];
-  start_date: string | null;
   commander: string | null;
   chief_engineer: string | null;
   project_type: string | null;
-  crew_size: number | null;
-  created_at: string;
-  updated_at: string;
-  client?: {
-    name: string;
-    vessels: string[];
-    project_managers: string[];
-    logo_url_light: string | null;
-    logo_url_dark: string | null;
-  } | null;
+  armador: string | null;
+  api_project_id: string | null;
 }
 
 export type AppRole = 'admin' | 'moderator' | 'user' | 'company_admin';

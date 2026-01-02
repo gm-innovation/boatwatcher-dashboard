@@ -479,6 +479,8 @@ export type Database = {
       projects: {
         Row: {
           allowed_worker_ids: string[] | null
+          api_project_id: string | null
+          armador: string | null
           chief_engineer: string | null
           client_id: string | null
           commander: string | null
@@ -494,6 +496,8 @@ export type Database = {
         }
         Insert: {
           allowed_worker_ids?: string[] | null
+          api_project_id?: string | null
+          armador?: string | null
           chief_engineer?: string | null
           client_id?: string | null
           commander?: string | null
@@ -509,6 +513,8 @@ export type Database = {
         }
         Update: {
           allowed_worker_ids?: string[] | null
+          api_project_id?: string | null
+          armador?: string | null
           chief_engineer?: string | null
           client_id?: string | null
           commander?: string | null
