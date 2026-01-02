@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useCompanies } from '@/hooks/useSupabase';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { Plus, Edit2, Trash2, Building2, Image, Upload } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Plus, Edit2, Trash2, Building2, Upload, Loader2 } from 'lucide-react';
 import type { Company } from '@/types/supabase';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/components/theme-provider';
@@ -22,41 +23,102 @@ interface ClientFormProps {
 
 const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
   const [name, setName] = useState(client?.name || '');
-  const [cnpj, setCnpj] = useState(client?.cnpj || '');
-  const [contactEmail, setContactEmail] = useState(client?.contact_email || '');
+  const [status, setStatus] = useState(client?.status || 'active');
   const [logoUrlLight, setLogoUrlLight] = useState(client?.logo_url_light || '');
   const [logoUrlDark, setLogoUrlDark] = useState(client?.logo_url_dark || '');
+  const [apiEmail, setApiEmail] = useState(client?.contact_email || '');
+  const [apiPassword, setApiPassword] = useState(client?.api_password || '');
+  const [apiEnvironment, setApiEnvironment] = useState(client?.api_environment || 'production');
   const [isLoading, setIsLoading] = useState(false);
+  const [isTestingApi, setIsTestingApi] = useState(false);
+  const [uploadingLight, setUploadingLight] = useState(false);
+  const [uploadingDark, setUploadingDark] = useState(false);
+  
+  const lightLogoRef = useRef<HTMLInputElement>(null);
+  const darkLogoRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+
+  const handleLogoUpload = async (file: File, type: 'light' | 'dark') => {
+    const setUploading = type === 'light' ? setUploadingLight : setUploadingDark;
+    const setLogoUrl = type === 'light' ? setLogoUrlLight : setLogoUrlDark;
+    
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${crypto.randomUUID()}.${fileExt}`;
+      const filePath = `${type}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('company-logos')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('company-logos')
+        .getPublicUrl(filePath);
+
+      setLogoUrl(publicUrl);
+      toast({ title: 'Logo enviado com sucesso' });
+    } catch (error: any) {
+      toast({ title: 'Erro ao enviar logo', description: error.message, variant: 'destructive' });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleTestApiConnection = async () => {
+    if (!apiEmail || !apiPassword) {
+      toast({ title: 'Preencha email e senha da API', variant: 'destructive' });
+      return;
+    }
+    
+    setIsTestingApi(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('test-inmeta-connection', {
+        body: { email: apiEmail, password: apiPassword, environment: apiEnvironment }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.success) {
+        toast({ title: 'Conexão com API bem sucedida!', description: 'Credenciais válidas.' });
+      } else {
+        toast({ title: 'Falha na conexão', description: data?.message || 'Credenciais inválidas', variant: 'destructive' });
+      }
+    } catch (error: any) {
+      toast({ title: 'Erro ao testar conexão', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsTestingApi(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
+      const payload = { 
+        name, 
+        status,
+        contact_email: apiEmail || null,
+        api_password: apiPassword || null,
+        api_environment: apiEnvironment,
+        logo_url_light: logoUrlLight || null,
+        logo_url_dark: logoUrlDark || null
+      };
+
       if (client) {
         const { error } = await supabase
           .from('companies')
-          .update({ 
-            name, 
-            cnpj, 
-            contact_email: contactEmail,
-            logo_url_light: logoUrlLight || null,
-            logo_url_dark: logoUrlDark || null
-          })
+          .update(payload)
           .eq('id', client.id);
         if (error) throw error;
         toast({ title: 'Cliente atualizado com sucesso' });
       } else {
         const { error } = await supabase
           .from('companies')
-          .insert({ 
-            name, 
-            cnpj, 
-            contact_email: contactEmail,
-            logo_url_light: logoUrlLight || null,
-            logo_url_dark: logoUrlDark || null
-          });
+          .insert(payload);
         if (error) throw error;
         toast({ title: 'Cliente cadastrado com sucesso' });
       }
@@ -70,31 +132,157 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="name">Nome do Cliente *</Label>
-        <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Row 1: Nome e Status */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="name">Nome do Cliente *</Label>
+          <Input 
+            id="name" 
+            value={name} 
+            onChange={(e) => setName(e.target.value)} 
+            placeholder="Nome do cliente"
+            required 
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="status">Status</Label>
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Ativo</SelectItem>
+              <SelectItem value="inactive">Inativo</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="cnpj">CNPJ</Label>
-        <Input id="cnpj" value={cnpj} onChange={(e) => setCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
+
+      {/* Row 2: Logos */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Logo Normal</Label>
+          <input
+            type="file"
+            ref={lightLogoRef}
+            className="hidden"
+            accept="image/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleLogoUpload(file, 'light');
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className="w-auto gap-2"
+            onClick={() => lightLogoRef.current?.click()}
+            disabled={uploadingLight}
+          >
+            {uploadingLight ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            Enviar Logo
+          </Button>
+          <p className="text-xs text-muted-foreground">Logo usada no sistema</p>
+          {logoUrlLight && (
+            <div className="mt-2">
+              <img src={logoUrlLight} alt="Logo Normal" className="h-12 object-contain rounded border p-1" />
+            </div>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label>Logo Rotacionada (Etiquetas)</Label>
+          <input
+            type="file"
+            ref={darkLogoRef}
+            className="hidden"
+            accept="image/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleLogoUpload(file, 'dark');
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className="w-auto gap-2"
+            onClick={() => darkLogoRef.current?.click()}
+            disabled={uploadingDark}
+          >
+            {uploadingDark ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            Enviar Logo
+          </Button>
+          <p className="text-xs text-muted-foreground">Logo já rotacionada para etiquetas</p>
+          {logoUrlDark && (
+            <div className="mt-2">
+              <img src={logoUrlDark} alt="Logo Rotacionada" className="h-12 object-contain rounded border p-1" />
+            </div>
+          )}
+        </div>
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="contactEmail">Email API</Label>
-        <Input id="contactEmail" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />
+
+      {/* API Configuration Section */}
+      <div className="space-y-4 pt-4 border-t">
+        <h3 className="font-medium">Configurações da API Inmeta</h3>
+        
+        {/* Row 3: Email e Senha */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="apiEmail">Email da API *</Label>
+            <Input 
+              id="apiEmail" 
+              type="email"
+              value={apiEmail} 
+              onChange={(e) => setApiEmail(e.target.value)} 
+              placeholder="email@exemplo.com"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="apiPassword">Senha da API *</Label>
+            <Input 
+              id="apiPassword" 
+              type="password"
+              value={apiPassword} 
+              onChange={(e) => setApiPassword(e.target.value)} 
+              placeholder="••••••••"
+            />
+          </div>
+        </div>
+
+        {/* Row 4: Ambiente */}
+        <div className="space-y-2">
+          <Label htmlFor="environment">Ambiente</Label>
+          <Select value={apiEnvironment} onValueChange={setApiEnvironment}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="production">Produção</SelectItem>
+              <SelectItem value="homologation">Homologação</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Row 5: Testar Conexão */}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleTestApiConnection}
+          disabled={isTestingApi}
+          className="gap-2"
+        >
+          {isTestingApi && <Loader2 className="h-4 w-4 animate-spin" />}
+          Testar Conexão com API
+        </Button>
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="logoUrlLight">URL Logo (Tema Claro)</Label>
-        <Input id="logoUrlLight" value={logoUrlLight} onChange={(e) => setLogoUrlLight(e.target.value)} placeholder="https://..." />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="logoUrlDark">URL Logo (Tema Escuro)</Label>
-        <Input id="logoUrlDark" value={logoUrlDark} onChange={(e) => setLogoUrlDark(e.target.value)} placeholder="https://..." />
-      </div>
+
+      {/* Footer */}
       <div className="flex justify-end gap-2 pt-4 border-t">
-        <Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancelar
+        </Button>
         <Button type="submit" disabled={isLoading}>
-          {isLoading ? 'Salvando...' : client ? 'Atualizar' : 'Cadastrar'}
+          {isLoading ? 'Salvando...' : client ? 'Atualizar Cliente' : 'Criar Cliente'}
         </Button>
       </div>
     </form>
@@ -124,16 +312,29 @@ export const ClientsManagement = () => {
     return theme === 'dark' ? company.logo_url_dark : company.logo_url_light;
   };
 
+  const getStatusBadge = (status: string | null) => {
+    if (status === 'inactive') {
+      return <Badge variant="secondary">Inativo</Badge>;
+    }
+    return <Badge className="bg-green-500/10 text-green-500 hover:bg-green-500/20">Ativo</Badge>;
+  };
+
+  const getEnvironmentBadge = (env: string | null) => {
+    if (env === 'homologation') {
+      return <Badge variant="outline">Homologação</Badge>;
+    }
+    return <Badge variant="outline">Produção</Badge>;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">Clientes (Armadores)</h2>
+          <h2 className="text-xl font-semibold">Gerenciar Clientes</h2>
           <p className="text-sm text-muted-foreground">{companies.length} clientes cadastrados</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2">
-            <Image className="h-4 w-4" />
+          <Button variant="outline">
             Alterar Logo da Aplicação
           </Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -143,7 +344,7 @@ export const ClientsManagement = () => {
                 Novo Cliente
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>{editingClient ? 'Editar Cliente' : 'Novo Cliente'}</DialogTitle>
               </DialogHeader>
@@ -197,10 +398,10 @@ export const ClientsManagement = () => {
                   <td className="p-4 font-medium">{company.name}</td>
                   <td className="p-4 text-sm text-muted-foreground">{company.contact_email || '-'}</td>
                   <td className="p-4 text-center">
-                    <Badge variant="outline">Produção</Badge>
+                    {getEnvironmentBadge(company.api_environment)}
                   </td>
                   <td className="p-4 text-center">
-                    <Badge className="bg-green-500/10 text-green-500">Ativo</Badge>
+                    {getStatusBadge(company.status)}
                   </td>
                   <td className="p-4">
                     <div className="flex justify-center gap-2">

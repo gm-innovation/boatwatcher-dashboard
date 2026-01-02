@@ -169,6 +169,8 @@ export type Database = {
       }
       companies: {
         Row: {
+          api_environment: string | null
+          api_password: string | null
           cnpj: string | null
           contact_email: string | null
           created_at: string
@@ -177,10 +179,13 @@ export type Database = {
           logo_url_light: string | null
           name: string
           project_managers: string[] | null
+          status: string | null
           updated_at: string
           vessels: string[] | null
         }
         Insert: {
+          api_environment?: string | null
+          api_password?: string | null
           cnpj?: string | null
           contact_email?: string | null
           created_at?: string
@@ -189,10 +194,13 @@ export type Database = {
           logo_url_light?: string | null
           name: string
           project_managers?: string[] | null
+          status?: string | null
           updated_at?: string
           vessels?: string[] | null
         }
         Update: {
+          api_environment?: string | null
+          api_password?: string | null
           cnpj?: string | null
           contact_email?: string | null
           created_at?: string
@@ -201,6 +209,7 @@ export type Database = {
           logo_url_light?: string | null
           name?: string
           project_managers?: string[] | null
+          status?: string | null
           updated_at?: string
           vessels?: string[] | null
         }

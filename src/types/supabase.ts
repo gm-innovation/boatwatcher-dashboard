@@ -7,6 +7,9 @@ export interface Company {
   project_managers: string[];
   cnpj: string | null;
   contact_email: string | null;
+  status: string | null;
+  api_password: string | null;
+  api_environment: string | null;
   created_at: string;
   updated_at: string;
 }

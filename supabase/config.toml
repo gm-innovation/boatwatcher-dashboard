@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.agent-relay]
 verify_jwt = false
+
+[functions.test-inmeta-connection]
+verify_jwt = true
