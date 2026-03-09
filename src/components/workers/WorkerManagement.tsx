@@ -116,26 +116,19 @@ const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
         });
         toast({ title: 'Trabalhador atualizado com sucesso' });
       } else {
-        // Insert
-        const { data: newWorker, error } = await supabase
-          .from('workers')
-          .insert({
-            name: data.name,
-            document_number: data.document_number,
-            role: data.role || null,
-            company_id: data.company_id || null,
-            status: data.status,
-            allowed_project_ids: data.allowed_project_ids,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
+        const newWorker = await createWorker({
+          name: data.name,
+          document_number: data.document_number,
+          role: data.role || null,
+          company_id: data.company_id || null,
+          status: data.status,
+          allowed_project_ids: data.allowed_project_ids,
+        });
 
         if (photoFile && newWorker) {
           const photoUrl = await uploadPhoto(newWorker.id);
           if (photoUrl) {
-            await supabase.from('workers').update({ photo_url: photoUrl }).eq('id', newWorker.id);
+            await updateWorker(newWorker.id, { photo_url: photoUrl });
           }
         }
 
