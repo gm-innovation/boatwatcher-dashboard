@@ -4,6 +4,9 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { isElectron } from "@/lib/dataProvider";
+import { createCompany, updateCompany } from "@/hooks/useDataProvider";
+import { uploadFile, getPublicUrl } from "@/lib/storageProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanies } from "@/hooks/useSupabase";
 import { format } from "date-fns";
@@ -50,6 +53,15 @@ export const CompanyForm = () => {
   const handleLogoUpload = async (file: File, isDarkMode: boolean) => {
     const fileExt = file.name.split('.').pop();
     const fileName = `${crypto.randomUUID()}.${fileExt}`;
+
+    if (isElectron()) {
+      // In Electron, store as data URL
+      return new Promise<string | null>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+    }
 
     const { error: uploadError } = await supabase.storage
       .from('client-logos')
@@ -105,37 +117,22 @@ export const CompanyForm = () => {
         logoUrlDark = await handleLogoUpload(logoDarkInput.files[0], true);
       }
 
+      const companyData = {
+        name: companyName,
+        project_managers: projectManagersArray,
+        vessels: vesselsArray,
+        ...(logoUrlLight && { logo_url_light: logoUrlLight }),
+        ...(logoUrlDark && { logo_url_dark: logoUrlDark }),
+      };
+
       if (selectedCompanyId && selectedCompanyId !== "new") {
-        const { error } = await supabase
-          .from('companies')
-          .update({
-            name: companyName,
-            project_managers: projectManagersArray,
-            vessels: vesselsArray,
-            ...(logoUrlLight && { logo_url_light: logoUrlLight }),
-            ...(logoUrlDark && { logo_url_dark: logoUrlDark }),
-          })
-          .eq('id', selectedCompanyId);
-
-        if (error) throw error;
-
+        await updateCompany(selectedCompanyId, companyData);
         toast({
           title: "Empresa atualizada",
           description: "Os dados da empresa foram atualizados com sucesso.",
         });
       } else {
-        const { error } = await supabase
-          .from('companies')
-          .insert({
-            name: companyName,
-            logo_url_light: logoUrlLight,
-            logo_url_dark: logoUrlDark,
-            project_managers: projectManagersArray,
-            vessels: vesselsArray,
-          });
-
-        if (error) throw error;
-
+        await createCompany(companyData);
         toast({
           title: "Empresa cadastrada",
           description: "A empresa foi cadastrada com sucesso.",
@@ -182,12 +179,7 @@ export const CompanyForm = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <Label>Logo da Empresa (Light Mode)</Label>
-              <Input
-                type="file"
-                name="logo-light"
-                accept="image/*"
-                className="mt-2"
-              />
+              <Input type="file" name="logo-light" accept="image/*" className="mt-2" />
               <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-white dark:bg-zinc-900 mt-2">
                 {selectedCompanyId && selectedCompanyId !== "new" ? (
                   <img
@@ -203,12 +195,7 @@ export const CompanyForm = () => {
 
             <div className="space-y-2">
               <Label>Logo da Empresa (Dark Mode)</Label>
-              <Input
-                type="file"
-                name="logo-dark"
-                accept="image/*"
-                className="mt-2"
-              />
+              <Input type="file" name="logo-dark" accept="image/*" className="mt-2" />
               <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-zinc-900 dark:bg-white mt-2">
                 {selectedCompanyId && selectedCompanyId !== "new" ? (
                   <img

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { isElectron, getElectronAPI } from '@/lib/dataProvider';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAccessLogs } from '@/hooks/useDataProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,49 +17,56 @@ interface RecentActivityFeedProps {
 export const RecentActivityFeed = ({ projectId }: RecentActivityFeedProps) => {
   const [recentLogs, setRecentLogs] = useState<AccessLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const queryClient = useQueryClient();
 
   useEffect(() => {
-    const fetchRecentLogs = async () => {
+    const fetchLogs = async () => {
       if (!projectId) {
         setRecentLogs([]);
         setIsLoading(false);
         return;
       }
 
-      const { data, error } = await supabase
-        .from('access_logs')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .limit(20);
+      try {
+        if (isElectron()) {
+          const data = await fetchAccessLogs({ limit: 20 });
+          setRecentLogs((data || []) as AccessLog[]);
+        } else {
+          const { data, error } = await supabase
+            .from('access_logs')
+            .select('*')
+            .order('timestamp', { ascending: false })
+            .limit(20);
 
-      if (!error && data) {
-        setRecentLogs(data as AccessLog[]);
+          if (!error && data) {
+            setRecentLogs(data as AccessLog[]);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching recent logs:', err);
       }
       setIsLoading(false);
     };
 
-    fetchRecentLogs();
+    fetchLogs();
 
-    // Realtime subscription
-    const channel = supabase
-      .channel('recent-access-logs')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'access_logs',
-        },
-        (payload) => {
-          setRecentLogs(prev => [payload.new as AccessLog, ...prev].slice(0, 20));
-        }
-      )
-      .subscribe();
+    // Realtime subscription (web only) or polling (Electron)
+    if (isElectron()) {
+      const interval = setInterval(fetchLogs, 5000);
+      return () => clearInterval(interval);
+    } else {
+      const channel = supabase
+        .channel('recent-access-logs')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'access_logs' },
+          (payload) => {
+            setRecentLogs(prev => [payload.new as AccessLog, ...prev].slice(0, 20));
+          }
+        )
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      return () => { supabase.removeChannel(channel); };
+    }
   }, [projectId]);
 
   const getDirectionIcon = (direction: string) => {

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Plus } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { createProject, updateProject } from "@/hooks/useDataProvider";
 import { useProjectById, useCompanies } from "@/hooks/useSupabase";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,15 +24,12 @@ export const ProjectForm = () => {
   const queryClient = useQueryClient();
   const { data: companies = [] } = useCompanies();
   
-  // Form state
   const [projectName, setProjectName] = useState("");
   const [projectStatus, setProjectStatus] = useState("active");
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
 
-  // Fetch project data when selected
   const { data: projectData } = useProjectById(selectedProjectId);
 
-  // Update form when project is selected
   useEffect(() => {
     if (projectData) {
       setProjectName(projectData.name || "");
@@ -47,20 +44,12 @@ export const ProjectForm = () => {
 
   const handleSave = async () => {
     if (!isCreatingNew && !selectedProjectId) {
-      toast({
-        title: "Erro ao salvar",
-        description: "Selecione um projeto primeiro",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao salvar", description: "Selecione um projeto primeiro", variant: "destructive" });
       return;
     }
 
     if (!projectName.trim()) {
-      toast({
-        title: "Erro ao salvar",
-        description: "Digite o nome do projeto",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao salvar", description: "Digite o nome do projeto", variant: "destructive" });
       return;
     }
 
@@ -74,45 +63,19 @@ export const ProjectForm = () => {
       };
 
       if (isCreatingNew) {
-        const { data, error } = await supabase
-          .from('projects')
-          .insert(projectDataToSave)
-          .select()
-          .single();
-
-        if (error) throw error;
-        
-        setSelectedProjectId(data.id);
+        const data = await createProject(projectDataToSave);
+        if (data) setSelectedProjectId(data.id);
         setIsCreatingNew(false);
-
         await queryClient.invalidateQueries({ queryKey: ['projects'] });
-
-        toast({
-          title: "Projeto criado",
-          description: "O novo projeto foi criado com sucesso",
-        });
+        toast({ title: "Projeto criado", description: "O novo projeto foi criado com sucesso" });
       } else {
-        const { error } = await supabase
-          .from('projects')
-          .update(projectDataToSave)
-          .eq('id', selectedProjectId);
-
-        if (error) throw error;
-
+        await updateProject(selectedProjectId!, projectDataToSave);
         await queryClient.invalidateQueries({ queryKey: ['projects'] });
-
-        toast({
-          title: "Projeto atualizado",
-          description: "As alterações foram salvas com sucesso",
-        });
+        toast({ title: "Projeto atualizado", description: "As alterações foram salvas com sucesso" });
       }
     } catch (error: any) {
       console.error('Error saving project:', error);
-      toast({
-        title: "Erro ao salvar",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
     } finally {
       setIsSaving(false);
     }

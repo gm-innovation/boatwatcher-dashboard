@@ -1,19 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
+import { isElectron } from '@/lib/dataProvider';
+import { fetchCompanies, fetchWorkers, fetchProjects, fetchProjectById } from '@/hooks/useDataProvider';
 import { supabase } from '@/integrations/supabase/client';
-import type { Company, Worker, Project, AccessLog } from '@/types/supabase';
+import type { Company, Worker, Project } from '@/types/supabase';
 import { format, startOfDay } from 'date-fns';
 
 export const useCompanies = () => {
   return useQuery({
     queryKey: ['companies'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('companies')
-        .select('*')
-        .order('name');
-      
-      if (error) throw error;
-      return data as Company[];
+      return await fetchCompanies() as Company[];
     }
   });
 };
@@ -22,22 +18,7 @@ export const useWorkers = () => {
   return useQuery({
     queryKey: ['workers'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('workers')
-        .select(`
-          *,
-          companies (
-            name
-          )
-        `)
-        .order('name');
-      
-      if (error) throw error;
-      
-      return data.map((worker: any) => ({
-        ...worker,
-        company: worker.companies?.name || 'N/A'
-      })) as Worker[];
+      return await fetchWorkers() as Worker[];
     }
   });
 };
@@ -46,26 +27,7 @@ export const useProjects = () => {
   return useQuery({
     queryKey: ['projects'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('projects')
-        .select(`
-          *,
-          client:companies (
-            name,
-            vessels,
-            project_managers,
-            logo_url_light,
-            logo_url_dark
-          )
-        `)
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error('Error fetching projects:', error);
-        throw error;
-      }
-      
-      return data as Project[];
+      return await fetchProjects() as Project[];
     }
   });
 };
@@ -75,28 +37,7 @@ export const useProjectById = (projectId: string | null) => {
     queryKey: ['project', projectId],
     queryFn: async () => {
       if (!projectId) return null;
-      
-      const { data, error } = await supabase
-        .from('projects')
-        .select(`
-          *,
-          client:companies (
-            name,
-            vessels,
-            project_managers,
-            logo_url_light,
-            logo_url_dark
-          )
-        `)
-        .eq('id', projectId)
-        .single();
-      
-      if (error) {
-        console.error('Error fetching project by id:', error);
-        throw error;
-      }
-
-      return data as Project;
+      return await fetchProjectById(projectId) as Project;
     },
     enabled: !!projectId
   });
@@ -108,6 +49,12 @@ export const useCompanyLogo = (companyId: string | null) => {
     queryFn: async () => {
       if (!companyId) return null;
       
+      if (isElectron()) {
+        const companies = await fetchCompanies();
+        const company = companies?.find((c: any) => c.id === companyId);
+        return company ? { logo_url_light: company.logo_url_light, logo_url_dark: company.logo_url_dark } : null;
+      }
+
       const { data, error } = await supabase
         .from('companies')
         .select('logo_url_light, logo_url_dark')
@@ -121,7 +68,7 @@ export const useCompanyLogo = (companyId: string | null) => {
   });
 };
 
-// Hook para buscar trabalhadores "a bordo" (com entrada hoje e sem saída posterior)
+// Hook para buscar trabalhadores "a bordo"
 export const useWorkersOnBoard = (projectId: string | null) => {
   const today = format(startOfDay(new Date()), 'yyyy-MM-dd');
   
@@ -129,6 +76,14 @@ export const useWorkersOnBoard = (projectId: string | null) => {
     queryKey: ['workers-on-board', projectId, today],
     queryFn: async () => {
       if (!projectId) return [];
+
+      if (isElectron()) {
+        const api = (window as any).electronAPI;
+        if (api?.db?.getWorkersOnBoard) {
+          return api.db.getWorkersOnBoard(projectId);
+        }
+        return [];
+      }
 
       // Buscar logs de entrada de hoje
       const { data: entryLogs, error: entryError } = await supabase
@@ -156,7 +111,6 @@ export const useWorkersOnBoard = (projectId: string | null) => {
       for (const entry of entryLogs || []) {
         if (!entry.worker_id) continue;
         
-        // Verificar se há saída posterior
         const hasExit = exitLogs?.some(exit => 
           exit.worker_id === entry.worker_id && 
           new Date(exit.timestamp) > new Date(entry.timestamp)
@@ -172,19 +126,12 @@ export const useWorkersOnBoard = (projectId: string | null) => {
         }
       }
 
-      // Buscar dados completos dos trabalhadores
       const workerIds = Array.from(workersOnBoard.keys());
       if (workerIds.length === 0) return [];
 
       const { data: workers, error: workersError } = await supabase
         .from('workers')
-        .select(`
-          id,
-          name,
-          role,
-          company_id,
-          companies (name)
-        `)
+        .select('id, name, role, company_id, companies(name)')
         .in('id', workerIds);
 
       if (workersError) throw workersError;
@@ -200,7 +147,7 @@ export const useWorkersOnBoard = (projectId: string | null) => {
       }));
     },
     enabled: !!projectId,
-    refetchInterval: 30000 // Atualiza a cada 30 segundos
+    refetchInterval: 30000
   });
 };
 
