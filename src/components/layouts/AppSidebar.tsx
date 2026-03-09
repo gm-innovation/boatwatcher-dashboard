@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   FileText, 
@@ -9,7 +8,6 @@ import {
   ChevronDown,
   UserCheck,
   Briefcase,
-  FileCheck,
   Server,
   FolderKanban,
   Shield,
@@ -17,7 +15,7 @@ import {
   Cog,
   Wifi
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { useAuthContext } from '@/contexts/AuthContext';
 import {
   Sidebar,
   SidebarContent,
@@ -27,14 +25,10 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubItem,
-  SidebarMenuSubButton,
   useSidebar,
 } from '@/components/ui/sidebar';
 import { NavLink } from './NavLink';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import type { AppRole } from '@/types/supabase';
 
 const mainNavItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard, end: true },
@@ -59,43 +53,25 @@ const adminSubItems = [
 
 export function AppSidebar() {
   const { state } = useSidebar();
-  const collapsed = state === 'collapsed';
   const location = useLocation();
-  const navigate = useNavigate();
-  const [userRole, setUserRole] = useState<AppRole | null>(null);
+  const { role } = useAuthContext();
   
   const currentPath = location.pathname;
   const isPeopleActive = currentPath.startsWith('/people');
   const isAdminActive = currentPath.startsWith('/admin');
   const isCompanyPortalActive = currentPath.startsWith('/company-portal');
 
-  useEffect(() => {
-    const fetchUserRole = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const { data } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', session.user.id)
-          .maybeSingle();
-        setUserRole(data?.role as AppRole || null);
-      }
-    };
-    fetchUserRole();
-  }, []);
-
   const isActive = (path: string, end?: boolean) => {
     if (end) return currentPath === path;
     return currentPath.startsWith(path);
   };
 
-  const isAdmin = userRole === 'admin';
-  const isCompanyAdmin = userRole === 'company_admin';
+  const isAdmin = role === 'admin';
+  const isCompanyAdmin = role === 'company_admin';
 
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
-        {/* Main Navigation */}
         <SidebarGroup>
           <SidebarGroupLabel>Menu Principal</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -118,7 +94,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* People Management - Admin only */}
         {isAdmin && (
           <SidebarGroup>
             <Collapsible defaultOpen={isPeopleActive}>
@@ -155,7 +130,6 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {/* Company Portal - Company Admin only */}
         {isCompanyAdmin && (
           <SidebarGroup>
             <SidebarGroupLabel>Portal da Empresa</SidebarGroupLabel>
@@ -178,7 +152,6 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {/* Administration - Admin only */}
         {isAdmin && (
           <SidebarGroup>
             <Collapsible defaultOpen={isAdminActive}>
