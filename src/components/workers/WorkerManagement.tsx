@@ -96,17 +96,8 @@ const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
     const fileName = `${workerId}.${fileExt}`;
     const filePath = `workers/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('worker-photos')
-      .upload(filePath, photoFile, { upsert: true });
-
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
-      return null;
-    }
-
-    const { data } = await supabase.storage.from('worker-photos').createSignedUrl(filePath, 3600);
-    return data?.signedUrl || null;
+    const result = await uploadFile('worker-photos', filePath, photoFile, { upsert: true });
+    return result;
   };
 
   const onSubmit = async (data: WorkerFormData) => {
