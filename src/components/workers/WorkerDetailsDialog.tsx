@@ -210,6 +210,7 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
           <div className="mt-2">
             <BadgePrinter worker={worker} companyName={companyName} jobFunctionName={worker.role || undefined} />
           </div>
+        </DialogHeader>
 
         <ScrollArea className="flex-1 pr-4">
           <div className="space-y-6 pb-4">
