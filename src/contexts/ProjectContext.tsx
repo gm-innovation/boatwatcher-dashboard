@@ -50,6 +50,13 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     setLastUpdate(new Date());
   }, []);
 
+  const registerRefreshCallback = useCallback((cb: () => void) => {
+    refreshCallbacksRef.current.push(cb);
+    return () => {
+      refreshCallbacksRef.current = refreshCallbacksRef.current.filter(fn => fn !== cb);
+    };
+  }, []);
+
   // Fetch projects when component mounts
   useEffect(() => {
     const fetchProjects = async () => {
