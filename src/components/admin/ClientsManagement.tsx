@@ -259,12 +259,6 @@ export const ClientsManagement = () => {
     return <Badge className="bg-green-500/10 text-green-500 hover:bg-green-500/20">Ativo</Badge>;
   };
 
-  const getEnvironmentBadge = (env: string | null) => {
-    if (env === 'homologation') {
-      return <Badge variant="outline">Homologação</Badge>;
-    }
-    return <Badge variant="outline">Produção</Badge>;
-  };
 
   return (
     <div className="space-y-6">
