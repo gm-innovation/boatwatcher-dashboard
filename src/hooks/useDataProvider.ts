@@ -87,7 +87,7 @@ export async function createWorker(workerData: Record<string, any>) {
   if (isElectron()) {
     return electronDB()!.createWorker(workerData);
   }
-  const { data, error } = await supabase.from('workers').insert(workerData).select().single();
+  const { data, error } = await supabase.from('workers').insert(workerData as any).select().single();
   if (error) throw error;
   return data;
 }
