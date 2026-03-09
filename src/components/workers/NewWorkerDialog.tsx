@@ -241,8 +241,8 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
       return null;
     }
 
-    const { data } = supabase.storage.from('worker-photos').getPublicUrl(filePath);
-    return data.publicUrl;
+    const { data } = await supabase.storage.from('worker-photos').createSignedUrl(filePath, 3600);
+    return data?.signedUrl || null;
   };
 
   const saveDocuments = async (workerId: string) => {
@@ -264,8 +264,8 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
           continue;
         }
 
-        const { data: urlData } = supabase.storage.from('worker-documents').getPublicUrl(fileName);
-        documentUrl = urlData.publicUrl;
+        const { data: urlData } = await supabase.storage.from('worker-documents').createSignedUrl(fileName, 3600);
+        documentUrl = urlData?.signedUrl || null;
       }
 
       await createDocument.mutateAsync({

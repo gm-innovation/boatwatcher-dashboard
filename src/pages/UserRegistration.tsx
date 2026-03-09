@@ -137,13 +137,13 @@ const UserRegistration = () => {
           continue;
         }
 
-        const { data } = supabase.storage
+        const { data } = await supabase.storage
           .from('worker-documents')
-          .getPublicUrl(filePath);
+          .createSignedUrl(filePath, 3600);
 
         newDocs.push({
           filename: file.name,
-          file_url: data.publicUrl,
+          file_url: data?.signedUrl || '',
           file_type: file.type
         });
       }
@@ -219,8 +219,8 @@ const UserRegistration = () => {
       return null;
     }
 
-    const { data } = supabase.storage.from('worker-photos').getPublicUrl(filePath);
-    return data.publicUrl;
+    const { data } = await supabase.storage.from('worker-photos').createSignedUrl(filePath, 3600);
+    return data?.signedUrl || null;
   };
 
   const onSubmit = async (data: RegistrationFormData) => {

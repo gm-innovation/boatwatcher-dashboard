@@ -18,6 +18,7 @@ import ResetPassword from "./pages/ResetPassword";
 import Visitors from "./pages/Visitors";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { MainLayout } from "./components/layouts/MainLayout";
+import { AuthProvider } from "./contexts/AuthContext";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,6 +29,12 @@ const queryClient = new QueryClient({
   },
 });
 
+const ProtectedPage = ({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string }) => (
+  <ProtectedRoute requiredRole={requiredRole}>
+    <MainLayout>{children}</MainLayout>
+  </ProtectedRoute>
+);
+
 const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
@@ -36,82 +43,21 @@ const App = () => {
           <Toaster />
           <Sonner />
           <BrowserRouter>
-          <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/cadastro" element={<UserRegistration />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <MainLayout>
-                      <Index />
-                    </MainLayout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route 
-                path="/reports" 
-                element={
-                  <ProtectedRoute>
-                    <MainLayout>
-                      <Reports />
-                    </MainLayout>
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/people/*" 
-                element={
-                  <ProtectedRoute>
-                    <MainLayout>
-                      <PeopleManagement />
-                    </MainLayout>
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/admin/*" 
-                element={
-                  <ProtectedRoute>
-                    <MainLayout>
-                      <Admin />
-                    </MainLayout>
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/company-portal/*" 
-                element={
-                  <ProtectedRoute>
-                    <MainLayout>
-                      <CompanyPortal />
-                    </MainLayout>
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/settings" 
-                element={
-                  <ProtectedRoute>
-                    <MainLayout>
-                      <ProjectSettings />
-                    </MainLayout>
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/visitors" 
-                element={
-                  <ProtectedRoute>
-                    <MainLayout>
-                      <Visitors />
-                    </MainLayout>
-                  </ProtectedRoute>
-                } 
-              />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <AuthProvider>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/cadastro" element={<UserRegistration />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/" element={<ProtectedPage><Index /></ProtectedPage>} />
+                <Route path="/reports" element={<ProtectedPage><Reports /></ProtectedPage>} />
+                <Route path="/people/*" element={<ProtectedPage requiredRole="admin"><PeopleManagement /></ProtectedPage>} />
+                <Route path="/admin/*" element={<ProtectedPage requiredRole="admin"><Admin /></ProtectedPage>} />
+                <Route path="/company-portal/*" element={<ProtectedPage><CompanyPortal /></ProtectedPage>} />
+                <Route path="/settings" element={<ProtectedPage requiredRole="admin"><ProjectSettings /></ProtectedPage>} />
+                <Route path="/visitors" element={<ProtectedPage><Visitors /></ProtectedPage>} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </AuthProvider>
           </BrowserRouter>
         </TooltipProvider>
       </ThemeProvider>
