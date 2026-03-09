@@ -383,12 +383,12 @@ export const WorkerManagement = () => {
   const handleDelete = async (worker: Worker) => {
     if (!confirm(`Tem certeza que deseja remover ${worker.name}?`)) return;
     
-    const { error } = await supabase.from('workers').delete().eq('id', worker.id);
-    if (error) {
-      toast({ title: 'Erro ao remover trabalhador', variant: 'destructive' });
-    } else {
+    try {
+      await deleteWorker(worker.id);
       toast({ title: 'Trabalhador removido' });
       queryClient.invalidateQueries({ queryKey: ['workers'] });
+    } catch {
+      toast({ title: 'Erro ao remover trabalhador', variant: 'destructive' });
     }
   };
 

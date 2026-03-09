@@ -176,12 +176,7 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
     if (!worker) return;
     
     try {
-      const { error } = await supabase
-        .from('workers')
-        .update({ allowed_project_ids: selectedProjects })
-        .eq('id', worker.id);
-
-      if (error) throw error;
+      await updateWorker(worker.id, { allowed_project_ids: selectedProjects });
       toast({ title: 'Projetos atualizados com sucesso' });
       setIsManagingProjects(false);
       queryClient.invalidateQueries({ queryKey: ['workers'] });
