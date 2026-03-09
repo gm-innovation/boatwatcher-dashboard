@@ -102,8 +102,8 @@ const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
       return null;
     }
 
-    const { data } = supabase.storage.from('worker-photos').getPublicUrl(filePath);
-    return data.publicUrl;
+    const { data } = await supabase.storage.from('worker-photos').createSignedUrl(filePath, 3600);
+    return data?.signedUrl || null;
   };
 
   const onSubmit = async (data: WorkerFormData) => {

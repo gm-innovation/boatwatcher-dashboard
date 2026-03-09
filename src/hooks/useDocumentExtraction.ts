@@ -54,11 +54,11 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
         return null;
       }
 
-      const { data: publicUrl } = supabase.storage
+      const { data: signedUrl } = await supabase.storage
         .from('worker-documents')
-        .getPublicUrl(filePath);
+        .createSignedUrl(filePath, 3600);
 
-      return publicUrl.publicUrl;
+      return signedUrl?.signedUrl || null;
     } catch (error) {
       console.error('[uploadToStorage] Erro ao fazer upload:', error);
       return null;
