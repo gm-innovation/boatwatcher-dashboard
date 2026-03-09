@@ -218,6 +218,7 @@ export const Header = () => {
               </Toggle>
 
               <Button variant="ghost" size="icon" onClick={signOut}>
+                <LogOut className="h-4 w-4" />
               </Button>
             </div>
           </div>
