@@ -44,7 +44,7 @@ export const StatisticsCards = ({ crewSize, workersOnBoard, companiesOnBoard }: 
         value={workersOnBoard}
         bgColor="bg-green-50 dark:bg-green-950/30"
         iconBgColor="bg-green-100 dark:bg-green-900/50"
-        textColor="text-green-900 dark:text-green-100" />
+        textColor="text-green-900 dark:text-green-100" className="bg-black/0" />
       
       <StatCard
         icon={<Building className="h-6 w-6 text-purple-600" />}
@@ -52,7 +52,7 @@ export const StatisticsCards = ({ crewSize, workersOnBoard, companiesOnBoard }: 
         value={companiesOnBoard}
         bgColor="bg-purple-50 dark:bg-purple-950/30"
         iconBgColor="bg-purple-100 dark:bg-purple-900/50"
-        textColor="text-purple-900 dark:text-purple-100" />
+        textColor="text-purple-900 dark:text-purple-100" className="bg-black/0" />
       
     </div>);
 
