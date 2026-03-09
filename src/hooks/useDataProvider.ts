@@ -140,7 +140,7 @@ export async function createProject(projectData: Record<string, any>) {
   if (isElectron()) {
     return null; // expanded in IPC bridge
   }
-  const { data, error } = await supabase.from('projects').insert(projectData).select().single();
+  const { data, error } = await supabase.from('projects').insert(projectData as any).select().single();
   if (error) throw error;
   return data;
 }
