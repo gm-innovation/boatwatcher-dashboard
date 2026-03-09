@@ -39,6 +39,7 @@ import type { AppRole } from '@/types/supabase';
 const mainNavItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard, end: true },
   { title: 'Relatórios', url: '/reports', icon: FileText },
+  { title: 'Visitantes', url: '/visitors', icon: UserCheck },
 ];
 
 const peopleSubItems = [

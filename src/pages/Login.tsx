@@ -309,12 +309,36 @@ const Login = () => {
                   {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                   Entrar
                 </Button>
-                <p className="text-center text-sm text-muted-foreground">
-                  É trabalhador?{' '}
-                  <a href="/cadastro" className="text-primary hover:underline">
-                    Fazer cadastro
-                  </a>
-                </p>
+                <div className="text-center space-y-2">
+                  <button
+                    type="button"
+                    className="text-sm text-primary hover:underline"
+                    onClick={async () => {
+                      if (!email) {
+                        toast({ title: 'Informe seu email', description: 'Digite seu email acima para receber o link de recuperação.', variant: 'destructive' });
+                        return;
+                      }
+                      setLoading(true);
+                      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                        redirectTo: `${window.location.origin}/reset-password`,
+                      });
+                      setLoading(false);
+                      if (error) {
+                        toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+                      } else {
+                        toast({ title: 'Email enviado!', description: 'Verifique sua caixa de entrada para redefinir a senha.' });
+                      }
+                    }}
+                  >
+                    Esqueceu a senha?
+                  </button>
+                  <p className="text-sm text-muted-foreground">
+                    É trabalhador?{' '}
+                    <a href="/cadastro" className="text-primary hover:underline">
+                      Fazer cadastro
+                    </a>
+                  </p>
+                </div>
               </form>
             </>
           )}
