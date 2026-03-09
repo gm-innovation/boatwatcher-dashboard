@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
-import { Clock, Moon, Sun, LogOut, LayoutDashboard, FileText, Users, Building2, Shield, Menu, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Clock, Moon, Sun, LogOut, LayoutDashboard, FileText, Users, Building2, Shield, Menu, RefreshCw, ToggleLeft, ToggleRight, Wifi, WifiOff, Cloud, CloudOff } from 'lucide-react';
+import { isElectron, getElectronAPI } from '@/lib/dataProvider';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
