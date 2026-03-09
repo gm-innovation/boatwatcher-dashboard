@@ -91,7 +91,7 @@ export default function Visitors() {
 
   const deleteVisitor = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('visitors').delete().eq('id', id);
+      const { error } = await (supabase.from as any)('visitors').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
