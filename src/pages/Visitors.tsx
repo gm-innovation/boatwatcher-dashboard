@@ -45,15 +45,14 @@ export default function Visitors() {
   const { data: visitors = [], isLoading } = useQuery({
     queryKey: ['visitors', selectedProjectId],
     queryFn: async () => {
-      let query = supabase
-        .from('visitors')
+      let query = (supabase.from as any)('visitors')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (selectedProjectId) query = query.eq('project_id', selectedProjectId);
       const { data, error } = await query;
       if (error) throw error;
-      return data as Visitor[];
+      return (data || []) as Visitor[];
     },
   });
 
