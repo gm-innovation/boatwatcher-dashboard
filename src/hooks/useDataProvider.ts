@@ -178,7 +178,7 @@ export async function insertAccessLog(logData: Record<string, any>) {
   if (isElectron()) {
     return electronDB()!.insertAccessLog(logData);
   }
-  const { data, error } = await supabase.from('access_logs').insert(logData).select().single();
+  const { data, error } = await supabase.from('access_logs').insert(logData as any).select().single();
   if (error) throw error;
   return data;
 }
