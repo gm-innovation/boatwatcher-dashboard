@@ -33,6 +33,7 @@ interface Visitor {
 
 export default function Visitors() {
   const { selectedProjectId } = useProject();
+  const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [search, setSearch] = useState('');
