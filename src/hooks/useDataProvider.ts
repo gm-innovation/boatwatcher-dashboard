@@ -35,13 +35,9 @@ export async function fetchCompanyById(id: string) {
 
 export async function createCompany(companyData: Record<string, any>) {
   if (isElectron()) {
-    return electronDB()!.getCompanies().then(() => {
-      // Electron createCompany not in current bridge, use generic
-      return (window as any).electronAPI.db.createWorker ? 
-        fetch('/api/company', { method: 'POST', body: JSON.stringify(companyData) }) : null;
-    });
+    return null; // expanded in IPC bridge
   }
-  const { data, error } = await supabase.from('companies').insert(companyData).select().single();
+  const { data, error } = await supabase.from('companies').insert(companyData as any).select().single();
   if (error) throw error;
   return data;
 }
