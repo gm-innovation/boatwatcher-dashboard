@@ -129,7 +129,8 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       lastUpdate,
       autoRefresh,
       setAutoRefresh,
-      handleRefresh
+      handleRefresh,
+      registerRefreshCallback
     }}>
       {children}
     </ProjectContext.Provider>
