@@ -1,4 +1,4 @@
-# BoatWatcher Desktop — Build Instructions
+# Dock Check Desktop — Build Instructions
 
 ## Pré-requisitos
 
@@ -39,8 +39,8 @@ npm run electron:dev
 npm run build:electron
 
 # Gera o instalador em ./electron-dist/
-# Windows: BoatWatcher-Setup.exe
-# Linux: BoatWatcher.AppImage
+# Windows: DockCheck-Setup.exe
+# Linux: DockCheck.AppImage
 ```
 
 ## Arquitetura

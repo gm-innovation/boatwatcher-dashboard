@@ -1,4 +1,4 @@
-# BoatWatcher — Servidor Local Dedicado
+# Dock Check — Servidor Local Dedicado
 
 ## Arquitetura
 

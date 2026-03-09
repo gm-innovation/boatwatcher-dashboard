@@ -28,7 +28,7 @@ nsis:
   uninstallerIcon: public/favicon.ico
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: BoatWatcher
+  shortcutName: Dock Check
 
 linux:
   target:

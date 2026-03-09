@@ -43,7 +43,7 @@ class BackupManager {
 
   pruneOldBackups() {
     const files = fs.readdirSync(this.backupDir)
-      .filter(f => f.startsWith('boatwatcher-') && f.endsWith('.db'))
+      .filter(f => f.startsWith('dockcheck-') && f.endsWith('.db'))
       .sort()
       .reverse();
 

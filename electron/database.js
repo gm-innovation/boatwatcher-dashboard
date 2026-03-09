@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 let db;
 
 function initDatabase(userDataPath) {
-  const dbPath = path.join(userDataPath, 'boatwatcher.db');
+  const dbPath = path.join(userDataPath, 'dockcheck.db');
   db = new Database(dbPath);
 
   // Enable WAL mode for better concurrency

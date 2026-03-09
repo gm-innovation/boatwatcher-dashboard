@@ -1,7 +1,7 @@
 @echo off
-REM BoatWatcher Local Server — Installation Script (Windows)
+REM Dock Check Local Server — Installation Script (Windows)
 
-echo === BoatWatcher Local Server Setup ===
+echo === Dock Check Local Server Setup ===
 
 REM Check Node.js
 where node >nul 2>&1
@@ -27,7 +27,7 @@ echo.
 echo To run as a Windows service, install NSSM:
 echo   1. Download from https://nssm.cc/download
 echo   2. Extract nssm.exe to this directory
-echo   3. Run: nssm install BoatWatcherServer "%cd%\start-server.bat"
+echo   3. Run: nssm install DockCheckServer "%cd%\start-server.bat"
 echo.
 
 REM Create start script
