@@ -1,10 +1,14 @@
+import { useMemo } from 'react';
 import { useAccessLogs } from '@/hooks/useControlID';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Download, Moon, User, Clock, Building2 } from 'lucide-react';
+import { format, parseISO, differenceInCalendarDays } from 'date-fns';
 
 interface OvernightControlProps {
   projectId: string;
@@ -24,12 +28,65 @@ interface OvernightWorker {
 export const OvernightControl = ({ projectId, startDate, endDate }: OvernightControlProps) => {
   const { data: accessLogs = [], isLoading } = useAccessLogs(projectId, startDate, endDate, 1000);
 
-  // Simular dados de pernoite
-  const overnightWorkers: OvernightWorker[] = [
-    { id: '1', name: 'João Silva', company: 'Empresa A', entryTime: '07:30', nights: 3 },
-    { id: '2', name: 'Maria Santos', company: 'Empresa B', entryTime: '06:45', nights: 5 },
-    { id: '3', name: 'Pedro Costa', company: 'Empresa A', entryTime: '07:00', nights: 2 },
-  ];
+  const { data: workers = [] } = useQuery({
+    queryKey: ['workers-with-companies'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('workers')
+        .select('id, name, photo_url, company:companies(name)')
+        .eq('status', 'active');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const overnightWorkers = useMemo<OvernightWorker[]>(() => {
+    if (!accessLogs.length) return [];
+
+    // Group logs by worker_id
+    const workerLogs = new Map<string, typeof accessLogs>();
+    for (const log of accessLogs) {
+      if (!log.worker_id) continue;
+      if (!workerLogs.has(log.worker_id)) workerLogs.set(log.worker_id, []);
+      workerLogs.get(log.worker_id)!.push(log);
+    }
+
+    const result: OvernightWorker[] = [];
+
+    workerLogs.forEach((logs, workerId) => {
+      // Sort by timestamp desc
+      const sorted = [...logs].sort((a, b) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+
+      // Find last entry without a subsequent exit
+      const lastEntry = sorted.find(l => l.direction === 'entry');
+      const lastExit = sorted.find(l => l.direction === 'exit');
+
+      const isOnBoard = lastEntry && (!lastExit || new Date(lastEntry.timestamp) > new Date(lastExit.timestamp));
+
+      if (isOnBoard && lastEntry) {
+        const entryDate = parseISO(lastEntry.timestamp);
+        const nights = differenceInCalendarDays(new Date(), entryDate);
+
+        const worker = workers.find(w => w.id === workerId);
+        const companyName = worker?.company && typeof worker.company === 'object' && 'name' in worker.company
+          ? (worker.company as { name: string }).name
+          : 'Desconhecida';
+
+        result.push({
+          id: workerId,
+          name: worker?.name || lastEntry.worker_name || 'Desconhecido',
+          company: companyName,
+          entryTime: format(entryDate, 'HH:mm'),
+          nights: Math.max(nights, 0),
+          photoUrl: worker?.photo_url || undefined,
+        });
+      }
+    });
+
+    return result.sort((a, b) => b.nights - a.nights);
+  }, [accessLogs, workers]);
 
   if (!projectId) {
     return (
@@ -42,7 +99,6 @@ export const OvernightControl = ({ projectId, startDate, endDate }: OvernightCon
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="pt-6">
@@ -89,7 +145,6 @@ export const OvernightControl = ({ projectId, startDate, endDate }: OvernightCon
         </Card>
       </div>
 
-      {/* Export buttons */}
       <div className="flex justify-end gap-2">
         <Button variant="outline" className="gap-2">
           <Download className="h-4 w-4" />
@@ -101,7 +156,6 @@ export const OvernightControl = ({ projectId, startDate, endDate }: OvernightCon
         </Button>
       </div>
 
-      {/* Table */}
       <Card>
         <CardHeader>
           <CardTitle>Trabalhadores Pernoitando</CardTitle>

@@ -99,9 +99,8 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
       const payload = { 
         name, 
         status,
-        contact_email: apiEmail || null,
-        api_password: apiPassword || null,
-        api_environment: apiEnvironment,
+        cnpj: cnpj || null,
+        contact_email: contactEmail || null,
         logo_url_light: logoUrlLight || null,
         logo_url_dark: logoUrlDark || null
       };

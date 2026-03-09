@@ -128,6 +128,14 @@ const Admin = () => {
         <TabsContent value="documents">
           <DocumentExpirationCheck />
         </TabsContent>
+
+        <TabsContent value="agents">
+          <AgentManagement />
+        </TabsContent>
+
+        <TabsContent value="connectivity">
+          <ConnectivityDashboard />
+        </TabsContent>
       </Tabs>
     </div>
   );
