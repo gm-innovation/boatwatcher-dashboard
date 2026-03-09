@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface Project {
   id: string;
@@ -22,6 +23,10 @@ interface ProjectContextType {
   loading: boolean;
   isFullscreenMode: boolean;
   toggleFullscreen: () => void;
+  lastUpdate: Date;
+  autoRefresh: boolean;
+  setAutoRefresh: (value: boolean) => void;
+  handleRefresh: () => void;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -32,10 +37,21 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const queryClient = useQueryClient();
 
   const toggleFullscreen = () => {
     setIsFullscreenMode(prev => !prev);
   };
+
+  const handleRefresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['project', selectedProjectId] });
+    queryClient.invalidateQueries({ queryKey: ['workers-on-board'] });
+    queryClient.invalidateQueries({ queryKey: ['devices'] });
+    queryClient.invalidateQueries({ queryKey: ['access-logs'] });
+    setLastUpdate(new Date());
+  }, [queryClient, selectedProjectId]);
 
   // Fetch projects when component mounts
   useEffect(() => {
@@ -68,7 +84,6 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
 
-        // Transform data to match Project type
         const transformedProjects = (data || []).map((project: any) => ({
           id: project.id,
           name: project.name,
@@ -106,7 +121,11 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       projects,
       loading,
       isFullscreenMode,
-      toggleFullscreen
+      toggleFullscreen,
+      lastUpdate,
+      autoRefresh,
+      setAutoRefresh,
+      handleRefresh
     }}>
       {children}
     </ProjectContext.Provider>
