@@ -9,7 +9,9 @@ import { ReportScheduler } from "@/components/reports/ReportScheduler";
 import { DiagnosticsPanel } from "@/components/admin/DiagnosticsPanel";
 import { PendingRegistrations } from "@/components/people/PendingRegistrations";
 import { DocumentExpirationCheck } from "@/components/admin/DocumentExpirationCheck";
-import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, UserCheck, FileWarning } from "lucide-react";
+import { AgentManagement } from "@/components/devices/AgentManagement";
+import { ConnectivityDashboard } from "@/components/devices/ConnectivityDashboard";
+import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, UserCheck, FileWarning, Bot, Wifi } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
 const Admin = () => {
