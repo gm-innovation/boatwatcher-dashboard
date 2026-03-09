@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useProject } from '@/contexts/ProjectContext';
@@ -27,10 +28,12 @@ interface Visitor {
   status: string;
   project_id: string | null;
   created_at: string;
+  checked_out_at: string | null;
 }
 
 export default function Visitors() {
   const { selectedProjectId } = useProject();
+  const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -238,10 +241,10 @@ export default function Visitors() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nome</TableHead>
-                <TableHead>Documento</TableHead>
+                {!isMobile && <TableHead>Documento</TableHead>}
                 <TableHead>Empresa</TableHead>
-                <TableHead>Motivo</TableHead>
-                <TableHead>Validade</TableHead>
+                {!isMobile && <TableHead>Motivo</TableHead>}
+                {!isMobile && <TableHead>Validade</TableHead>}
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[120px]">Ações</TableHead>
               </TableRow>
@@ -250,20 +253,22 @@ export default function Visitors() {
               {filtered.map(visitor => (
                 <TableRow key={visitor.id}>
                   <TableCell className="font-medium">{visitor.name}</TableCell>
-                  <TableCell>{visitor.document_number || '-'}</TableCell>
+                  {!isMobile && <TableCell>{visitor.document_number || '-'}</TableCell>}
                   <TableCell>{visitor.company || '-'}</TableCell>
-                  <TableCell className="max-w-[200px] truncate">{visitor.reason || '-'}</TableCell>
-                  <TableCell>
-                    {visitor.valid_until ? (
-                      <span className="text-sm">
-                        {format(new Date(visitor.valid_until), 'dd/MM HH:mm')}
-                        <br />
-                        <span className="text-xs text-muted-foreground">
-                          {formatDistanceToNow(new Date(visitor.valid_until), { addSuffix: true, locale: ptBR })}
+                  {!isMobile && <TableCell className="max-w-[200px] truncate">{visitor.reason || '-'}</TableCell>}
+                  {!isMobile && (
+                    <TableCell>
+                      {visitor.valid_until ? (
+                        <span className="text-sm">
+                          {format(new Date(visitor.valid_until), 'dd/MM HH:mm')}
+                          <br />
+                          <span className="text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(visitor.valid_until), { addSuffix: true, locale: ptBR })}
+                          </span>
                         </span>
-                      </span>
-                    ) : 'Indefinido'}
-                  </TableCell>
+                      ) : 'Indefinido'}
+                    </TableCell>
+                  )}
                   <TableCell>{getStatusBadge(visitor)}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
@@ -274,7 +279,7 @@ export default function Visitors() {
                           onClick={() => updateStatus.mutate({ id: visitor.id, status: 'checked_out' })}
                         >
                           <UserX className="h-3 w-3 mr-1" />
-                          Saída
+                          {!isMobile && 'Saída'}
                         </Button>
                       )}
                       <Button
