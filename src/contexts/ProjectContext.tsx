@@ -1,6 +1,5 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useQueryClient } from '@tanstack/react-query';
 
 interface Project {
   id: string;
@@ -27,6 +26,7 @@ interface ProjectContextType {
   autoRefresh: boolean;
   setAutoRefresh: (value: boolean) => void;
   handleRefresh: () => void;
+  registerRefreshCallback: (cb: () => void) => () => void;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -39,19 +39,23 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const queryClient = useQueryClient();
+  const refreshCallbacksRef = useRef<(() => void)[]>([]);
 
   const toggleFullscreen = () => {
     setIsFullscreenMode(prev => !prev);
   };
 
   const handleRefresh = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['project', selectedProjectId] });
-    queryClient.invalidateQueries({ queryKey: ['workers-on-board'] });
-    queryClient.invalidateQueries({ queryKey: ['devices'] });
-    queryClient.invalidateQueries({ queryKey: ['access-logs'] });
+    refreshCallbacksRef.current.forEach(cb => cb());
     setLastUpdate(new Date());
-  }, [queryClient, selectedProjectId]);
+  }, []);
+
+  const registerRefreshCallback = useCallback((cb: () => void) => {
+    refreshCallbacksRef.current.push(cb);
+    return () => {
+      refreshCallbacksRef.current = refreshCallbacksRef.current.filter(fn => fn !== cb);
+    };
+  }, []);
 
   // Fetch projects when component mounts
   useEffect(() => {
@@ -125,7 +129,8 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       lastUpdate,
       autoRefresh,
       setAutoRefresh,
-      handleRefresh
+      handleRefresh,
+      registerRefreshCallback
     }}>
       {children}
     </ProjectContext.Provider>
