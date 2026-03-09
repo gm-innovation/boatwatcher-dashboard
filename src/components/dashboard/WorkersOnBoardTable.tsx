@@ -95,7 +95,8 @@ export const WorkersOnBoardTable = ({ workers, onExport }: WorkersOnBoardTablePr
       </div>
 
       {/* Table */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1" orientation="horizontal">
+        <div className="min-w-[600px]">
         <Table>
           <TableHeader>
             <TableRow>
