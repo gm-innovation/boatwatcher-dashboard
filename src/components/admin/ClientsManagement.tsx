@@ -65,31 +65,6 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
     }
   };
 
-  const handleTestApiConnection = async () => {
-    if (!apiEmail || !apiPassword) {
-      toast({ title: 'Preencha email e senha da API', variant: 'destructive' });
-      return;
-    }
-    
-    setIsTestingApi(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('test-inmeta-connection', {
-        body: { email: apiEmail, password: apiPassword, environment: apiEnvironment }
-      });
-      
-      if (error) throw error;
-      
-      if (data?.success) {
-        toast({ title: 'Conexão com API bem sucedida!', description: 'Credenciais válidas.' });
-      } else {
-        toast({ title: 'Falha na conexão', description: data?.message || 'Credenciais inválidas', variant: 'destructive' });
-      }
-    } catch (error: any) {
-      toast({ title: 'Erro ao testar conexão', description: error.message, variant: 'destructive' });
-    } finally {
-      setIsTestingApi(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
