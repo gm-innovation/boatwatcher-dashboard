@@ -315,8 +315,8 @@ export const ClientsManagement = () => {
               <tr>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Logo</th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Nome</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Email API</th>
-                <th className="text-center p-4 text-sm font-medium text-muted-foreground">Ambiente</th>
+                <th className="text-left p-4 text-sm font-medium text-muted-foreground">CNPJ</th>
+                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Contato</th>
                 <th className="text-center p-4 text-sm font-medium text-muted-foreground">Status</th>
                 <th className="text-center p-4 text-sm font-medium text-muted-foreground">Ações</th>
               </tr>
@@ -336,10 +336,8 @@ export const ClientsManagement = () => {
                     </Avatar>
                   </td>
                   <td className="p-4 font-medium">{company.name}</td>
+                  <td className="p-4 text-sm text-muted-foreground">{company.cnpj || '-'}</td>
                   <td className="p-4 text-sm text-muted-foreground">{company.contact_email || '-'}</td>
-                  <td className="p-4 text-center">
-                    {getEnvironmentBadge(company.api_environment)}
-                  </td>
                   <td className="p-4 text-center">
                     {getStatusBadge(company.status)}
                   </td>
