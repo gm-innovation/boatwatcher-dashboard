@@ -84,95 +84,23 @@ export function AgentManagement() {
     );
   };
 
-  const pythonAgentScript = `#!/usr/bin/env python3
-"""
-Agente Local ControlID - Conecta leitores em rede local ao sistema na nuvem
-"""
-import requests
-import time
-import json
-
-AGENT_TOKEN = "SEU_TOKEN_AQUI"
-RELAY_URL = "${AGENT_RELAY_URL}"
-POLL_INTERVAL = 5  # segundos
-
-def poll_commands():
-    """Busca comandos pendentes no servidor"""
-    try:
-        response = requests.get(
-            RELAY_URL,
-            headers={
-                "Authorization": f"Bearer {AGENT_TOKEN}",
-                "X-Agent-Version": "1.0.0"
-            },
-            timeout=30
-        )
-        if response.ok:
-            return response.json().get("commands", [])
-    except Exception as e:
-        print(f"Erro ao buscar comandos: {e}")
-    return []
-
-def execute_command(cmd):
-    """Executa comando no dispositivo local"""
-    device = cmd.get("devices", {})
-    ip = device.get("controlid_ip_address")
-    command = cmd.get("command")
-    payload = cmd.get("payload", {})
-    
-    try:
-        # Exemplo: liberar acesso
-        if command == "release_access":
-            response = requests.post(
-                f"http://{ip}/execute.fcgi?cmd=sec_box",
-                json={"action": "open", "door": payload.get("door_id", 1)},
-                timeout=10
-            )
-            return {"success": True, "result": response.json()}
-        
-        # Exemplo: verificar status
-        if command == "get_status":
-            response = requests.get(f"http://{ip}/system_info.fcgi", timeout=10)
-            return {"success": True, "result": response.json()}
-            
-        return {"success": False, "error": f"Comando desconhecido: {command}"}
-        
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-def send_results(results):
-    """Envia resultados dos comandos para o servidor"""
-    try:
-        requests.post(
-            f"{RELAY_URL}/result",
-            headers={"Authorization": f"Bearer {AGENT_TOKEN}"},
-            json=results,
-            timeout=30
-        )
-    except Exception as e:
-        print(f"Erro ao enviar resultados: {e}")
-
-def main():
-    print("Agente Local ControlID iniciado")
-    while True:
-        commands = poll_commands()
-        if commands:
-            print(f"Recebidos {len(commands)} comandos")
-            results = []
-            for cmd in commands:
-                result = execute_command(cmd)
-                results.append({
-                    "command_id": cmd["id"],
-                    "success": result["success"],
-                    "result": result.get("result"),
-                    "error": result.get("error")
-                })
-            send_results(results)
-        time.sleep(POLL_INTERVAL)
-
-if __name__ == "__main__":
-    main()
-`;
+  const configTemplate = `{
+  "agent_token": "SEU_TOKEN_AQUI",
+  "relay_url": "${AGENT_RELAY_URL.replace('/agent-relay', '/agent-sync')}",
+  "db_path": "agent_data.db",
+  "poll_interval": 5,
+  "sync_interval": 30,
+  "heartbeat_interval": 60,
+  "devices": [
+    {
+      "ip": "192.168.1.100",
+      "device_id": "ID_DO_DISPOSITIVO",
+      "name": "Leitor Portaria",
+      "user": "admin",
+      "password": "admin"
+    }
+  ]
+}`;
 
   return (
     <div className="space-y-6">
@@ -412,19 +340,40 @@ if __name__ == "__main__":
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>Script Python</Label>
+                  <Label>Script Python (v2.0 — offline-first)</Label>
                   <Button 
                     variant="outline" 
                     size="sm"
-                    onClick={() => copyToClipboard(pythonAgentScript, 'python-script')}
+                    asChild
                   >
-                    {copiedField === 'python-script' ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                    <a href="/controlid_agent.py" download="controlid_agent.py">
+                      <Download className="h-4 w-4 mr-1" />
+                      Download
+                    </a>
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Script com SQLite local, sync queue e suporte offline. Baixe e configure com o <code className="bg-muted px-1 rounded">config.json</code> abaixo.
+                </p>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>config.json (template)</Label>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => copyToClipboard(configTemplate, 'config-json')}
+                  >
+                    {copiedField === 'config-json' ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
                     Copiar
                   </Button>
                 </div>
-                <ScrollArea className="h-64 w-full rounded-md border">
+                <ScrollArea className="h-48 w-full rounded-md border">
                   <pre className="p-4 text-xs font-mono">
-                    {pythonAgentScript}
+                    {configTemplate}
                   </pre>
                 </ScrollArea>
               </div>
@@ -440,19 +389,19 @@ if __name__ == "__main__":
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">2</div>
-                    <p>Copie o script acima e salve como <code className="bg-muted px-1 rounded">controlid_agent.py</code></p>
+                    <p>Baixe o script <code className="bg-muted px-1 rounded">controlid_agent.py</code> acima</p>
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">3</div>
-                    <p>Substitua <code className="bg-muted px-1 rounded">SEU_TOKEN_AQUI</code> pelo token do agente</p>
+                    <p>Copie o template <code className="bg-muted px-1 rounded">config.json</code> e preencha o token, IPs dos dispositivos e device IDs</p>
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">4</div>
-                    <p>Execute: <code className="bg-muted px-1 rounded">python controlid_agent.py</code></p>
+                    <p>Instale dependências: <code className="bg-muted px-1 rounded">pip install requests</code></p>
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">5</div>
-                    <p>Configure como serviço para execução automática (opcional)</p>
+                    <p>Execute: <code className="bg-muted px-1 rounded">python controlid_agent.py</code></p>
                   </div>
                 </div>
               </div>
@@ -465,12 +414,13 @@ if __name__ == "__main__":
             </CardHeader>
             <CardContent>
               <div className="text-sm text-muted-foreground space-y-2">
-                <p>O agente local funciona como uma ponte entre o sistema na nuvem e os leitores em rede local:</p>
+                <p>O agente v2.0 funciona com arquitetura offline-first:</p>
                 <ol className="list-decimal list-inside space-y-1 ml-2">
-                  <li>O agente faz polling no servidor a cada 5 segundos buscando comandos</li>
-                  <li>Quando um comando é recebido, o agente executa no dispositivo local</li>
-                  <li>O resultado é enviado de volta para o servidor</li>
-                  <li>O agente também envia heartbeats com status dos dispositivos</li>
+                  <li>Eventos dos leitores são salvos localmente em SQLite</li>
+                  <li>Uma thread de sync envia logs pendentes para a nuvem em lote</li>
+                  <li>Workers são sincronizados periodicamente do servidor</li>
+                  <li>Heartbeats reportam status e contagem de pendências</li>
+                  <li>Se a internet cair, os dados ficam na fila local até reconectar</li>
                 </ol>
               </div>
             </CardContent>
