@@ -30,7 +30,7 @@ class BackupManager {
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupFile = path.join(this.backupDir, `boatwatcher-${timestamp}.db`);
+    const backupFile = path.join(this.backupDir, `dockcheck-${timestamp}.db`);
 
     try {
       fs.copyFileSync(dbPath, backupFile);
