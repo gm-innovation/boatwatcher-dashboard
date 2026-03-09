@@ -14,7 +14,8 @@ import {
   FolderKanban,
   Shield,
   Activity,
-  Cog
+  Cog,
+  Wifi
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import {
