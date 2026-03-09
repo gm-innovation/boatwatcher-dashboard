@@ -14,6 +14,8 @@ import Admin from "./pages/Admin";
 import CompanyPortal from "./pages/CompanyPortal";
 import UserRegistration from "./pages/UserRegistration";
 import NotFound from "./pages/NotFound";
+import ResetPassword from "./pages/ResetPassword";
+import Visitors from "./pages/Visitors";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { MainLayout } from "./components/layouts/MainLayout";
 
