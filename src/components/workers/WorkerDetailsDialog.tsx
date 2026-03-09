@@ -207,7 +207,9 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
             Detalhes do Trabalhador - {worker.name}
           </DialogTitle>
           <p className="text-sm text-muted-foreground">Visualize e edite as informações do trabalhador</p>
-        </DialogHeader>
+          <div className="mt-2">
+            <BadgePrinter worker={worker} companyName={companyName} jobFunctionName={worker.role || undefined} />
+          </div>
 
         <ScrollArea className="flex-1 pr-4">
           <div className="space-y-6 pb-4">

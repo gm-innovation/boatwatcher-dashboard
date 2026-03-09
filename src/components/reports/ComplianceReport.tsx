@@ -92,10 +92,16 @@ export const ComplianceReport = () => {
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>Relatório de Conformidade</CardTitle>
-          <Button onClick={handleExport} disabled={expiredDocs.length === 0 && expiringDocs.length === 0}>
-            <Download className="h-4 w-4 mr-2" />
-            Exportar CSV
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={handleExportPdf} variant="outline" disabled={expiredDocs.length === 0 && expiringDocs.length === 0}>
+              <FileDown className="h-4 w-4 mr-2" />
+              Exportar PDF
+            </Button>
+            <Button onClick={handleExport} disabled={expiredDocs.length === 0 && expiringDocs.length === 0}>
+              <Download className="h-4 w-4 mr-2" />
+              Exportar CSV
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
