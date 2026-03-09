@@ -392,9 +392,12 @@ export type Database = {
           id: string
           ip_address: string | null
           last_seen_at: string | null
+          last_sync_at: string | null
           name: string
+          pending_sync_count: number | null
           project_id: string | null
           status: string
+          sync_status: string | null
           token: string
           updated_at: string
           version: string | null
@@ -406,9 +409,12 @@ export type Database = {
           id?: string
           ip_address?: string | null
           last_seen_at?: string | null
+          last_sync_at?: string | null
           name: string
+          pending_sync_count?: number | null
           project_id?: string | null
           status?: string
+          sync_status?: string | null
           token: string
           updated_at?: string
           version?: string | null
@@ -420,9 +426,12 @@ export type Database = {
           id?: string
           ip_address?: string | null
           last_seen_at?: string | null
+          last_sync_at?: string | null
           name?: string
+          pending_sync_count?: number | null
           project_id?: string | null
           status?: string
+          sync_status?: string | null
           token?: string
           updated_at?: string
           version?: string | null
