@@ -79,6 +79,14 @@ const Admin = () => {
             <FileWarning className="h-4 w-4" />
             Documentos
           </TabsTrigger>
+          <TabsTrigger value="agents" className="gap-2">
+            <Bot className="h-4 w-4" />
+            Agentes
+          </TabsTrigger>
+          <TabsTrigger value="connectivity" className="gap-2">
+            <Wifi className="h-4 w-4" />
+            Conectividade
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="pending">
