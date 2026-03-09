@@ -104,22 +104,16 @@ const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
     setIsUploading(true);
     try {
       if (worker) {
-        // Update
         const photoUrl = await uploadPhoto(worker.id);
-        const { error } = await supabase
-          .from('workers')
-          .update({
-            name: data.name,
-            document_number: data.document_number,
-            role: data.role || null,
-            company_id: data.company_id || null,
-            status: data.status,
-            allowed_project_ids: data.allowed_project_ids,
-            photo_url: photoUrl,
-          })
-          .eq('id', worker.id);
-
-        if (error) throw error;
+        await updateWorker(worker.id, {
+          name: data.name,
+          document_number: data.document_number,
+          role: data.role || null,
+          company_id: data.company_id || null,
+          status: data.status,
+          allowed_project_ids: data.allowed_project_ids,
+          photo_url: photoUrl,
+        });
         toast({ title: 'Trabalhador atualizado com sucesso' });
       } else {
         // Insert
