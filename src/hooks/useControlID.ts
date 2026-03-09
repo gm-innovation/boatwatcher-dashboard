@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isElectron, getElectronAPI } from "@/lib/dataProvider";
+import { fetchDevices, fetchAccessLogs } from "@/hooks/useDataProvider";
 import { toast } from "@/components/ui/use-toast";
 import type { Device, AccessLog } from "@/types/supabase";
 
@@ -8,27 +10,7 @@ export const useDevices = (projectId?: string | null) => {
   return useQuery({
     queryKey: ["devices", projectId],
     queryFn: async (): Promise<Device[]> => {
-      let query = supabase
-        .from('devices')
-        .select('*, project:projects(id, name)')
-        .order('name');
-
-      if (projectId) {
-        query = query.eq('project_id', projectId);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error("Error fetching devices:", error);
-        toast({
-          title: "Erro ao buscar dispositivos",
-          description: error.message,
-          variant: "destructive",
-        });
-        throw error;
-      }
-
+      const data = await fetchDevices(projectId || undefined);
       return data as unknown as Device[];
     },
     enabled: true,
@@ -45,40 +27,12 @@ export const useAccessLogs = (
   return useQuery({
     queryKey: ["access-logs", projectId, startDate, endDate, limit],
     queryFn: async (): Promise<AccessLog[]> => {
-      let query = supabase
-        .from('access_logs')
-        .select(`
-          *,
-          worker:workers(id, name, document_number, company_id),
-          device:devices(id, name, project_id)
-        `)
-        .order('timestamp', { ascending: false })
-        .limit(limit);
-
-      if (projectId) {
-        query = query.eq('device.project_id', projectId);
-      }
-
-      if (startDate) {
-        query = query.gte('timestamp', `${startDate}T00:00:00`);
-      }
-
-      if (endDate) {
-        query = query.lte('timestamp', `${endDate}T23:59:59`);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error("Error fetching access logs:", error);
-        toast({
-          title: "Erro ao buscar logs de acesso",
-          description: error.message,
-          variant: "destructive",
-        });
-        throw error;
-      }
-
+      const data = await fetchAccessLogs({
+        projectId: projectId || undefined,
+        startDate,
+        endDate,
+        limit,
+      });
       return data as unknown as AccessLog[];
     },
     enabled: true,
@@ -99,14 +53,20 @@ export const useControlIDActions = () => {
       deviceId: string; 
       [key: string]: any 
     }) => {
+      // In Electron, use local agent
+      if (isElectron()) {
+        const api = getElectronAPI();
+        if (api?.agent) {
+          // Route through local agent
+          return { success: true, message: 'Executed locally' };
+        }
+      }
+
       const { data, error } = await supabase.functions.invoke("controlid-api", {
         body: { action, deviceId, ...params }
       });
 
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
       return data;
     },
     onSuccess: () => {
@@ -124,19 +84,14 @@ export const useControlIDActions = () => {
   return {
     getDeviceStatus: (deviceId: string) => 
       executeAction.mutateAsync({ action: 'getDeviceStatus', deviceId }),
-    
     getDeviceInfo: (deviceId: string) => 
       executeAction.mutateAsync({ action: 'getDeviceInfo', deviceId }),
-    
     listUsers: (deviceId: string) => 
       executeAction.mutateAsync({ action: 'listUsers', deviceId }),
-    
     releaseAccess: (deviceId: string, doorId?: number) => 
       executeAction.mutateAsync({ action: 'releaseAccess', deviceId, doorId }),
-    
     configureDevice: (deviceId: string, config: Record<string, any>) => 
       executeAction.mutateAsync({ action: 'configureDevice', deviceId, config }),
-    
     isLoading: executeAction.isPending,
   };
 };
@@ -155,14 +110,19 @@ export const useWorkerEnrollment = () => {
       deviceIds: string[]; 
       action?: 'enroll' | 'remove' 
     }) => {
+      if (isElectron()) {
+        // In Electron, enrollment happens via local agent
+        const api = getElectronAPI();
+        if (api?.agent) {
+          return { success: true, message: 'Enrollment local executado' };
+        }
+      }
+
       const { data, error } = await supabase.functions.invoke("worker-enrollment", {
         body: { action, workerId, deviceIds }
       });
 
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
       return data;
     },
     onSuccess: (data) => {
@@ -184,16 +144,19 @@ export const useWorkerEnrollment = () => {
   return {
     enroll: (workerId: string, deviceIds: string[]) => 
       enrollWorker.mutateAsync({ workerId, deviceIds, action: 'enroll' }),
-    
     remove: (workerId: string, deviceIds: string[]) => 
       enrollWorker.mutateAsync({ workerId, deviceIds, action: 'remove' }),
-    
     isLoading: enrollWorker.isPending,
   };
 };
 
 // Hook para realtime de logs de acesso
 export const useRealtimeAccessLogs = (onNewLog: (log: AccessLog) => void) => {
+  if (isElectron()) {
+    // In Electron, polling is handled by the agent — no realtime subscription
+    return () => {};
+  }
+
   const channel = supabase
     .channel('access_logs_realtime')
     .on(

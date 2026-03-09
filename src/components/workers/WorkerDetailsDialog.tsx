@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { supabase } from '@/integrations/supabase/client';
+import { updateWorker } from '@/hooks/useDataProvider';
 import { useCompanies, useProjects } from '@/hooks/useSupabase';
 import { useWorkerDocuments } from '@/hooks/useWorkerDocuments';
 import { useWorkerStrikes, useCreateWorkerStrike, useDeleteWorkerStrike } from '@/hooks/useWorkerStrikes';
@@ -142,17 +142,12 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
     if (!worker) return;
     
     try {
-      const { error } = await supabase
-        .from('workers')
-        .update({
-          birth_date: data.birth_date || null,
-          gender: data.gender || null,
-          blood_type: data.blood_type || null,
-          observations: data.observations || null,
-        })
-        .eq('id', worker.id);
-
-      if (error) throw error;
+      await updateWorker(worker.id, {
+        birth_date: data.birth_date || null,
+        gender: data.gender || null,
+        blood_type: data.blood_type || null,
+        observations: data.observations || null,
+      });
       toast({ title: 'Dados atualizados com sucesso' });
       setIsEditingAdditional(false);
       queryClient.invalidateQueries({ queryKey: ['workers'] });
@@ -181,12 +176,7 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
     if (!worker) return;
     
     try {
-      const { error } = await supabase
-        .from('workers')
-        .update({ allowed_project_ids: selectedProjects })
-        .eq('id', worker.id);
-
-      if (error) throw error;
+      await updateWorker(worker.id, { allowed_project_ids: selectedProjects });
       toast({ title: 'Projetos atualizados com sucesso' });
       setIsManagingProjects(false);
       queryClient.invalidateQueries({ queryKey: ['workers'] });

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useWorkers } from '@/hooks/useSupabase';
-import { supabase } from '@/integrations/supabase/client';
+import { updateWorker } from '@/hooks/useDataProvider';
 import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,12 +20,7 @@ export const PendingRegistrations = () => {
   const handleApprove = async (workerId: string) => {
     setProcessingId(workerId);
     try {
-      const { error } = await supabase
-        .from('workers')
-        .update({ status: 'active' })
-        .eq('id', workerId);
-      
-      if (error) throw error;
+      await updateWorker(workerId, { status: 'active' });
       toast({ title: 'Cadastro aprovado com sucesso' });
       queryClient.invalidateQueries({ queryKey: ['workers'] });
     } catch (error: any) {
@@ -38,12 +33,7 @@ export const PendingRegistrations = () => {
   const handleReject = async (workerId: string) => {
     setProcessingId(workerId);
     try {
-      const { error } = await supabase
-        .from('workers')
-        .update({ status: 'blocked' })
-        .eq('id', workerId);
-      
-      if (error) throw error;
+      await updateWorker(workerId, { status: 'blocked' });
       toast({ title: 'Cadastro rejeitado' });
       queryClient.invalidateQueries({ queryKey: ['workers'] });
     } catch (error: any) {

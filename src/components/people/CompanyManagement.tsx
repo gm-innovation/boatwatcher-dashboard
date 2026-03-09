@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useCompanies } from '@/hooks/useSupabase';
-import { supabase } from '@/integrations/supabase/client';
+import { createCompany, updateCompany, deleteCompany } from '@/hooks/useDataProvider';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,17 +30,10 @@ const CompanyForm = ({ company, onSuccess, onCancel }: CompanyFormProps) => {
 
     try {
       if (company) {
-        const { error } = await supabase
-          .from('companies')
-          .update({ name, cnpj, contact_email: contactEmail })
-          .eq('id', company.id);
-        if (error) throw error;
+        await updateCompany(company.id, { name, cnpj, contact_email: contactEmail });
         toast({ title: 'Empresa atualizada com sucesso' });
       } else {
-        const { error } = await supabase
-          .from('companies')
-          .insert({ name, cnpj, contact_email: contactEmail });
-        if (error) throw error;
+        await createCompany({ name, cnpj, contact_email: contactEmail });
         toast({ title: 'Empresa cadastrada com sucesso' });
       }
       queryClient.invalidateQueries({ queryKey: ['companies'] });
@@ -85,12 +78,12 @@ export const CompanyManagement = () => {
   const handleDelete = async (company: Company) => {
     if (!confirm(`Tem certeza que deseja remover ${company.name}?`)) return;
     
-    const { error } = await supabase.from('companies').delete().eq('id', company.id);
-    if (error) {
-      toast({ title: 'Erro ao remover empresa', variant: 'destructive' });
-    } else {
+    try {
+      await deleteCompany(company.id);
       toast({ title: 'Empresa removida' });
       queryClient.invalidateQueries({ queryKey: ['companies'] });
+    } catch {
+      toast({ title: 'Erro ao remover empresa', variant: 'destructive' });
     }
   };
 

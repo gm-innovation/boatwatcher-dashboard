@@ -2,6 +2,9 @@ import { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { createWorker, updateWorker, deleteWorker } from '@/hooks/useDataProvider';
+import { uploadFile } from '@/lib/storageProvider';
+import { isElectron } from '@/lib/dataProvider';
 import { supabase } from '@/integrations/supabase/client';
 import { useWorkers, useCompanies, useProjects } from '@/hooks/useSupabase';
 import { useDevices, useWorkerEnrollment } from '@/hooks/useControlID';
@@ -93,61 +96,39 @@ const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
     const fileName = `${workerId}.${fileExt}`;
     const filePath = `workers/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('worker-photos')
-      .upload(filePath, photoFile, { upsert: true });
-
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
-      return null;
-    }
-
-    const { data } = await supabase.storage.from('worker-photos').createSignedUrl(filePath, 3600);
-    return data?.signedUrl || null;
+    const result = await uploadFile('worker-photos', filePath, photoFile, { upsert: true });
+    return result;
   };
 
   const onSubmit = async (data: WorkerFormData) => {
     setIsUploading(true);
     try {
       if (worker) {
-        // Update
         const photoUrl = await uploadPhoto(worker.id);
-        const { error } = await supabase
-          .from('workers')
-          .update({
-            name: data.name,
-            document_number: data.document_number,
-            role: data.role || null,
-            company_id: data.company_id || null,
-            status: data.status,
-            allowed_project_ids: data.allowed_project_ids,
-            photo_url: photoUrl,
-          })
-          .eq('id', worker.id);
-
-        if (error) throw error;
+        await updateWorker(worker.id, {
+          name: data.name,
+          document_number: data.document_number,
+          role: data.role || null,
+          company_id: data.company_id || null,
+          status: data.status,
+          allowed_project_ids: data.allowed_project_ids,
+          photo_url: photoUrl,
+        });
         toast({ title: 'Trabalhador atualizado com sucesso' });
       } else {
-        // Insert
-        const { data: newWorker, error } = await supabase
-          .from('workers')
-          .insert({
-            name: data.name,
-            document_number: data.document_number,
-            role: data.role || null,
-            company_id: data.company_id || null,
-            status: data.status,
-            allowed_project_ids: data.allowed_project_ids,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
+        const newWorker = await createWorker({
+          name: data.name,
+          document_number: data.document_number,
+          role: data.role || null,
+          company_id: data.company_id || null,
+          status: data.status,
+          allowed_project_ids: data.allowed_project_ids,
+        });
 
         if (photoFile && newWorker) {
           const photoUrl = await uploadPhoto(newWorker.id);
           if (photoUrl) {
-            await supabase.from('workers').update({ photo_url: photoUrl }).eq('id', newWorker.id);
+            await updateWorker(newWorker.id, { photo_url: photoUrl });
           }
         }
 
@@ -402,12 +383,12 @@ export const WorkerManagement = () => {
   const handleDelete = async (worker: Worker) => {
     if (!confirm(`Tem certeza que deseja remover ${worker.name}?`)) return;
     
-    const { error } = await supabase.from('workers').delete().eq('id', worker.id);
-    if (error) {
-      toast({ title: 'Erro ao remover trabalhador', variant: 'destructive' });
-    } else {
+    try {
+      await deleteWorker(worker.id);
       toast({ title: 'Trabalhador removido' });
       queryClient.invalidateQueries({ queryKey: ['workers'] });
+    } catch {
+      toast({ title: 'Erro ao remover trabalhador', variant: 'destructive' });
     }
   };
 

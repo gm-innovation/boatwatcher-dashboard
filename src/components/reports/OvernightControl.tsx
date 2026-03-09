@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { useAccessLogs } from '@/hooks/useControlID';
 import { useQuery } from '@tanstack/react-query';
+import { isElectron } from '@/lib/dataProvider';
+import { fetchWorkers } from '@/hooks/useDataProvider';
 import { supabase } from '@/integrations/supabase/client';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
@@ -32,6 +34,9 @@ export const OvernightControl = ({ projectId, startDate, endDate }: OvernightCon
   const { data: workers = [] } = useQuery({
     queryKey: ['workers-with-companies'],
     queryFn: async () => {
+      if (isElectron()) {
+        return fetchWorkers();
+      }
       const { data, error } = await supabase
         .from('workers')
         .select('id, name, photo_url, company:companies(name)')
