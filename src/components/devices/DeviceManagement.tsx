@@ -3,9 +3,10 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
-import { useDevices, useControlIDActions } from '@/hooks/useControlID';
+import { useDevices } from '@/hooks/useControlID';
 import { useProjects } from '@/hooks/useSupabase';
 import { useProject } from '@/contexts/ProjectContext';
+import { useLocalAgents } from '@/hooks/useLocalAgents';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,19 +17,12 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DeviceSetupInstructions } from './DeviceSetupInstructions';
 import { 
-  Plus, 
-  Wifi, 
-  WifiOff, 
-  Settings, 
-  Trash2, 
-  RefreshCw,
-  DoorOpen,
-  Camera,
-  Server,
-  Link
+  Plus, Wifi, WifiOff, Trash2, RefreshCw, DoorOpen, Camera, Server, Link, Loader2, CheckCircle2, XCircle, Clock
 } from 'lucide-react';
 import type { Device, DeviceType } from '@/types/supabase';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 const deviceSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
@@ -37,6 +31,7 @@ const deviceSchema = z.object({
   type: z.enum(['facial_reader', 'turnstile', 'terminal']),
   location: z.string().optional(),
   project_id: z.string().optional(),
+  agent_id: z.string().optional(),
   api_username: z.string().optional(),
   api_password: z.string().optional(),
 });
@@ -44,32 +39,52 @@ const deviceSchema = z.object({
 type DeviceFormData = z.infer<typeof deviceSchema>;
 
 const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => void }) => {
-  const { getDeviceStatus, releaseAccess, isLoading } = useControlIDActions();
   const [showSetup, setShowSetup] = useState(false);
+  const [sendingCommand, setSendingCommand] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  const handleCheckStatus = async () => {
-    try {
-      await getDeviceStatus(device.id);
-      queryClient.invalidateQueries({ queryKey: ['devices'] });
-      toast({ title: 'Status verificado' });
-    } catch (error) {
-      toast({ title: 'Erro ao verificar status', variant: 'destructive' });
-    }
-  };
+  // Get recent commands for this device
+  const { data: recentCommands = [] } = useQuery({
+    queryKey: ['device-commands', device.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('agent_commands')
+        .select('id, command, status, created_at, executed_at, error_message')
+        .eq('device_id', device.id)
+        .order('created_at', { ascending: false })
+        .limit(3);
+      if (error) throw error;
+      return data;
+    },
+    refetchInterval: 5000,
+  });
 
-  const handleRelease = async () => {
+  const sendAgentCommand = async (command: string, payload: Record<string, unknown> = {}) => {
+    if (!device.agent_id) {
+      toast({ title: 'Dispositivo sem agente', description: 'Associe um agente local a este dispositivo.', variant: 'destructive' });
+      return;
+    }
+    setSendingCommand(command);
     try {
-      await releaseAccess(device.id);
-      toast({ title: 'Acesso liberado' });
-    } catch (error) {
-      toast({ title: 'Erro ao liberar acesso', variant: 'destructive' });
+      const { error } = await supabase.from('agent_commands').insert({
+        agent_id: device.agent_id,
+        device_id: device.id,
+        command,
+        payload,
+        status: 'pending',
+      } as any);
+      if (error) throw error;
+      toast({ title: 'Comando enviado', description: `Aguardando agente executar: ${command}` });
+      queryClient.invalidateQueries({ queryKey: ['device-commands', device.id] });
+    } catch (error: any) {
+      toast({ title: 'Erro ao enviar comando', description: error.message, variant: 'destructive' });
+    } finally {
+      setSendingCommand(null);
     }
   };
 
   const handleDelete = async () => {
     if (!confirm('Tem certeza que deseja remover este dispositivo?')) return;
-    
     const { error } = await supabase.from('devices').delete().eq('id', device.id);
     if (error) {
       toast({ title: 'Erro ao remover dispositivo', variant: 'destructive' });
@@ -84,7 +99,7 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
       case 'online': return 'bg-green-500/10 text-green-500 border-green-500/20';
       case 'offline': return 'bg-red-500/10 text-red-500 border-red-500/20';
       case 'error': return 'bg-orange-500/10 text-orange-500 border-orange-500/20';
-      default: return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
+      default: return 'bg-muted text-muted-foreground border-border';
     }
   };
 
@@ -94,6 +109,13 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
       case 'turnstile': return DoorOpen;
       default: return Server;
     }
+  };
+
+  const getCmdStatusIcon = (status: string) => {
+    if (status === 'completed') return <CheckCircle2 className="h-3 w-3 text-green-500" />;
+    if (status === 'failed') return <XCircle className="h-3 w-3 text-destructive" />;
+    if (status === 'in_progress') return <Loader2 className="h-3 w-3 animate-spin text-primary" />;
+    return <Clock className="h-3 w-3 text-muted-foreground" />;
   };
 
   const TypeIcon = getTypeIcon(device.type);
@@ -128,17 +150,39 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
                 <span className="font-medium">Local:</span> {device.location}
               </div>
             )}
+            {!device.agent_id && (
+              <div className="text-xs text-orange-500 bg-orange-500/10 rounded px-2 py-1">
+                ⚠ Sem agente local associado
+              </div>
+            )}
+
+            {/* Recent commands */}
+            {recentCommands.length > 0 && (
+              <div className="space-y-1 border-t pt-2">
+                <p className="text-xs font-medium text-muted-foreground">Últimos comandos:</p>
+                {recentCommands.map(cmd => (
+                  <div key={cmd.id} className="flex items-center gap-2 text-xs">
+                    {getCmdStatusIcon(cmd.status)}
+                    <span className="font-mono">{cmd.command}</span>
+                    <span className="text-muted-foreground">
+                      {formatDistanceToNow(new Date(cmd.created_at), { addSuffix: true, locale: ptBR })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2 pt-2">
               <Button size="sm" variant="outline" onClick={() => setShowSetup(true)}>
                 <Link className="h-4 w-4 mr-1" />
                 Configurar
               </Button>
-              <Button size="sm" variant="outline" onClick={handleCheckStatus} disabled={isLoading}>
-                <RefreshCw className="h-4 w-4 mr-1" />
+              <Button size="sm" variant="outline" onClick={() => sendAgentCommand('get_status')} disabled={!!sendingCommand}>
+                {sendingCommand === 'get_status' ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
                 Status
               </Button>
-              <Button size="sm" variant="outline" onClick={handleRelease} disabled={isLoading}>
-                <DoorOpen className="h-4 w-4 mr-1" />
+              <Button size="sm" variant="outline" onClick={() => sendAgentCommand('release_access', { door_id: 1 })} disabled={!!sendingCommand}>
+                {sendingCommand === 'release_access' ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <DoorOpen className="h-4 w-4 mr-1" />}
                 Liberar
               </Button>
               <Button size="sm" variant="ghost" className="text-destructive" onClick={handleDelete}>
@@ -149,11 +193,7 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
         </CardContent>
       </Card>
       
-      <DeviceSetupInstructions 
-        device={device} 
-        open={showSetup} 
-        onOpenChange={setShowSetup} 
-      />
+      <DeviceSetupInstructions device={device} open={showSetup} onOpenChange={setShowSetup} />
     </>
   );
 };
@@ -163,13 +203,12 @@ export const DeviceManagement = () => {
   const { selectedProjectId } = useProject();
   const { data: devices = [], isLoading, refetch } = useDevices(selectedProjectId);
   const { data: projects = [] } = useProjects();
+  const { agents } = useLocalAgents(selectedProjectId);
   const queryClient = useQueryClient();
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<DeviceFormData>({
     resolver: zodResolver(deviceSchema),
-    defaultValues: {
-      type: 'facial_reader',
-    }
+    defaultValues: { type: 'facial_reader' }
   });
 
   const onSubmit = async (data: DeviceFormData) => {
@@ -180,6 +219,7 @@ export const DeviceManagement = () => {
       type: data.type,
       location: data.location || null,
       project_id: data.project_id || null,
+      agent_id: data.agent_id || null,
       api_credentials: {
         username: data.api_username || '',
         password: data.api_password || '',
@@ -189,7 +229,6 @@ export const DeviceManagement = () => {
     };
 
     const { error } = await supabase.from('devices').insert(deviceData);
-
     if (error) {
       toast({ title: 'Erro ao cadastrar dispositivo', description: error.message, variant: 'destructive' });
     } else {
@@ -207,21 +246,18 @@ export const DeviceManagement = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">Dispositivos ControlID</h2>
+          <h2 className="text-xl font-semibold">Dispositivos</h2>
           <p className="text-sm text-muted-foreground">
             {devices.length} dispositivos • {onlineCount} online • {offlineCount} offline
           </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar Dispositivo
-            </Button>
+            <Button><Plus className="h-4 w-4 mr-2" />Adicionar Dispositivo</Button>
           </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Novo Dispositivo ControlID</DialogTitle>
+              <DialogTitle>Novo Dispositivo</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div className="space-y-2">
@@ -231,11 +267,9 @@ export const DeviceManagement = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="type">Tipo</Label>
+                <Label>Tipo</Label>
                 <Select onValueChange={(value) => setValue('type', value as DeviceType)} defaultValue="facial_reader">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="facial_reader">Leitor Facial</SelectItem>
                     <SelectItem value="turnstile">Catraca</SelectItem>
@@ -246,54 +280,63 @@ export const DeviceManagement = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="controlid_serial_number">Número de Série</Label>
-                  <Input id="controlid_serial_number" placeholder="Serial" {...register('controlid_serial_number')} />
+                  <Label>Número de Série</Label>
+                  <Input placeholder="Serial" {...register('controlid_serial_number')} />
                   {errors.controlid_serial_number && <p className="text-sm text-destructive">{errors.controlid_serial_number.message}</p>}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="controlid_ip_address">Endereço IP</Label>
-                  <Input id="controlid_ip_address" placeholder="192.168.1.100" {...register('controlid_ip_address')} />
+                  <Label>Endereço IP</Label>
+                  <Input placeholder="192.168.1.100" {...register('controlid_ip_address')} />
                   {errors.controlid_ip_address && <p className="text-sm text-destructive">{errors.controlid_ip_address.message}</p>}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="location">Localização</Label>
-                <Input id="location" placeholder="Ex: Portaria Principal" {...register('location')} />
+                <Label>Localização</Label>
+                <Input placeholder="Ex: Portaria Principal" {...register('location')} />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="project_id">Projeto</Label>
-                <Select onValueChange={(value) => setValue('project_id', value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um projeto" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map(project => (
-                      <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Projeto</Label>
+                  <Select onValueChange={(value) => setValue('project_id', value)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {projects.map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Agente Local</Label>
+                  <Select onValueChange={(value) => setValue('agent_id', value)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {agents.map(a => (
+                        <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="border-t pt-4">
                 <p className="text-sm font-medium mb-3">Credenciais de API (opcional)</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="api_username">Usuário</Label>
-                    <Input id="api_username" {...register('api_username')} />
+                    <Label>Usuário</Label>
+                    <Input {...register('api_username')} />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="api_password">Senha</Label>
-                    <Input id="api_password" type="password" {...register('api_password')} />
+                    <Label>Senha</Label>
+                    <Input type="password" {...register('api_password')} />
                   </div>
                 </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancelar
-                </Button>
+                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
                 <Button type="submit">Cadastrar</Button>
               </div>
             </form>
@@ -303,7 +346,7 @@ export const DeviceManagement = () => {
 
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
       ) : devices.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -315,7 +358,7 @@ export const DeviceManagement = () => {
         <div className="text-center py-12 text-muted-foreground">
           <Server className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p>Nenhum dispositivo cadastrado</p>
-          <p className="text-sm">Adicione seu primeiro dispositivo ControlID</p>
+          <p className="text-sm">Adicione seu primeiro dispositivo</p>
         </div>
       )}
     </div>
