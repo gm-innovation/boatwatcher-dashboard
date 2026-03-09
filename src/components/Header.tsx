@@ -5,10 +5,9 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
 import { useTheme } from '@/components/theme-provider';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/components/ui/use-toast';
 import { ProjectSelector } from '@/components/ProjectSelector';
 import { useProject } from '@/contexts/ProjectContext';
+import { useAuthContext } from '@/contexts/AuthContext';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 export const Header = () => {
@@ -16,11 +15,12 @@ export const Header = () => {
   const location = useLocation();
   const [currentTime, setCurrentTime] = useState(new Date());
   const { theme, setTheme } = useTheme();
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isCompanyAdmin, setIsCompanyAdmin] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { toast } = useToast();
   const { selectedProject, selectedProjectId, setSelectedProjectId } = useProject();
+  const { role, signOut } = useAuthContext();
+
+  const isAdmin = role === 'admin';
+  const isCompanyAdmin = role === 'company_admin';
 
   const clientLogo = theme === 'dark' 
     ? selectedProject?.client?.logo_url_dark 
@@ -30,37 +30,8 @@ export const Header = () => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
-
-    const checkUserRole = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const { data: roleData } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', session.user.id)
-          .maybeSingle();
-        
-        setIsAdmin(roleData?.role === 'admin');
-        setIsCompanyAdmin(roleData?.role === 'company_admin');
-      }
-    };
-
-    checkUserRole();
     return () => clearInterval(timer);
   }, []);
-
-  const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast({
-        title: "Erro ao sair",
-        description: error.message,
-        variant: "destructive",
-      });
-      return;
-    }
-    navigate('/login');
-  };
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
 
@@ -188,7 +159,7 @@ export const Header = () => {
                         >
                           {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
                         </Toggle>
-                        <Button variant="ghost" size="sm" onClick={handleLogout}>
+                        <Button variant="ghost" size="sm" onClick={signOut}>
                           <LogOut className="h-4 w-4 mr-2" />
                           Sair
                         </Button>
@@ -246,7 +217,7 @@ export const Header = () => {
                 {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
               </Toggle>
 
-              <Button variant="ghost" size="icon" onClick={handleLogout}>
+              <Button variant="ghost" size="icon" onClick={signOut}>
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
