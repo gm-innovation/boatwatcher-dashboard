@@ -84,95 +84,23 @@ export function AgentManagement() {
     );
   };
 
-  const pythonAgentScript = `#!/usr/bin/env python3
-"""
-Agente Local ControlID - Conecta leitores em rede local ao sistema na nuvem
-"""
-import requests
-import time
-import json
-
-AGENT_TOKEN = "SEU_TOKEN_AQUI"
-RELAY_URL = "${AGENT_RELAY_URL}"
-POLL_INTERVAL = 5  # segundos
-
-def poll_commands():
-    """Busca comandos pendentes no servidor"""
-    try:
-        response = requests.get(
-            RELAY_URL,
-            headers={
-                "Authorization": f"Bearer {AGENT_TOKEN}",
-                "X-Agent-Version": "1.0.0"
-            },
-            timeout=30
-        )
-        if response.ok:
-            return response.json().get("commands", [])
-    except Exception as e:
-        print(f"Erro ao buscar comandos: {e}")
-    return []
-
-def execute_command(cmd):
-    """Executa comando no dispositivo local"""
-    device = cmd.get("devices", {})
-    ip = device.get("controlid_ip_address")
-    command = cmd.get("command")
-    payload = cmd.get("payload", {})
-    
-    try:
-        # Exemplo: liberar acesso
-        if command == "release_access":
-            response = requests.post(
-                f"http://{ip}/execute.fcgi?cmd=sec_box",
-                json={"action": "open", "door": payload.get("door_id", 1)},
-                timeout=10
-            )
-            return {"success": True, "result": response.json()}
-        
-        # Exemplo: verificar status
-        if command == "get_status":
-            response = requests.get(f"http://{ip}/system_info.fcgi", timeout=10)
-            return {"success": True, "result": response.json()}
-            
-        return {"success": False, "error": f"Comando desconhecido: {command}"}
-        
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-def send_results(results):
-    """Envia resultados dos comandos para o servidor"""
-    try:
-        requests.post(
-            f"{RELAY_URL}/result",
-            headers={"Authorization": f"Bearer {AGENT_TOKEN}"},
-            json=results,
-            timeout=30
-        )
-    except Exception as e:
-        print(f"Erro ao enviar resultados: {e}")
-
-def main():
-    print("Agente Local ControlID iniciado")
-    while True:
-        commands = poll_commands()
-        if commands:
-            print(f"Recebidos {len(commands)} comandos")
-            results = []
-            for cmd in commands:
-                result = execute_command(cmd)
-                results.append({
-                    "command_id": cmd["id"],
-                    "success": result["success"],
-                    "result": result.get("result"),
-                    "error": result.get("error")
-                })
-            send_results(results)
-        time.sleep(POLL_INTERVAL)
-
-if __name__ == "__main__":
-    main()
-`;
+  const configTemplate = `{
+  "agent_token": "SEU_TOKEN_AQUI",
+  "relay_url": "${AGENT_RELAY_URL.replace('/agent-relay', '/agent-sync')}",
+  "db_path": "agent_data.db",
+  "poll_interval": 5,
+  "sync_interval": 30,
+  "heartbeat_interval": 60,
+  "devices": [
+    {
+      "ip": "192.168.1.100",
+      "device_id": "ID_DO_DISPOSITIVO",
+      "name": "Leitor Portaria",
+      "user": "admin",
+      "password": "admin"
+    }
+  ]
+}`;
 
   return (
     <div className="space-y-6">
