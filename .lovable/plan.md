@@ -1,69 +1,40 @@
 
 
-# Plano: Agente Local com Modo Offline (Offline-First)
+# Plano Revisado: Implementação Incremental do Agente Offline
 
-## Objetivo
-Transformar o agente local de um simples relay em um servidor local completo que funciona sem internet, armazena dados localmente e sincroniza quando a conexão é restabelecida.
+## Problema
+O plano anterior tentava criar 4 arquivos grandes simultaneamente (Python agent ~600 linhas, edge function, UI complexa, migration), causando erros internos repetidos. Precisa ser dividido em etapas menores.
 
-## Arquitetura Atual vs Proposta
+## Estado Atual
+- `public/controlid_agent.py` **não existe** (nunca foi criado com sucesso)
+- `supabase/functions/agent-sync/` **vazio** (nunca foi criado)
+- `AgentManagement.tsx` existe com script Python inline básico (482 linhas)
+- `useLocalAgents.ts` existe sem campos de sync
+- Migration dos campos de sync pode ou não ter sido aplicada
 
-```text
-ATUAL (Online-only):
-  Leitor ──HTTP──> Agente ──HTTPS──> Cloud
-  (sem internet = parado)
+## Plano em 4 Etapas Separadas
 
-PROPOSTO (Offline-first):
-  Leitor ──HTTP──> Agente ──> SQLite Local (sempre funciona)
-                      │
-                      └──> Fila de Sync ──HTTPS──> Cloud (quando online)
-```
+### Etapa 1 — Migration + Edge Function
+- Adicionar colunas `last_sync_at`, `pending_sync_count`, `sync_status` na tabela `local_agents` (se ainda não existirem)
+- Criar `supabase/functions/agent-sync/index.ts` — versão enxuta com 3 endpoints: `upload-logs`, `download-workers`, `status`
 
-## O que será implementado
+### Etapa 2 — Script Python (arquivo separado)
+- Criar `public/controlid_agent.py` com estrutura modular:
+  - SQLite local (workers, access_logs, sync_queue)
+  - ControlID API client (login, status, sync_users)
+  - Sync engine (upload logs, download workers)
+  - Main loop com heartbeat
 
-### 1. Agente Local Python com SQLite (`public/controlid_agent.py`)
-- **Banco local SQLite** com tabelas: `workers`, `access_logs`, `sync_queue`, `agent_config`
-- **Polling do leitor ControlID** direto via API HTTP local para capturar eventos de acesso em tempo real (independente de internet)
-- **Fila de sincronização**: toda operação gera um registro na `sync_queue` com status `pending`
-- **Sync automático**: quando detecta internet, envia itens pendentes ao cloud via `agent-relay`
-- **Recebimento de dados do cloud**: ao sincronizar, baixa novos trabalhadores/comandos do cloud para o SQLite local
-- **Detecção de conectividade**: teste periódico de conexão com o cloud
+### Etapa 3 — Atualizar UI do AgentManagement
+- Adicionar indicadores de sync status, last_sync_at, pending_sync_count nos cards dos agentes
+- Botão de download do script Python
+- Template de config.json
 
-### 2. Capacidades Offline
-- **Cadastro de trabalhadores no leitor**: usa dados do SQLite local, sem precisar do cloud
-- **Controle de acesso**: leitor opera sozinho; agente captura logs via API do dispositivo e grava no SQLite
-- **Logs de acesso**: armazenados localmente, sincronizados quando internet volta
-- **Comandos locais**: fila local de comandos que são executados imediatamente no dispositivo
+### Etapa 4 — Instruções de instalação
+- Adicionar aba com instruções Linux (systemd) e Windows (NSSM)
 
-### 3. Sincronização (quando internet retorna)
-- Upload de todos `access_logs` pendentes para o cloud
-- Download de novos trabalhadores/atualizações do cloud
-- Upload de eventos/status do dispositivo
-- Resolução por timestamp (last-write-wins) para conflitos simples
+Cada etapa será implementada como uma mensagem separada, evitando sobrecarga.
 
-### 4. Nova Edge Function `agent-sync` 
-- Endpoint dedicado para sincronização em lote
-- Recebe array de access_logs do período offline
-- Envia lista de trabalhadores atualizados desde último sync
-- Retorna comandos pendentes acumulados
-
-### 5. Atualização da UI (`AgentManagement.tsx`)
-- Indicador de "última sincronização" por agente
-- Status: online / offline / sincronizando
-- Contador de itens pendentes de sync
-- Instruções de instalação atualizadas
-
-## Arquivos
-
-| Arquivo | Ação |
-|---------|------|
-| `public/controlid_agent.py` | Reescrever com SQLite + sync queue |
-| `supabase/functions/agent-sync/index.ts` | Novo - endpoint de sync em lote |
-| `src/components/devices/AgentManagement.tsx` | Atualizar UI com status de sync |
-| `src/hooks/useLocalAgents.ts` | Adicionar campos de sync |
-| `supabase/config.toml` | Registrar nova function |
-
-## Limitações
-- O dashboard web continua precisando de internet (é uma aplicação web)
-- Cadastro de **novos** trabalhadores offline requer que o agente tenha uma interface local (CLI ou API)
-- Fotos/documentos grandes ficam na fila até ter conexão
+## Próxima Ação
+Implementar apenas a **Etapa 1** (migration + edge function) nesta rodada.
 
