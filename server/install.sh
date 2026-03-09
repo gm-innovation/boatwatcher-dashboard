@@ -1,9 +1,9 @@
 #!/bin/bash
-# BoatWatcher Local Server — Installation Script (Linux)
+# Dock Check Local Server — Installation Script (Linux)
 
 set -e
 
-echo "=== BoatWatcher Local Server Setup ==="
+echo "=== Dock Check Local Server Setup ==="
 
 # Check Node.js
 if ! command -v node &> /dev/null; then
@@ -22,12 +22,12 @@ npm install
 mkdir -p data backups
 
 # Create systemd service
-SERVICE_FILE=/etc/systemd/system/boatwatcher-server.service
+SERVICE_FILE=/etc/systemd/system/dockcheck-server.service
 WORK_DIR=$(pwd)
 
 sudo tee $SERVICE_FILE > /dev/null <<EOF
 [Unit]
-Description=BoatWatcher Local Server
+Description=Dock Check Local Server
 After=network.target
 
 [Service]
@@ -46,11 +46,11 @@ WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl enable boatwatcher-server
-sudo systemctl start boatwatcher-server
+sudo systemctl enable dockcheck-server
+sudo systemctl start dockcheck-server
 
 echo ""
 echo "=== Installation Complete ==="
 echo "Server running on http://0.0.0.0:3001"
-echo "Service: sudo systemctl status boatwatcher-server"
-echo "Logs:    sudo journalctl -u boatwatcher-server -f"
+echo "Service: sudo systemctl status dockcheck-server"
+echo "Logs:    sudo journalctl -u dockcheck-server -f"

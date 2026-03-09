@@ -23,14 +23,14 @@ class BackupManager {
   }
 
   performBackup() {
-    const dbPath = path.join(this.dataDir, 'boatwatcher.db');
+    const dbPath = path.join(this.dataDir, 'dockcheck.db');
     if (!fs.existsSync(dbPath)) {
       console.log('[Backup] No database file found, skipping');
       return;
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupFile = path.join(this.backupDir, `boatwatcher-${timestamp}.db`);
+    const backupFile = path.join(this.backupDir, `dockcheck-${timestamp}.db`);
 
     try {
       fs.copyFileSync(dbPath, backupFile);
@@ -43,7 +43,7 @@ class BackupManager {
 
   pruneOldBackups() {
     const files = fs.readdirSync(this.backupDir)
-      .filter(f => f.startsWith('boatwatcher-') && f.endsWith('.db'))
+      .filter(f => f.startsWith('dockcheck-') && f.endsWith('.db'))
       .sort()
       .reverse();
 

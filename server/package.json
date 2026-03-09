@@ -1,7 +1,7 @@
 {
-  "name": "boatwatcher-local-server",
+  "name": "dockcheck-local-server",
   "version": "1.0.0",
-  "description": "BoatWatcher Local Server — API REST + SQLite + ControlID Agent + Cloud Sync",
+  "description": "Dock Check Local Server — API REST + SQLite + ControlID Agent + Cloud Sync",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

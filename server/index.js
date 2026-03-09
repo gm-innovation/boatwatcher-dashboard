@@ -72,7 +72,7 @@ app.use('/api/sync', syncRoutes);
 app.use('/files', express.static(path.join(DATA_DIR, 'files')));
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[BoatWatcher Server] Running on http://0.0.0.0:${PORT}`);
-  console.log(`[BoatWatcher Server] Data dir: ${DATA_DIR}`);
-  console.log(`[BoatWatcher Server] Backup dir: ${BACKUP_DIR}`);
+  console.log(`[Dock Check Server] Running on http://0.0.0.0:${PORT}`);
+  console.log(`[Dock Check Server] Data dir: ${DATA_DIR}`);
+  console.log(`[Dock Check Server] Backup dir: ${BACKUP_DIR}`);
 });
