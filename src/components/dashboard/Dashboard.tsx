@@ -21,6 +21,17 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
   const { data: workersOnBoard = [], refetch: refetchWorkers } = useWorkersOnBoard(projectId);
   const companiesOnBoard = useCompaniesOnBoard(workersOnBoard);
 
+  // Register query invalidation as a refresh callback
+  useEffect(() => {
+    const unregister = registerRefreshCallback(() => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['workers-on-board'] });
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+      queryClient.invalidateQueries({ queryKey: ['access-logs'] });
+    });
+    return unregister;
+  }, [registerRefreshCallback, queryClient, projectId]);
+
   // Enable realtime updates
   useRealtimeAccessLogs({
     projectId,
