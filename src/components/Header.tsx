@@ -159,7 +159,7 @@ export const Header = () => {
                         >
                           {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
                         </Toggle>
-                        <Button variant="ghost" size="sm" onClick={handleLogout}>
+                        <Button variant="ghost" size="sm" onClick={signOut}>
                           <LogOut className="h-4 w-4 mr-2" />
                           Sair
                         </Button>
