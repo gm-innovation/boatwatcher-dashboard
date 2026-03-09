@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Search, Download, Filter } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
