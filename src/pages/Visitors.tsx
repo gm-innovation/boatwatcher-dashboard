@@ -80,7 +80,7 @@ export default function Visitors() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from('visitors').update({ status } as any).eq('id', id);
+      const { error } = await (supabase.from as any)('visitors').update({ status }).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
