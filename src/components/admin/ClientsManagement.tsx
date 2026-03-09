@@ -221,61 +221,6 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
         </div>
       </div>
 
-      {/* API Configuration Section */}
-      <div className="space-y-4 pt-4 border-t">
-        <h3 className="font-medium">Configurações da API Inmeta</h3>
-        
-        {/* Row 3: Email e Senha */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="apiEmail">Email da API *</Label>
-            <Input 
-              id="apiEmail" 
-              type="email"
-              value={apiEmail} 
-              onChange={(e) => setApiEmail(e.target.value)} 
-              placeholder="email@exemplo.com"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="apiPassword">Senha da API *</Label>
-            <Input 
-              id="apiPassword" 
-              type="password"
-              value={apiPassword} 
-              onChange={(e) => setApiPassword(e.target.value)} 
-              placeholder="••••••••"
-            />
-          </div>
-        </div>
-
-        {/* Row 4: Ambiente */}
-        <div className="space-y-2">
-          <Label htmlFor="environment">Ambiente</Label>
-          <Select value={apiEnvironment} onValueChange={setApiEnvironment}>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="production">Produção</SelectItem>
-              <SelectItem value="homologation">Homologação</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Row 5: Testar Conexão */}
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleTestApiConnection}
-          disabled={isTestingApi}
-          className="gap-2"
-        >
-          {isTestingApi && <Loader2 className="h-4 w-4 animate-spin" />}
-          Testar Conexão com API
-        </Button>
-      </div>
-
       {/* Footer */}
       <div className="flex justify-end gap-2 pt-4 border-t">
         <Button type="button" variant="outline" onClick={onCancel}>
