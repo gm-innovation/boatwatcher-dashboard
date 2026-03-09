@@ -22,6 +22,20 @@ export const Header = () => {
 
   const isAdmin = role === 'admin';
   const isCompanyAdmin = role === 'company_admin';
+  const isDesktop = isElectron();
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [syncStatus, setSyncStatus] = useState<{ syncing: boolean; lastSync: string | null; pendingCount: number }>({ syncing: false, lastSync: null, pendingCount: 0 });
+
+  useEffect(() => {
+    if (!isDesktop) return;
+    const api = getElectronAPI();
+    if (!api) return;
+    api.onConnectivityChange((online) => setIsOnline(online));
+    api.onSyncStatusChange((status) => {
+      setIsOnline(status.online);
+      setSyncStatus({ syncing: status.syncing, lastSync: status.lastSync, pendingCount: status.pendingCount });
+    });
+  }, [isDesktop]);
 
   const clientLogo = theme === 'dark' 
     ? selectedProject?.client?.logo_url_dark 
