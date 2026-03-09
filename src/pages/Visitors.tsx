@@ -79,7 +79,7 @@ export default function Visitors() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await (supabase.from as supabase.frome({ ssupabase.from
+      const { error } = await supabase.from('visitors').update({ status }).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -90,7 +90,7 @@ export default function Visitors() {
 
   const deleteVisitor = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await (supabase.from as any)('vissupabase.fromd', id);
+      const { error } = await supabase.from('visitors').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
