@@ -26,11 +26,9 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
   const [status, setStatus] = useState(client?.status || 'active');
   const [logoUrlLight, setLogoUrlLight] = useState(client?.logo_url_light || '');
   const [logoUrlDark, setLogoUrlDark] = useState(client?.logo_url_dark || '');
-  const [apiEmail, setApiEmail] = useState(client?.contact_email || '');
-  const [apiPassword, setApiPassword] = useState(client?.api_password || '');
-  const [apiEnvironment, setApiEnvironment] = useState(client?.api_environment || 'production');
+  const [cnpj, setCnpj] = useState(client?.cnpj || '');
+  const [contactEmail, setContactEmail] = useState(client?.contact_email || '');
   const [isLoading, setIsLoading] = useState(false);
-  const [isTestingApi, setIsTestingApi] = useState(false);
   const [uploadingLight, setUploadingLight] = useState(false);
   const [uploadingDark, setUploadingDark] = useState(false);
   
