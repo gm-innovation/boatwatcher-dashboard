@@ -25,7 +25,10 @@ import {
   XCircle,
   Loader2,
   Download,
-  Key
+  Key,
+  CloudUpload,
+  DatabaseZap,
+  ArrowUpDown
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
