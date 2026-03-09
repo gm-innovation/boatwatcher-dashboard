@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, AlertCircle, AlertTriangle, FileCheck } from 'lucide-react';
+import { Download, AlertCircle, AlertTriangle, FileCheck, FileDown } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { exportReportPdf } from '@/utils/exportReportPdf';
 
 export const ComplianceReport = () => {
   const { data: expiredDocs = [], isLoading: loadingExpired } = useExpiredDocuments();
