@@ -127,6 +127,34 @@ export const PresenceReport = () => {
     link.click();
   };
 
+  const handleExportPdf = () => {
+    exportReportPdf({
+      title: 'Relatório de Presença',
+      subtitle: `Período: ${format(new Date(startDate), 'dd/MM/yyyy')} a ${format(new Date(endDate), 'dd/MM/yyyy')}`,
+      columns: [
+        { header: 'Data', key: 'data', width: 25 },
+        { header: 'Trabalhador', key: 'trabalhador' },
+        { header: 'Empresa', key: 'empresa' },
+        { header: 'Entrada', key: 'entrada', width: 18, align: 'center' },
+        { header: 'Saída', key: 'saida', width: 18, align: 'center' },
+        { header: 'Total', key: 'total', width: 20, align: 'center' },
+      ],
+      data: presenceData.map(row => ({
+        data: format(new Date(row.date), 'dd/MM/yyyy'),
+        trabalhador: row.workerName,
+        empresa: row.companyName,
+        entrada: row.firstEntry ? format(row.firstEntry, 'HH:mm') : '-',
+        saida: row.lastExit ? format(row.lastExit, 'HH:mm') : '-',
+        total: `${row.totalHours}h ${row.remainingMinutes}m`,
+      })),
+      filename: `relatorio-presenca-${startDate}-${endDate}.pdf`,
+      summaryRows: [
+        { label: 'Total registros', value: String(presenceData.length) },
+        { label: 'Total horas', value: `${Math.floor(totalHoursAll / 60)}h ${totalHoursAll % 60}m` },
+      ],
+    });
+  };
+
   const totalHoursAll = presenceData.reduce((sum, row) => sum + row.totalMinutes, 0);
 
   return (
