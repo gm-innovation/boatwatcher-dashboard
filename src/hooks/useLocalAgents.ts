@@ -14,6 +14,9 @@ interface LocalAgent {
   configuration: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  last_sync_at: string | null;
+  pending_sync_count: number | null;
+  sync_status: string | null;
 }
 
 interface AgentCommand {
