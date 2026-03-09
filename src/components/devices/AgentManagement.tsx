@@ -414,12 +414,13 @@ export function AgentManagement() {
             </CardHeader>
             <CardContent>
               <div className="text-sm text-muted-foreground space-y-2">
-                <p>O agente local funciona como uma ponte entre o sistema na nuvem e os leitores em rede local:</p>
+                <p>O agente v2.0 funciona com arquitetura offline-first:</p>
                 <ol className="list-decimal list-inside space-y-1 ml-2">
-                  <li>O agente faz polling no servidor a cada 5 segundos buscando comandos</li>
-                  <li>Quando um comando é recebido, o agente executa no dispositivo local</li>
-                  <li>O resultado é enviado de volta para o servidor</li>
-                  <li>O agente também envia heartbeats com status dos dispositivos</li>
+                  <li>Eventos dos leitores são salvos localmente em SQLite</li>
+                  <li>Uma thread de sync envia logs pendentes para a nuvem em lote</li>
+                  <li>Workers são sincronizados periodicamente do servidor</li>
+                  <li>Heartbeats reportam status e contagem de pendências</li>
+                  <li>Se a internet cair, os dados ficam na fila local até reconectar</li>
                 </ol>
               </div>
             </CardContent>
