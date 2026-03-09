@@ -37,6 +37,7 @@ interface WorkersOnBoardTableProps {
 }
 
 export const WorkersOnBoardTable = ({ workers, onExport }: WorkersOnBoardTableProps) => {
+  const isMobile = useIsMobile();
   const [searchTerm, setSearchTerm] = useState('');
   const [locationFilter, setLocationFilter] = useState<string>('all');
 
