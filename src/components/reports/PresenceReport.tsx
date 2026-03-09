@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Download, Calendar, Clock, User, Building2 } from 'lucide-react';
+import { Download, Calendar, Clock, User, Building2, FileDown } from 'lucide-react';
+import { exportReportPdf } from '@/utils/exportReportPdf';
 import { format, startOfDay, endOfDay, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
