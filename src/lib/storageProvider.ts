@@ -2,12 +2,13 @@
  * Storage Provider Abstraction
  * 
  * - Web: uses Supabase Storage (cloud buckets)
- * - Electron: saves to local filesystem via IPC
+ * - Electron: uses Local Server REST API for file storage
  */
 
 import { isElectron } from '@/lib/dataProvider';
 import { supabase } from '@/integrations/supabase/client';
 import { getStorageUrl, getUploadedFileReference, resolveFileUrl } from '@/utils/storageUtils';
+import { localStorage as localStorageProvider } from '@/lib/localServerProvider';
 
 export async function uploadFile(
   bucket: string,
@@ -16,17 +17,7 @@ export async function uploadFile(
   options?: { upsert?: boolean }
 ): Promise<string | null> {
   if (isElectron()) {
-    // In Electron, save file to local data directory via IPC
-    const api = (window as any).electronAPI;
-    if (api?.storage?.uploadFile) {
-      return api.storage.uploadFile(bucket, path, await file.arrayBuffer());
-    }
-    // Fallback: convert to data URL and store locally
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.readAsDataURL(file);
-    });
+    return localStorageProvider.upload(bucket, path, file);
   }
 
   const { error } = await supabase.storage
@@ -43,11 +34,7 @@ export async function uploadFile(
 
 export async function getFileUrl(bucket: string, path: string): Promise<string | null> {
   if (isElectron()) {
-    const api = (window as any).electronAPI;
-    if (api?.storage?.getFileUrl) {
-      return api.storage.getFileUrl(bucket, path);
-    }
-    return null;
+    return localStorageProvider.getUrl(bucket, path);
   }
 
   return getStorageUrl(bucket, path);
@@ -57,22 +44,23 @@ export async function resolveUrl(storedUrl: string | null): Promise<string | nul
   if (!storedUrl) return null;
 
   if (isElectron()) {
-    // In Electron, data URLs or local paths are returned as-is
-    if (storedUrl.startsWith('data:') || storedUrl.startsWith('file://')) {
+    // URLs from local server are already absolute
+    if (storedUrl.startsWith('http') || storedUrl.startsWith('data:')) {
       return storedUrl;
     }
+    // Relative path from local server
     const api = (window as any).electronAPI;
-    if (api?.storage?.resolveUrl) {
-      return api.storage.resolveUrl(storedUrl);
-    }
-    return storedUrl;
+    const base = api?.getServerUrl?.() || 'http://localhost:3001';
+    return `${base}${storedUrl}`;
   }
 
   return resolveFileUrl(storedUrl);
 }
 
 export function getPublicUrl(bucket: string, path: string): string | null {
-  if (isElectron()) return null;
+  if (isElectron()) {
+    return localStorageProvider.getUrl(bucket, path);
+  }
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }
