@@ -25,7 +25,10 @@ import {
   XCircle,
   Loader2,
   Download,
-  Key
+  Key,
+  CloudUpload,
+  DatabaseZap,
+  ArrowUpDown
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -249,7 +252,39 @@ export function AgentManagement() {
                           </span>
                         )}
                       </div>
-                      
+
+                      {/* Sync status indicators */}
+                      <div className="flex flex-wrap gap-2">
+                        {agent.sync_status && (
+                          <Badge variant="outline" className={
+                            agent.sync_status === 'synced' 
+                              ? 'bg-primary/10 text-primary border-primary/20' 
+                              : agent.sync_status === 'pending' 
+                                ? 'bg-accent text-accent-foreground border-accent' 
+                                : 'bg-muted text-muted-foreground border-border'
+                          }>
+                            {agent.sync_status === 'synced' ? (
+                              <><CheckCircle2 className="h-3 w-3 mr-1" /> Sincronizado</>
+                            ) : agent.sync_status === 'pending' ? (
+                              <><CloudUpload className="h-3 w-3 mr-1" /> Pendente</>
+                            ) : (
+                              <><ArrowUpDown className="h-3 w-3 mr-1" /> {agent.sync_status}</>
+                            )}
+                          </Badge>
+                        )}
+                        {(agent.pending_sync_count ?? 0) > 0 && (
+                          <Badge variant="secondary">
+                            <DatabaseZap className="h-3 w-3 mr-1" />
+                            {agent.pending_sync_count} logs pendentes
+                          </Badge>
+                        )}
+                        {agent.last_sync_at && (
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <RefreshCw className="h-3 w-3" />
+                            Sync {formatDistanceToNow(new Date(agent.last_sync_at), { addSuffix: true, locale: ptBR })}
+                          </span>
+                        )}
+                      </div>
                       {selectedAgent === agent.id && newAgentToken && (
                         <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
                           <p className="text-sm text-yellow-600 mb-2">Novo token gerado:</p>
