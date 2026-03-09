@@ -162,10 +162,16 @@ export const PresenceReport = () => {
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>Relatório de Presença</CardTitle>
-          <Button onClick={handleExport} disabled={presenceData.length === 0}>
-            <Download className="h-4 w-4 mr-2" />
-            Exportar CSV
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={handleExportPdf} variant="outline" disabled={presenceData.length === 0}>
+              <FileDown className="h-4 w-4 mr-2" />
+              PDF
+            </Button>
+            <Button onClick={handleExport} disabled={presenceData.length === 0}>
+              <Download className="h-4 w-4 mr-2" />
+              CSV
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
