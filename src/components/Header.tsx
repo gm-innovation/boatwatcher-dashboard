@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
-import { Clock, Moon, Sun, LogOut, LayoutDashboard, FileText, Users, Building2, Shield, Menu, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Clock, Moon, Sun, LogOut, LayoutDashboard, FileText, Users, Building2, Shield, Menu, RefreshCw, ToggleLeft, ToggleRight, Wifi, WifiOff, Cloud, CloudOff } from 'lucide-react';
+import { isElectron, getElectronAPI } from '@/lib/dataProvider';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,20 @@ export const Header = () => {
 
   const isAdmin = role === 'admin';
   const isCompanyAdmin = role === 'company_admin';
+  const isDesktop = isElectron();
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [syncStatus, setSyncStatus] = useState<{ syncing: boolean; lastSync: string | null; pendingCount: number }>({ syncing: false, lastSync: null, pendingCount: 0 });
+
+  useEffect(() => {
+    if (!isDesktop) return;
+    const api = getElectronAPI();
+    if (!api) return;
+    api.onConnectivityChange((online) => setIsOnline(online));
+    api.onSyncStatusChange((status) => {
+      setIsOnline(status.online);
+      setSyncStatus({ syncing: status.syncing, lastSync: status.lastSync, pendingCount: status.pendingCount });
+    });
+  }, [isDesktop]);
 
   const clientLogo = theme === 'dark' 
     ? selectedProject?.client?.logo_url_dark 
@@ -161,6 +176,23 @@ export const Header = () => {
                 <span className="hidden sm:inline">Auto</span>
               </Button>
 
+              {isDesktop && (
+                <div className="hidden lg:flex items-center gap-1 border-l border-border pl-2">
+                  {isOnline ? (
+                    <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                      <Cloud className="h-4 w-4" /> Online
+                      {syncStatus.syncing && <RefreshCw className="h-3 w-3 animate-spin" />}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-xs text-orange-500">
+                      <CloudOff className="h-4 w-4" /> Offline
+                      {syncStatus.pendingCount > 0 && (
+                        <span className="bg-orange-500 text-white text-[10px] px-1 rounded-full">{syncStatus.pendingCount}</span>
+                      )}
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="hidden lg:flex items-center gap-1 border-l border-border pl-2">
                 <Toggle variant="outline" size="sm" pressed={theme === 'dark'} onPressedChange={(pressed) => setTheme(pressed ? 'dark' : 'light')}>
                   {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}

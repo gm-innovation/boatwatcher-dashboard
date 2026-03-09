@@ -73,6 +73,78 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, agent_id: agent.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    // POST /upload-workers (offline registrations)
+    if (req.method === 'POST' && action === 'upload-workers') {
+      const { workers } = await req.json()
+      if (!Array.isArray(workers) || workers.length === 0) {
+        return new Response(JSON.stringify({ error: 'Empty workers' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      const mappings: { localId: string; cloudId: string }[] = []
+      for (const w of workers) {
+        // Check if worker already exists by document_number
+        let cloudId = null
+        if (w.document_number) {
+          const { data: existing } = await supabase.from('workers').select('id').eq('document_number', w.document_number).maybeSingle()
+          if (existing) {
+            cloudId = existing.id
+            // Update existing worker
+            await supabase.from('workers').update({
+              name: w.name,
+              role: w.role,
+              company_id: w.company_id,
+              status: w.status || 'pending_review',
+              updated_at: new Date().toISOString(),
+            }).eq('id', cloudId)
+          }
+        }
+
+        if (!cloudId) {
+          // Insert new worker with pending_review status
+          const { data: inserted, error: insertError } = await supabase.from('workers').insert({
+            name: w.name,
+            document_number: w.document_number,
+            company_id: w.company_id,
+            role: w.role,
+            status: 'pending_review',
+            allowed_project_ids: agent.project_id ? [agent.project_id] : [],
+          }).select('id').single()
+
+          if (insertError) {
+            console.error('Insert worker error:', insertError)
+            continue
+          }
+          cloudId = inserted.id
+        }
+
+        mappings.push({ localId: w.local_id || w.id, cloudId })
+      }
+
+      return new Response(JSON.stringify({ success: true, mappings }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // GET /download-companies
+    if (req.method === 'GET' && action === 'download-companies') {
+      const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'
+      const { data: companies, error } = await supabase
+        .from('companies')
+        .select('id, name, cnpj, status, logo_url_light, logo_url_dark')
+        .gte('updated_at', since)
+      if (error) throw error
+      return new Response(JSON.stringify({ companies: companies || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // GET /download-projects
+    if (req.method === 'GET' && action === 'download-projects') {
+      const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'
+      const { data: projects, error } = await supabase
+        .from('projects')
+        .select('id, name, client_id, status, location, crew_size')
+        .gte('updated_at', since)
+      if (error) throw error
+      return new Response(JSON.stringify({ projects: projects || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (e) {
     console.error('agent-sync error:', e)
