@@ -45,7 +45,7 @@ export default function Visitors() {
   const { data: visitors = [], isLoading } = useQuery({
     queryKey: ['visitors', selectedProjectId],
     queryFn: async () => {
-      let query = (supabase.from as any)('visitors')
+      let query = supabase.from('visitors')
         .select('*')
         .order('created_at', { ascending: false });
 
