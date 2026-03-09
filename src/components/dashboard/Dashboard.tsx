@@ -1,4 +1,3 @@
-import { useState, useCallback } from 'react';
 import { useProjectById, useWorkersOnBoard, useCompaniesOnBoard } from '@/hooks/useSupabase';
 import { useRealtimeAccessLogs } from '@/hooks/useRealtimeAccessLogs';
 import { useProject } from '@/contexts/ProjectContext';
@@ -6,24 +5,14 @@ import { ProjectInfoCard } from './ProjectInfoCard';
 import { StatisticsCards } from './StatisticsCards';
 import { WorkersOnBoardTable, WorkerOnBoard } from './WorkersOnBoardTable';
 import { CompaniesOnBoardList } from './CompaniesOnBoardList';
-import { DeviceStatusPanel } from './DeviceStatusPanel';
-import { RecentActivityFeed } from './RecentActivityFeed';
-import { AlertsPanel } from './AlertsPanel';
-import { QuickActionsPanel } from './QuickActionsPanel';
-import { RefreshCw, ToggleLeft, ToggleRight, Maximize2, Minimize2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
-import { useQueryClient } from '@tanstack/react-query';
 
 interface DashboardProps {
   projectId: string | null;
 }
 
 export const Dashboard = ({ projectId }: DashboardProps) => {
-  const queryClient = useQueryClient();
-  const { isFullscreenMode, toggleFullscreen } = useProject();
-  const [lastUpdate, setLastUpdate] = useState(new Date());
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const { autoRefresh, handleRefresh } = useProject();
 
   const { data: project } = useProjectById(projectId);
   const { data: workersOnBoard = [], refetch: refetchWorkers } = useWorkersOnBoard(projectId);
@@ -35,7 +24,7 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
     onNewLog: () => {
       if (autoRefresh) {
         refetchWorkers();
-        setLastUpdate(new Date());
+        handleRefresh();
       }
     }
   });
@@ -49,14 +38,6 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
     company: w.company,
     entryTime: w.entryTime
   }));
-
-  const handleRefresh = useCallback(() => {
-    refetchWorkers();
-    queryClient.invalidateQueries({ queryKey: ['project', projectId] });
-    queryClient.invalidateQueries({ queryKey: ['devices'] });
-    queryClient.invalidateQueries({ queryKey: ['access-logs'] });
-    setLastUpdate(new Date());
-  }, [refetchWorkers, queryClient, projectId]);
 
   const handleExport = () => {
     const csvContent = [
@@ -83,46 +64,6 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
 
   return (
     <div className="space-y-6">
-      {/* Refresh Controls */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <h1 className="text-xl sm:text-2xl font-bold">Dashboard</h1>
-        <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
-          <span className="text-xs sm:text-sm text-muted-foreground">
-            Atualizado: {format(lastUpdate, 'HH:mm:ss')}
-          </span>
-          <Button variant="outline" size="sm" onClick={handleRefresh}>
-            <RefreshCw className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Atualizar</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setAutoRefresh(!autoRefresh)}
-            className="gap-1 sm:gap-2"
-          >
-            {autoRefresh ? (
-              <ToggleRight className="h-5 w-5 text-primary" />
-            ) : (
-              <ToggleLeft className="h-5 w-5 text-muted-foreground" />
-            )}
-            <span className="hidden sm:inline">Auto</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={toggleFullscreen}
-            className="gap-1 sm:gap-2"
-          >
-            {isFullscreenMode ? (
-              <Minimize2 className="h-4 w-4" />
-            ) : (
-              <Maximize2 className="h-4 w-4" />
-            )}
-            <span className="hidden sm:inline">{isFullscreenMode ? 'Sair' : 'Tela Cheia'}</span>
-          </Button>
-        </div>
-      </div>
-
       {/* Project Info Card */}
       <ProjectInfoCard project={project || null} />
 
@@ -133,33 +74,18 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
         companiesOnBoard={companiesOnBoard.length}
       />
 
-      {/* Quick Actions */}
-      <QuickActionsPanel />
-
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-        {/* Workers Table - 2 columns */}
-        <div className="xl:col-span-2">
+      {/* Workers Table + Companies List */}
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+        <div className="xl:col-span-3">
           <WorkersOnBoardTable 
             workers={formattedWorkers}
             onExport={handleExport}
           />
         </div>
-
-        {/* Companies List - 1 column */}
-        <div className="xl:col-span-1">
+        <div className="xl:col-span-2">
           <CompaniesOnBoardList companies={companiesOnBoard} />
         </div>
-
-        {/* Side Panel - 1 column */}
-        <div className="xl:col-span-1 space-y-6">
-          <DeviceStatusPanel />
-          <AlertsPanel />
-        </div>
       </div>
-
-      {/* Recent Activity Feed - Full width */}
-      <RecentActivityFeed projectId={projectId} />
     </div>
   );
 };
