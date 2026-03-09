@@ -27,6 +27,7 @@ interface Visitor {
   status: string;
   project_id: string | null;
   created_at: string;
+  checked_out_at: string | null;
 }
 
 export default function Visitors() {
