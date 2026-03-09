@@ -1,40 +1,23 @@
 
 
-# Plano Revisado: Implementação Incremental do Agente Offline
+# Plano: Correção de Erros + Edge Function (Etapa 1 Mínima)
 
-## Problema
-O plano anterior tentava criar 4 arquivos grandes simultaneamente (Python agent ~600 linhas, edge function, UI complexa, migration), causando erros internos repetidos. Precisa ser dividido em etapas menores.
+## Problema Atual
+1. **Build quebrado**: `StatisticsCards.tsx` tem props `className` inválidas nas linhas 39, 47 e 55 — `StatCard` não aceita essa prop. Isso causa erro de HMR.
+2. **Edge function `agent-sync` nunca foi criada** — tentativas anteriores falharam com erro interno.
 
-## Estado Atual
-- `public/controlid_agent.py` **não existe** (nunca foi criado com sucesso)
-- `supabase/functions/agent-sync/` **vazio** (nunca foi criado)
-- `AgentManagement.tsx` existe com script Python inline básico (482 linhas)
-- `useLocalAgents.ts` existe sem campos de sync
-- Migration dos campos de sync pode ou não ter sido aplicada
+## O que será feito (apenas 2 arquivos pequenos)
 
-## Plano em 4 Etapas Separadas
+### 1. Corrigir `StatisticsCards.tsx`
+Remover as 3 props `className` extras das chamadas de `StatCard`.
 
-### Etapa 1 — Migration + Edge Function
-- Adicionar colunas `last_sync_at`, `pending_sync_count`, `sync_status` na tabela `local_agents` (se ainda não existirem)
-- Criar `supabase/functions/agent-sync/index.ts` — versão enxuta com 3 endpoints: `upload-logs`, `download-workers`, `status`
+### 2. Criar `supabase/functions/agent-sync/index.ts` (versão mínima ~80 linhas)
+Endpoint simples com 3 ações:
+- `upload-logs` — recebe array de logs, insere em `access_logs`
+- `download-workers` — retorna workers atualizados desde timestamp
+- `status` — atualiza heartbeat do agente
 
-### Etapa 2 — Script Python (arquivo separado)
-- Criar `public/controlid_agent.py` com estrutura modular:
-  - SQLite local (workers, access_logs, sync_queue)
-  - ControlID API client (login, status, sync_users)
-  - Sync engine (upload logs, download workers)
-  - Main loop com heartbeat
+Autenticação por token do agente (mesmo padrão do `agent-relay`).
 
-### Etapa 3 — Atualizar UI do AgentManagement
-- Adicionar indicadores de sync status, last_sync_at, pending_sync_count nos cards dos agentes
-- Botão de download do script Python
-- Template de config.json
-
-### Etapa 4 — Instruções de instalação
-- Adicionar aba com instruções Linux (systemd) e Windows (NSSM)
-
-Cada etapa será implementada como uma mensagem separada, evitando sobrecarga.
-
-## Próxima Ação
-Implementar apenas a **Etapa 1** (migration + edge function) nesta rodada.
+Nenhuma alteração de migration (colunas `last_sync_at`, `pending_sync_count`, `sync_status` já existem).
 
