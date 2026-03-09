@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useProjectById, useWorkersOnBoard, useCompaniesOnBoard } from '@/hooks/useSupabase';
 import { useRealtimeAccessLogs } from '@/hooks/useRealtimeAccessLogs';
 import { useProject } from '@/contexts/ProjectContext';
@@ -6,13 +7,15 @@ import { StatisticsCards } from './StatisticsCards';
 import { WorkersOnBoardTable, WorkerOnBoard } from './WorkersOnBoardTable';
 import { CompaniesOnBoardList } from './CompaniesOnBoardList';
 import { format } from 'date-fns';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface DashboardProps {
   projectId: string | null;
 }
 
 export const Dashboard = ({ projectId }: DashboardProps) => {
-  const { autoRefresh, handleRefresh } = useProject();
+  const queryClient = useQueryClient();
+  const { autoRefresh, handleRefresh, registerRefreshCallback } = useProject();
 
   const { data: project } = useProjectById(projectId);
   const { data: workersOnBoard = [], refetch: refetchWorkers } = useWorkersOnBoard(projectId);
