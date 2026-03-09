@@ -142,17 +142,12 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
     if (!worker) return;
     
     try {
-      const { error } = await supabase
-        .from('workers')
-        .update({
-          birth_date: data.birth_date || null,
-          gender: data.gender || null,
-          blood_type: data.blood_type || null,
-          observations: data.observations || null,
-        })
-        .eq('id', worker.id);
-
-      if (error) throw error;
+      await updateWorker(worker.id, {
+        birth_date: data.birth_date || null,
+        gender: data.gender || null,
+        blood_type: data.blood_type || null,
+        observations: data.observations || null,
+      });
       toast({ title: 'Dados atualizados com sucesso' });
       setIsEditingAdditional(false);
       queryClient.invalidateQueries({ queryKey: ['workers'] });
