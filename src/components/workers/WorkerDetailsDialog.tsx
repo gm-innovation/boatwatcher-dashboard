@@ -44,6 +44,7 @@ import {
   Shield,
   FileWarning,
 } from 'lucide-react';
+import { BadgePrinter } from './BadgePrinter';
 
 interface Worker {
   id: string;
