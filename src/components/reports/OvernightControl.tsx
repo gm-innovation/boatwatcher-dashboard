@@ -3,7 +3,7 @@ import { useAccessLogs } from '@/hooks/useControlID';
 import { useQuery } from '@tanstack/react-query';
 import { isElectron } from '@/lib/dataProvider';
 import { fetchWorkers } from '@/hooks/useDataProvider';
-import { supabase } from '@/integrations/supabase/client';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { exportReportPdf } from '@/utils/exportReportPdf';
 import { Badge } from '@/components/ui/badge';
