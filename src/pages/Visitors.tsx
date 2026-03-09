@@ -45,7 +45,7 @@ export default function Visitors() {
   const { data: visitors = [], isLoading } = useQuery({
     queryKey: ['visitors', selectedProjectId],
     queryFn: async () => {
-      let query = supabase.from('visitors')
+      let query = supabase.froms')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -58,7 +58,7 @@ export default function Visitors() {
 
   const createVisitor = useMutation({
     mutationFn: async () => {
-      const { error } = await (supabase.from as any)('visitors').insert({
+      const { error } = await (supabasesupabase.froms').insert({
         name: form.name,
         document_number: form.document_number || null,
         company: form.company || null,
