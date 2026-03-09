@@ -23,7 +23,7 @@ class BackupManager {
   }
 
   performBackup() {
-    const dbPath = path.join(this.dataDir, 'boatwatcher.db');
+    const dbPath = path.join(this.dataDir, 'dockcheck.db');
     if (!fs.existsSync(dbPath)) {
       console.log('[Backup] No database file found, skipping');
       return;
