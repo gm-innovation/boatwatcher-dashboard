@@ -104,8 +104,8 @@ export const WorkersOnBoardTable = ({ workers, onExport }: WorkersOnBoardTablePr
             <TableRow>
               <TableHead className="w-12">Nº</TableHead>
               <TableHead>Nome</TableHead>
-              <TableHead>Local</TableHead>
-              <TableHead>Função</TableHead>
+              {!isMobile && <TableHead>Local</TableHead>}
+              {!isMobile && <TableHead>Função</TableHead>}
               <TableHead>Empresa</TableHead>
               <TableHead className="text-right">Entrada</TableHead>
             </TableRow>
@@ -116,8 +116,8 @@ export const WorkersOnBoardTable = ({ workers, onExport }: WorkersOnBoardTablePr
                 <TableRow key={worker.id}>
                   <TableCell className="font-medium">{index + 1}</TableCell>
                   <TableCell className="font-medium">{worker.name}</TableCell>
-                  <TableCell>{worker.location || '-'}</TableCell>
-                  <TableCell>{worker.role || '-'}</TableCell>
+                  {!isMobile && <TableCell>{worker.location || '-'}</TableCell>}
+                  {!isMobile && <TableCell>{worker.role || '-'}</TableCell>}
                   <TableCell>{worker.company}</TableCell>
                   <TableCell className="text-right">
                     {format(new Date(worker.entryTime), 'HH:mm')}
@@ -126,7 +126,7 @@ export const WorkersOnBoardTable = ({ workers, onExport }: WorkersOnBoardTablePr
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={isMobile ? 4 : 6} className="text-center py-8 text-muted-foreground">
                   Nenhum trabalhador a bordo
                 </TableCell>
               </TableRow>
