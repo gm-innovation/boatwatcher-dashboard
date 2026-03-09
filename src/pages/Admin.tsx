@@ -9,7 +9,9 @@ import { ReportScheduler } from "@/components/reports/ReportScheduler";
 import { DiagnosticsPanel } from "@/components/admin/DiagnosticsPanel";
 import { PendingRegistrations } from "@/components/people/PendingRegistrations";
 import { DocumentExpirationCheck } from "@/components/admin/DocumentExpirationCheck";
-import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, UserCheck, FileWarning } from "lucide-react";
+import { AgentManagement } from "@/components/devices/AgentManagement";
+import { ConnectivityDashboard } from "@/components/devices/ConnectivityDashboard";
+import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, UserCheck, FileWarning, Bot, Wifi } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
 const Admin = () => {
@@ -25,6 +27,8 @@ const Admin = () => {
     if (location.pathname.includes('/diagnostics')) return 'diagnostics';
     if (location.pathname.includes('/pending')) return 'pending';
     if (location.pathname.includes('/documents')) return 'documents';
+    if (location.pathname.includes('/agents')) return 'agents';
+    if (location.pathname.includes('/connectivity')) return 'connectivity';
     return 'projects';
   };
 
@@ -77,6 +81,14 @@ const Admin = () => {
             <FileWarning className="h-4 w-4" />
             Documentos
           </TabsTrigger>
+          <TabsTrigger value="agents" className="gap-2">
+            <Bot className="h-4 w-4" />
+            Agentes
+          </TabsTrigger>
+          <TabsTrigger value="connectivity" className="gap-2">
+            <Wifi className="h-4 w-4" />
+            Conectividade
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="pending">
@@ -117,6 +129,14 @@ const Admin = () => {
 
         <TabsContent value="documents">
           <DocumentExpirationCheck />
+        </TabsContent>
+
+        <TabsContent value="agents">
+          <AgentManagement />
+        </TabsContent>
+
+        <TabsContent value="connectivity">
+          <ConnectivityDashboard />
         </TabsContent>
       </Tabs>
     </div>

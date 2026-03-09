@@ -14,7 +14,8 @@ import {
   FolderKanban,
   Shield,
   Activity,
-  Cog
+  Cog,
+  Wifi
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -48,6 +49,7 @@ const peopleSubItems = [
 
 const adminSubItems = [
   { title: 'Dispositivos', url: '/admin/devices', icon: Server },
+  { title: 'Conectividade', url: '/admin/connectivity', icon: Wifi },
   { title: 'Projetos', url: '/admin/projects', icon: FolderKanban },
   { title: 'Usuários', url: '/admin/users', icon: Shield },
   { title: 'Configurações', url: '/admin/settings', icon: Cog },

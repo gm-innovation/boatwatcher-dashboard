@@ -26,11 +26,9 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
   const [status, setStatus] = useState(client?.status || 'active');
   const [logoUrlLight, setLogoUrlLight] = useState(client?.logo_url_light || '');
   const [logoUrlDark, setLogoUrlDark] = useState(client?.logo_url_dark || '');
-  const [apiEmail, setApiEmail] = useState(client?.contact_email || '');
-  const [apiPassword, setApiPassword] = useState(client?.api_password || '');
-  const [apiEnvironment, setApiEnvironment] = useState(client?.api_environment || 'production');
+  const [cnpj, setCnpj] = useState(client?.cnpj || '');
+  const [contactEmail, setContactEmail] = useState(client?.contact_email || '');
   const [isLoading, setIsLoading] = useState(false);
-  const [isTestingApi, setIsTestingApi] = useState(false);
   const [uploadingLight, setUploadingLight] = useState(false);
   const [uploadingDark, setUploadingDark] = useState(false);
   
@@ -67,31 +65,6 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
     }
   };
 
-  const handleTestApiConnection = async () => {
-    if (!apiEmail || !apiPassword) {
-      toast({ title: 'Preencha email e senha da API', variant: 'destructive' });
-      return;
-    }
-    
-    setIsTestingApi(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('test-inmeta-connection', {
-        body: { email: apiEmail, password: apiPassword, environment: apiEnvironment }
-      });
-      
-      if (error) throw error;
-      
-      if (data?.success) {
-        toast({ title: 'Conexão com API bem sucedida!', description: 'Credenciais válidas.' });
-      } else {
-        toast({ title: 'Falha na conexão', description: data?.message || 'Credenciais inválidas', variant: 'destructive' });
-      }
-    } catch (error: any) {
-      toast({ title: 'Erro ao testar conexão', description: error.message, variant: 'destructive' });
-    } finally {
-      setIsTestingApi(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,9 +74,8 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
       const payload = { 
         name, 
         status,
-        contact_email: apiEmail || null,
-        api_password: apiPassword || null,
-        api_environment: apiEnvironment,
+        cnpj: cnpj || null,
+        contact_email: contactEmail || null,
         logo_url_light: logoUrlLight || null,
         logo_url_dark: logoUrlDark || null
       };
@@ -221,59 +193,27 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
         </div>
       </div>
 
-      {/* API Configuration Section */}
-      <div className="space-y-4 pt-4 border-t">
-        <h3 className="font-medium">Configurações da API Inmeta</h3>
-        
-        {/* Row 3: Email e Senha */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="apiEmail">Email da API *</Label>
-            <Input 
-              id="apiEmail" 
-              type="email"
-              value={apiEmail} 
-              onChange={(e) => setApiEmail(e.target.value)} 
-              placeholder="email@exemplo.com"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="apiPassword">Senha da API *</Label>
-            <Input 
-              id="apiPassword" 
-              type="password"
-              value={apiPassword} 
-              onChange={(e) => setApiPassword(e.target.value)} 
-              placeholder="••••••••"
-            />
-          </div>
-        </div>
-
-        {/* Row 4: Ambiente */}
+      {/* Row 3: CNPJ e Email de Contato */}
+      <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="environment">Ambiente</Label>
-          <Select value={apiEnvironment} onValueChange={setApiEnvironment}>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="production">Produção</SelectItem>
-              <SelectItem value="homologation">Homologação</SelectItem>
-            </SelectContent>
-          </Select>
+          <Label htmlFor="cnpj">CNPJ</Label>
+          <Input 
+            id="cnpj" 
+            value={cnpj} 
+            onChange={(e) => setCnpj(e.target.value)} 
+            placeholder="00.000.000/0000-00"
+          />
         </div>
-
-        {/* Row 5: Testar Conexão */}
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleTestApiConnection}
-          disabled={isTestingApi}
-          className="gap-2"
-        >
-          {isTestingApi && <Loader2 className="h-4 w-4 animate-spin" />}
-          Testar Conexão com API
-        </Button>
+        <div className="space-y-2">
+          <Label htmlFor="contactEmail">Email de Contato</Label>
+          <Input 
+            id="contactEmail" 
+            type="email"
+            value={contactEmail} 
+            onChange={(e) => setContactEmail(e.target.value)} 
+            placeholder="contato@empresa.com"
+          />
+        </div>
       </div>
 
       {/* Footer */}
@@ -319,12 +259,6 @@ export const ClientsManagement = () => {
     return <Badge className="bg-green-500/10 text-green-500 hover:bg-green-500/20">Ativo</Badge>;
   };
 
-  const getEnvironmentBadge = (env: string | null) => {
-    if (env === 'homologation') {
-      return <Badge variant="outline">Homologação</Badge>;
-    }
-    return <Badge variant="outline">Produção</Badge>;
-  };
 
   return (
     <div className="space-y-6">
@@ -375,8 +309,8 @@ export const ClientsManagement = () => {
               <tr>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Logo</th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Nome</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Email API</th>
-                <th className="text-center p-4 text-sm font-medium text-muted-foreground">Ambiente</th>
+                <th className="text-left p-4 text-sm font-medium text-muted-foreground">CNPJ</th>
+                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Contato</th>
                 <th className="text-center p-4 text-sm font-medium text-muted-foreground">Status</th>
                 <th className="text-center p-4 text-sm font-medium text-muted-foreground">Ações</th>
               </tr>
@@ -396,10 +330,8 @@ export const ClientsManagement = () => {
                     </Avatar>
                   </td>
                   <td className="p-4 font-medium">{company.name}</td>
+                  <td className="p-4 text-sm text-muted-foreground">{company.cnpj || '-'}</td>
                   <td className="p-4 text-sm text-muted-foreground">{company.contact_email || '-'}</td>
-                  <td className="p-4 text-center">
-                    {getEnvironmentBadge(company.api_environment)}
-                  </td>
                   <td className="p-4 text-center">
                     {getStatusBadge(company.status)}
                   </td>

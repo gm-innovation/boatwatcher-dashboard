@@ -1,9 +1,13 @@
+import { useMemo } from 'react';
 import { useAccessLogs } from '@/hooks/useControlID';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Download, Building2, Users, Clock } from 'lucide-react';
+import { differenceInMinutes, parseISO } from 'date-fns';
 
 interface CompanyReportProps {
   projectId: string;
@@ -21,12 +25,74 @@ interface CompanyData {
 export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportProps) => {
   const { data: accessLogs = [], isLoading } = useAccessLogs(projectId, startDate, endDate, 1000);
 
-  // Agrupar dados por empresa (simulado - na prática você faria um join com workers e companies)
-  const companyData: CompanyData[] = [
-    { name: 'Empresa A', totalWorkers: 15, totalHours: 1200, entries: 450 },
-    { name: 'Empresa B', totalWorkers: 8, totalHours: 640, entries: 240 },
-    { name: 'Empresa C', totalWorkers: 12, totalHours: 960, entries: 360 },
-  ];
+  const { data: workers = [] } = useQuery({
+    queryKey: ['workers-with-companies-report'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('workers')
+        .select('id, name, company:companies(id, name)');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const companyData = useMemo<CompanyData[]>(() => {
+    if (!accessLogs.length || !workers.length) return [];
+
+    // Map worker_id -> company name
+    const workerCompanyMap = new Map<string, string>();
+    for (const w of workers) {
+      const companyName = w.company && typeof w.company === 'object' && 'name' in w.company
+        ? (w.company as { name: string }).name
+        : 'Sem empresa';
+      workerCompanyMap.set(w.id, companyName);
+    }
+
+    // Group logs by worker, then compute entry/exit pairs
+    const companyStats = new Map<string, { workers: Set<string>; entries: number; totalMinutes: number }>();
+
+    // Group by worker
+    const workerLogs = new Map<string, typeof accessLogs>();
+    for (const log of accessLogs) {
+      if (!log.worker_id) continue;
+      if (!workerLogs.has(log.worker_id)) workerLogs.set(log.worker_id, []);
+      workerLogs.get(log.worker_id)!.push(log);
+    }
+
+    workerLogs.forEach((logs, workerId) => {
+      const companyName = workerCompanyMap.get(workerId) || 'Sem empresa';
+      if (!companyStats.has(companyName)) {
+        companyStats.set(companyName, { workers: new Set(), entries: 0, totalMinutes: 0 });
+      }
+      const stats = companyStats.get(companyName)!;
+      stats.workers.add(workerId);
+
+      // Sort chronologically
+      const sorted = [...logs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+      // Pair entries with exits
+      let lastEntry: string | null = null;
+      for (const log of sorted) {
+        if (log.direction === 'entry') {
+          stats.entries++;
+          lastEntry = log.timestamp;
+        } else if (log.direction === 'exit' && lastEntry) {
+          const mins = differenceInMinutes(parseISO(log.timestamp), parseISO(lastEntry));
+          if (mins > 0 && mins < 1440) { // max 24h sanity check
+            stats.totalMinutes += mins;
+          }
+          lastEntry = null;
+        }
+      }
+    });
+
+    return Array.from(companyStats.entries()).map(([name, stats]) => ({
+      name,
+      totalWorkers: stats.workers.size,
+      totalHours: Math.round(stats.totalMinutes / 60),
+      entries: stats.entries,
+    })).sort((a, b) => b.entries - a.entries);
+  }, [accessLogs, workers]);
 
   const totalWorkers = companyData.reduce((sum, c) => sum + c.totalWorkers, 0);
   const totalEntries = companyData.reduce((sum, c) => sum + c.entries, 0);
@@ -42,7 +108,6 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="pt-6">
@@ -85,7 +150,6 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
         </Card>
       </div>
 
-      {/* Export buttons */}
       <div className="flex justify-end gap-2">
         <Button variant="outline" className="gap-2">
           <Download className="h-4 w-4" />
@@ -97,7 +161,6 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
         </Button>
       </div>
 
-      {/* Table */}
       <Card>
         <CardHeader>
           <CardTitle>Relatório por Empresa</CardTitle>
@@ -107,7 +170,7 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>
-          ) : (
+          ) : companyData.length > 0 ? (
             <ScrollArea className="h-[400px]">
               <table className="w-full">
                 <thead className="sticky top-0 bg-card border-b">
@@ -136,13 +199,18 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
                       <td className="p-4 text-center">{company.totalHours}h</td>
                       <td className="p-4 text-center">{company.entries}</td>
                       <td className="p-4 text-center">
-                        {Math.round(company.totalHours / company.totalWorkers)}h
+                        {company.totalWorkers > 0 ? Math.round(company.totalHours / company.totalWorkers) : 0}h
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </ScrollArea>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Nenhum dado de acesso encontrado no período</p>
+            </div>
           )}
         </CardContent>
       </Card>
