@@ -27,6 +27,8 @@ const Admin = () => {
     if (location.pathname.includes('/diagnostics')) return 'diagnostics';
     if (location.pathname.includes('/pending')) return 'pending';
     if (location.pathname.includes('/documents')) return 'documents';
+    if (location.pathname.includes('/agents')) return 'agents';
+    if (location.pathname.includes('/connectivity')) return 'connectivity';
     return 'projects';
   };
 
