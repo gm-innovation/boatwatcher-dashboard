@@ -57,7 +57,8 @@ export default function Visitors() {
 
   const createVisitor = useMutation({
     mutationFn: async () => {
-      const { error } = await (supabasesupabase.supabase.supabase.from,
+      const { error } = await supabase.from('visitors').insert({
+        name: form.name,
         document_number: form.document_number || null,
         company: form.company || null,
         reason: form.reason || null,
