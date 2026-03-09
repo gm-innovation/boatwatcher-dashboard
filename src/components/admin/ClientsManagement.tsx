@@ -193,6 +193,29 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
         </div>
       </div>
 
+      {/* Row 3: CNPJ e Email de Contato */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="cnpj">CNPJ</Label>
+          <Input 
+            id="cnpj" 
+            value={cnpj} 
+            onChange={(e) => setCnpj(e.target.value)} 
+            placeholder="00.000.000/0000-00"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="contactEmail">Email de Contato</Label>
+          <Input 
+            id="contactEmail" 
+            type="email"
+            value={contactEmail} 
+            onChange={(e) => setContactEmail(e.target.value)} 
+            placeholder="contato@empresa.com"
+          />
+        </div>
+      </div>
+
       {/* Footer */}
       <div className="flex justify-end gap-2 pt-4 border-t">
         <Button type="button" variant="outline" onClick={onCancel}>
