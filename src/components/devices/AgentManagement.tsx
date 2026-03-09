@@ -30,7 +30,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-const AGENT_RELAY_URL = `https://qdscawiwjhzgiqroqkik.supabase.co/functions/v1/agent-relay`;
+const AGENT_RELAY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-relay`;
 
 export function AgentManagement() {
   const { selectedProjectId } = useProject();
