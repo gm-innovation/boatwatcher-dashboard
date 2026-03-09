@@ -131,6 +131,7 @@ export const WorkersOnBoardTable = ({ workers, onExport }: WorkersOnBoardTablePr
             )}
           </TableBody>
         </Table>
+        </div>
       </ScrollArea>
     </div>
   );
