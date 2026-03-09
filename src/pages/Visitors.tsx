@@ -45,7 +45,7 @@ export default function Visitors() {
   const { data: visitors = [], isLoading } = useQuery({
     queryKey: ['visitors', selectedProjectId],
     queryFn: async () => {
-      let query = supabase.from   .select('*')
+      let query = supabase.fromt('*')
         .order('created_at', { ascending: false });
 
       if (selectedProjectId) query = query.eq('project_id', selectedProjectId);
@@ -57,7 +57,7 @@ export default function Visitors() {
 
   const createVisitor = useMutation({
     mutationFn: async () => {
-      const { error } = await (supabasesupabase.supabase.from   name: form.name,
+      const { error } = await (supabasesupabase.supabase.supabase.from,
         document_number: form.document_number || null,
         company: form.company || null,
         reason: form.reason || null,
@@ -78,7 +78,7 @@ export default function Visitors() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await (supabase.from as supabase.frome({ status }).eq('id', id);
+      const { error } = await (supabase.from as supabase.frome({ ssupabase.from
       if (error) throw error;
     },
     onSuccess: () => {
@@ -89,7 +89,7 @@ export default function Visitors() {
 
   const deleteVisitor = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await (supabase.from as any)('visitors').delete().eq('id', id);
+      const { error } = await (supabase.from as any)('vissupabase.fromd', id);
       if (error) throw error;
     },
     onSuccess: () => {
