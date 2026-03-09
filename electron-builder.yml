@@ -1,6 +1,6 @@
-appId: com.boatwatcher.desktop
-productName: BoatWatcher Desktop
-copyright: Copyright © 2026 BoatWatcher
+appId: com.dockcheck.desktop
+productName: Dock Check Desktop
+copyright: Copyright © 2026 Dock Check
 
 directories:
   output: electron-dist
