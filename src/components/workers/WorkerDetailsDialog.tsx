@@ -44,6 +44,7 @@ import {
   Shield,
   FileWarning,
 } from 'lucide-react';
+import { BadgePrinter } from './BadgePrinter';
 
 interface Worker {
   id: string;
@@ -206,6 +207,9 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
             Detalhes do Trabalhador - {worker.name}
           </DialogTitle>
           <p className="text-sm text-muted-foreground">Visualize e edite as informações do trabalhador</p>
+          <div className="mt-2">
+            <BadgePrinter worker={worker} companyName={companyName} jobFunctionName={worker.role || undefined} />
+          </div>
         </DialogHeader>
 
         <ScrollArea className="flex-1 pr-4">

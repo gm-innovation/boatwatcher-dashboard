@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
+import { exportReportPdf } from '@/utils/exportReportPdf';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -146,11 +147,38 @@ export const OvernightControl = ({ projectId, startDate, endDate }: OvernightCon
       </div>
 
       <div className="flex justify-end gap-2">
-        <Button variant="outline" className="gap-2">
+        <Button variant="outline" className="gap-2" onClick={() => {
+          const csvContent = [
+            ['Trabalhador', 'Empresa', 'Entrada', 'Noites'].join(','),
+            ...overnightWorkers.map(w => [w.name, w.company, w.entryTime, w.nights].join(','))
+          ].join('\n');
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = `pernoite-${startDate}-${endDate}.csv`;
+          link.click();
+        }}>
           <Download className="h-4 w-4" />
           CSV
         </Button>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={() => {
+          exportReportPdf({
+            title: 'Controle de Pernoite',
+            subtitle: `Período: ${startDate} a ${endDate}`,
+            columns: [
+              { header: 'Trabalhador', key: 'name' },
+              { header: 'Empresa', key: 'company' },
+              { header: 'Entrada', key: 'entryTime', width: 35, align: 'center' },
+              { header: 'Noites', key: 'nights', width: 20, align: 'center' },
+            ],
+            data: overnightWorkers,
+            filename: `pernoite-${startDate}-${endDate}.pdf`,
+            summaryRows: [
+              { label: 'Pernoitando', value: String(overnightWorkers.length) },
+              { label: 'Total noites', value: String(overnightWorkers.reduce((s, w) => s + w.nights, 0)) },
+            ],
+          });
+        }}>
           <Download className="h-4 w-4" />
           PDF
         </Button>

@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Download, Calendar, Clock, User, Building2 } from 'lucide-react';
+import { Download, Calendar, Clock, User, Building2, FileDown } from 'lucide-react';
+import { exportReportPdf } from '@/utils/exportReportPdf';
 import { format, startOfDay, endOfDay, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -126,6 +127,34 @@ export const PresenceReport = () => {
     link.click();
   };
 
+  const handleExportPdf = () => {
+    exportReportPdf({
+      title: 'Relatório de Presença',
+      subtitle: `Período: ${format(new Date(startDate), 'dd/MM/yyyy')} a ${format(new Date(endDate), 'dd/MM/yyyy')}`,
+      columns: [
+        { header: 'Data', key: 'data', width: 25 },
+        { header: 'Trabalhador', key: 'trabalhador' },
+        { header: 'Empresa', key: 'empresa' },
+        { header: 'Entrada', key: 'entrada', width: 18, align: 'center' },
+        { header: 'Saída', key: 'saida', width: 18, align: 'center' },
+        { header: 'Total', key: 'total', width: 20, align: 'center' },
+      ],
+      data: presenceData.map(row => ({
+        data: format(new Date(row.date), 'dd/MM/yyyy'),
+        trabalhador: row.workerName,
+        empresa: row.companyName,
+        entrada: row.firstEntry ? format(row.firstEntry, 'HH:mm') : '-',
+        saida: row.lastExit ? format(row.lastExit, 'HH:mm') : '-',
+        total: `${row.totalHours}h ${row.remainingMinutes}m`,
+      })),
+      filename: `relatorio-presenca-${startDate}-${endDate}.pdf`,
+      summaryRows: [
+        { label: 'Total registros', value: String(presenceData.length) },
+        { label: 'Total horas', value: `${Math.floor(totalHoursAll / 60)}h ${totalHoursAll % 60}m` },
+      ],
+    });
+  };
+
   const totalHoursAll = presenceData.reduce((sum, row) => sum + row.totalMinutes, 0);
 
   return (
@@ -133,10 +162,16 @@ export const PresenceReport = () => {
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>Relatório de Presença</CardTitle>
-          <Button onClick={handleExport} disabled={presenceData.length === 0}>
-            <Download className="h-4 w-4 mr-2" />
-            Exportar CSV
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={handleExportPdf} variant="outline" disabled={presenceData.length === 0}>
+              <FileDown className="h-4 w-4 mr-2" />
+              PDF
+            </Button>
+            <Button onClick={handleExport} disabled={presenceData.length === 0}>
+              <Download className="h-4 w-4 mr-2" />
+              CSV
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">

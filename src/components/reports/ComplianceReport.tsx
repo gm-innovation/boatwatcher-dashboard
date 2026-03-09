@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, AlertCircle, AlertTriangle, FileCheck } from 'lucide-react';
+import { Download, AlertCircle, AlertTriangle, FileCheck, FileDown } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { exportReportPdf } from '@/utils/exportReportPdf';
 
 export const ComplianceReport = () => {
   const { data: expiredDocs = [], isLoading: loadingExpired } = useExpiredDocuments();
@@ -44,6 +45,46 @@ export const ComplianceReport = () => {
     link.click();
   };
 
+  const handleExportPdf = () => {
+    const allDocs = [
+      ...expiredDocs.map((d: any) => ({
+        status: 'Vencido',
+        worker: d.worker?.name || 'Desconhecido',
+        empresa: getCompanyName(d.worker?.company_id),
+        documento: d.document_type,
+        vencimento: format(new Date(d.expiry_date), 'dd/MM/yyyy'),
+        dias: `${Math.abs(differenceInDays(new Date(d.expiry_date), new Date()))} dias`,
+      })),
+      ...expiringDocs.map((d: any) => ({
+        status: 'Vencendo',
+        worker: d.worker?.name || 'Desconhecido',
+        empresa: getCompanyName(d.worker?.company_id),
+        documento: d.document_type,
+        vencimento: format(new Date(d.expiry_date), 'dd/MM/yyyy'),
+        dias: `${differenceInDays(new Date(d.expiry_date), new Date())} dias`,
+      })),
+    ];
+
+    exportReportPdf({
+      title: 'Relatório de Conformidade',
+      subtitle: `${expiredDocs.length} vencidos | ${expiringDocs.length} vencendo em 30 dias`,
+      columns: [
+        { header: 'Status', key: 'status', width: 22 },
+        { header: 'Trabalhador', key: 'worker' },
+        { header: 'Empresa', key: 'empresa' },
+        { header: 'Documento', key: 'documento' },
+        { header: 'Vencimento', key: 'vencimento', width: 25, align: 'center' },
+        { header: 'Dias', key: 'dias', width: 20, align: 'center' },
+      ],
+      data: allDocs,
+      filename: `relatorio-conformidade-${format(new Date(), 'yyyy-MM-dd')}.pdf`,
+      summaryRows: [
+        { label: 'Documentos vencidos', value: String(expiredDocs.length) },
+        { label: 'Vencendo em 30 dias', value: String(expiringDocs.length) },
+      ],
+    });
+  };
+
   const isLoading = loadingExpired || loadingExpiring;
 
   return (
@@ -51,10 +92,16 @@ export const ComplianceReport = () => {
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>Relatório de Conformidade</CardTitle>
-          <Button onClick={handleExport} disabled={expiredDocs.length === 0 && expiringDocs.length === 0}>
-            <Download className="h-4 w-4 mr-2" />
-            Exportar CSV
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={handleExportPdf} variant="outline" disabled={expiredDocs.length === 0 && expiringDocs.length === 0}>
+              <FileDown className="h-4 w-4 mr-2" />
+              Exportar PDF
+            </Button>
+            <Button onClick={handleExport} disabled={expiredDocs.length === 0 && expiringDocs.length === 0}>
+              <Download className="h-4 w-4 mr-2" />
+              Exportar CSV
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>

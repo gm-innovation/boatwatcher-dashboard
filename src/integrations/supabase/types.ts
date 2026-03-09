@@ -732,6 +732,56 @@ export type Database = {
         }
         Relationships: []
       }
+      visitors: {
+        Row: {
+          checked_out_at: string | null
+          company: string | null
+          created_at: string
+          document_number: string | null
+          id: string
+          name: string
+          photo_url: string | null
+          project_id: string | null
+          reason: string | null
+          status: string
+          valid_until: string | null
+        }
+        Insert: {
+          checked_out_at?: string | null
+          company?: string | null
+          created_at?: string
+          document_number?: string | null
+          id?: string
+          name: string
+          photo_url?: string | null
+          project_id?: string | null
+          reason?: string | null
+          status?: string
+          valid_until?: string | null
+        }
+        Update: {
+          checked_out_at?: string | null
+          company?: string | null
+          created_at?: string
+          document_number?: string | null
+          id?: string
+          name?: string
+          photo_url?: string | null
+          project_id?: string | null
+          reason?: string | null
+          status?: string
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visitors_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       worker_documents: {
         Row: {
           created_at: string

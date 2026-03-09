@@ -45,7 +45,7 @@ export default function Visitors() {
   const { data: visitors = [], isLoading } = useQuery({
     queryKey: ['visitors', selectedProjectId],
     queryFn: async () => {
-      let query = (supabase.from as any)('visitors')
+      let query = supabase.from('visitors')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -58,7 +58,7 @@ export default function Visitors() {
 
   const createVisitor = useMutation({
     mutationFn: async () => {
-      const { error } = await (supabase.from as any)('visitors').insert({
+      const { error } = await supabase.from('visitors').insert({
         name: form.name,
         document_number: form.document_number || null,
         company: form.company || null,
@@ -80,7 +80,7 @@ export default function Visitors() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await (supabase.from as any)('visitors').update({ status }).eq('id', id);
+      const { error } = await supabase.from('visitors').update({ status }).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -91,7 +91,7 @@ export default function Visitors() {
 
   const deleteVisitor = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await (supabase.from as any)('visitors').delete().eq('id', id);
+      const { error } = await supabase.from('visitors').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -161,7 +161,7 @@ export default function Visitors() {
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3 flex-1 min-w-[200px]">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

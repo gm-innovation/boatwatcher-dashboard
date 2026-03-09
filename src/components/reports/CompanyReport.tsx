@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
+import { exportReportPdf } from '@/utils/exportReportPdf';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Download, Building2, Users, Clock } from 'lucide-react';
@@ -151,11 +152,39 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
       </div>
 
       <div className="flex justify-end gap-2">
-        <Button variant="outline" className="gap-2">
+        <Button variant="outline" className="gap-2" onClick={() => {
+          const csvContent = [
+            ['Empresa', 'Trabalhadores', 'Horas', 'Acessos'].join(','),
+            ...companyData.map(c => [c.name, c.totalWorkers, c.totalHours, c.entries].join(','))
+          ].join('\n');
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = `relatorio-empresa-${startDate}-${endDate}.csv`;
+          link.click();
+        }}>
           <Download className="h-4 w-4" />
           CSV
         </Button>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={() => {
+          exportReportPdf({
+            title: 'Relatório por Empresa',
+            subtitle: `Período: ${startDate} a ${endDate}`,
+            columns: [
+              { header: 'Empresa', key: 'name' },
+              { header: 'Trabalhadores', key: 'totalWorkers', width: 30, align: 'center' },
+              { header: 'Horas', key: 'totalHours', width: 25, align: 'center' },
+              { header: 'Acessos', key: 'entries', width: 25, align: 'center' },
+            ],
+            data: companyData,
+            filename: `relatorio-empresa-${startDate}-${endDate}.pdf`,
+            summaryRows: [
+              { label: 'Empresas', value: String(companyData.length) },
+              { label: 'Total trabalhadores', value: String(totalWorkers) },
+              { label: 'Total acessos', value: String(totalEntries) },
+            ],
+          });
+        }}>
           <Download className="h-4 w-4" />
           PDF
         </Button>

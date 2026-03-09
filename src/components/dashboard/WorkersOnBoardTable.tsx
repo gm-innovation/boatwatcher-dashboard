@@ -95,7 +95,8 @@ export const WorkersOnBoardTable = ({ workers, onExport }: WorkersOnBoardTablePr
       </div>
 
       {/* Table */}
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-x-auto">
+        <div className="min-w-[600px]">
         <Table>
           <TableHeader>
             <TableRow>
@@ -130,7 +131,8 @@ export const WorkersOnBoardTable = ({ workers, onExport }: WorkersOnBoardTablePr
             )}
           </TableBody>
         </Table>
-      </ScrollArea>
+        </div>
+      </div>
     </div>
   );
 };
