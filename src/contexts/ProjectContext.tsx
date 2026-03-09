@@ -26,6 +26,7 @@ interface ProjectContextType {
   autoRefresh: boolean;
   setAutoRefresh: (value: boolean) => void;
   handleRefresh: () => void;
+  registerRefreshCallback: (cb: () => void) => () => void;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
