@@ -38,19 +38,16 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const queryClient = useQueryClient();
+  const refreshCallbacksRef = useRef<(() => void)[]>([]);
 
   const toggleFullscreen = () => {
     setIsFullscreenMode(prev => !prev);
   };
 
   const handleRefresh = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['project', selectedProjectId] });
-    queryClient.invalidateQueries({ queryKey: ['workers-on-board'] });
-    queryClient.invalidateQueries({ queryKey: ['devices'] });
-    queryClient.invalidateQueries({ queryKey: ['access-logs'] });
+    refreshCallbacksRef.current.forEach(cb => cb());
     setLastUpdate(new Date());
-  }, [queryClient, selectedProjectId]);
+  }, []);
 
   // Fetch projects when component mounts
   useEffect(() => {
