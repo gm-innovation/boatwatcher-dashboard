@@ -76,8 +76,8 @@ export const ProjectInfoCard = ({ project }: ProjectInfoCardProps) => {
             )}
           </div>
 
-          {/* Info Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {/* Info Grid - single row */}
+          <div className="flex flex-wrap gap-6">
             <InfoItem
               icon={<Building className="h-4 w-4 text-blue-600" />}
               iconBgColor="bg-blue-100 dark:bg-blue-900/30"
