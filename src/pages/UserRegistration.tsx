@@ -137,13 +137,13 @@ const UserRegistration = () => {
           continue;
         }
 
-        const { data } = supabase.storage
+        const { data } = await supabase.storage
           .from('worker-documents')
-          .getPublicUrl(filePath);
+          .createSignedUrl(filePath, 3600);
 
         newDocs.push({
           filename: file.name,
-          file_url: data.publicUrl,
+          file_url: data?.signedUrl || '',
           file_type: file.type
         });
       }
