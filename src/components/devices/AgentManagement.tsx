@@ -340,19 +340,40 @@ export function AgentManagement() {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>Script Python</Label>
+                  <Label>Script Python (v2.0 — offline-first)</Label>
                   <Button 
                     variant="outline" 
                     size="sm"
-                    onClick={() => copyToClipboard(pythonAgentScript, 'python-script')}
+                    asChild
                   >
-                    {copiedField === 'python-script' ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                    <a href="/controlid_agent.py" download="controlid_agent.py">
+                      <Download className="h-4 w-4 mr-1" />
+                      Download
+                    </a>
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Script com SQLite local, sync queue e suporte offline. Baixe e configure com o <code className="bg-muted px-1 rounded">config.json</code> abaixo.
+                </p>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>config.json (template)</Label>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => copyToClipboard(configTemplate, 'config-json')}
+                  >
+                    {copiedField === 'config-json' ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
                     Copiar
                   </Button>
                 </div>
-                <ScrollArea className="h-64 w-full rounded-md border">
+                <ScrollArea className="h-48 w-full rounded-md border">
                   <pre className="p-4 text-xs font-mono">
-                    {pythonAgentScript}
+                    {configTemplate}
                   </pre>
                 </ScrollArea>
               </div>
@@ -368,19 +389,19 @@ export function AgentManagement() {
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">2</div>
-                    <p>Copie o script acima e salve como <code className="bg-muted px-1 rounded">controlid_agent.py</code></p>
+                    <p>Baixe o script <code className="bg-muted px-1 rounded">controlid_agent.py</code> acima</p>
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">3</div>
-                    <p>Substitua <code className="bg-muted px-1 rounded">SEU_TOKEN_AQUI</code> pelo token do agente</p>
+                    <p>Copie o template <code className="bg-muted px-1 rounded">config.json</code> e preencha o token, IPs dos dispositivos e device IDs</p>
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">4</div>
-                    <p>Execute: <code className="bg-muted px-1 rounded">python controlid_agent.py</code></p>
+                    <p>Instale dependências: <code className="bg-muted px-1 rounded">pip install requests</code></p>
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">5</div>
-                    <p>Configure como serviço para execução automática (opcional)</p>
+                    <p>Execute: <code className="bg-muted px-1 rounded">python controlid_agent.py</code></p>
                   </div>
                 </div>
               </div>
