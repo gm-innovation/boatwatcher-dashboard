@@ -214,10 +214,24 @@ serve(async (req) => {
 
       console.log(`[download-workers] Agent ${agent.id}: returning ${(workers || []).length} workers since ${since}`)
 
+      // Generate signed URLs for private worker photos
+      const workersWithPhotos = await Promise.all(
+        (workers || []).map(async (worker) => {
+          if (worker.photo_url) {
+            const photoPath = worker.photo_url.replace(/^worker-photos\//, '');
+            const { data: signedData } = await supabase.storage
+              .from('worker-photos')
+              .createSignedUrl(photoPath, 3600);
+            return { ...worker, photo_signed_url: signedData?.signedUrl ?? null };
+          }
+          return { ...worker, photo_signed_url: null };
+        })
+      );
+
       return new Response(JSON.stringify({ 
-        workers: workers || [], 
+        workers: workersWithPhotos, 
         timestamp: new Date().toISOString(),
-        count: (workers || []).length 
+        count: workersWithPhotos.length 
       }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -284,13 +298,26 @@ serve(async (req) => {
 
         // Enrich sync_users commands with worker data
         if (cmd.command === 'sync_users' && device?.project_id) {
-          const { data: workers } = await supabase
+          const { data: syncWorkers } = await supabase
             .from('workers')
             .select('id, name, code, document_number, photo_url, status, company_id, role')
             .eq('status', 'active')
             .contains('allowed_project_ids', [device.project_id])
 
-          enriched.payload = { ...((cmd.payload as any) || {}), workers: workers || [] }
+          const syncWorkersWithPhotos = await Promise.all(
+            (syncWorkers || []).map(async (w) => {
+              if (w.photo_url) {
+                const photoPath = w.photo_url.replace(/^worker-photos\//, '');
+                const { data: signedData } = await supabase.storage
+                  .from('worker-photos')
+                  .createSignedUrl(photoPath, 3600);
+                return { ...w, photo_signed_url: signedData?.signedUrl ?? null };
+              }
+              return { ...w, photo_signed_url: null };
+            })
+          );
+
+          enriched.payload = { ...((cmd.payload as any) || {}), workers: syncWorkersWithPhotos }
         }
 
         return enriched
