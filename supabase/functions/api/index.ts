@@ -214,10 +214,24 @@ serve(async (req) => {
 
       console.log(`[download-workers] Agent ${agent.id}: returning ${(workers || []).length} workers since ${since}`)
 
+      // Generate signed URLs for private worker photos
+      const workersWithPhotos = await Promise.all(
+        (workers || []).map(async (worker) => {
+          if (worker.photo_url) {
+            const photoPath = worker.photo_url.replace(/^worker-photos\//, '');
+            const { data: signedData } = await supabase.storage
+              .from('worker-photos')
+              .createSignedUrl(photoPath, 3600);
+            return { ...worker, photo_signed_url: signedData?.signedUrl ?? null };
+          }
+          return { ...worker, photo_signed_url: null };
+        })
+      );
+
       return new Response(JSON.stringify({ 
-        workers: workers || [], 
+        workers: workersWithPhotos, 
         timestamp: new Date().toISOString(),
-        count: (workers || []).length 
+        count: workersWithPhotos.length 
       }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
