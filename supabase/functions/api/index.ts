@@ -27,6 +27,27 @@ serve(async (req) => {
       const body = await req.json().catch(() => ({}))
       console.log("CONTROLID HEARTBEAT:", JSON.stringify(body))
 
+      // Handle agent heartbeat (update local_agents table)
+      if (body.event_type === 'agent_heartbeat' && body.token) {
+        const clientIp = req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || 'unknown'
+        const { data: agent, error: agentError } = await supabase
+          .from('local_agents')
+          .update({ 
+            status: 'online', 
+            last_seen_at: new Date().toISOString(),
+            version: body.agent_version || null,
+            ip_address: clientIp
+          })
+          .eq('token', body.token)
+          .select('id, name')
+          .maybeSingle()
+
+        if (agentError) console.error('Error updating agent status:', agentError)
+        else if (agent) console.log(`Agent ${agent.name} set to online, version: ${body.agent_version}`)
+        else console.warn(`Agent with provided token not found`)
+      }
+
+      // Handle device heartbeat (update devices table)
       const serialNumber = body.serial_number || body.device_id?.toString()
       if (serialNumber) {
         const { data: device, error } = await supabase
