@@ -1,28 +1,28 @@
 project_id = "qdscawiwjhzgiqroqkik"
 
 [functions.controlid-api]
-verify_jwt = true
+verify_jwt = false
 
 [functions.controlid-webhook]
 verify_jwt = false
 
 [functions.worker-enrollment]
-verify_jwt = true
+verify_jwt = false
 
 [functions.notification-service]
 verify_jwt = true
 
 [functions.scheduled-reports]
-verify_jwt = true
+verify_jwt = false
 
 [functions.extract-document-data]
-verify_jwt = true
+verify_jwt = false
 
 [functions.check-expiring-documents]
 verify_jwt = false
 
 [functions.auth-ping]
-verify_jwt = true
+verify_jwt = false
 
 [functions.echo-auth]
 verify_jwt = false

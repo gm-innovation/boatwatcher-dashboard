@@ -118,6 +118,24 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  // Validate JWT in code
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+  }
+
+  const anonClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    { global: { headers: { Authorization: authHeader } } }
+  )
+
+  const token = authHeader.replace('Bearer ', '')
+  const { data: claimsData, error: claimsError } = await anonClient.auth.getClaims(token)
+  if (claimsError || !claimsData?.claims) {
+    return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+  }
+
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -125,7 +143,7 @@ serve(async (req) => {
 
   try {
     const { action, workerId, deviceIds } = await req.json()
-    console.log('Worker Enrollment Request:', { action, workerId, deviceIds })
+    console.log('Worker Enrollment Request:', { action, workerId, deviceIds, userId: claimsData.claims.sub })
 
     // Buscar dados do trabalhador
     const { data: worker, error: workerError } = await supabase
