@@ -161,6 +161,69 @@ serve(async (req) => {
       })
     }
 
+    // ==================== DOWNLOAD WORKERS ====================
+    if (path === '/notifications/download-workers' || path.endsWith('/notifications/download-workers')) {
+      const token = url.searchParams.get('token')
+      if (!token) {
+        return new Response(JSON.stringify({ error: 'token parameter required' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const { data: agent, error: agentError } = await supabase
+        .from('local_agents')
+        .select('id, project_id, status')
+        .eq('token', token)
+        .maybeSingle()
+
+      if (agentError || !agent) {
+        return new Response(JSON.stringify({ error: 'Invalid token' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      // Update agent last_seen
+      await supabase.from('local_agents').update({ 
+        status: 'online', 
+        last_seen_at: new Date().toISOString() 
+      }).eq('id', agent.id)
+
+      const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'
+
+      let query = supabase
+        .from('workers')
+        .select('id, name, code, document_number, photo_url, status, company_id, role, allowed_project_ids')
+        .eq('status', 'active')
+        .gte('updated_at', since)
+
+      if (agent.project_id) {
+        query = query.contains('allowed_project_ids', [agent.project_id])
+      }
+
+      const { data: workers, error: workersError } = await query
+
+      if (workersError) {
+        console.error('Error fetching workers:', workersError)
+        return new Response(JSON.stringify({ error: 'Failed to fetch workers' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      console.log(`[download-workers] Agent ${agent.id}: returning ${(workers || []).length} workers since ${since}`)
+
+      return new Response(JSON.stringify({ 
+        workers: workers || [], 
+        timestamp: new Date().toISOString(),
+        count: (workers || []).length 
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     // ==================== POLL COMMANDS ====================
     if (path === '/notifications/poll' || path.endsWith('/notifications/poll')) {
       const deviceIds = url.searchParams.get('device_ids')
@@ -176,7 +239,7 @@ serve(async (req) => {
       // Find devices by serial numbers
       const { data: devices } = await supabase
         .from('devices')
-        .select('id, name, controlid_serial_number, controlid_ip_address, api_credentials')
+        .select('id, name, controlid_serial_number, controlid_ip_address, api_credentials, agent_id, project_id')
         .in('controlid_serial_number', serials)
 
       if (!devices || devices.length === 0) {
@@ -205,10 +268,10 @@ serve(async (req) => {
         })
       }
 
-      // Enrich commands with device info
-      const enrichedCommands = (commands || []).map(cmd => {
+      // Enrich commands with device info + worker data for sync_users
+      const enrichedCommands = await Promise.all((commands || []).map(async (cmd) => {
         const device = devices.find(d => d.id === cmd.device_id)
-        return {
+        const enriched: any = {
           ...cmd,
           device: device ? {
             id: device.id,
@@ -218,7 +281,20 @@ serve(async (req) => {
             api_credentials: device.api_credentials,
           } : null,
         }
-      })
+
+        // Enrich sync_users commands with worker data
+        if (cmd.command === 'sync_users' && device?.project_id) {
+          const { data: workers } = await supabase
+            .from('workers')
+            .select('id, name, code, document_number, photo_url, status, company_id, role')
+            .eq('status', 'active')
+            .contains('allowed_project_ids', [device.project_id])
+
+          enriched.payload = { ...((cmd.payload as any) || {}), workers: workers || [] }
+        }
+
+        return enriched
+      }))
 
       // Mark as in_progress
       if (enrichedCommands.length > 0) {
