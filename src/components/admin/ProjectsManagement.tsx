@@ -329,15 +329,13 @@ export const ProjectsManagement = () => {
                 <tr key={project.id} className="border-b hover:bg-muted/50">
                   <td className="p-4">
                     <div className="flex items-center gap-3">
-                      <Avatar className="h-10 w-10">
+                      <div className="h-10 w-10 rounded-md border bg-muted flex items-center justify-center overflow-hidden shrink-0">
                         {getClientLogo(project) ? (
-                          <AvatarImage src={getClientLogo(project)!} alt={project.client?.name} />
+                          <img src={getClientLogo(project)!} alt={project.client?.name} className="h-full w-full object-contain p-1" />
                         ) : (
-                          <AvatarFallback>
-                            <Building2 className="h-5 w-5" />
-                          </AvatarFallback>
+                          <Building2 className="h-5 w-5 text-muted-foreground" />
                         )}
-                      </Avatar>
+                      </div>
                       <span className="text-sm text-muted-foreground">{project.client?.name || '-'}</span>
                     </div>
                   </td>
