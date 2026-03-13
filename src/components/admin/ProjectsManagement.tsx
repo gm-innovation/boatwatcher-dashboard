@@ -353,7 +353,7 @@ export const ProjectsManagement = () => {
                   </td>
                   <td className="p-4">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
+                      <CalendarIcon className="h-4 w-4" />
                       {project.start_date ? format(new Date(project.start_date), 'dd/MM/yyyy') : '-'}
                     </div>
                   </td>
