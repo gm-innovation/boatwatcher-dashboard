@@ -102,12 +102,189 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, count: logs.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    // POST /upload-operations
+    if (req.method === 'POST' && action === 'upload-operations') {
+      const { operations } = await req.json()
+      if (!Array.isArray(operations) || operations.length === 0) {
+        return new Response(JSON.stringify({ error: 'Empty operations' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      const results: Array<Record<string, unknown>> = []
+
+      for (const operation of operations) {
+        const queueId = operation?.id ?? null
+        const entityType = operation?.entity_type ?? null
+        const entityId = operation?.entity_id ?? null
+        const kind = operation?.operation ?? null
+        const payload = operation?.payload ?? {}
+
+        try {
+          if (!entityType || !kind) {
+            throw new Error('Invalid operation payload')
+          }
+
+          if (entityType === 'user_company') {
+            if (kind === 'delete') {
+              if (!payload.cloud_id) throw new Error('cloud_id required for deletion')
+              const { error } = await supabase.from('user_companies').delete().eq('id', payload.cloud_id)
+              if (error) throw error
+              results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: payload.cloud_id })
+              continue
+            }
+
+            if (!payload.user_id || !payload.company_id) {
+              throw new Error('user_id and company_id are required')
+            }
+
+            if (payload.cloud_id) {
+              const { error } = await supabase
+                .from('user_companies')
+                .update({ user_id: payload.user_id, company_id: payload.company_id, updated_at: new Date().toISOString() })
+                .eq('id', payload.cloud_id)
+              if (error) throw error
+              results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: payload.cloud_id })
+              continue
+            }
+
+            const { data: existing, error: existingError } = await supabase
+              .from('user_companies')
+              .select('id')
+              .eq('user_id', payload.user_id)
+              .maybeSingle()
+            if (existingError) throw existingError
+
+            if (existing?.id) {
+              const { error } = await supabase
+                .from('user_companies')
+                .update({ company_id: payload.company_id, updated_at: new Date().toISOString() })
+                .eq('id', existing.id)
+              if (error) throw error
+              results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: existing.id })
+              continue
+            }
+
+            const { data, error } = await supabase
+              .from('user_companies')
+              .insert({ user_id: payload.user_id, company_id: payload.company_id })
+              .select('id')
+              .single()
+            if (error) throw error
+            results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: data.id })
+            continue
+          }
+
+          if (entityType === 'company_document') {
+            if (kind === 'delete') {
+              if (!payload.cloud_id) throw new Error('cloud_id required for deletion')
+              const { error } = await supabase.from('company_documents').delete().eq('id', payload.cloud_id)
+              if (error) throw error
+              results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: payload.cloud_id })
+              continue
+            }
+
+            const documentPayload = {
+              company_id: payload.company_id,
+              document_type: payload.document_type,
+              filename: payload.filename,
+              file_url: payload.file_url ?? null,
+            }
+
+            if (!documentPayload.company_id || !documentPayload.document_type || !documentPayload.filename) {
+              throw new Error('company_id, document_type and filename are required')
+            }
+
+            if (payload.cloud_id) {
+              const { error } = await supabase
+                .from('company_documents')
+                .update(documentPayload)
+                .eq('id', payload.cloud_id)
+              if (error) throw error
+              results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: payload.cloud_id })
+              continue
+            }
+
+            const { data, error } = await supabase
+              .from('company_documents')
+              .insert(documentPayload)
+              .select('id')
+              .single()
+            if (error) throw error
+            results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: data.id })
+            continue
+          }
+
+          if (entityType === 'worker_document') {
+            if (kind === 'delete') {
+              if (!payload.cloud_id) throw new Error('cloud_id required for deletion')
+              const { error } = await supabase.from('worker_documents').delete().eq('id', payload.cloud_id)
+              if (error) throw error
+              results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: payload.cloud_id })
+              continue
+            }
+
+            const documentPayload = {
+              worker_id: payload.worker_id,
+              document_type: payload.document_type,
+              document_url: payload.document_url ?? null,
+              expiry_date: payload.expiry_date ?? null,
+              issue_date: payload.issue_date ?? null,
+              filename: payload.filename ?? null,
+              extracted_data: payload.extracted_data ?? null,
+              status: payload.status ?? 'valid',
+            }
+
+            if (!documentPayload.worker_id || !documentPayload.document_type) {
+              throw new Error('worker_id and document_type are required')
+            }
+
+            if (payload.cloud_id) {
+              const { error } = await supabase
+                .from('worker_documents')
+                .update(documentPayload)
+                .eq('id', payload.cloud_id)
+              if (error) throw error
+              results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: payload.cloud_id })
+              continue
+            }
+
+            const { data, error } = await supabase
+              .from('worker_documents')
+              .insert(documentPayload)
+              .select('id')
+              .single()
+            if (error) throw error
+            results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: data.id })
+            continue
+          }
+
+          throw new Error(`Unsupported entity type: ${entityType}`)
+        } catch (error) {
+          results.push({
+            queueId,
+            entityType,
+            entityId,
+            operation: kind,
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+
+      await supabase.from('local_agents').update({
+        last_sync_at: new Date().toISOString(),
+        pending_sync_count: results.filter((result) => !result.success).length,
+        sync_status: results.some((result) => !result.success) ? 'partial' : 'synced',
+      }).eq('id', agent.id)
+
+      return new Response(JSON.stringify({ success: true, results }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     // GET /download-workers
     if (req.method === 'GET' && action === 'download-workers') {
       const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'
       const { data: workers, error } = await supabase
         .from('workers')
-        .select('id, name, code, document_number, photo_url, status')
+        .select('id, name, code, document_number, photo_url, status, company_id, role, allowed_project_ids, updated_at')
         .contains('allowed_project_ids', [agent.project_id])
         .gte('updated_at', since)
         .eq('status', 'active')
