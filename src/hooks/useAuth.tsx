@@ -3,16 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 import { useToast } from '@/components/ui/use-toast';
-import { LOCAL_DESKTOP_SESSION, LOCAL_DESKTOP_USER } from '@/lib/authRuntime';
-import { usesLocalAuth } from '@/lib/runtimeProfile';
 
 export const useAuth = (requiredRole?: string) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
-  const [cloudUser, setCloudUser] = useState<User | null>(null);
-  const [cloudSession, setCloudSession] = useState<Session | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -53,30 +49,9 @@ export const useAuth = (requiredRole?: string) => {
   };
 
   useEffect(() => {
-    if (usesLocalAuth()) {
-      setUser(LOCAL_DESKTOP_USER);
-      setSession(LOCAL_DESKTOP_SESSION);
-      setRole('admin');
-      setLoading(false);
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-        setCloudSession(nextSession);
-        setCloudUser(nextSession?.user ?? null);
-      });
-
-      supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-        setCloudSession(currentSession);
-        setCloudUser(currentSession?.user ?? null);
-      });
-
-      return () => subscription.unsubscribe();
-    }
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
-      setCloudSession(nextSession);
-      setCloudUser(nextSession?.user ?? null);
 
       if (nextSession?.user) {
         setTimeout(() => {
@@ -95,8 +70,6 @@ export const useAuth = (requiredRole?: string) => {
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
-      setCloudSession(currentSession);
-      setCloudUser(currentSession?.user ?? null);
 
       if (!currentSession) {
         setLoading(false);
@@ -111,24 +84,6 @@ export const useAuth = (requiredRole?: string) => {
   }, [navigate, requiredRole]);
 
   const signOut = async () => {
-    if (usesLocalAuth()) {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        toast({
-          title: 'Erro ao sair da conta conectada',
-          description: error.message,
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      toast({
-        title: 'Sessão conectada encerrada',
-        description: 'O modo local do desktop continua disponível.',
-      });
-      return;
-    }
-
     const { error } = await supabase.auth.signOut();
     if (error) {
       toast({
@@ -139,5 +94,15 @@ export const useAuth = (requiredRole?: string) => {
     }
   };
 
-  return { user, session, loading, role, signOut, cloudUser, cloudSession, hasCloudSession: !!cloudSession?.user, checkUserRole };
+  return {
+    user,
+    session,
+    loading,
+    role,
+    signOut,
+    cloudUser: user,
+    cloudSession: session,
+    hasCloudSession: !!session?.user,
+    checkUserRole,
+  };
 };
