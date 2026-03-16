@@ -55,6 +55,8 @@ export const localCompanies = {
 export const localCompanyDocuments = {
   list: (companyId: string) => apiFetch(`/api/company-documents?companyId=${encodeURIComponent(companyId)}`),
   create: (data: Record<string, any>) => apiFetch('/api/company-documents', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: Record<string, any>) => apiFetch(`/api/company-documents/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id: string) => apiFetch(`/api/company-documents/${id}`, { method: 'DELETE' }),
 };
 
 // --- Projects ---
@@ -87,6 +89,52 @@ export const localDevices = {
   update: (id: string, data: Record<string, any>) => apiFetch(`/api/devices/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 };
 
+export const localControlId = {
+  async getDeviceStatus(deviceId: string) {
+    const device = await localDevices.getById(deviceId);
+    return {
+      success: true,
+      message: 'Status obtido do servidor local',
+      device,
+      status: device?.status ?? 'offline',
+    };
+  },
+  async getDeviceInfo(deviceId: string) {
+    const device = await localDevices.getById(deviceId);
+    return {
+      success: true,
+      message: 'Informações obtidas do servidor local',
+      device,
+    };
+  },
+  async listUsers(deviceId: string) {
+    return {
+      success: false,
+      message: `Listagem de usuários do dispositivo ${deviceId} será conectada ao agente local na próxima fase.`,
+    };
+  },
+  async releaseAccess(deviceId: string, doorId?: number) {
+    return {
+      success: false,
+      message: `Abertura remota${doorId ? ` da porta ${doorId}` : ''} no dispositivo ${deviceId} ainda não está disponível no servidor local.`,
+    };
+  },
+  async configureDevice(deviceId: string, config: Record<string, any>) {
+    const device = await localDevices.update(deviceId, { configuration: config });
+    return {
+      success: true,
+      message: 'Configuração salva no servidor local',
+      device,
+    };
+  },
+  async enrollWorker(workerId: string, deviceIds: string[], action: 'enroll' | 'remove' = 'enroll') {
+    return {
+      success: false,
+      message: `${action === 'enroll' ? 'Enrollment' : 'Remoção'} local do trabalhador ${workerId} para ${deviceIds.length} dispositivo(s) será conectada ao agente na próxima fase.`,
+    };
+  },
+};
+
 // --- Job Functions ---
 export const localJobFunctions = {
   list: () => apiFetch('/api/job-functions'),
@@ -99,7 +147,11 @@ export const localJobFunctions = {
 export const localWorkerDocuments = {
   list: (workerId: string) => apiFetch(`/api/worker-documents?workerId=${encodeURIComponent(workerId)}`),
   listByWorkers: (workerIds: string[]) => apiFetch(`/api/worker-documents?workerIds=${encodeURIComponent(workerIds.join(','))}`),
+  listExpiring: (daysAhead: number = 30) => apiFetch(`/api/worker-documents/expiring?daysAhead=${daysAhead}`),
+  listExpired: () => apiFetch('/api/worker-documents/expired'),
   create: (data: Record<string, any>) => apiFetch('/api/worker-documents', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: Record<string, any>) => apiFetch(`/api/worker-documents/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id: string) => apiFetch(`/api/worker-documents/${id}`, { method: 'DELETE' }),
 };
 
 // --- Storage ---

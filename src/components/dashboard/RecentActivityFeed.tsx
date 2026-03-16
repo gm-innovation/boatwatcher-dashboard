@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { isElectron, getElectronAPI } from '@/lib/dataProvider';
-import { supabase } from '@/integrations/supabase/client';
 import { fetchAccessLogs } from '@/hooks/useDataProvider';
+import { useRealtimeAccessLogs } from '@/hooks/useRealtimeAccessLogs';
+import { usesLocalServer } from '@/lib/runtimeProfile';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -17,8 +17,11 @@ interface RecentActivityFeedProps {
 export const RecentActivityFeed = ({ projectId }: RecentActivityFeedProps) => {
   const [recentLogs, setRecentLogs] = useState<AccessLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const isLocalRuntime = usesLocalServer();
 
   useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | undefined;
+
     const fetchLogs = async () => {
       if (!projectId) {
         setRecentLogs([]);
@@ -27,60 +30,46 @@ export const RecentActivityFeed = ({ projectId }: RecentActivityFeedProps) => {
       }
 
       try {
-        if (isElectron()) {
-          const data = await fetchAccessLogs({ limit: 20 });
-          setRecentLogs((data || []) as AccessLog[]);
-        } else {
-          const { data, error } = await supabase
-            .from('access_logs')
-            .select('*')
-            .order('timestamp', { ascending: false })
-            .limit(20);
-
-          if (!error && data) {
-            setRecentLogs(data as AccessLog[]);
-          }
-        }
+        const data = await fetchAccessLogs({ projectId, limit: 20 });
+        setRecentLogs((data || []) as AccessLog[]);
       } catch (err) {
         console.error('Error fetching recent logs:', err);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     fetchLogs();
 
-    // Realtime subscription (web only) or polling (Electron)
-    if (isElectron()) {
-      const interval = setInterval(fetchLogs, 5000);
-      return () => clearInterval(interval);
-    } else {
-      const channel = supabase
-        .channel('recent-access-logs')
-        .on(
-          'postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'access_logs' },
-          (payload) => {
-            setRecentLogs(prev => [payload.new as AccessLog, ...prev].slice(0, 20));
-          }
-        )
-        .subscribe();
-
-      return () => { supabase.removeChannel(channel); };
+    if (isLocalRuntime) {
+      interval = setInterval(fetchLogs, 5000);
     }
-  }, [projectId]);
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [projectId, isLocalRuntime]);
+
+  useRealtimeAccessLogs({
+    projectId,
+    onNewLog: (log) => {
+      if (isLocalRuntime) return;
+      setRecentLogs((prev) => [log, ...prev].slice(0, 20));
+    },
+  });
 
   const getDirectionIcon = (direction: string) => {
     switch (direction) {
-      case 'entry': return <ArrowRight className="h-3 w-3 text-green-500" />;
-      case 'exit': return <ArrowLeft className="h-3 w-3 text-blue-500" />;
+      case 'entry': return <ArrowRight className="h-3 w-3 text-primary" />;
+      case 'exit': return <ArrowLeft className="h-3 w-3 text-accent" />;
       default: return <Clock className="h-3 w-3 text-muted-foreground" />;
     }
   };
 
   const getStatusBadge = (status: string) => {
-    return status === 'granted' 
-      ? <Badge className="bg-green-500/10 text-green-500 text-xs">Concedido</Badge>
-      : <Badge className="bg-red-500/10 text-red-500 text-xs">Negado</Badge>;
+    return status === 'granted'
+      ? <Badge className="bg-primary/10 text-primary text-xs">Concedido</Badge>
+      : <Badge className="bg-destructive/10 text-destructive text-xs">Negado</Badge>;
   };
 
   return (
@@ -100,8 +89,8 @@ export const RecentActivityFeed = ({ projectId }: RecentActivityFeedProps) => {
           <ScrollArea className="h-[300px]">
             <div className="space-y-3">
               {recentLogs.map((log) => (
-                <div 
-                  key={log.id} 
+                <div
+                  key={log.id}
                   className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors animate-fade-in"
                 >
                   <Avatar className="h-8 w-8">

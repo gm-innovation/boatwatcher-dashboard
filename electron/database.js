@@ -425,6 +425,29 @@ function createDatabaseAPI(db, startCode) {
       return db.prepare('SELECT * FROM company_documents WHERE id = ?').get(id);
     },
 
+    updateCompanyDocument(id, data) {
+      const existing = db.prepare('SELECT * FROM company_documents WHERE id = ?').get(id);
+      if (!existing) return null;
+
+      const sets = [];
+      const params = [];
+      for (const [key, value] of Object.entries(data)) {
+        if (['id', 'created_at', 'cloud_id'].includes(key)) continue;
+        sets.push(`${key} = ?`);
+        params.push(value ?? null);
+      }
+      if (!sets.length) return existing;
+
+      sets.push('synced = 0');
+      params.push(id);
+      db.prepare(`UPDATE company_documents SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+      return db.prepare('SELECT * FROM company_documents WHERE id = ?').get(id);
+    },
+
+    deleteCompanyDocument(id) {
+      db.prepare('DELETE FROM company_documents WHERE id = ?').run(id);
+    },
+
     // === Projects ===
     getProjects() {
       return db.prepare(`
@@ -532,6 +555,52 @@ function createDatabaseAPI(db, startCode) {
       return db.prepare(sql).all(...params).map(normalizeWorkerDocumentRow);
     },
 
+    getWorkersWithExpiringDocuments(daysAhead = 30) {
+      const today = new Date().toISOString().split('T')[0];
+      const future = new Date();
+      future.setDate(future.getDate() + Number(daysAhead || 30));
+      const futureDate = future.toISOString().split('T')[0];
+
+      return db.prepare(`
+        SELECT wd.*, w.id as worker_ref_id, w.name as worker_name, w.company_id, w.document_number
+        FROM worker_documents wd
+        LEFT JOIN workers w ON w.id = wd.worker_id
+        WHERE wd.expiry_date IS NOT NULL
+          AND wd.expiry_date >= ?
+          AND wd.expiry_date <= ?
+        ORDER BY wd.expiry_date ASC
+      `).all(today, futureDate).map((row) => ({
+        ...normalizeWorkerDocumentRow(row),
+        worker: {
+          id: row.worker_ref_id,
+          name: row.worker_name,
+          company_id: row.company_id,
+          document_number: row.document_number,
+        },
+      }));
+    },
+
+    getExpiredDocuments() {
+      const today = new Date().toISOString().split('T')[0];
+
+      return db.prepare(`
+        SELECT wd.*, w.id as worker_ref_id, w.name as worker_name, w.company_id, w.document_number
+        FROM worker_documents wd
+        LEFT JOIN workers w ON w.id = wd.worker_id
+        WHERE wd.expiry_date IS NOT NULL
+          AND wd.expiry_date < ?
+        ORDER BY wd.expiry_date ASC
+      `).all(today).map((row) => ({
+        ...normalizeWorkerDocumentRow(row),
+        worker: {
+          id: row.worker_ref_id,
+          name: row.worker_name,
+          company_id: row.company_id,
+          document_number: row.document_number,
+        },
+      }));
+    },
+
     createWorkerDocument(data) {
       const id = uuidv4();
       db.prepare(`
@@ -548,29 +617,76 @@ function createDatabaseAPI(db, startCode) {
         data.extracted_data ? JSON.stringify(data.extracted_data) : null,
         data.status || 'valid',
       );
-      return db.prepare('SELECT * FROM worker_documents WHERE id = ?').get(id);
+      return normalizeWorkerDocumentRow(db.prepare('SELECT * FROM worker_documents WHERE id = ?').get(id));
+    },
+
+    updateWorkerDocument(id, data) {
+      const existing = db.prepare('SELECT * FROM worker_documents WHERE id = ?').get(id);
+      if (!existing) return null;
+
+      const sets = [];
+      const params = [];
+      for (const [key, value] of Object.entries(data)) {
+        if (['id', 'created_at', 'cloud_id', 'workerId'].includes(key)) continue;
+        if (key === 'extracted_data') {
+          sets.push('extracted_data = ?');
+          params.push(value ? JSON.stringify(value) : null);
+        } else {
+          sets.push(`${key} = ?`);
+          params.push(value ?? null);
+        }
+      }
+      if (!sets.length) return normalizeWorkerDocumentRow(existing);
+
+      sets.push("updated_at = datetime('now')");
+      sets.push('synced = 0');
+      params.push(id);
+      db.prepare(`UPDATE worker_documents SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+      return normalizeWorkerDocumentRow(db.prepare('SELECT * FROM worker_documents WHERE id = ?').get(id));
+    },
+
+    deleteWorkerDocument(id) {
+      db.prepare('DELETE FROM worker_documents WHERE id = ?').run(id);
     },
 
     // === Access Logs ===
     getAccessLogs(filters = {}) {
-      let sql = 'SELECT * FROM access_logs';
+      let sql = `
+        SELECT al.*
+        FROM access_logs al
+        LEFT JOIN devices d ON d.id = al.device_id
+      `;
       const conditions = [];
       const params = [];
 
+      if (filters.projectId) {
+        conditions.push('d.project_id = ?');
+        params.push(filters.projectId);
+      }
+      if (filters.startDate) {
+        conditions.push('al.timestamp >= ?');
+        params.push(`${filters.startDate}T00:00:00`);
+      }
+      if (filters.endDate) {
+        conditions.push('al.timestamp <= ?');
+        params.push(`${filters.endDate}T23:59:59`);
+      }
       if (filters.since) {
-        conditions.push('timestamp >= ?');
+        conditions.push('al.timestamp >= ?');
         params.push(filters.since);
       }
       if (filters.direction) {
-        conditions.push('direction = ?');
+        conditions.push('al.direction = ?');
         params.push(filters.direction);
       }
       if (filters.access_status) {
-        conditions.push('access_status = ?');
+        conditions.push('al.access_status = ?');
         params.push(filters.access_status);
       }
       if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-      sql += ' ORDER BY timestamp DESC LIMIT 1000';
+
+      const limit = Number(filters.limit || 100);
+      sql += ` ORDER BY al.timestamp DESC LIMIT ${Number.isFinite(limit) && limit > 0 ? limit : 100}`;
 
       return db.prepare(sql).all(...params);
     },
