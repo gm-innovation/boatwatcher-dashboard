@@ -11,10 +11,12 @@ export const useAuth = (requiredRole?: string) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
+  const [cloudUser, setCloudUser] = useState<User | null>(null);
+  const [cloudSession, setCloudSession] = useState<Session | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const checkUserRole = async (userId: string) => {
+  const checkUserRole = async (userId: string, options?: { navigateOnFailure?: boolean }) => {
     try {
       const { data: roleData, error } = await supabase
         .from('user_roles')
@@ -25,26 +27,28 @@ export const useAuth = (requiredRole?: string) => {
       if (error) {
         console.error('Error fetching user role:', error);
         setLoading(false);
-        return;
+        return null;
       }
 
       const userRole = roleData?.role || null;
       setRole(userRole);
 
-      if (requiredRole && userRole !== requiredRole) {
+      if (requiredRole && userRole !== requiredRole && options?.navigateOnFailure !== false) {
         toast({
           title: 'Acesso Negado',
           description: 'Você não tem permissão para acessar esta página.',
           variant: 'destructive',
         });
         navigate('/');
-        return;
+        return null;
       }
 
       setLoading(false);
+      return userRole;
     } catch (error) {
       console.error('Error checking user role:', error);
       setLoading(false);
+      return null;
     }
   };
 
@@ -54,12 +58,25 @@ export const useAuth = (requiredRole?: string) => {
       setSession(LOCAL_DESKTOP_SESSION);
       setRole('admin');
       setLoading(false);
-      return;
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+        setCloudSession(nextSession);
+        setCloudUser(nextSession?.user ?? null);
+      });
+
+      supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+        setCloudSession(currentSession);
+        setCloudUser(currentSession?.user ?? null);
+      });
+
+      return () => subscription.unsubscribe();
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
+      setCloudSession(nextSession);
+      setCloudUser(nextSession?.user ?? null);
 
       if (nextSession?.user) {
         setTimeout(() => {
@@ -78,6 +95,8 @@ export const useAuth = (requiredRole?: string) => {
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
+      setCloudSession(currentSession);
+      setCloudUser(currentSession?.user ?? null);
 
       if (!currentSession) {
         setLoading(false);
@@ -93,7 +112,20 @@ export const useAuth = (requiredRole?: string) => {
 
   const signOut = async () => {
     if (usesLocalAuth()) {
-      window.location.reload();
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        toast({
+          title: 'Erro ao sair da conta conectada',
+          description: error.message,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      toast({
+        title: 'Sessão conectada encerrada',
+        description: 'O modo local do desktop continua disponível.',
+      });
       return;
     }
 
@@ -107,5 +139,5 @@ export const useAuth = (requiredRole?: string) => {
     }
   };
 
-  return { user, session, loading, role, signOut };
+  return { user, session, loading, role, signOut, cloudUser, cloudSession, hasCloudSession: !!cloudSession?.user, checkUserRole };
 };
