@@ -54,7 +54,7 @@ const webAdminSubItems = [
   { title: 'Documentos', url: '/admin/documents', icon: FileWarning },
 ];
 
-const desktopAdminSubItems = webAdminSubItems;
+
 
 export function AppSidebar() {
   const location = useLocation();
