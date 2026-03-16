@@ -126,6 +126,26 @@ class SyncEngine {
       }
     } catch (e) { console.error('Download companies error:', e.message); }
 
+    // Download company/user relations
+    try {
+      const userCompaniesRes = await this.callEdgeFunction(`agent-sync/download-user-companies?since=${lastSync}`, 'GET');
+      if (userCompaniesRes.user_companies) {
+        for (const association of userCompaniesRes.user_companies) {
+          this.db.upsertUserCompanyFromCloud(association);
+        }
+      }
+    } catch (e) { console.error('Download user_companies error:', e.message); }
+
+    // Download company documents
+    try {
+      const companyDocumentsRes = await this.callEdgeFunction(`agent-sync/download-company-documents?since=${lastSync}`, 'GET');
+      if (companyDocumentsRes.company_documents) {
+        for (const document of companyDocumentsRes.company_documents) {
+          this.db.upsertCompanyDocumentFromCloud(document);
+        }
+      }
+    } catch (e) { console.error('Download company_documents error:', e.message); }
+
     // Download projects
     try {
       const projectsRes = await this.callEdgeFunction(`agent-sync/download-projects?since=${lastSync}`, 'GET');
@@ -145,6 +165,16 @@ class SyncEngine {
         }
       }
     } catch (e) { console.error('Download workers error:', e.message); }
+
+    // Download worker documents
+    try {
+      const workerDocumentsRes = await this.callEdgeFunction(`agent-sync/download-worker-documents?since=${lastSync}`, 'GET');
+      if (workerDocumentsRes.worker_documents) {
+        for (const document of workerDocumentsRes.worker_documents) {
+          this.db.upsertWorkerDocumentFromCloud(document);
+        }
+      }
+    } catch (e) { console.error('Download worker_documents error:', e.message); }
 
     this.db.setSyncMeta('last_download', new Date().toISOString());
   }
