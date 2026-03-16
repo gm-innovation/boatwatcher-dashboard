@@ -9,20 +9,22 @@ import { toast } from '@/hooks/use-toast';
 import { ensureValidSession } from '@/utils/ensureValidSession';
 import { useDocumentExtraction, ProcessedDocument } from '@/hooks/useDocumentExtraction';
 import { useJobFunctions } from '@/hooks/useJobFunctions';
+import { usesLocalServer } from '@/lib/runtimeProfile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { 
-  Upload, 
-  X, 
-  FileText, 
-  Loader2, 
-  User, 
+import {
+  Upload,
+  X,
+  FileText,
+  Loader2,
+  User,
   Camera,
   CheckCircle,
   AlertCircle,
@@ -30,7 +32,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { getValidityStatus, formatCPF, normalizeGender, DocumentType } from '@/utils/documentParser';
+import { getValidityStatus, normalizeGender } from '@/utils/documentParser';
 
 const employeeSchema = z.object({
   full_name: z.string().min(1, 'Nome completo é obrigatório'),
@@ -52,14 +54,15 @@ interface EmployeeFormProps {
 export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormProps) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const isLocalRuntime = usesLocalServer();
   const { data: jobFunctions = [] } = useJobFunctions();
   const { extractMultipleDocuments, isExtracting, progress } = useDocumentExtraction();
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>('');
   const [documents, setDocuments] = useState<ProcessedDocument[]>([]);
-  
+
   const photoInputRef = useRef<HTMLInputElement>(null);
   const docsInputRef = useRef<HTMLInputElement>(null);
 
@@ -69,7 +72,6 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
 
   const watchedValues = watch();
 
-  // Handle photo selection
   const handlePhotoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -80,22 +82,31 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
     }
 
     setPhotoFile(file);
-    
+
     const reader = new FileReader();
-    reader.onload = (e) => {
-      setPhotoPreview(e.target?.result as string);
+    reader.onload = (loadEvent) => {
+      setPhotoPreview(loadEvent.target?.result as string);
     };
     reader.readAsDataURL(file);
   };
 
-  // Handle document upload with AI extraction
   const handleDocumentsSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    const fileArray = Array.from(files).filter(f => 
-      f.type === 'application/pdf' || 
-      f.type.startsWith('image/')
+    if (isLocalRuntime) {
+      toast({
+        title: 'Extração indisponível no desktop',
+        description: 'A extração e persistência de documentos do portal serão conectadas ao servidor local na próxima fase.',
+        variant: 'destructive'
+      });
+      event.target.value = '';
+      return;
+    }
+
+    const fileArray = Array.from(files).filter((file) =>
+      file.type === 'application/pdf' ||
+      file.type.startsWith('image/')
     );
 
     if (fileArray.length === 0) {
@@ -104,43 +115,41 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
     }
 
     const processedDocs = await extractMultipleDocuments(fileArray);
-    
+
     if (processedDocs.length > 0) {
-      setDocuments(prev => [...prev, ...processedDocs]);
-      
-      // Auto-fill form with extracted data from first document with personal info
+      setDocuments((previous) => [...previous, ...processedDocs]);
+
       for (const doc of processedDocs) {
         const extracted = doc.extracted_data;
-        if (extracted) {
-          if (extracted.full_name && !watchedValues.full_name) {
-            setValue('full_name', extracted.full_name);
-          }
-          if (extracted.document_number && !watchedValues.document_number) {
-            setValue('document_number', extracted.document_number);
-          }
-          if (extracted.birth_date && !watchedValues.birth_date) {
-            setValue('birth_date', extracted.birth_date);
-          }
-          if (extracted.gender && !watchedValues.gender) {
-            setValue('gender', normalizeGender(extracted.gender) || '');
-          }
-          if (extracted.blood_type && !watchedValues.blood_type) {
-            setValue('blood_type', extracted.blood_type);
-          }
-          if (extracted.job_function && !watchedValues.job_function_id) {
-            // Try to match job function
-            const match = jobFunctions.find(jf => 
-              jf.name.toLowerCase().includes(extracted.job_function!.toLowerCase()) ||
-              extracted.job_function!.toLowerCase().includes(jf.name.toLowerCase())
-            );
-            if (match) {
-              setValue('job_function_id', match.id);
-            }
+        if (!extracted) continue;
+
+        if (extracted.full_name && !watchedValues.full_name) {
+          setValue('full_name', extracted.full_name);
+        }
+        if (extracted.document_number && !watchedValues.document_number) {
+          setValue('document_number', extracted.document_number);
+        }
+        if (extracted.birth_date && !watchedValues.birth_date) {
+          setValue('birth_date', extracted.birth_date);
+        }
+        if (extracted.gender && !watchedValues.gender) {
+          setValue('gender', normalizeGender(extracted.gender) || '');
+        }
+        if (extracted.blood_type && !watchedValues.blood_type) {
+          setValue('blood_type', extracted.blood_type);
+        }
+        if (extracted.job_function && !watchedValues.job_function_id) {
+          const match = jobFunctions.find((jobFunction) =>
+            jobFunction.name.toLowerCase().includes(extracted.job_function!.toLowerCase()) ||
+            extracted.job_function!.toLowerCase().includes(jobFunction.name.toLowerCase())
+          );
+          if (match) {
+            setValue('job_function_id', match.id);
           }
         }
       }
-      
-      toast({ 
+
+      toast({
         title: `${processedDocs.length} documento(s) processado(s)`,
         description: 'Dados extraídos automaticamente pela IA'
       });
@@ -152,54 +161,57 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
   };
 
   const removeDocument = (index: number) => {
-    setDocuments(prev => prev.filter((_, i) => i !== index));
+    setDocuments((previous) => previous.filter((_, currentIndex) => currentIndex !== index));
   };
 
   const getDocumentStatusBadge = (doc: ProcessedDocument) => {
     const status = getValidityStatus(doc.expiry_date);
-    
+
     switch (status) {
       case 'valid':
         return (
-          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
-            <CheckCircle className="h-3 w-3 mr-1" />
+          <Badge variant="outline" className="border-primary/20 bg-primary/10 text-primary">
+            <CheckCircle className="mr-1 h-3 w-3" />
             Válido
           </Badge>
         );
       case 'expiring_soon':
         return (
-          <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">
-            <Clock className="h-3 w-3 mr-1" />
+          <Badge variant="outline" className="border-border bg-muted text-foreground">
+            <Clock className="mr-1 h-3 w-3" />
             Vencendo
           </Badge>
         );
       case 'expired':
         return (
-          <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/30">
-            <AlertCircle className="h-3 w-3 mr-1" />
+          <Badge variant="outline" className="border-destructive/30 bg-destructive/10 text-destructive">
+            <AlertCircle className="mr-1 h-3 w-3" />
             Vencido
           </Badge>
         );
+      default:
+        return null;
     }
   };
 
   const uploadPhoto = async (workerId: string): Promise<string | null> => {
     if (!photoFile) return null;
 
-    // Validate session before upload
-    const validSession = await ensureValidSession();
-    if (!validSession) {
-      toast({
-        title: 'Sessão expirada',
-        description: 'Sua sessão expirou. Faça login novamente.',
-        variant: 'destructive'
-      });
-      return null;
-    }
-
     const fileExt = photoFile.name.split('.').pop();
     const fileName = `${workerId}.${fileExt}`;
     const filePath = `workers/${fileName}`;
+
+    if (!isLocalRuntime) {
+      const validSession = await ensureValidSession();
+      if (!validSession) {
+        toast({
+          title: 'Sessão expirada',
+          description: 'Sua sessão expirou. Faça login novamente.',
+          variant: 'destructive'
+        });
+        return null;
+      }
+    }
 
     const result = await uploadFile('worker-photos', filePath, photoFile, { upsert: true });
 
@@ -216,15 +228,14 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
 
   const onSubmit = async (data: EmployeeFormData) => {
     setIsLoading(true);
-    
+
     try {
-      // Create worker
       const { data: newWorker, error: workerError } = await supabase
         .from('workers')
         .insert({
           name: data.full_name,
           document_number: data.document_number,
-          role: data.job_function_id ? jobFunctions.find(jf => jf.id === data.job_function_id)?.name : null,
+          role: data.job_function_id ? jobFunctions.find((jobFunction) => jobFunction.id === data.job_function_id)?.name : null,
           company_id: companyId,
           job_function_id: data.job_function_id || null,
           status: 'active',
@@ -234,7 +245,6 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
 
       if (workerError) throw workerError;
 
-      // Upload photo
       if (photoFile && newWorker) {
         const photoUrl = await uploadPhoto(newWorker.id);
         if (photoUrl) {
@@ -242,9 +252,8 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
         }
       }
 
-      // Save documents
-      if (documents.length > 0 && newWorker) {
-        const docsToInsert = documents.map(doc => ({
+      if (!isLocalRuntime && documents.length > 0 && newWorker) {
+        const docsToInsert = documents.map((doc) => ({
           worker_id: newWorker.id,
           document_type: doc.document_type,
           document_url: doc.file_url,
@@ -264,15 +273,18 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
         }
       }
 
-      toast({ title: 'Funcionário cadastrado com sucesso!' });
+      toast({
+        title: isLocalRuntime ? 'Funcionário cadastrado no desktop com sucesso!' : 'Funcionário cadastrado com sucesso!',
+        description: isLocalRuntime ? 'Os documentos do portal continuam temporariamente disponíveis apenas no web.' : undefined
+      });
       queryClient.invalidateQueries({ queryKey: ['company-workers'] });
       queryClient.invalidateQueries({ queryKey: ['workers'] });
       onSuccess();
     } catch (error: any) {
-      toast({ 
-        title: 'Erro ao cadastrar funcionário', 
-        description: error.message, 
-        variant: 'destructive' 
+      toast({
+        title: 'Erro ao cadastrar funcionário',
+        description: error.message,
+        variant: 'destructive'
       });
     } finally {
       setIsLoading(false);
@@ -281,7 +293,14 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-      {/* Photo Upload */}
+      {isLocalRuntime && (
+        <Alert>
+          <AlertDescription>
+            No desktop local, este formulário cadastra o trabalhador e a foto, mas a extração e o armazenamento de documentos do portal ainda serão conectados ao servidor local.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="flex items-start gap-6">
         <div className="space-y-2">
           <Label>Foto do Funcionário</Label>
@@ -292,9 +311,9 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
             onChange={handlePhotoSelect}
             className="hidden"
           />
-          <div 
+          <div
             onClick={() => photoInputRef.current?.click()}
-            className="relative cursor-pointer group"
+            className="group relative cursor-pointer"
           >
             <Avatar className="h-24 w-24">
               {photoPreview ? (
@@ -305,16 +324,16 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
                 </AvatarFallback>
               )}
             </Avatar>
-            <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <Camera className="h-6 w-6 text-white" />
+            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-foreground/50 opacity-0 transition-opacity group-hover:opacity-100">
+              <Camera className="h-6 w-6 text-background" />
             </div>
           </div>
-          <p className="text-xs text-muted-foreground text-center">
+          <p className="text-center text-xs text-muted-foreground">
             Clique para enviar
           </p>
         </div>
 
-        <div className="flex-1 grid grid-cols-2 gap-4">
+        <div className="grid flex-1 grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="full_name">Nome Completo *</Label>
             <Input id="full_name" {...register('full_name')} />
@@ -328,7 +347,6 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
         </div>
       </div>
 
-      {/* Additional Fields */}
       <div className="grid grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label htmlFor="job_function_id">Cargo/Função</Label>
@@ -337,8 +355,8 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
               <SelectValue placeholder="Selecione" />
             </SelectTrigger>
             <SelectContent>
-              {jobFunctions.map(jf => (
-                <SelectItem key={jf.id} value={jf.id}>{jf.name}</SelectItem>
+              {jobFunctions.map((jobFunction) => (
+                <SelectItem key={jobFunction.id} value={jobFunction.id}>{jobFunction.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -369,7 +387,7 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
               <SelectValue placeholder="Selecione" />
             </SelectTrigger>
             <SelectContent>
-              {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(type => (
+              {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((type) => (
                 <SelectItem key={type} value={type}>{type}</SelectItem>
               ))}
             </SelectContent>
@@ -377,7 +395,6 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
         </div>
       </div>
 
-      {/* Documents Upload */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <Label>Documentos</Label>
@@ -386,7 +403,7 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
             Extração com IA
           </Badge>
         </div>
-        
+
         <input
           ref={docsInputRef}
           type="file"
@@ -395,42 +412,41 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
           onChange={handleDocumentsSelect}
           className="hidden"
         />
-        
-        <div 
+
+        <div
           onClick={() => !isExtracting && docsInputRef.current?.click()}
-          className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+          className="cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors hover:bg-muted/50"
         >
           {isExtracting ? (
             <div className="space-y-3">
-              <Loader2 className="h-8 w-8 mx-auto text-primary animate-spin" />
+              <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
               <p className="text-sm text-muted-foreground">Processando documentos com IA...</p>
-              <Progress value={progress} className="max-w-xs mx-auto" />
+              <Progress value={progress} className="mx-auto max-w-xs" />
             </div>
           ) : (
             <>
-              <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+              <Upload className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
                 Arraste ou clique para enviar ASO, NRs, RG, CPF, CNH
               </p>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="mt-1 text-xs text-muted-foreground">
                 PDF ou imagens • A IA extrairá os dados automaticamente
               </p>
             </>
           )}
         </div>
 
-        {/* Documents List */}
         {documents.length > 0 && (
           <div className="space-y-2">
             {documents.map((doc, index) => (
               <Card key={index} className="p-3">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-muted">
+                  <div className="rounded-lg bg-muted p-2">
                     <FileText className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{doc.filename}</p>
-                    <div className="flex items-center gap-2 mt-1">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{doc.filename}</p>
+                    <div className="mt-1 flex items-center gap-2">
                       <Badge variant="secondary" className="text-xs">
                         {doc.document_type}
                       </Badge>
@@ -457,15 +473,14 @@ export const EmployeeForm = ({ companyId, onSuccess, onCancel }: EmployeeFormPro
         )}
       </div>
 
-      {/* Actions */}
-      <div className="flex justify-end gap-2 pt-4 border-t">
+      <div className="flex justify-end gap-2 border-t pt-4">
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancelar
         </Button>
         <Button type="submit" disabled={isLoading || isExtracting}>
           {isLoading ? (
             <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Salvando...
             </>
           ) : (
