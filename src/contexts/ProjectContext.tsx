@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { usesLocalServer } from '@/lib/runtimeProfile';
-import { fetchProjects as fetchProjectsFromProvider } from '@/hooks/useDataProvider';
+import { fetchProjects as fetchProjectsFromProvider, fetchCurrentCompanyByUserId } from '@/hooks/useDataProvider';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 interface Project {
   id: string;
@@ -9,7 +10,7 @@ interface Project {
   client_id: string | null;
   status: string | null;
   client?: {
-    id: string;
+    id?: string;
     name: string;
     logo_url_light: string | null;
     logo_url_dark: string | null;
@@ -32,9 +33,11 @@ interface ProjectContextType {
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
+const PROJECT_STORAGE_KEY = 'dockcheck:selected-project-id';
 
 export const ProjectProvider = ({ children }: { children: ReactNode }) => {
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const { user, role } = useAuthContext();
+  const [selectedProjectId, setSelectedProjectIdState] = useState<string | null>(() => localStorage.getItem(PROJECT_STORAGE_KEY));
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,34 +46,53 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const refreshCallbacksRef = useRef<(() => void)[]>([]);
 
+  const setSelectedProjectId = useCallback((id: string | null) => {
+    setSelectedProjectIdState(id);
+    if (id) {
+      localStorage.setItem(PROJECT_STORAGE_KEY, id);
+    } else {
+      localStorage.removeItem(PROJECT_STORAGE_KEY);
+    }
+  }, []);
+
   const toggleFullscreen = () => {
-    setIsFullscreenMode(prev => !prev);
+    setIsFullscreenMode((prev) => !prev);
   };
 
   const handleRefresh = useCallback(() => {
-    refreshCallbacksRef.current.forEach(cb => cb());
+    refreshCallbacksRef.current.forEach((cb) => cb());
     setLastUpdate(new Date());
   }, []);
 
   const registerRefreshCallback = useCallback((cb: () => void) => {
     refreshCallbacksRef.current.push(cb);
     return () => {
-      refreshCallbacksRef.current = refreshCallbacksRef.current.filter(fn => fn !== cb);
+      refreshCallbacksRef.current = refreshCallbacksRef.current.filter((fn) => fn !== cb);
     };
   }, []);
 
   useEffect(() => {
     const fetchProjects = async () => {
+      if (!user) {
+        setProjects([]);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+
       try {
         if (usesLocalServer()) {
-          const localProjects = await fetchProjectsFromProvider();
-          setProjects(localProjects || []);
-          return;
-        }
+          const localProjects = ((await fetchProjectsFromProvider()) || []) as Project[];
 
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) {
-          setLoading(false);
+          if (role === 'admin') {
+            setProjects(localProjects);
+            return;
+          }
+
+          const companyAccess = await fetchCurrentCompanyByUserId(user.id);
+          const companyId = companyAccess?.company_id || null;
+          setProjects(localProjects.filter((project) => project.client_id === companyId));
           return;
         }
 
@@ -95,15 +117,15 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
 
-        const transformedProjects = (data || []).map((project: any) => ({
-          id: project.id,
-          name: project.name,
-          client_id: project.client_id,
-          status: project.status,
-          client: project.client
-        }));
-
-        setProjects(transformedProjects);
+        setProjects(
+          (data || []).map((project: any) => ({
+            id: project.id,
+            name: project.name,
+            client_id: project.client_id,
+            status: project.status,
+            client: project.client,
+          })),
+        );
       } catch (error) {
         console.error('Error fetching projects:', error);
       } finally {
@@ -112,33 +134,48 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     };
 
     fetchProjects();
-  }, []);
+  }, [user, role]);
 
-  // Update selected project when ID changes
   useEffect(() => {
-    if (selectedProjectId) {
-      const project = projects.find(p => p.id === selectedProjectId);
-      setSelectedProject(project || null);
-    } else {
+    if (!projects.length) {
       setSelectedProject(null);
+      if (selectedProjectId) {
+        setSelectedProjectId(null);
+      }
+      return;
     }
-  }, [selectedProjectId, projects]);
+
+    const nextSelectedProject = selectedProjectId
+      ? projects.find((project) => project.id === selectedProjectId) || null
+      : null;
+
+    if (nextSelectedProject) {
+      setSelectedProject(nextSelectedProject);
+      return;
+    }
+
+    const fallbackProject = projects[0];
+    setSelectedProject(fallbackProject);
+    setSelectedProjectId(fallbackProject.id);
+  }, [projects, selectedProjectId, setSelectedProjectId]);
 
   return (
-    <ProjectContext.Provider value={{
-      selectedProjectId,
-      setSelectedProjectId,
-      selectedProject,
-      projects,
-      loading,
-      isFullscreenMode,
-      toggleFullscreen,
-      lastUpdate,
-      autoRefresh,
-      setAutoRefresh,
-      handleRefresh,
-      registerRefreshCallback
-    }}>
+    <ProjectContext.Provider
+      value={{
+        selectedProjectId,
+        setSelectedProjectId,
+        selectedProject,
+        projects,
+        loading,
+        isFullscreenMode,
+        toggleFullscreen,
+        lastUpdate,
+        autoRefresh,
+        setAutoRefresh,
+        handleRefresh,
+        registerRefreshCallback,
+      }}
+    >
       {children}
     </ProjectContext.Provider>
   );

@@ -55,8 +55,6 @@ const webAdminSubItems = [
   { title: 'Documentos', url: '/admin/documents', icon: FileWarning },
 ];
 
-
-
 export function AppSidebar() {
   const location = useLocation();
   const { role } = useAuthContext();
@@ -73,7 +71,6 @@ export function AppSidebar() {
 
   const isAdmin = role === 'admin';
   const isCompanyAdmin = role === 'company_admin';
-  const adminSubItems = webAdminSubItems;
 
   return (
     <Sidebar collapsible="icon">
@@ -84,11 +81,7 @@ export function AppSidebar() {
             <SidebarMenu>
               {mainNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive(item.url, item.end)}
-                    tooltip={item.title}
-                  >
+                  <SidebarMenuButton asChild isActive={isActive(item.url, item.end)} tooltip={item.title}>
                     <NavLink to={item.url} end={item.end}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
@@ -100,41 +93,35 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {isAdmin && (
-          <SidebarGroup>
-            <Collapsible defaultOpen={isPeopleActive}>
-              <CollapsibleTrigger asChild>
-                <SidebarGroupLabel className="cursor-pointer hover:bg-sidebar-accent rounded-md px-2 py-1 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    <span>Gestão de Pessoas</span>
-                  </div>
-                  <ChevronDown className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                </SidebarGroupLabel>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {peopleSubItems.map((item) => (
-                      <SidebarMenuItem key={item.title}>
-                        <SidebarMenuButton
-                          asChild
-                          isActive={isActive(item.url)}
-                          tooltip={item.title}
-                        >
-                          <NavLink to={item.url}>
-                            <item.icon className="h-4 w-4" />
-                            <span>{item.title}</span>
-                          </NavLink>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </CollapsibleContent>
-            </Collapsible>
-          </SidebarGroup>
-        )}
+        <SidebarGroup>
+          <Collapsible defaultOpen={isPeopleActive}>
+            <CollapsibleTrigger asChild>
+              <SidebarGroupLabel className="cursor-pointer hover:bg-sidebar-accent rounded-md px-2 py-1 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  <span>Gestão de Pessoas</span>
+                </div>
+                <ChevronDown className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {peopleSubItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+                        <NavLink to={item.url}>
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </SidebarGroup>
 
         {isCompanyAdmin && (
           <SidebarGroup>
@@ -142,11 +129,7 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isCompanyPortalActive}
-                    tooltip="Portal da Empresa"
-                  >
+                  <SidebarMenuButton asChild isActive={isCompanyPortalActive} tooltip="Portal da Empresa">
                     <NavLink to="/company-portal">
                       <Building2 className="h-4 w-4" />
                       <span>Minha Empresa</span>
@@ -173,13 +156,9 @@ export function AppSidebar() {
               <CollapsibleContent>
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    {adminSubItems.map((item) => (
+                    {webAdminSubItems.map((item) => (
                       <SidebarMenuItem key={item.title}>
-                        <SidebarMenuButton
-                          asChild
-                          isActive={isActive(item.url)}
-                          tooltip={item.title}
-                        >
+                        <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
                           <NavLink to={item.url}>
                             <item.icon className="h-4 w-4" />
                             <span>{item.title}</span>
