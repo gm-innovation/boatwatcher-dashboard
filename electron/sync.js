@@ -54,8 +54,9 @@ class SyncEngine {
     // If we just came online or have pending data, sync
     const pendingWorkers = this.db.getUnsyncedWorkers?.() || [];
     const pendingLogs = this.db.getUnsyncedLogs?.() || [];
+    const pendingOperations = this.db.getPendingSyncOperations?.() || [];
 
-    if (pendingWorkers.length > 0 || pendingLogs.length > 0 || wasOffline) {
+    if (pendingWorkers.length > 0 || pendingLogs.length > 0 || pendingOperations.length > 0 || wasOffline) {
       await this.triggerSync();
     }
 
