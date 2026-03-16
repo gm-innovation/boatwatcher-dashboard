@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -8,6 +8,7 @@ import { isElectron } from '@/lib/dataProvider';
 import { supabase } from '@/integrations/supabase/client';
 import { useWorkers, useCompanies, useProjects } from '@/hooks/useSupabase';
 import { useDevices, useWorkerEnrollment } from '@/hooks/useControlID';
+import { useResolvedUrl } from '@/hooks/useResolvedUrl';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
