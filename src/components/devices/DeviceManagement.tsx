@@ -116,7 +116,7 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
 
   const handleDelete = async () => {
     if (isLocalRuntime) {
-      toast({ title: 'Indisponível no modo local', description: 'A remoção será conectada ao servidor local em uma próxima fase.', variant: 'destructive' });
+      toast({ title: 'Indisponível no modo local', description: LOCAL_DELETE_MESSAGE, variant: 'destructive' });
       return;
     }
 
