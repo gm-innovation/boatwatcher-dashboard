@@ -244,6 +244,25 @@ function initDatabase(userDataPath) {
     db.exec("ALTER TABLE devices ADD COLUMN api_credentials TEXT DEFAULT '{}'");
   }
 
+  const userCompanyColumns = new Set(db.prepare("PRAGMA table_info(user_companies)").all().map((column) => column.name));
+  if (!userCompanyColumns.has('updated_at')) db.exec("ALTER TABLE user_companies ADD COLUMN updated_at TEXT");
+  if (!userCompanyColumns.has('synced')) db.exec("ALTER TABLE user_companies ADD COLUMN synced INTEGER DEFAULT 0");
+  if (!userCompanyColumns.has('cloud_id')) db.exec("ALTER TABLE user_companies ADD COLUMN cloud_id TEXT");
+
+  const companyDocumentColumns = new Set(db.prepare("PRAGMA table_info(company_documents)").all().map((column) => column.name));
+  if (!companyDocumentColumns.has('updated_at')) db.exec("ALTER TABLE company_documents ADD COLUMN updated_at TEXT");
+  if (!companyDocumentColumns.has('synced')) db.exec("ALTER TABLE company_documents ADD COLUMN synced INTEGER DEFAULT 0");
+  if (!companyDocumentColumns.has('cloud_id')) db.exec("ALTER TABLE company_documents ADD COLUMN cloud_id TEXT");
+
+  const workerDocumentColumns = new Set(db.prepare("PRAGMA table_info(worker_documents)").all().map((column) => column.name));
+  if (!workerDocumentColumns.has('updated_at')) db.exec("ALTER TABLE worker_documents ADD COLUMN updated_at TEXT");
+  if (!workerDocumentColumns.has('synced')) db.exec("ALTER TABLE worker_documents ADD COLUMN synced INTEGER DEFAULT 0");
+  if (!workerDocumentColumns.has('cloud_id')) db.exec("ALTER TABLE worker_documents ADD COLUMN cloud_id TEXT");
+
+  db.exec("UPDATE user_companies SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
+  db.exec("UPDATE company_documents SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
+  db.exec("UPDATE worker_documents SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
+
   const maxCode = db.prepare('SELECT MAX(code) as max_code FROM workers').get();
   const nextCode = (maxCode?.max_code || 0) + 1;
 
