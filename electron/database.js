@@ -39,6 +39,7 @@ function normalizeDeviceRow(row) {
   if (!row) return null;
   return {
     ...row,
+    api_credentials: safeParseJson(row.api_credentials, {}),
     configuration: safeParseJson(row.configuration, {}),
   };
 }
