@@ -8,7 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
 import { ensureValidSession } from '@/utils/ensureValidSession';
 import { useDocumentExtraction, ProcessedDocument } from '@/hooks/useDocumentExtraction';
-import { Button } from '@/components/ui/button';
+import { useJobFunctions } from '@/hooks/useJobFunctions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';

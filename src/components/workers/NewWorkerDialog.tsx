@@ -8,7 +8,7 @@ import { useCompanies, useProjects } from '@/hooks/useSupabase';
 import { useCreateWorkerDocument } from '@/hooks/useWorkerDocuments';
 import { useDocumentExtraction, ProcessedDocument } from '@/hooks/useDocumentExtraction';
 import { toast } from '@/hooks/use-toast';
-import { useQueryClient } from '@tanstack/react-query';
+import { ensureValidSession } from '@/utils/ensureValidSession';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
