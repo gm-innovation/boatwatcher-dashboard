@@ -54,23 +54,22 @@ export const RecentActivityFeed = ({ projectId }: RecentActivityFeedProps) => {
     projectId,
     onNewLog: (log) => {
       if (isLocalRuntime) return;
-      if (projectId && log.device_id === null) return;
       setRecentLogs((prev) => [log, ...prev].slice(0, 20));
     },
   });
 
   const getDirectionIcon = (direction: string) => {
     switch (direction) {
-      case 'entry': return <ArrowRight className="h-3 w-3 text-green-500" />;
-      case 'exit': return <ArrowLeft className="h-3 w-3 text-blue-500" />;
+      case 'entry': return <ArrowRight className="h-3 w-3 text-primary" />;
+      case 'exit': return <ArrowLeft className="h-3 w-3 text-accent" />;
       default: return <Clock className="h-3 w-3 text-muted-foreground" />;
     }
   };
 
   const getStatusBadge = (status: string) => {
-    return status === 'granted' 
-      ? <Badge className="bg-green-500/10 text-green-500 text-xs">Concedido</Badge>
-      : <Badge className="bg-red-500/10 text-red-500 text-xs">Negado</Badge>;
+    return status === 'granted'
+      ? <Badge className="bg-primary/10 text-primary text-xs">Concedido</Badge>
+      : <Badge className="bg-destructive/10 text-destructive text-xs">Negado</Badge>;
   };
 
   return (
@@ -90,8 +89,8 @@ export const RecentActivityFeed = ({ projectId }: RecentActivityFeedProps) => {
           <ScrollArea className="h-[300px]">
             <div className="space-y-3">
               {recentLogs.map((log) => (
-                <div 
-                  key={log.id} 
+                <div
+                  key={log.id}
                   className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors animate-fade-in"
                 >
                   <Avatar className="h-8 w-8">
