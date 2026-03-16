@@ -69,14 +69,17 @@ class SyncEngine {
     this.notifyListeners();
 
     try {
-      // Upload structured pending operations first so dependent entities exist in cloud
-      await this.uploadQueuedOperations();
+      // Upload base entities first
+      await this.uploadQueuedOperations(['company']);
+
+      // Upload pending workers after company ids are resolvable in cloud
+      await this.uploadWorkers();
+
+      // Upload dependent structured operations
+      await this.uploadQueuedOperations(['user_company', 'company_document', 'worker_document']);
 
       // Upload pending logs
       await this.uploadLogs();
-
-      // Upload pending workers
-      await this.uploadWorkers();
 
       // Download updates from cloud
       await this.downloadUpdates();
