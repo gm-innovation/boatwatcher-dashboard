@@ -426,6 +426,17 @@ serve(async (req) => {
       return new Response(JSON.stringify({ company_documents: companyDocuments || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    // GET /download-companies
+    if (req.method === 'GET' && action === 'download-companies') {
+      const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'
+      const { data: companies, error } = await supabase
+        .from('companies')
+        .select('id, name, cnpj, contact_email, logo_url_light, logo_url_dark, status, vessels, project_managers, created_at, updated_at')
+        .gte('updated_at', since)
+      if (error) throw error
+      return new Response(JSON.stringify({ companies: companies || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     // GET /download-projects
     if (req.method === 'GET' && action === 'download-projects') {
       const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'
