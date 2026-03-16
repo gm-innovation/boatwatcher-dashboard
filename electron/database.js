@@ -1415,7 +1415,7 @@ function createDatabaseAPI(db, startCode) {
     },
 
     setSyncMeta(key, value) {
-      db.prepare('INSERT OR REPLACE INTO sync_meta (key, value, updated_at) VALUES (?, ?, datetime("now"))').run(key, value);
+      db.prepare("INSERT OR REPLACE INTO sync_meta (key, value, updated_at) VALUES (?, ?, datetime('now'))").run(key, value);
     },
 
     getRawDb() {
