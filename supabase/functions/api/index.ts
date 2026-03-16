@@ -574,16 +574,7 @@ serve(async (req) => {
             .contains('allowed_project_ids', [device.project_id])
 
           const syncWorkersWithPhotos = await Promise.all(
-            (syncWorkers || []).map(async (w) => {
-              if (w.photo_url) {
-                const photoPath = w.photo_url.replace(/^worker-photos\//, '')
-                const { data: signedData } = await supabase.storage
-                  .from('worker-photos')
-                  .createSignedUrl(photoPath, 3600)
-                return { ...w, photo_signed_url: signedData?.signedUrl ?? null }
-              }
-              return { ...w, photo_signed_url: null }
-            })
+            (syncWorkers || []).map((worker) => attachWorkerPhotoSignedUrl(supabase, worker, 'sync_users'))
           )
 
           enriched.payload = { ...((cmd.payload as any) || {}), workers: syncWorkersWithPhotos }
