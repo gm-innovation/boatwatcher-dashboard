@@ -14,11 +14,16 @@ export function useResolvedUrl(storedUrl: string | null | undefined): string | n
       return;
     }
 
-    // If it doesn't look like a Supabase storage URL or storage:// URI, use as-is
-    const isStorageUrl = storedUrl.startsWith('storage://') || 
+    // Resolve private storage refs, legacy public URLs, signed URLs and raw bucket paths
+    const isStorageUrl =
+      storedUrl.startsWith('storage://') ||
+      storedUrl.startsWith('worker-photos/') ||
+      storedUrl.startsWith('worker-documents/') ||
       storedUrl.includes('/storage/v1/object/public/worker-photos/') ||
-      storedUrl.includes('/storage/v1/object/public/worker-documents/');
-    
+      storedUrl.includes('/storage/v1/object/public/worker-documents/') ||
+      storedUrl.includes('/storage/v1/object/sign/worker-photos/') ||
+      storedUrl.includes('/storage/v1/object/sign/worker-documents/');
+
     if (!isStorageUrl) {
       setResolvedUrl(storedUrl);
       return;
