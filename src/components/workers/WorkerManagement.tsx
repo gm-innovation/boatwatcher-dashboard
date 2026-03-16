@@ -491,13 +491,12 @@ export const WorkerManagement = () => {
                 </td>
                 <td className="p-4">
                   <div className="flex items-center gap-3">
-                    <Avatar className="h-8 w-8">
-                      {worker.photo_url ? (
-                        <AvatarImage src={worker.photo_url} alt={worker.name} />
-                      ) : (
-                        <AvatarFallback><User className="h-4 w-4" /></AvatarFallback>
-                      )}
-                    </Avatar>
+                    <ResolvedAvatar
+                      className="h-8 w-8"
+                      photoUrl={worker.photo_url}
+                      name={worker.name}
+                      iconClassName="h-4 w-4"
+                    />
                     <span className="font-medium">{worker.name}</span>
                   </div>
                 </td>

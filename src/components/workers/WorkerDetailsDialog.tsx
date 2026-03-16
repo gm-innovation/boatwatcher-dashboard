@@ -289,8 +289,8 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
                   <div className="flex gap-6">
                     <div className="flex-shrink-0">
                       <Avatar className="h-24 w-24">
-                        {worker.photo_url ? (
-                          <AvatarImage src={worker.photo_url} alt={worker.name} />
+                        {resolvedPhotoUrl ? (
+                          <AvatarImage src={resolvedPhotoUrl} alt={worker.name} />
                         ) : (
                           <AvatarFallback className="text-2xl">
                             <User className="h-10 w-10" />
