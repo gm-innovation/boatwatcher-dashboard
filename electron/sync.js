@@ -94,8 +94,11 @@ class SyncEngine {
     }
   }
 
-  async uploadQueuedOperations() {
-    const operations = this.db.getPendingSyncOperations?.() || [];
+  async uploadQueuedOperations(entityTypes = null) {
+    let operations = this.db.getPendingSyncOperations?.() || [];
+    if (Array.isArray(entityTypes) && entityTypes.length > 0) {
+      operations = operations.filter((operation) => entityTypes.includes(operation.entity_type));
+    }
     if (operations.length === 0) return;
 
     const response = await this.callEdgeFunction('agent-sync/upload-operations', 'POST', { operations });

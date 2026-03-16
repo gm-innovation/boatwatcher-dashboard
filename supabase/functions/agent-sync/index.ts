@@ -373,8 +373,9 @@ serve(async (req) => {
             await supabase.from('workers').update({
               name: w.name,
               role: w.role,
-              company_id: w.company_id,
+              company_id: w.company_id || null,
               status: w.status || 'pending_review',
+              allowed_project_ids: agent.project_id ? [agent.project_id] : [],
               updated_at: new Date().toISOString(),
             }).eq('id', cloudId)
           }
@@ -385,7 +386,7 @@ serve(async (req) => {
           const { data: inserted, error: insertError } = await supabase.from('workers').insert({
             name: w.name,
             document_number: w.document_number,
-            company_id: w.company_id,
+            company_id: w.company_id || null,
             role: w.role,
             status: 'pending_review',
             allowed_project_ids: agent.project_id ? [agent.project_id] : [],
