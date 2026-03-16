@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { enrollUserOnDevice, removeUserFromDevice, loadPhotoAsBase64 } = require('../lib/controlid');
 
 router.get('/', (req, res) => {
   try {
@@ -35,6 +36,107 @@ router.put('/:id', (req, res) => {
     res.json(worker);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/enrollment', async (req, res) => {
+  try {
+    const action = req.body?.action === 'remove' ? 'remove' : 'enroll';
+    const deviceIds = Array.isArray(req.body?.deviceIds) ? [...new Set(req.body.deviceIds.filter(Boolean))] : [];
+
+    if (deviceIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'Selecione ao menos um dispositivo.' });
+    }
+
+    const worker = req.db.getWorkerById(req.params.id);
+    if (!worker) {
+      return res.status(404).json({ success: false, error: 'Worker not found' });
+    }
+
+    const devices = deviceIds
+      .map((deviceId) => req.db.getDeviceById?.(deviceId))
+      .filter(Boolean);
+
+    if (devices.length === 0) {
+      return res.status(404).json({ success: false, error: 'Nenhum dispositivo válido foi encontrado.' });
+    }
+
+    let photoBase64 = null;
+    let photoNotice = null;
+
+    if (action === 'enroll') {
+      if (!worker.photo_url) {
+        photoNotice = 'Trabalhador sem foto biométrica cadastrada.';
+      } else {
+        try {
+          photoBase64 = await loadPhotoAsBase64(worker.photo_url);
+          if (!photoBase64) {
+            photoNotice = 'Foto do trabalhador indisponível para biometria.';
+          }
+        } catch (error) {
+          photoNotice = `Foto indisponível para biometria: ${error.message}`;
+        }
+      }
+    }
+
+    const currentEnrolled = Array.isArray(worker.devices_enrolled) ? worker.devices_enrolled : [];
+    const nextEnrolled = new Set(currentEnrolled);
+    const results = [];
+
+    for (const device of devices) {
+      try {
+        const result = action === 'enroll'
+          ? await enrollUserOnDevice(device, worker, photoBase64)
+          : await removeUserFromDevice(device, worker.id);
+
+        if (result.success) {
+          if (action === 'enroll') nextEnrolled.add(device.id);
+          if (action === 'remove') nextEnrolled.delete(device.id);
+        }
+
+        results.push({
+          deviceId: device.id,
+          deviceName: device.name,
+          ...result,
+        });
+      } catch (error) {
+        results.push({
+          deviceId: device.id,
+          deviceName: device.name,
+          success: false,
+          error: error.message,
+        });
+      }
+    }
+
+    const updatedDevicesEnrolled = Array.from(nextEnrolled);
+    const updatedWorker = req.db.updateWorker(worker.id, {
+      devices_enrolled: updatedDevicesEnrolled,
+    });
+
+    const successCount = results.filter((item) => item.success).length;
+    const failureCount = results.length - successCount;
+    const warningCount = results.filter((item) => item.warning).length;
+
+    let message = `${action === 'enroll' ? 'Enrollment' : 'Remoção'} concluído(a) em ${successCount}/${results.length} dispositivo(s).`;
+    if (failureCount > 0) {
+      message += ` ${failureCount} falha(s).`;
+    }
+    if (photoNotice) {
+      message += ` ${photoNotice}`;
+    } else if (warningCount > 0) {
+      message += ' Parte dos dispositivos concluiu sem biometria facial.';
+    }
+
+    res.json({
+      success: failureCount === 0,
+      message,
+      results,
+      devicesEnrolled: updatedDevicesEnrolled,
+      worker: updatedWorker,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

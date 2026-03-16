@@ -122,10 +122,10 @@ export const localControlId = {
     });
   },
   async enrollWorker(workerId: string, deviceIds: string[], action: 'enroll' | 'remove' = 'enroll') {
-    return {
-      success: false,
-      message: `${action === 'enroll' ? 'Enrollment' : 'Remoção'} local do trabalhador ${workerId} para ${deviceIds.length} dispositivo(s) será conectada ao agente na próxima fase.`,
-    };
+    return apiFetch(`/api/workers/${workerId}/enrollment`, {
+      method: 'POST',
+      body: JSON.stringify({ deviceIds, action }),
+    });
   },
 };
 
