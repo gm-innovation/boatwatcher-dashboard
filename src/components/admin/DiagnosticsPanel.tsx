@@ -203,10 +203,102 @@ export const DiagnosticsPanel = () => {
     setIsRunning(true);
     const results: DiagnosticItem[] = [];
 
-    // Also run auth diagnostics
     await runAuthDiagnostics();
 
-    // 1. Testar conexão com banco de dados
+    if (isLocalRuntime) {
+      try {
+        const start = Date.now();
+        await localHealth.check();
+        const duration = Date.now() - start;
+        results.push({
+          id: 'db',
+          name: 'Servidor Local',
+          status: 'ok',
+          message: `Servidor local acessível (${duration}ms)`,
+          lastCheck: new Date()
+        });
+      } catch (e: any) {
+        results.push({
+          id: 'db',
+          name: 'Servidor Local',
+          status: 'error',
+          message: e?.message || 'Falha ao acessar o servidor local',
+          lastCheck: new Date()
+        });
+      }
+
+      try {
+        const syncStatus = await localSync.getStatus();
+        results.push({
+          id: 'auth',
+          name: 'Sincronização Local',
+          status: syncStatus.online ? 'ok' : 'warning',
+          message: syncStatus.online
+            ? `Online • ${syncStatus.pendingCount || 0} pendências na fila`
+            : `Offline • ${syncStatus.pendingCount || 0} pendências aguardando envio`,
+          lastCheck: new Date()
+        });
+      } catch (e: any) {
+        results.push({
+          id: 'auth',
+          name: 'Sincronização Local',
+          status: 'error',
+          message: e?.message || 'Falha ao verificar sincronização local',
+          lastCheck: new Date()
+        });
+      }
+
+      try {
+        const agentStatus = await localAgent.getStatus();
+        results.push({
+          id: 'devices',
+          name: 'Agente Local',
+          status: agentStatus.running ? 'ok' : 'warning',
+          message: agentStatus.running
+            ? `Agente em execução • ${agentStatus.devicesCount || 0} dispositivo(s) monitorados`
+            : 'Agente parado no momento',
+          lastCheck: new Date()
+        });
+      } catch (e: any) {
+        results.push({
+          id: 'devices',
+          name: 'Agente Local',
+          status: 'error',
+          message: e?.message || 'Falha ao verificar agente local',
+          lastCheck: new Date()
+        });
+      }
+
+      results.push({
+        id: 'storage',
+        name: 'Armazenamento Local',
+        status: 'warning',
+        message: 'A verificação detalhada de arquivos locais será conectada em uma próxima fase.',
+        lastCheck: new Date()
+      });
+
+      results.push({
+        id: 'docs',
+        name: 'Documentos Locais',
+        status: 'warning',
+        message: 'A checagem automática de vencimentos no servidor local será ligada em uma próxima fase.',
+        lastCheck: new Date()
+      });
+
+      results.push({
+        id: 'data',
+        name: 'Integridade dos Dados Locais',
+        status: 'warning',
+        message: 'A auditoria estrutural do banco local será adicionada na etapa de endurecimento do servidor local.',
+        lastCheck: new Date()
+      });
+
+      setDiagnostics(results);
+      setLastRunTime(new Date());
+      setIsRunning(false);
+      return;
+    }
+
     try {
       const start = Date.now();
       const { error } = await supabase.from('system_settings').select('id').limit(1);
@@ -228,14 +320,13 @@ export const DiagnosticsPanel = () => {
       });
     }
 
-    // 2. Testar serviço de autenticação (usando getUser para validação server-side)
     try {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       let status: 'ok' | 'warning' | 'error' = 'ok';
       let message = '';
-      
+
       if (userError) {
         status = 'error';
         message = `JWT inválido: ${userError.message}`;
@@ -246,7 +337,7 @@ export const DiagnosticsPanel = () => {
         status = 'ok';
         message = `Sessão válida: ${user.email}`;
       }
-      
+
       results.push({
         id: 'auth',
         name: 'Autenticação (Server-Validated)',
@@ -264,12 +355,11 @@ export const DiagnosticsPanel = () => {
       });
     }
 
-    // 3. Verificar dispositivos ControlID
     try {
       const { data: devices, error: devicesError } = await supabase
         .from('devices')
         .select('id, status, last_event_timestamp');
-      
+
       if (devicesError) {
         results.push({
           id: 'devices',
@@ -282,16 +372,16 @@ export const DiagnosticsPanel = () => {
         const totalDevices = devices?.length || 0;
         const offlineDevices = devices?.filter(d => d.status === 'offline').length || 0;
         const errorDevices = devices?.filter(d => d.status === 'error').length || 0;
-        
+
         let status: 'ok' | 'warning' | 'error' = 'ok';
         if (errorDevices > 0) status = 'error';
         else if (offlineDevices > 0) status = 'warning';
-        
+
         results.push({
           id: 'devices',
           name: 'Dispositivos ControlID',
           status: totalDevices === 0 ? 'warning' : status,
-          message: totalDevices === 0 
+          message: totalDevices === 0
             ? 'Nenhum dispositivo cadastrado'
             : `${totalDevices - offlineDevices - errorDevices}/${totalDevices} online${offlineDevices > 0 ? `, ${offlineDevices} offline` : ''}${errorDevices > 0 ? `, ${errorDevices} com erro` : ''}`,
           lastCheck: new Date()
@@ -307,12 +397,11 @@ export const DiagnosticsPanel = () => {
       });
     }
 
-    // 4. Verificar armazenamento de arquivos
     try {
       const { error: storageError } = await supabase.storage
         .from('worker-photos')
         .list('', { limit: 1 });
-      
+
       results.push({
         id: 'storage',
         name: 'Armazenamento de Arquivos',
@@ -330,27 +419,26 @@ export const DiagnosticsPanel = () => {
       });
     }
 
-    // 5. Verificar documentos vencendo em 30 dias
     try {
       const today = new Date();
       const thirtyDaysFromNow = new Date();
       thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-      
+
       const { data: expiringDocs, error: docsError } = await supabase
         .from('worker_documents')
         .select('id')
         .lt('expiry_date', thirtyDaysFromNow.toISOString().split('T')[0])
         .gt('expiry_date', today.toISOString().split('T')[0]);
-      
+
       const expiringCount = expiringDocs?.length || 0;
-      
+
       results.push({
         id: 'docs',
         name: 'Documentos a Vencer (30 dias)',
         status: docsError ? 'error' : expiringCount > 0 ? 'warning' : 'ok',
-        message: docsError 
-          ? `Erro: ${docsError.message}` 
-          : expiringCount > 0 
+        message: docsError
+          ? `Erro: ${docsError.message}`
+          : expiringCount > 0
             ? `${expiringCount} documento(s) vencendo nos próximos 30 dias`
             : 'Nenhum documento próximo do vencimento',
         lastCheck: new Date()
@@ -365,27 +453,26 @@ export const DiagnosticsPanel = () => {
       });
     }
 
-    // 6. Verificar integridade dos dados (trabalhadores e empresas)
     try {
       const { count: workersCount, error: workersError } = await supabase
         .from('workers')
         .select('id', { count: 'exact', head: true });
-      
+
       const { count: companiesCount, error: companiesError } = await supabase
         .from('companies')
         .select('id', { count: 'exact', head: true });
-      
+
       const { count: projectsCount, error: projectsError } = await supabase
         .from('projects')
         .select('id', { count: 'exact', head: true });
-      
+
       const hasError = workersError || companiesError || projectsError;
-      
+
       results.push({
         id: 'data',
         name: 'Integridade dos Dados',
         status: hasError ? 'error' : 'ok',
-        message: hasError 
+        message: hasError
           ? 'Erro ao verificar integridade'
           : `${workersCount || 0} trabalhadores, ${companiesCount || 0} empresas, ${projectsCount || 0} projetos`,
         lastCheck: new Date()
