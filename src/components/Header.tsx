@@ -33,11 +33,11 @@ export const Header = () => {
     api.onConnectivityChange((online) => setIsOnline(online));
     api.sync.getStatus().then((status) => {
       setIsOnline(status.online);
-      setSyncStatus(status);
+      setSyncStatus({ syncing: false, lastSync: status.lastSync ?? null, pendingCount: status.pendingCount ?? 0, configured: status.configured, message: status.message });
     }).catch(() => undefined);
     api.onSyncStatusChange((status) => {
       setIsOnline(status.online);
-      setSyncStatus(status);
+      setSyncStatus({ syncing: !!status.syncing, lastSync: status.lastSync ?? null, pendingCount: status.pendingCount ?? 0, configured: status.configured, message: status.message });
     });
   }, [isDesktop]);
 

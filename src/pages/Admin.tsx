@@ -28,29 +28,20 @@ const Admin = () => {
   const location = useLocation();
   const isLocalRuntime = usesLocalServer();
 
-  const tabs: AdminTab[] = isLocalRuntime
-    ? [
-        { value: 'projects', label: 'Projetos', icon: FolderKanban, content: <ProjectsManagement /> },
-        { value: 'devices', label: 'Dispositivos', icon: Server, content: <DeviceManagement /> },
-        { value: 'documents', label: 'Documentos', icon: FileWarning, content: <DocumentExpirationCheck /> },
-        { value: 'agents', label: 'Agentes', icon: Bot, content: <AgentManagement /> },
-        { value: 'connectivity', label: 'Conectividade', icon: Wifi, content: <ConnectivityDashboard /> },
-        { value: 'diagnostics', label: 'Diagnóstico', icon: Stethoscope, content: <DiagnosticsPanel /> },
-      ]
-    : [
-        { value: 'pending', label: 'Aprovações', icon: UserCheck, content: <PendingRegistrations /> },
-        { value: 'projects', label: 'Projetos', icon: FolderKanban, content: <ProjectsManagement /> },
-        { value: 'clients', label: 'Clientes', icon: Building2, content: <ClientsManagement /> },
-        { value: 'schedules', label: 'Agendamentos', icon: Calendar, content: <ReportScheduler /> },
-        { value: 'devices', label: 'Dispositivos', icon: Server, content: <DeviceManagement /> },
-        { value: 'users', label: 'Usuários', icon: Shield, content: <UserManagement /> },
-        { value: 'settings', label: 'Configurações', icon: Cog, content: <GlobalSettings /> },
-        { value: 'diagnostics', label: 'Diagnóstico', icon: Stethoscope, content: <DiagnosticsPanel /> },
-        { value: 'audit', label: 'Auditoria', icon: Activity, content: <AuditLog /> },
-        { value: 'documents', label: 'Documentos', icon: FileWarning, content: <DocumentExpirationCheck /> },
-        { value: 'agents', label: 'Agentes', icon: Bot, content: <AgentManagement /> },
-        { value: 'connectivity', label: 'Conectividade', icon: Wifi, content: <ConnectivityDashboard /> },
-      ];
+  const tabs: AdminTab[] = [
+    { value: 'pending', label: 'Aprovações', icon: UserCheck, content: <PendingRegistrations /> },
+    { value: 'projects', label: 'Projetos', icon: FolderKanban, content: <ProjectsManagement /> },
+    { value: 'clients', label: 'Clientes', icon: Building2, content: <ClientsManagement /> },
+    { value: 'schedules', label: 'Agendamentos', icon: Calendar, content: <ReportScheduler /> },
+    { value: 'devices', label: 'Dispositivos', icon: Server, content: <DeviceManagement /> },
+    { value: 'users', label: 'Usuários', icon: Shield, content: <UserManagement /> },
+    { value: 'settings', label: 'Configurações', icon: Cog, content: <GlobalSettings /> },
+    { value: 'diagnostics', label: 'Diagnóstico', icon: Stethoscope, content: <DiagnosticsPanel /> },
+    { value: 'audit', label: 'Auditoria', icon: Activity, content: <AuditLog /> },
+    { value: 'documents', label: 'Documentos', icon: FileWarning, content: <DocumentExpirationCheck /> },
+    { value: 'agents', label: 'Agentes', icon: Bot, content: <AgentManagement /> },
+    { value: 'connectivity', label: 'Conectividade', icon: Wifi, content: <ConnectivityDashboard /> },
+  ];
 
   const getDefaultTab = () => {
     const match = tabs.find((tab) => location.pathname.includes(`/${tab.value}`));
@@ -60,10 +51,10 @@ const Admin = () => {
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">{isLocalRuntime ? 'Operação Local' : 'Área Administrativa'}</h1>
+        <h1 className="text-2xl font-bold">{isLocalRuntime ? 'Administração Desktop' : 'Área Administrativa'}</h1>
         <p className="text-muted-foreground">
           {isLocalRuntime
-            ? 'Ferramentas operacionais disponíveis no ambiente desktop/local.'
+            ? 'Operação local com acesso às abas administrativas e integração em nuvem quando houver conta conectada.'
             : 'Configurações do sistema e gerenciamento avançado.'}
         </p>
       </div>
