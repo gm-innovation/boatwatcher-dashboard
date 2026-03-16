@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
+import { usesLocalAuth, usesLocalServer } from '@/lib/runtimeProfile';
 
 interface LocalAgent {
   id: string;
@@ -38,12 +39,17 @@ function generateSecureToken(): string {
   return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
+const LOCAL_RUNTIME_MESSAGE = 'Esta ação ficará disponível quando concluirmos a integração completa do servidor local com agentes e comandos.';
+
 export function useLocalAgents(projectId?: string | null) {
   const queryClient = useQueryClient();
+  const isLocalRuntime = usesLocalAuth() || usesLocalServer();
 
   const { data: agents = [], isLoading, error } = useQuery({
     queryKey: ['local-agents', projectId],
     queryFn: async () => {
+      if (isLocalRuntime) return [] as LocalAgent[];
+
       let query = supabase
         .from('local_agents')
         .select('*')
@@ -61,8 +67,9 @@ export function useLocalAgents(projectId?: string | null) {
 
   const createAgent = useMutation({
     mutationFn: async ({ name, projectId }: { name: string; projectId?: string }) => {
+      if (isLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
+
       const token = generateSecureToken();
-      
       const { data, error } = await supabase
         .from('local_agents')
         .insert({
@@ -88,6 +95,8 @@ export function useLocalAgents(projectId?: string | null) {
 
   const deleteAgent = useMutation({
     mutationFn: async (agentId: string) => {
+      if (isLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
+
       const { error } = await supabase
         .from('local_agents')
         .delete()
@@ -106,8 +115,9 @@ export function useLocalAgents(projectId?: string | null) {
 
   const regenerateToken = useMutation({
     mutationFn: async (agentId: string) => {
+      if (isLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
+
       const newToken = generateSecureToken();
-      
       const { data, error } = await supabase
         .from('local_agents')
         .update({ token: newToken })
@@ -139,12 +149,13 @@ export function useLocalAgents(projectId?: string | null) {
 
 export function useAgentCommands(agentId: string | null) {
   const queryClient = useQueryClient();
+  const isLocalRuntime = usesLocalAuth() || usesLocalServer();
 
   const { data: commands = [], isLoading, error } = useQuery({
     queryKey: ['agent-commands', agentId],
     queryFn: async () => {
-      if (!agentId) return [];
-      
+      if (!agentId || isLocalRuntime) return [];
+
       const { data, error } = await supabase
         .from('agent_commands')
         .select(`
@@ -163,21 +174,23 @@ export function useAgentCommands(agentId: string | null) {
       return data as (AgentCommand & { devices: { id: string; name: string; controlid_serial_number: string } })[];
     },
     enabled: !!agentId,
-    refetchInterval: 5000 // Atualizar a cada 5 segundos
+    refetchInterval: isLocalRuntime ? false : 5000
   });
 
   const sendCommand = useMutation({
-    mutationFn: async ({ 
-      agentId, 
-      deviceId, 
-      command, 
-      payload 
-    }: { 
-      agentId: string; 
-      deviceId: string; 
-      command: string; 
-      payload?: Record<string, unknown> 
+    mutationFn: async ({
+      agentId,
+      deviceId,
+      command,
+      payload
+    }: {
+      agentId: string;
+      deviceId: string;
+      command: string;
+      payload?: Record<string, unknown>
     }) => {
+      if (isLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
+
       const { data, error } = await supabase
         .from('agent_commands')
         .insert([{
