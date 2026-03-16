@@ -60,7 +60,15 @@ export const getElectronAPI = () => {
   return (window as any).electronAPI as {
     db: DataProvider;
     sync: {
-      getStatus: () => Promise<{ online: boolean; lastSync: string | null; pendingCount: number }>;
+      getStatus: () => Promise<{
+        online: boolean;
+        lastSync: string | null;
+        pendingCount: number;
+        syncing?: boolean;
+        configured?: boolean;
+        mode?: 'cloud-sync' | 'local-only';
+        message?: string;
+      }>;
       triggerSync: () => Promise<void>;
     };
     agent: {
