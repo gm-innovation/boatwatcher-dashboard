@@ -40,7 +40,7 @@ const deviceSchema = z.object({
 
 type DeviceFormData = z.infer<typeof deviceSchema>;
 
-const LOCAL_COMMANDS_MESSAGE = 'Comandos remotos serão ligados ao servidor local em uma próxima fase.';
+const LOCAL_DELETE_MESSAGE = 'A remoção será conectada ao servidor local em uma próxima fase.';
 
 const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => void }) => {
   const [showSetup, setShowSetup] = useState(false);
@@ -65,18 +65,38 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
     refetchInterval: isLocalRuntime ? false : 5000,
   });
 
-  const sendAgentCommand = async (command: string, payload: Record<string, unknown> = {}) => {
-    if (isLocalRuntime) {
-      toast({ title: 'Indisponível no modo local', description: LOCAL_COMMANDS_MESSAGE, variant: 'destructive' });
-      return;
-    }
-
-    if (!device.agent_id) {
-      toast({ title: 'Dispositivo sem agente', description: 'Associe um agente local a este dispositivo.', variant: 'destructive' });
-      return;
-    }
+  const sendAgentCommand = async (command: 'get_status' | 'release_access', payload: Record<string, unknown> = {}) => {
     setSendingCommand(command);
     try {
+      if (isLocalRuntime) {
+        if (command === 'get_status') {
+          const result = await localDevicesAction('getDeviceStatus', device.id);
+          toast({
+            title: result.success ? 'Status atualizado' : 'Falha ao consultar status',
+            description: result.message || result.error || 'Não foi possível consultar o dispositivo.',
+            variant: result.success ? 'default' : 'destructive',
+          });
+        }
+
+        if (command === 'release_access') {
+          const result = await localDevicesAction('releaseAccess', device.id, payload);
+          toast({
+            title: result.success ? 'Comando enviado' : 'Falha ao liberar acesso',
+            description: result.message || result.error || 'Não foi possível acionar a porta.',
+            variant: result.success ? 'default' : 'destructive',
+          });
+        }
+
+        queryClient.invalidateQueries({ queryKey: ['devices'] });
+        onRefresh();
+        return;
+      }
+
+      if (!device.agent_id) {
+        toast({ title: 'Dispositivo sem agente', description: 'Associe um agente local a este dispositivo.', variant: 'destructive' });
+        return;
+      }
+
       const { error } = await supabase.from('agent_commands').insert({
         agent_id: device.agent_id,
         device_id: device.id,
