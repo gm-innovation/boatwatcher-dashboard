@@ -932,9 +932,14 @@ function createDatabaseAPI(db, startCode) {
       const existing = db.prepare('SELECT * FROM worker_documents WHERE id = ?').get(id);
       if (!existing) return;
 
-      queueSyncOperation('worker_document', 'delete', id, {
-        cloud_id: existing.cloud_id || null,
-      });
+      if (existing.cloud_id || existing.synced) {
+        queueSyncOperation('worker_document', 'delete', id, {
+          cloud_id: existing.cloud_id || null,
+        });
+      } else {
+        clearQueuedSyncOperation('worker_document', id);
+      }
+
       db.prepare('DELETE FROM worker_documents WHERE id = ?').run(id);
     },
 
