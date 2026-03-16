@@ -5,8 +5,9 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
+import { useProject } from '@/contexts/ProjectContext';
 
 interface ProjectSelectorProps {
   selectedProjectId: string | null;
@@ -14,7 +15,11 @@ interface ProjectSelectorProps {
 }
 
 export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectSelectorProps) => {
-  const { data: projects = [], isLoading } = useProjects();
+  const { projects: contextProjects, loading: contextLoading } = useProject();
+  const { data: queryProjects = [], isLoading: queryLoading } = useProjects();
+
+  const projects = contextProjects.length > 0 || contextLoading ? contextProjects : queryProjects;
+  const isLoading = contextLoading || queryLoading;
 
   if (isLoading) {
     return (
@@ -25,11 +30,11 @@ export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectS
     );
   }
 
-  const selectedProject = projects.find(p => p.id === selectedProjectId);
+  const selectedProject = projects.find((p) => p.id === selectedProjectId);
 
   return (
-    <Select 
-      value={selectedProjectId || undefined} 
+    <Select
+      value={selectedProjectId || undefined}
       onValueChange={onProjectSelect}
     >
       <SelectTrigger className="w-[300px]">

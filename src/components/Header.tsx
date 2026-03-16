@@ -187,19 +187,25 @@ export const Header = () => {
               </Button>
 
               {isDesktop && (
-                <div className="hidden lg:flex items-center gap-1 border-l border-border pl-2">
-                  {isOnline ? (
-                    <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                      <Cloud className="h-4 w-4" /> Online
-                      {syncStatus.syncing && <RefreshCw className="h-3 w-3 animate-spin" />}
-                    </span>
+                <div className="hidden lg:flex items-center gap-2 border-l border-border pl-2">
+                  {syncStatus.configured ? (
+                    isOnline ? (
+                      <span className="flex items-center gap-1 text-xs text-foreground">
+                        <Cloud className="h-4 w-4 text-primary" /> Online
+                        {syncStatus.syncing && <RefreshCw className="h-3 w-3 animate-spin" />}
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <CloudOff className="h-4 w-4" /> Offline
+                        {syncStatus.pendingCount > 0 && (
+                          <span className="bg-primary text-primary-foreground text-[10px] px-1 rounded-full">{syncStatus.pendingCount}</span>
+                        )}
+                      </span>
+                    )
                   ) : (
-                    <span className="flex items-center gap-1 text-xs text-orange-500">
-                      <CloudOff className="h-4 w-4" /> Offline
-                      {syncStatus.pendingCount > 0 && (
-                        <span className="bg-orange-500 text-white text-[10px] px-1 rounded-full">{syncStatus.pendingCount}</span>
-                      )}
-                    </span>
+                    <Button variant="ghost" size="sm" className="h-auto px-2 text-xs" onClick={() => navigate('/login')}>
+                      <CloudOff className="h-4 w-4 mr-1" /> Sync não configurado
+                    </Button>
                   )}
                 </div>
               )}
@@ -207,9 +213,15 @@ export const Header = () => {
                 <Toggle variant="outline" size="sm" pressed={theme === 'dark'} onPressedChange={(pressed) => setTheme(pressed ? 'dark' : 'light')}>
                   {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
                 </Toggle>
-                <Button variant="ghost" size="icon" onClick={signOut}>
-                  <LogOut className="h-4 w-4" />
-                </Button>
+                {isDesktop && !hasCloudSession ? (
+                  <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>
+                    Conectar conta
+                  </Button>
+                ) : (
+                  <Button variant="ghost" size="icon" onClick={signOut}>
+                    <LogOut className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </div>
           </div>
