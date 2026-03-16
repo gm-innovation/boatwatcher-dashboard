@@ -4,11 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { 
-  Stethoscope, 
-  CheckCircle, 
-  XCircle, 
-  AlertTriangle, 
+import {
+  Stethoscope,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
   RefreshCw,
   Database,
   Server,
@@ -27,6 +27,8 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { getSessionDiagnostics, forceLogout } from '@/utils/ensureValidSession';
 import { toast } from '@/hooks/use-toast';
+import { localAgent, localHealth, localSync } from '@/lib/localServerProvider';
+import { usesLocalAuth, usesLocalServer } from '@/lib/runtimeProfile';
 
 interface DiagnosticItem {
   id: string;
@@ -57,8 +59,8 @@ export const DiagnosticsPanel = () => {
   const [lastRunTime, setLastRunTime] = useState<Date | null>(null);
   const [authDiagnostics, setAuthDiagnostics] = useState<AuthDiagnostics | null>(null);
   const [isTestingAuth, setIsTestingAuth] = useState(false);
-  
-  // Edge function test results
+  const isLocalRuntime = usesLocalAuth() || usesLocalServer();
+
   const [authPingResult, setAuthPingResult] = useState<EdgeFunctionTestResult>({ status: 'pending' });
   const [echoAuthResult, setEchoAuthResult] = useState<EdgeFunctionTestResult>({ status: 'pending' });
   const [isTestingAuthPing, setIsTestingAuthPing] = useState(false);
@@ -77,15 +79,23 @@ export const DiagnosticsPanel = () => {
   };
 
   const testAuthPing = async () => {
+    if (isLocalRuntime) {
+      setAuthPingResult({
+        status: 'error',
+        error: 'Teste indisponível no runtime local até a conexão completa com o servidor local.',
+      });
+      return;
+    }
+
     setIsTestingAuthPing(true);
     setAuthPingResult({ status: 'pending' });
-    
+
     try {
       console.log('[DiagnosticsPanel] Testing auth-ping...');
       const { data, error } = await supabase.functions.invoke('auth-ping', {
         method: 'POST',
       });
-      
+
       if (error) {
         console.error('[DiagnosticsPanel] auth-ping error:', error);
         setAuthPingResult({
@@ -108,14 +118,22 @@ export const DiagnosticsPanel = () => {
         error: e.message,
       });
     }
-    
+
     setIsTestingAuthPing(false);
   };
 
   const testEchoAuth = async () => {
+    if (isLocalRuntime) {
+      setEchoAuthResult({
+        status: 'error',
+        error: 'Teste indisponível no runtime local até a conexão completa com o servidor local.',
+      });
+      return;
+    }
+
     setIsTestingEchoAuth(true);
     setEchoAuthResult({ status: 'pending' });
-    
+
     try {
       console.log('[DiagnosticsPanel] Testing echo-auth...');
       const { data, error } = await supabase.functions.invoke('echo-auth', {

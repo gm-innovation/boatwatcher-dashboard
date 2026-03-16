@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { RefreshCw, FileWarning, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { usesLocalAuth, usesLocalServer } from '@/lib/runtimeProfile';
 
 interface CheckStats {
   expired: number;
@@ -19,8 +20,18 @@ export const DocumentExpirationCheck = () => {
   const [isChecking, setIsChecking] = useState(false);
   const [lastCheck, setLastCheck] = useState<Date | null>(null);
   const [stats, setStats] = useState<CheckStats | null>(null);
+  const isLocalRuntime = usesLocalAuth() || usesLocalServer();
 
   const handleCheck = async () => {
+    if (isLocalRuntime) {
+      toast({
+        title: 'Indisponível no modo local',
+        description: 'A verificação manual por função backend será conectada ao servidor local em uma próxima fase.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsChecking(true);
     try {
       const { data, error } = await supabase.functions.invoke('check-expiring-documents', {
@@ -64,9 +75,9 @@ export const DocumentExpirationCheck = () => {
               Verifica documentos próximos do vencimento e cria notificações
             </CardDescription>
           </div>
-          <Button onClick={handleCheck} disabled={isChecking}>
+          <Button onClick={handleCheck} disabled={isChecking || isLocalRuntime}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isChecking ? 'animate-spin' : ''}`} />
-            {isChecking ? 'Verificando...' : 'Verificar Agora'}
+            {isLocalRuntime ? 'Disponível em breve' : isChecking ? 'Verificando...' : 'Verificar Agora'}
           </Button>
         </div>
       </CardHeader>
@@ -86,7 +97,7 @@ export const DocumentExpirationCheck = () => {
                 <p className="text-2xl font-bold text-destructive">{stats.expired}</p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-2 p-3 rounded-lg bg-orange-500/10">
               <Clock className="h-5 w-5 text-orange-500" />
               <div>
@@ -94,7 +105,7 @@ export const DocumentExpirationCheck = () => {
                 <p className="text-2xl font-bold text-orange-500">{stats.expiring7days}</p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-500/10">
               <Clock className="h-5 w-5 text-yellow-500" />
               <div>
@@ -102,7 +113,7 @@ export const DocumentExpirationCheck = () => {
                 <p className="text-2xl font-bold text-yellow-500">{stats.expiring15days}</p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-2 p-3 rounded-lg bg-muted">
               <Clock className="h-5 w-5 text-muted-foreground" />
               <div>
@@ -129,8 +140,9 @@ export const DocumentExpirationCheck = () => {
 
         {!stats && !isChecking && (
           <p className="text-sm text-muted-foreground">
-            Clique em "Verificar Agora" para iniciar a verificação manual de documentos.
-            A verificação automática ocorre diariamente às 08:00.
+            {isLocalRuntime
+              ? 'A verificação manual será ligada ao servidor local em uma próxima fase.'
+              : 'Clique em "Verificar Agora" para iniciar a verificação manual de documentos. A verificação automática ocorre diariamente às 08:00.'}
           </p>
         )}
       </CardContent>

@@ -16,13 +16,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DeviceSetupInstructions } from './DeviceSetupInstructions';
-import { 
+import {
   Plus, Wifi, WifiOff, Trash2, RefreshCw, DoorOpen, Camera, Server, Link, Loader2, CheckCircle2, XCircle, Clock
 } from 'lucide-react';
 import type { Device, DeviceType } from '@/types/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { usesLocalAuth, usesLocalServer } from '@/lib/runtimeProfile';
+import { localDevices } from '@/lib/localServerProvider';
 
 const deviceSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
@@ -38,15 +40,19 @@ const deviceSchema = z.object({
 
 type DeviceFormData = z.infer<typeof deviceSchema>;
 
+const LOCAL_COMMANDS_MESSAGE = 'Comandos remotos serão ligados ao servidor local em uma próxima fase.';
+
 const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => void }) => {
   const [showSetup, setShowSetup] = useState(false);
   const [sendingCommand, setSendingCommand] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const isLocalRuntime = usesLocalAuth() || usesLocalServer();
 
-  // Get recent commands for this device
   const { data: recentCommands = [] } = useQuery({
     queryKey: ['device-commands', device.id],
     queryFn: async () => {
+      if (isLocalRuntime) return [];
+
       const { data, error } = await supabase
         .from('agent_commands')
         .select('id, command, status, created_at, executed_at, error_message')
@@ -56,10 +62,15 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
       if (error) throw error;
       return data;
     },
-    refetchInterval: 5000,
+    refetchInterval: isLocalRuntime ? false : 5000,
   });
 
   const sendAgentCommand = async (command: string, payload: Record<string, unknown> = {}) => {
+    if (isLocalRuntime) {
+      toast({ title: 'Indisponível no modo local', description: LOCAL_COMMANDS_MESSAGE, variant: 'destructive' });
+      return;
+    }
+
     if (!device.agent_id) {
       toast({ title: 'Dispositivo sem agente', description: 'Associe um agente local a este dispositivo.', variant: 'destructive' });
       return;
@@ -84,6 +95,11 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
   };
 
   const handleDelete = async () => {
+    if (isLocalRuntime) {
+      toast({ title: 'Indisponível no modo local', description: 'A remoção será conectada ao servidor local em uma próxima fase.', variant: 'destructive' });
+      return;
+    }
+
     if (!confirm('Tem certeza que deseja remover este dispositivo?')) return;
     const { error } = await supabase.from('devices').delete().eq('id', device.id);
     if (error) {
@@ -156,7 +172,6 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
               </div>
             )}
 
-            {/* Recent commands */}
             {recentCommands.length > 0 && (
               <div className="space-y-1 border-t pt-2">
                 <p className="text-xs font-medium text-muted-foreground">Últimos comandos:</p>
@@ -177,11 +192,11 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
                 <Link className="h-4 w-4 mr-1" />
                 Configurar
               </Button>
-              <Button size="sm" variant="outline" onClick={() => sendAgentCommand('get_status')} disabled={!!sendingCommand}>
+              <Button size="sm" variant="outline" onClick={() => sendAgentCommand('get_status')} disabled={!!sendingCommand || isLocalRuntime}>
                 {sendingCommand === 'get_status' ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
                 Status
               </Button>
-              <Button size="sm" variant="outline" onClick={() => sendAgentCommand('release_access', { door_id: 1 })} disabled={!!sendingCommand}>
+              <Button size="sm" variant="outline" onClick={() => sendAgentCommand('release_access', { door_id: 1 })} disabled={!!sendingCommand || isLocalRuntime}>
                 {sendingCommand === 'release_access' ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <DoorOpen className="h-4 w-4 mr-1" />}
                 Liberar
               </Button>
@@ -192,7 +207,7 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
           </div>
         </CardContent>
       </Card>
-      
+
       <DeviceSetupInstructions device={device} open={showSetup} onOpenChange={setShowSetup} />
     </>
   );
@@ -205,6 +220,7 @@ export const DeviceManagement = () => {
   const { data: projects = [] } = useProjects();
   const { agents } = useLocalAgents(selectedProjectId);
   const queryClient = useQueryClient();
+  const isLocalRuntime = usesLocalAuth() || usesLocalServer();
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<DeviceFormData>({
     resolver: zodResolver(deviceSchema),
@@ -228,14 +244,18 @@ export const DeviceManagement = () => {
       status: 'offline' as const
     };
 
-    const { error } = await supabase.from('devices').insert(deviceData);
-    if (error) {
-      toast({ title: 'Erro ao cadastrar dispositivo', description: error.message, variant: 'destructive' });
+    const result = isLocalRuntime
+      ? await localDevices.create(deviceData)
+      : await supabase.from('devices').insert(deviceData).then(({ error }) => ({ error }));
+
+    if (result?.error) {
+      toast({ title: 'Erro ao cadastrar dispositivo', description: result.error.message, variant: 'destructive' });
     } else {
       toast({ title: 'Dispositivo cadastrado com sucesso' });
       reset();
       setIsDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ['devices'] });
+      refetch();
     }
   };
 
