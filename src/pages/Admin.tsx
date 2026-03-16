@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeviceManagement } from "@/components/devices/DeviceManagement";
 import UserManagement from "@/components/UserManagement";
@@ -12,132 +13,79 @@ import { DocumentExpirationCheck } from "@/components/admin/DocumentExpirationCh
 import { AgentManagement } from "@/components/devices/AgentManagement";
 import { ConnectivityDashboard } from "@/components/devices/ConnectivityDashboard";
 import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, UserCheck, FileWarning, Bot, Wifi } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useLocation } from "react-router-dom";
+import { usesLocalServer } from "@/lib/runtimeProfile";
+
+type AdminTab = {
+  value: string;
+  label: string;
+  icon: LucideIcon;
+  content: ReactNode;
+};
 
 const Admin = () => {
   const location = useLocation();
-  
+  const isLocalRuntime = usesLocalServer();
+
+  const tabs: AdminTab[] = isLocalRuntime
+    ? [
+        { value: 'projects', label: 'Projetos', icon: FolderKanban, content: <ProjectsManagement /> },
+        { value: 'devices', label: 'Dispositivos', icon: Server, content: <DeviceManagement /> },
+        { value: 'documents', label: 'Documentos', icon: FileWarning, content: <DocumentExpirationCheck /> },
+        { value: 'agents', label: 'Agentes', icon: Bot, content: <AgentManagement /> },
+        { value: 'connectivity', label: 'Conectividade', icon: Wifi, content: <ConnectivityDashboard /> },
+        { value: 'diagnostics', label: 'Diagnóstico', icon: Stethoscope, content: <DiagnosticsPanel /> },
+      ]
+    : [
+        { value: 'pending', label: 'Aprovações', icon: UserCheck, content: <PendingRegistrations /> },
+        { value: 'projects', label: 'Projetos', icon: FolderKanban, content: <ProjectsManagement /> },
+        { value: 'clients', label: 'Clientes', icon: Building2, content: <ClientsManagement /> },
+        { value: 'schedules', label: 'Agendamentos', icon: Calendar, content: <ReportScheduler /> },
+        { value: 'devices', label: 'Dispositivos', icon: Server, content: <DeviceManagement /> },
+        { value: 'users', label: 'Usuários', icon: Shield, content: <UserManagement /> },
+        { value: 'settings', label: 'Configurações', icon: Cog, content: <GlobalSettings /> },
+        { value: 'diagnostics', label: 'Diagnóstico', icon: Stethoscope, content: <DiagnosticsPanel /> },
+        { value: 'audit', label: 'Auditoria', icon: Activity, content: <AuditLog /> },
+        { value: 'documents', label: 'Documentos', icon: FileWarning, content: <DocumentExpirationCheck /> },
+        { value: 'agents', label: 'Agentes', icon: Bot, content: <AgentManagement /> },
+        { value: 'connectivity', label: 'Conectividade', icon: Wifi, content: <ConnectivityDashboard /> },
+      ];
+
   const getDefaultTab = () => {
-    if (location.pathname.includes('/projects')) return 'projects';
-    if (location.pathname.includes('/clients')) return 'clients';
-    if (location.pathname.includes('/users')) return 'users';
-    if (location.pathname.includes('/settings')) return 'settings';
-    if (location.pathname.includes('/audit')) return 'audit';
-    if (location.pathname.includes('/schedules')) return 'schedules';
-    if (location.pathname.includes('/diagnostics')) return 'diagnostics';
-    if (location.pathname.includes('/pending')) return 'pending';
-    if (location.pathname.includes('/documents')) return 'documents';
-    if (location.pathname.includes('/agents')) return 'agents';
-    if (location.pathname.includes('/connectivity')) return 'connectivity';
-    return 'projects';
+    const match = tabs.find((tab) => location.pathname.includes(`/${tab.value}`));
+    return match?.value || tabs[0].value;
   };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Área Administrativa</h1>
-        <p className="text-muted-foreground">Configurações do sistema e gerenciamento avançado</p>
+        <h1 className="text-2xl font-bold">{isLocalRuntime ? 'Operação Local' : 'Área Administrativa'}</h1>
+        <p className="text-muted-foreground">
+          {isLocalRuntime
+            ? 'Ferramentas operacionais disponíveis no ambiente desktop/local.'
+            : 'Configurações do sistema e gerenciamento avançado.'}
+        </p>
       </div>
 
       <Tabs defaultValue={getDefaultTab()} className="space-y-6">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="pending" className="gap-2">
-            <UserCheck className="h-4 w-4" />
-            Aprovações
-          </TabsTrigger>
-          <TabsTrigger value="projects" className="gap-2">
-            <FolderKanban className="h-4 w-4" />
-            Projetos
-          </TabsTrigger>
-          <TabsTrigger value="clients" className="gap-2">
-            <Building2 className="h-4 w-4" />
-            Clientes
-          </TabsTrigger>
-          <TabsTrigger value="schedules" className="gap-2">
-            <Calendar className="h-4 w-4" />
-            Agendamentos
-          </TabsTrigger>
-          <TabsTrigger value="devices" className="gap-2">
-            <Server className="h-4 w-4" />
-            Dispositivos
-          </TabsTrigger>
-          <TabsTrigger value="users" className="gap-2">
-            <Shield className="h-4 w-4" />
-            Usuários
-          </TabsTrigger>
-          <TabsTrigger value="settings" className="gap-2">
-            <Cog className="h-4 w-4" />
-            Configurações
-          </TabsTrigger>
-          <TabsTrigger value="diagnostics" className="gap-2">
-            <Stethoscope className="h-4 w-4" />
-            Diagnóstico
-          </TabsTrigger>
-          <TabsTrigger value="audit" className="gap-2">
-            <Activity className="h-4 w-4" />
-            Auditoria
-          </TabsTrigger>
-          <TabsTrigger value="documents" className="gap-2">
-            <FileWarning className="h-4 w-4" />
-            Documentos
-          </TabsTrigger>
-          <TabsTrigger value="agents" className="gap-2">
-            <Bot className="h-4 w-4" />
-            Agentes
-          </TabsTrigger>
-          <TabsTrigger value="connectivity" className="gap-2">
-            <Wifi className="h-4 w-4" />
-            Conectividade
-          </TabsTrigger>
+        <TabsList className="flex-wrap h-auto">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <TabsTrigger key={tab.value} value={tab.value} className="gap-2">
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
 
-        <TabsContent value="pending">
-          <PendingRegistrations />
-        </TabsContent>
-
-        <TabsContent value="projects">
-          <ProjectsManagement />
-        </TabsContent>
-
-        <TabsContent value="clients">
-          <ClientsManagement />
-        </TabsContent>
-
-        <TabsContent value="schedules">
-          <ReportScheduler />
-        </TabsContent>
-
-        <TabsContent value="devices">
-          <DeviceManagement />
-        </TabsContent>
-
-        <TabsContent value="users">
-          <UserManagement />
-        </TabsContent>
-
-        <TabsContent value="settings">
-          <GlobalSettings />
-        </TabsContent>
-
-        <TabsContent value="diagnostics">
-          <DiagnosticsPanel />
-        </TabsContent>
-
-        <TabsContent value="audit">
-          <AuditLog />
-        </TabsContent>
-
-        <TabsContent value="documents">
-          <DocumentExpirationCheck />
-        </TabsContent>
-
-        <TabsContent value="agents">
-          <AgentManagement />
-        </TabsContent>
-
-        <TabsContent value="connectivity">
-          <ConnectivityDashboard />
-        </TabsContent>
+        {tabs.map((tab) => (
+          <TabsContent key={tab.value} value={tab.value}>
+            {tab.content}
+          </TabsContent>
+        ))}
       </Tabs>
     </div>
   );
