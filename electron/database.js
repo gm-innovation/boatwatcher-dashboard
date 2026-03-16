@@ -81,6 +81,9 @@ function initDatabase(userDataPath) {
       user_id TEXT NOT NULL UNIQUE,
       company_id TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      synced INTEGER DEFAULT 0,
+      cloud_id TEXT,
       FOREIGN KEY (company_id) REFERENCES companies(id)
     );
 
@@ -91,6 +94,7 @@ function initDatabase(userDataPath) {
       filename TEXT NOT NULL,
       file_url TEXT,
       created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
       synced INTEGER DEFAULT 0,
       cloud_id TEXT,
       FOREIGN KEY (company_id) REFERENCES companies(id)
