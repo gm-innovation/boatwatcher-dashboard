@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { isElectron, getElectronAPI } from "@/lib/dataProvider";
 import { fetchDevices, fetchAccessLogs } from "@/hooks/useDataProvider";
 import { toast } from "@/components/ui/use-toast";
 import type { Device, AccessLog } from "@/types/supabase";
+import { usesLocalServer } from "@/lib/runtimeProfile";
+import { localControlId } from "@/lib/localServerProvider";
 
 // Hook para buscar dispositivos
 export const useDevices = (projectId?: string | null) => {
@@ -42,6 +43,7 @@ export const useAccessLogs = (
 // Hook para ações no dispositivo ControlID
 export const useControlIDActions = () => {
   const queryClient = useQueryClient();
+  const isLocalRuntime = usesLocalServer();
 
   const executeAction = useMutation({
     mutationFn: async ({ 
@@ -53,12 +55,20 @@ export const useControlIDActions = () => {
       deviceId: string; 
       [key: string]: any 
     }) => {
-      // In Electron, use local agent
-      if (isElectron()) {
-        const api = getElectronAPI();
-        if (api?.agent) {
-          // Route through local agent
-          return { success: true, message: 'Executed locally' };
+      if (isLocalRuntime) {
+        switch (action) {
+          case 'getDeviceStatus':
+            return localControlId.getDeviceStatus(deviceId);
+          case 'getDeviceInfo':
+            return localControlId.getDeviceInfo(deviceId);
+          case 'listUsers':
+            return localControlId.listUsers(deviceId);
+          case 'releaseAccess':
+            return localControlId.releaseAccess(deviceId, params.doorId);
+          case 'configureDevice':
+            return localControlId.configureDevice(deviceId, params.config || {});
+          default:
+            throw new Error(`Ação local não suportada: ${action}`);
         }
       }
 
@@ -99,6 +109,7 @@ export const useControlIDActions = () => {
 // Hook para enrollment de trabalhadores
 export const useWorkerEnrollment = () => {
   const queryClient = useQueryClient();
+  const isLocalRuntime = usesLocalServer();
 
   const enrollWorker = useMutation({
     mutationFn: async ({ 
@@ -110,12 +121,8 @@ export const useWorkerEnrollment = () => {
       deviceIds: string[]; 
       action?: 'enroll' | 'remove' 
     }) => {
-      if (isElectron()) {
-        // In Electron, enrollment happens via local agent
-        const api = getElectronAPI();
-        if (api?.agent) {
-          return { success: true, message: 'Enrollment local executado' };
-        }
+      if (isLocalRuntime) {
+        return localControlId.enrollWorker(workerId, deviceIds, action);
       }
 
       const { data, error } = await supabase.functions.invoke("worker-enrollment", {
@@ -150,30 +157,7 @@ export const useWorkerEnrollment = () => {
   };
 };
 
-// Hook para realtime de logs de acesso
-export const useRealtimeAccessLogs = (onNewLog: (log: AccessLog) => void) => {
-  if (isElectron()) {
-    // In Electron, polling is handled by the agent — no realtime subscription
-    return () => {};
-  }
-
-  const channel = supabase
-    .channel('access_logs_realtime')
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'access_logs',
-      },
-      (payload) => {
-        console.log('New access log:', payload.new);
-        onNewLog(payload.new as AccessLog);
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
+// Hook legado para realtime de logs de acesso
+export const useRealtimeAccessLogs = (_onNewLog: (log: AccessLog) => void) => {
+  return () => {};
 };

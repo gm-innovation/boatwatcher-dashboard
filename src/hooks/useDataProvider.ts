@@ -71,6 +71,19 @@ export async function createCompanyDocument(data: Record<string, any>) {
   return result;
 }
 
+export async function updateCompanyDocument(id: string, data: Record<string, any>) {
+  if (usesLocalServer()) return localCompanyDocuments.update(id, data);
+  const { data: result, error } = await supabase.from('company_documents').update(data).eq('id', id).select().single();
+  if (error) throw error;
+  return result;
+}
+
+export async function deleteCompanyDocument(id: string) {
+  if (usesLocalServer()) return localCompanyDocuments.delete(id);
+  const { error } = await supabase.from('company_documents').delete().eq('id', id);
+  if (error) throw error;
+}
+
 // --- Workers ---
 
 export async function fetchWorkers() {
@@ -124,11 +137,60 @@ export async function fetchWorkerDocumentsByWorkerIds(workerIds: string[]) {
   return data;
 }
 
+export async function fetchWorkersWithExpiringDocuments(daysAhead: number = 30) {
+  if (usesLocalServer()) return localWorkerDocuments.listExpiring(daysAhead);
+  const futureDate = new Date();
+  futureDate.setDate(futureDate.getDate() + daysAhead);
+
+  const { data, error } = await supabase
+    .from('worker_documents')
+    .select(`
+      *,
+      worker:workers(id, name, company_id, document_number)
+    `)
+    .lte('expiry_date', futureDate.toISOString().split('T')[0])
+    .gte('expiry_date', new Date().toISOString().split('T')[0])
+    .order('expiry_date');
+
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchExpiredDocuments() {
+  if (usesLocalServer()) return localWorkerDocuments.listExpired();
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('worker_documents')
+    .select(`
+      *,
+      worker:workers(id, name, company_id, document_number)
+    `)
+    .lt('expiry_date', today)
+    .order('expiry_date');
+
+  if (error) throw error;
+  return data;
+}
+
 export async function createWorkerDocument(documentData: Record<string, any>) {
   if (usesLocalServer()) return localWorkerDocuments.create(documentData);
   const { data, error } = await supabase.from('worker_documents').insert(documentData as any).select().single();
   if (error) throw error;
   return data;
+}
+
+export async function updateWorkerDocument(id: string, data: Record<string, any>) {
+  if (usesLocalServer()) return localWorkerDocuments.update(id, data);
+  const { data: result, error } = await supabase.from('worker_documents').update(data).eq('id', id).select().single();
+  if (error) throw error;
+  return result;
+}
+
+export async function deleteWorkerDocument(id: string) {
+  if (usesLocalServer()) return localWorkerDocuments.delete(id);
+  const { error } = await supabase.from('worker_documents').delete().eq('id', id);
+  if (error) throw error;
 }
 
 // --- Projects ---
@@ -180,6 +242,7 @@ export async function fetchAccessLogs(filters?: { projectId?: string; startDate?
 
   if (filters?.startDate) query = query.gte('timestamp', `${filters.startDate}T00:00:00`);
   if (filters?.endDate) query = query.lte('timestamp', `${filters.endDate}T23:59:59`);
+  if (filters?.projectId) query = query.eq('device.project_id', filters.projectId);
 
   const { data, error } = await query;
   if (error) throw error;
