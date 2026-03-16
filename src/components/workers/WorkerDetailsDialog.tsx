@@ -10,6 +10,7 @@ import { useWorkerDocuments } from '@/hooks/useWorkerDocuments';
 import { useWorkerStrikes, useCreateWorkerStrike, useDeleteWorkerStrike } from '@/hooks/useWorkerStrikes';
 import { toast } from '@/hooks/use-toast';
 import { useResolvedUrl } from '@/hooks/useResolvedUrl';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
