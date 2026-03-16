@@ -24,7 +24,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { usesLocalAuth, usesLocalServer } from '@/lib/runtimeProfile';
-import { localDevices } from '@/lib/localServerProvider';
+import { localControlId, localDevices } from '@/lib/localServerProvider';
 
 const deviceSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
