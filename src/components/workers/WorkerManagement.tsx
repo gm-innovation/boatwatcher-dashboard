@@ -80,6 +80,11 @@ const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
 
   const selectedProjects = watch('allowed_project_ids');
 
+  useEffect(() => {
+    setPhotoFile(null);
+    setPhotoPreview(resolvedWorkerPhotoUrl ?? null);
+  }, [worker?.id, resolvedWorkerPhotoUrl]);
+
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
