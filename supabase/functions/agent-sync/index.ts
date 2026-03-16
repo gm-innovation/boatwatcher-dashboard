@@ -6,6 +6,64 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-agent-token',
 }
 
+function resolveWorkerPhotoPath(photoUrl?: string | null) {
+  if (!photoUrl) return null
+
+  const normalized = photoUrl.trim()
+  if (!normalized) return null
+
+  if (normalized.startsWith('storage://')) {
+    const rest = normalized.replace('storage://', '')
+    const slashIndex = rest.indexOf('/')
+    if (slashIndex === -1) return null
+
+    const bucket = rest.slice(0, slashIndex)
+    const path = rest.slice(slashIndex + 1)
+    return bucket === 'worker-photos' && path ? path : null
+  }
+
+  if (normalized.startsWith('worker-photos/')) {
+    return normalized.replace(/^worker-photos\//, '')
+  }
+
+  try {
+    const parsed = new URL(normalized)
+    const match = parsed.pathname.match(/\/storage\/v1\/(?:object|render\/image)\/(?:public|sign)\/worker-photos\/(.+)$/)
+    if (match?.[1]) {
+      return decodeURIComponent(match[1])
+    }
+  } catch {
+    // Not a URL, continue with fallback handling.
+  }
+
+  return normalized.includes('://') ? null : normalized
+}
+
+async function attachWorkerPhotoSignedUrl(supabase: ReturnType<typeof createClient>, worker: Record<string, any>) {
+  if (!worker.photo_url) {
+    return { ...worker, photo_signed_url: null }
+  }
+
+  const photoPath = resolveWorkerPhotoPath(worker.photo_url)
+  console.log(`[agent-sync/download-workers] worker=${worker.id} photo_url=${worker.photo_url} resolved_path=${photoPath ?? 'null'}`)
+
+  if (!photoPath) {
+    console.warn(`[agent-sync/download-workers] Could not resolve worker photo path for worker ${worker.id}`)
+    return { ...worker, photo_signed_url: null }
+  }
+
+  const { data: signedData, error: signedError } = await supabase.storage
+    .from('worker-photos')
+    .createSignedUrl(photoPath, 3600)
+
+  if (signedError) {
+    console.error(`[agent-sync/download-workers] Failed to sign worker photo for worker ${worker.id}:`, signedError)
+    return { ...worker, photo_signed_url: null }
+  }
+
+  return { ...worker, photo_signed_url: signedData?.signedUrl ?? null }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
