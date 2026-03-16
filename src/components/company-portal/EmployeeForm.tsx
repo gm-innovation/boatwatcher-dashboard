@@ -9,6 +9,7 @@ import { toast } from '@/hooks/use-toast';
 import { ensureValidSession } from '@/utils/ensureValidSession';
 import { useDocumentExtraction, ProcessedDocument } from '@/hooks/useDocumentExtraction';
 import { useJobFunctions } from '@/hooks/useJobFunctions';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
