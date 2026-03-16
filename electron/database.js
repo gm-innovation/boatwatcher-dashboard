@@ -568,6 +568,18 @@ function createDatabaseAPI(db, startCode) {
         JSON.stringify(data.project_managers || []),
       );
 
+      queueSyncOperation('company', 'upsert', id, {
+        name: data.name,
+        cnpj: data.cnpj || null,
+        contact_email: data.contact_email || null,
+        logo_url_light: data.logo_url_light || null,
+        logo_url_dark: data.logo_url_dark || null,
+        status: data.status || 'active',
+        vessels: data.vessels || [],
+        project_managers: data.project_managers || [],
+        cloud_id: null,
+      });
+
       if (data.user_id) {
         const associationId = uuidv4();
         db.prepare(`
@@ -629,7 +641,21 @@ function createDatabaseAPI(db, startCode) {
       sets.push('synced = 0');
       params.push(id);
       db.prepare(`UPDATE companies SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-      return this.getCompanyById(id);
+      const updated = this.getCompanyById(id);
+      if (updated) {
+        queueSyncOperation('company', 'upsert', id, {
+          name: updated.name,
+          cnpj: updated.cnpj || null,
+          contact_email: updated.contact_email || null,
+          logo_url_light: updated.logo_url_light || null,
+          logo_url_dark: updated.logo_url_dark || null,
+          status: updated.status || 'active',
+          vessels: updated.vessels || [],
+          project_managers: updated.project_managers || [],
+          cloud_id: updated.cloud_id || null,
+        });
+      }
+      return updated;
     },
 
     deleteCompany(id) {
