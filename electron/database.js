@@ -216,6 +216,14 @@ function initDatabase(userDataPath) {
     CREATE INDEX IF NOT EXISTS idx_worker_documents_worker ON worker_documents(worker_id);
   `);
 
+  db.exec(`
+    ALTER TABLE devices ADD COLUMN agent_id TEXT;
+  `);
+
+  db.exec(`
+    ALTER TABLE devices ADD COLUMN api_credentials TEXT DEFAULT '{}';
+  `);
+
   const maxCode = db.prepare('SELECT MAX(code) as max_code FROM workers').get();
   const nextCode = (maxCode?.max_code || 0) + 1;
 
