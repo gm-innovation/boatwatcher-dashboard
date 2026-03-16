@@ -829,8 +829,8 @@ function createDatabaseAPI(db, startCode) {
     createWorkerDocument(data) {
       const id = uuidv4();
       db.prepare(`
-        INSERT INTO worker_documents (id, worker_id, document_type, document_url, expiry_date, issue_date, filename, extracted_data, status, synced)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        INSERT INTO worker_documents (id, worker_id, document_type, document_url, expiry_date, issue_date, filename, extracted_data, status, created_at, updated_at, synced)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
       `).run(
         id,
         data.worker_id,
@@ -842,6 +842,19 @@ function createDatabaseAPI(db, startCode) {
         data.extracted_data ? JSON.stringify(data.extracted_data) : null,
         data.status || 'valid',
       );
+
+      queueSyncOperation('worker_document', 'upsert', id, {
+        worker_id: data.worker_id,
+        document_type: data.document_type,
+        document_url: data.document_url || null,
+        expiry_date: data.expiry_date || null,
+        issue_date: data.issue_date || null,
+        filename: data.filename || null,
+        extracted_data: data.extracted_data || null,
+        status: data.status || 'valid',
+        cloud_id: null,
+      });
+
       return normalizeWorkerDocumentRow(db.prepare('SELECT * FROM worker_documents WHERE id = ?').get(id));
     },
 
@@ -867,10 +880,30 @@ function createDatabaseAPI(db, startCode) {
       sets.push('synced = 0');
       params.push(id);
       db.prepare(`UPDATE worker_documents SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-      return normalizeWorkerDocumentRow(db.prepare('SELECT * FROM worker_documents WHERE id = ?').get(id));
+
+      const updated = normalizeWorkerDocumentRow(db.prepare('SELECT * FROM worker_documents WHERE id = ?').get(id));
+      queueSyncOperation('worker_document', 'upsert', id, {
+        worker_id: updated.worker_id,
+        document_type: updated.document_type,
+        document_url: updated.document_url || null,
+        expiry_date: updated.expiry_date || null,
+        issue_date: updated.issue_date || null,
+        filename: updated.filename || null,
+        extracted_data: updated.extracted_data || null,
+        status: updated.status || 'valid',
+        cloud_id: updated.cloud_id || null,
+      });
+
+      return updated;
     },
 
     deleteWorkerDocument(id) {
+      const existing = db.prepare('SELECT * FROM worker_documents WHERE id = ?').get(id);
+      if (!existing) return;
+
+      queueSyncOperation('worker_document', 'delete', id, {
+        cloud_id: existing.cloud_id || null,
+      });
       db.prepare('DELETE FROM worker_documents WHERE id = ?').run(id);
     },
 
