@@ -29,6 +29,7 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { NavLink } from './NavLink';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 const mainNavItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard, end: true },
