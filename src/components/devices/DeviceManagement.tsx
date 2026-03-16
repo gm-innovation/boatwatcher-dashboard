@@ -24,7 +24,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { usesLocalAuth, usesLocalServer } from '@/lib/runtimeProfile';
-import { localDevices } from '@/lib/localServerProvider';
+import { localControlId, localDevices } from '@/lib/localServerProvider';
 
 const deviceSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
@@ -40,7 +40,7 @@ const deviceSchema = z.object({
 
 type DeviceFormData = z.infer<typeof deviceSchema>;
 
-const LOCAL_COMMANDS_MESSAGE = 'Comandos remotos serão ligados ao servidor local em uma próxima fase.';
+const LOCAL_DELETE_MESSAGE = 'A remoção será conectada ao servidor local em uma próxima fase.';
 
 const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => void }) => {
   const [showSetup, setShowSetup] = useState(false);
@@ -65,18 +65,38 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
     refetchInterval: isLocalRuntime ? false : 5000,
   });
 
-  const sendAgentCommand = async (command: string, payload: Record<string, unknown> = {}) => {
-    if (isLocalRuntime) {
-      toast({ title: 'Indisponível no modo local', description: LOCAL_COMMANDS_MESSAGE, variant: 'destructive' });
-      return;
-    }
-
-    if (!device.agent_id) {
-      toast({ title: 'Dispositivo sem agente', description: 'Associe um agente local a este dispositivo.', variant: 'destructive' });
-      return;
-    }
+  const sendAgentCommand = async (command: 'get_status' | 'release_access', payload: Record<string, unknown> = {}) => {
     setSendingCommand(command);
     try {
+      if (isLocalRuntime) {
+        if (command === 'get_status') {
+          const result = await localControlId.getDeviceStatus(device.id);
+          toast({
+            title: result.success ? 'Status atualizado' : 'Falha ao consultar status',
+            description: result.message || result.error || 'Não foi possível consultar o dispositivo.',
+            variant: result.success ? 'default' : 'destructive',
+          });
+        }
+
+        if (command === 'release_access') {
+          const result = await localControlId.releaseAccess(device.id, Number(payload.door_id || 1));
+          toast({
+            title: result.success ? 'Comando enviado' : 'Falha ao liberar acesso',
+            description: result.message || result.error || 'Não foi possível acionar a porta.',
+            variant: result.success ? 'default' : 'destructive',
+          });
+        }
+
+        queryClient.invalidateQueries({ queryKey: ['devices'] });
+        onRefresh();
+        return;
+      }
+
+      if (!device.agent_id) {
+        toast({ title: 'Dispositivo sem agente', description: 'Associe um agente local a este dispositivo.', variant: 'destructive' });
+        return;
+      }
+
       const { error } = await supabase.from('agent_commands').insert({
         agent_id: device.agent_id,
         device_id: device.id,
@@ -96,7 +116,7 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
 
   const handleDelete = async () => {
     if (isLocalRuntime) {
-      toast({ title: 'Indisponível no modo local', description: 'A remoção será conectada ao servidor local em uma próxima fase.', variant: 'destructive' });
+      toast({ title: 'Indisponível no modo local', description: LOCAL_DELETE_MESSAGE, variant: 'destructive' });
       return;
     }
 
@@ -166,7 +186,7 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
                 <span className="font-medium">Local:</span> {device.location}
               </div>
             )}
-            {!device.agent_id && (
+            {!device.agent_id && !isLocalRuntime && (
               <div className="text-xs text-orange-500 bg-orange-500/10 rounded px-2 py-1">
                 ⚠ Sem agente local associado
               </div>

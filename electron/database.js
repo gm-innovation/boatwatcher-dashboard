@@ -39,6 +39,7 @@ function normalizeDeviceRow(row) {
   if (!row) return null;
   return {
     ...row,
+    api_credentials: safeParseJson(row.api_credentials, {}),
     configuration: safeParseJson(row.configuration, {}),
   };
 }
@@ -56,6 +57,7 @@ function initDatabase(userDataPath) {
   db = new Database(dbPath);
 
   db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS companies (
@@ -180,6 +182,8 @@ function initDatabase(userDataPath) {
       status TEXT DEFAULT 'offline',
       location TEXT,
       project_id TEXT,
+      agent_id TEXT,
+      api_credentials TEXT DEFAULT '{}',
       configuration TEXT DEFAULT '{}',
       last_event_timestamp TEXT,
       created_at TEXT DEFAULT (datetime('now')),
@@ -211,6 +215,17 @@ function initDatabase(userDataPath) {
     CREATE INDEX IF NOT EXISTS idx_company_documents_company ON company_documents(company_id);
     CREATE INDEX IF NOT EXISTS idx_worker_documents_worker ON worker_documents(worker_id);
   `);
+
+  const deviceColumns = db.prepare("PRAGMA table_info(devices)").all();
+  const deviceColumnNames = new Set(deviceColumns.map((column) => column.name));
+
+  if (!deviceColumnNames.has('agent_id')) {
+    db.exec("ALTER TABLE devices ADD COLUMN agent_id TEXT");
+  }
+
+  if (!deviceColumnNames.has('api_credentials')) {
+    db.exec("ALTER TABLE devices ADD COLUMN api_credentials TEXT DEFAULT '{}'");
+  }
 
   const maxCode = db.prepare('SELECT MAX(code) as max_code FROM workers').get();
   const nextCode = (maxCode?.max_code || 0) + 1;
@@ -759,8 +774,8 @@ function createDatabaseAPI(db, startCode) {
     createDevice(data) {
       const id = data.id || uuidv4();
       db.prepare(`
-        INSERT INTO devices (id, name, controlid_serial_number, controlid_ip_address, type, status, location, project_id, configuration)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO devices (id, name, controlid_serial_number, controlid_ip_address, type, status, location, project_id, agent_id, api_credentials, configuration)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         data.name,
@@ -770,6 +785,8 @@ function createDatabaseAPI(db, startCode) {
         data.status || 'offline',
         data.location || null,
         data.project_id || null,
+        data.agent_id || null,
+        JSON.stringify(data.api_credentials || {}),
         JSON.stringify(data.configuration || {}),
       );
       return this.getDeviceById(id);
@@ -780,8 +797,8 @@ function createDatabaseAPI(db, startCode) {
       const params = [];
       for (const [key, value] of Object.entries(data)) {
         if (['id', 'created_at'].includes(key)) continue;
-        if (key === 'configuration') {
-          sets.push('configuration = ?');
+        if (key === 'configuration' || key === 'api_credentials') {
+          sets.push(`${key} = ?`);
           params.push(JSON.stringify(value || {}));
         } else {
           sets.push(`${key} = ?`);

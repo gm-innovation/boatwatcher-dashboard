@@ -90,42 +90,35 @@ export const localDevices = {
 };
 
 export const localControlId = {
-  async getDeviceStatus(deviceId: string) {
-    const device = await localDevices.getById(deviceId);
-    return {
-      success: true,
-      message: 'Status obtido do servidor local',
-      device,
-      status: device?.status ?? 'offline',
-    };
+  getDeviceStatus(deviceId: string) {
+    return apiFetch(`/api/devices/${deviceId}/actions`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'getDeviceStatus' }),
+    });
   },
-  async getDeviceInfo(deviceId: string) {
-    const device = await localDevices.getById(deviceId);
-    return {
-      success: true,
-      message: 'Informações obtidas do servidor local',
-      device,
-    };
+  getDeviceInfo(deviceId: string) {
+    return apiFetch(`/api/devices/${deviceId}/actions`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'getDeviceInfo' }),
+    });
   },
-  async listUsers(deviceId: string) {
-    return {
-      success: false,
-      message: `Listagem de usuários do dispositivo ${deviceId} será conectada ao agente local na próxima fase.`,
-    };
+  listUsers(deviceId: string) {
+    return apiFetch(`/api/devices/${deviceId}/actions`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'listUsers' }),
+    });
   },
-  async releaseAccess(deviceId: string, doorId?: number) {
-    return {
-      success: false,
-      message: `Abertura remota${doorId ? ` da porta ${doorId}` : ''} no dispositivo ${deviceId} ainda não está disponível no servidor local.`,
-    };
+  releaseAccess(deviceId: string, doorId?: number) {
+    return apiFetch(`/api/devices/${deviceId}/actions`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'releaseAccess', doorId }),
+    });
   },
-  async configureDevice(deviceId: string, config: Record<string, any>) {
-    const device = await localDevices.update(deviceId, { configuration: config });
-    return {
-      success: true,
-      message: 'Configuração salva no servidor local',
-      device,
-    };
+  configureDevice(deviceId: string, config: Record<string, any>) {
+    return apiFetch(`/api/devices/${deviceId}/actions`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'configureDevice', config }),
+    });
   },
   async enrollWorker(workerId: string, deviceIds: string[], action: 'enroll' | 'remove' = 'enroll') {
     return {
