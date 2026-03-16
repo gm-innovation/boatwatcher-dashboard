@@ -1,50 +1,6 @@
 const express = require('express');
 const router = express.Router();
-
-function parseApiCredentials(apiCredentials) {
-  if (!apiCredentials) return {};
-  if (typeof apiCredentials === 'string') {
-    try {
-      return JSON.parse(apiCredentials);
-    } catch {
-      return {};
-    }
-  }
-  return apiCredentials;
-}
-
-async function controlIdRequest(device, endpoint, method = 'GET', body) {
-  const apiCredentials = parseApiCredentials(device.api_credentials);
-  const url = `http://${device.controlid_ip_address}:${apiCredentials.port || 80}${endpoint}`;
-  const headers = { 'Content-Type': 'application/json' };
-
-  if (apiCredentials.username && apiCredentials.password) {
-    const auth = Buffer.from(`${apiCredentials.username}:${apiCredentials.password}`).toString('base64');
-    headers.Authorization = `Basic ${auth}`;
-  }
-
-  const response = await fetch(url, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(5000),
-  });
-
-  const text = await response.text();
-  let data = null;
-
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text || null;
-  }
-
-  if (!response.ok) {
-    throw new Error(typeof data === 'string' ? data : `HTTP ${response.status}`);
-  }
-
-  return data;
-}
+const { controlIdRequest } = require('../lib/controlid');
 
 async function executeDeviceAction(db, device, action, params = {}) {
   switch (action) {
@@ -152,6 +108,7 @@ router.get('/:id', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const device = req.db.createDevice?.(req.body);
+    req.agentController.reloadDevices?.();
     res.status(201).json(device);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -161,6 +118,7 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const device = req.db.updateDevice?.(req.params.id, req.body);
+    req.agentController.reloadDevices?.();
     res.json(device);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -170,6 +128,7 @@ router.put('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
   try {
     req.db.deleteDevice?.(req.params.id);
+    req.agentController.reloadDevices?.();
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

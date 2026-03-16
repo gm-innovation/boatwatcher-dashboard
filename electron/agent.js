@@ -23,6 +23,12 @@ class AgentController {
     for (const cb of this.listeners) cb(event);
   }
 
+  reloadDevices() {
+    this.devices = this.db.getDevices?.() || [];
+    console.log(`[Agent] Loaded ${this.devices.length} devices`);
+    return this.devices;
+  }
+
   getStatus() {
     return {
       running: this.running,
@@ -35,7 +41,7 @@ class AgentController {
     this.running = true;
 
     // Load devices from local DB
-    this.devices = this.db.getDevices?.() || [];
+    this.reloadDevices();
 
     // Start polling loop
     this.pollInterval = setInterval(() => this.pollDevices(), this.pollIntervalMs);
