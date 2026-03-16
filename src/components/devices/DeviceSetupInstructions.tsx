@@ -233,8 +233,8 @@ get_configuration
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {showNewToken && (
-                    <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg space-y-2">
-                      <div className="flex items-center gap-2 text-green-600">
+                    <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg space-y-2">
+                      <div className="flex items-center gap-2 text-primary">
                         <CheckCircle2 className="h-4 w-4" />
                         <span className="font-medium">Token criado com sucesso!</span>
                       </div>
@@ -301,11 +301,11 @@ get_configuration
                             <div className="flex items-center gap-2">
                               <span className="font-medium">{token.name}</span>
                               {token.is_active ? (
-                                <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20">
+                                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
                                   Ativo
                                 </Badge>
                               ) : (
-                                <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20">
+                                <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
                                   Revogado
                                 </Badge>
                               )}
@@ -333,7 +333,7 @@ get_configuration
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => revokeToken.mutate(token.id)}
-                                className="text-orange-500 hover:text-orange-600"
+                                className="text-muted-foreground hover:text-foreground"
                               >
                                 <AlertCircle className="h-4 w-4" />
                               </Button>
