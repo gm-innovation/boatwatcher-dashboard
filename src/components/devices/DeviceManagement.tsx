@@ -186,7 +186,7 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
                 <span className="font-medium">Local:</span> {device.location}
               </div>
             )}
-            {!device.agent_id && (
+            {!device.agent_id && !isLocalRuntime && (
               <div className="text-xs text-orange-500 bg-orange-500/10 rounded px-2 py-1">
                 ⚠ Sem agente local associado
               </div>
