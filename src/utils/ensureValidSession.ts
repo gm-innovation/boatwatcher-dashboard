@@ -1,5 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { LOCAL_DESKTOP_SESSION, LOCAL_DESKTOP_USER } from '@/lib/authRuntime';
+import { usesLocalAuth } from '@/lib/runtimeProfile';
 
 export interface ValidSession {
   accessToken: string;
@@ -7,34 +9,31 @@ export interface ValidSession {
   expiresAt: number;
 }
 
-/**
- * Validates the current session by checking with the server (getUser).
- * If the JWT is invalid or expired, forces logout and redirects to /login.
- * 
- * @returns ValidSession if session is valid, null if not (and handles cleanup)
- */
 export const ensureValidSession = async (): Promise<ValidSession | null> => {
   try {
-    // First, get the local session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError || !session) {
-      console.warn('[ensureValidSession] No local session found');
-      return null; // No session, but don't force logout (user might not be logged in)
+    if (usesLocalAuth()) {
+      return {
+        accessToken: LOCAL_DESKTOP_SESSION.access_token,
+        userId: LOCAL_DESKTOP_USER.id,
+        expiresAt: 0,
+      };
     }
 
-    // Validate the session with the server using getUser
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+    if (sessionError || !session) {
+      console.warn('[ensureValidSession] No local session found');
+      return null;
+    }
+
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
+
     if (userError || !user) {
       console.error('[ensureValidSession] Server rejected JWT:', userError?.message);
-      
-      // JWT is invalid on the server - force logout
       await forceLogout('Sua sessão expirou. Por favor, faça login novamente.');
       return null;
     }
 
-    // Session is valid!
     return {
       accessToken: session.access_token,
       userId: user.id,
@@ -46,18 +45,18 @@ export const ensureValidSession = async (): Promise<ValidSession | null> => {
   }
 };
 
-/**
- * Forces logout, clears storage, shows toast, and redirects to login.
- */
 export const forceLogout = async (message?: string): Promise<void> => {
+  if (usesLocalAuth()) {
+    window.location.href = '/';
+    return;
+  }
+
   try {
-    // Sign out from Supabase
     await supabase.auth.signOut();
   } catch (e) {
     console.error('[forceLogout] Error during signOut:', e);
   }
 
-  // Clear any remaining auth tokens from localStorage
   const keysToRemove: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
@@ -67,7 +66,6 @@ export const forceLogout = async (message?: string): Promise<void> => {
   }
   keysToRemove.forEach(key => localStorage.removeItem(key));
 
-  // Show toast
   if (message) {
     toast({
       title: 'Sessão Expirada',
@@ -76,13 +74,9 @@ export const forceLogout = async (message?: string): Promise<void> => {
     });
   }
 
-  // Redirect to login
   window.location.href = '/login';
 };
 
-/**
- * Gets session info for diagnostics without forcing logout.
- */
 export const getSessionDiagnostics = async (): Promise<{
   hasLocalSession: boolean;
   serverValidation: 'ok' | 'error' | 'no_session';
@@ -91,8 +85,18 @@ export const getSessionDiagnostics = async (): Promise<{
   errorMessage: string | null;
 }> => {
   try {
+    if (usesLocalAuth()) {
+      return {
+        hasLocalSession: true,
+        serverValidation: 'ok',
+        userEmail: LOCAL_DESKTOP_USER.email || null,
+        expiresAt: null,
+        errorMessage: null,
+      };
+    }
+
     const { data: { session } } = await supabase.auth.getSession();
-    
+
     if (!session) {
       return {
         hasLocalSession: false,
@@ -104,7 +108,7 @@ export const getSessionDiagnostics = async (): Promise<{
     }
 
     const { data: { user }, error } = await supabase.auth.getUser();
-    
+
     return {
       hasLocalSession: true,
       serverValidation: error ? 'error' : 'ok',
