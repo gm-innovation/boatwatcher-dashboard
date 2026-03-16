@@ -360,15 +360,26 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, mappings }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // GET /download-companies
-    if (req.method === 'GET' && action === 'download-companies') {
+    // GET /download-user-companies
+    if (req.method === 'GET' && action === 'download-user-companies') {
       const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'
-      const { data: companies, error } = await supabase
-        .from('companies')
-        .select('id, name, cnpj, status, logo_url_light, logo_url_dark')
+      const { data: userCompanies, error } = await supabase
+        .from('user_companies')
+        .select('id, user_id, company_id, created_at, updated_at')
         .gte('updated_at', since)
       if (error) throw error
-      return new Response(JSON.stringify({ companies: companies || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ user_companies: userCompanies || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // GET /download-company-documents
+    if (req.method === 'GET' && action === 'download-company-documents') {
+      const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'
+      const { data: companyDocuments, error } = await supabase
+        .from('company_documents')
+        .select('id, company_id, document_type, filename, file_url, created_at, updated_at')
+        .gte('updated_at', since)
+      if (error) throw error
+      return new Response(JSON.stringify({ company_documents: companyDocuments || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // GET /download-projects
@@ -380,6 +391,17 @@ serve(async (req) => {
         .gte('updated_at', since)
       if (error) throw error
       return new Response(JSON.stringify({ projects: projects || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // GET /download-worker-documents
+    if (req.method === 'GET' && action === 'download-worker-documents') {
+      const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'
+      const { data: workerDocuments, error } = await supabase
+        .from('worker_documents')
+        .select('id, worker_id, document_type, document_url, expiry_date, issue_date, filename, extracted_data, status, created_at, updated_at')
+        .gte('updated_at', since)
+      if (error) throw error
+      return new Response(JSON.stringify({ worker_documents: workerDocuments || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
