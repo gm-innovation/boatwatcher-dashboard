@@ -76,12 +76,9 @@ export const useWorkersOnBoard = (projectId: string | null) => {
     queryFn: async () => {
       if (!projectId) return [];
 
-      if (usesLocalServer()) {
-        const api = (window as any).electronAPI;
-        if (api?.db?.getWorkersOnBoard) {
-          return api.db.getWorkersOnBoard(projectId);
-        }
-        return [];
+      const localWorkersOnBoard = await fetchProjectWorkersOnBoard(projectId);
+      if (localWorkersOnBoard !== null) {
+        return localWorkersOnBoard;
       }
 
       const { data: entryLogs, error: entryError } = await supabase
@@ -117,7 +114,7 @@ export const useWorkersOnBoard = (projectId: string | null) => {
             worker_id: entry.worker_id,
             worker_name: entry.worker_name,
             device_name: entry.device_name,
-            entry_time: entry.timestamp
+            entry_time: entry.timestamp,
           });
         }
       }
@@ -139,11 +136,11 @@ export const useWorkersOnBoard = (projectId: string | null) => {
         role: worker.role,
         company: worker.companies?.name || 'N/A',
         company_id: worker.company_id,
-        entryTime: workersOnBoard.get(worker.id)?.entry_time
+        entryTime: workersOnBoard.get(worker.id)?.entry_time,
       }));
     },
     enabled: !!projectId,
-    refetchInterval: 30000
+    refetchInterval: 30000,
   });
 };
 
