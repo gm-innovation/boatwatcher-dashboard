@@ -234,6 +234,7 @@ export async function updateProject(id: string, projectData: Record<string, any>
 
 export async function fetchAccessLogs(filters?: { projectId?: string; startDate?: string; endDate?: string; limit?: number }) {
   if (usesLocalServer()) return localAccessLogs.list(filters as any);
+
   let query = supabase
     .from('access_logs')
     .select('*, worker:workers(id, name, document_number, company_id), device:devices(id, name, project_id)')
@@ -242,7 +243,20 @@ export async function fetchAccessLogs(filters?: { projectId?: string; startDate?
 
   if (filters?.startDate) query = query.gte('timestamp', `${filters.startDate}T00:00:00`);
   if (filters?.endDate) query = query.lte('timestamp', `${filters.endDate}T23:59:59`);
-  if (filters?.projectId) query = query.eq('device.project_id', filters.projectId);
+
+  if (filters?.projectId) {
+    const { data: devices, error: devicesError } = await supabase
+      .from('devices')
+      .select('id')
+      .eq('project_id', filters.projectId);
+
+    if (devicesError) throw devicesError;
+
+    const deviceIds = (devices || []).map((device) => device.id);
+    if (deviceIds.length === 0) return [];
+
+    query = query.in('device_id', deviceIds);
+  }
 
   const { data, error } = await query;
   if (error) throw error;
