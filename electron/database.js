@@ -659,6 +659,7 @@ function createDatabaseAPI(db, startCode) {
     },
 
     deleteCompany(id) {
+      const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(id);
       const documents = db.prepare('SELECT * FROM company_documents WHERE company_id = ?').all(id);
       const associations = db.prepare('SELECT * FROM user_companies WHERE company_id = ?').all(id);
 
@@ -681,6 +682,14 @@ function createDatabaseAPI(db, startCode) {
         } else {
           clearQueuedSyncOperation('user_company', association.id);
         }
+      }
+
+      if (company?.cloud_id || company?.synced) {
+        queueSyncOperation('company', 'delete', id, {
+          cloud_id: company?.cloud_id || null,
+        });
+      } else {
+        clearQueuedSyncOperation('company', id);
       }
 
       db.prepare('DELETE FROM company_documents WHERE company_id = ?').run(id);
