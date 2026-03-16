@@ -47,11 +47,13 @@ export const MyProjects = () => {
     enabled: !!userCompany
   });
 
-  const projectIds = [...new Set(
-    companyWorkers
-      .flatMap((worker: any) => worker.allowed_project_ids || [])
-      .filter(Boolean)
-  )];
+  const projectIds: string[] = Array.from(
+    new Set(
+      companyWorkers
+        .flatMap((worker: any) => (worker.allowed_project_ids || []) as string[])
+        .filter((projectId): projectId is string => Boolean(projectId))
+    )
+  );
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['company-projects', projectIds, isLocalRuntime],
