@@ -79,6 +79,68 @@ function getClientIp(req: Request) {
   return req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || 'unknown'
 }
 
+function resolveWorkerPhotoPath(photoUrl?: string | null) {
+  if (!photoUrl) return null
+
+  const normalized = photoUrl.trim()
+  if (!normalized) return null
+
+  if (normalized.startsWith('storage://')) {
+    const rest = normalized.replace('storage://', '')
+    const slashIndex = rest.indexOf('/')
+    if (slashIndex === -1) return null
+
+    const bucket = rest.slice(0, slashIndex)
+    const path = rest.slice(slashIndex + 1)
+    return bucket === 'worker-photos' && path ? path : null
+  }
+
+  if (normalized.startsWith('worker-photos/')) {
+    return normalized.replace(/^worker-photos\//, '')
+  }
+
+  try {
+    const parsed = new URL(normalized)
+    const match = parsed.pathname.match(/\/storage\/v1\/(?:object|render\/image)\/(?:public|sign)\/worker-photos\/(.+)$/)
+    if (match?.[1]) {
+      return decodeURIComponent(match[1])
+    }
+  } catch {
+    // Not a URL, continue with fallback handling.
+  }
+
+  return normalized.includes('://') ? null : normalized
+}
+
+async function attachWorkerPhotoSignedUrl(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  worker: Record<string, any>,
+  source: string,
+) {
+  if (!worker.photo_url) {
+    return { ...worker, photo_signed_url: null }
+  }
+
+  const photoPath = resolveWorkerPhotoPath(worker.photo_url)
+  console.log(`[${source}] worker=${worker.id} photo_url=${worker.photo_url} resolved_path=${photoPath ?? 'null'}`)
+
+  if (!photoPath) {
+    console.warn(`[${source}] Could not resolve worker photo path for worker ${worker.id}`)
+    return { ...worker, photo_signed_url: null }
+  }
+
+  const { data: signedData, error: signedError } = await supabase.storage
+    .from('worker-photos')
+    .createSignedUrl(photoPath, 3600)
+
+  if (signedError) {
+    console.error(`[${source}] Failed to sign worker photo for worker ${worker.id}:`, signedError)
+    return { ...worker, photo_signed_url: null }
+  }
+
+  return { ...worker, photo_signed_url: signedData?.signedUrl ?? null }
+}
+
 async function resolveDevice(supabase: ReturnType<typeof getSupabaseClient>, identifier?: string | number) {
   if (!identifier) return null
 
@@ -436,16 +498,7 @@ serve(async (req) => {
       console.log(`[download-workers] Agent ${agent.id}: returning ${(workers || []).length} workers since ${since}`)
 
       const workersWithPhotos = await Promise.all(
-        (workers || []).map(async (worker) => {
-          if (worker.photo_url) {
-            const photoPath = worker.photo_url.replace(/^worker-photos\//, '')
-            const { data: signedData } = await supabase.storage
-              .from('worker-photos')
-              .createSignedUrl(photoPath, 3600)
-            return { ...worker, photo_signed_url: signedData?.signedUrl ?? null }
-          }
-          return { ...worker, photo_signed_url: null }
-        })
+        (workers || []).map((worker) => attachWorkerPhotoSignedUrl(supabase, worker, 'download-workers'))
       )
 
       return new Response(JSON.stringify({
@@ -521,16 +574,7 @@ serve(async (req) => {
             .contains('allowed_project_ids', [device.project_id])
 
           const syncWorkersWithPhotos = await Promise.all(
-            (syncWorkers || []).map(async (w) => {
-              if (w.photo_url) {
-                const photoPath = w.photo_url.replace(/^worker-photos\//, '')
-                const { data: signedData } = await supabase.storage
-                  .from('worker-photos')
-                  .createSignedUrl(photoPath, 3600)
-                return { ...w, photo_signed_url: signedData?.signedUrl ?? null }
-              }
-              return { ...w, photo_signed_url: null }
-            })
+            (syncWorkers || []).map((worker) => attachWorkerPhotoSignedUrl(supabase, worker, 'sync_users'))
           )
 
           enriched.payload = { ...((cmd.payload as any) || {}), workers: syncWorkersWithPhotos }

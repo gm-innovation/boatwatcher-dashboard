@@ -240,11 +240,23 @@ class SyncEngine:
             if r.ok:
                 data = r.json()
                 workers = data.get("workers", [])
+                for worker in workers:
+                    photo_url = worker.get("photo_url")
+                    photo_signed_url = worker.get("photo_signed_url")
+                    if photo_url and str(photo_url).startswith("storage://"):
+                        if photo_signed_url:
+                            print(f"[Sync] Worker {worker.get('id')} foto assinada pronta para download")
+                        else:
+                            print(
+                                f"[Sync] Worker {worker.get('id')} sem photo_signed_url; "
+                                f"photo_url persistente={photo_url}"
+                            )
                 if workers:
                     count = self.db.upsert_workers(workers)
                     print(f"[Sync] {count} workers atualizados")
                 self.db.set_meta("last_worker_sync", data.get("timestamp", since))
                 return len(workers)
+            print(f"[Sync] Erro download workers: {r.status_code} {r.text[:200]}")
         except Exception as e:
             print(f"[Sync] Erro download workers: {e}")
         return 0
