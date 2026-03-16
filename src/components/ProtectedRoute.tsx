@@ -1,8 +1,8 @@
 import React from 'react';
-import { Navigate } from "react-router-dom";
-import { useAuthContext } from "@/contexts/AuthContext";
-import { isElectron } from "@/lib/dataProvider";
-import { Loader2 } from "lucide-react";
+import { Navigate } from 'react-router-dom';
+import { useAuthContext } from '@/contexts/AuthContext';
+import { Loader2 } from 'lucide-react';
+import { usesLocalAuth } from '@/lib/runtimeProfile';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -12,8 +12,7 @@ interface ProtectedRouteProps {
 export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   const { user, loading, role } = useAuthContext();
 
-  // In Electron, always allow access (local admin)
-  if (isElectron()) {
+  if (usesLocalAuth()) {
     return <>{children}</>;
   }
 

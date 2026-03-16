@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Shield, UserPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { usesLocalAuth } from "@/lib/runtimeProfile";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -18,26 +19,28 @@ const Login = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Check if setup is needed and if already authenticated
   useEffect(() => {
     const checkInitialState = async () => {
-      // Check if already authenticated
+      if (usesLocalAuth()) {
+        navigate("/");
+        return;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         navigate("/");
         return;
       }
 
-      // Check if initial setup is needed
       const { data: needsSetupData, error } = await supabase.rpc('needs_initial_setup');
-      
+
       if (error) {
         console.error('Error checking setup status:', error);
         setNeedsSetup(false);
       } else {
         setNeedsSetup(needsSetupData === true);
       }
-      
+
       setCheckingSetup(false);
     };
 
@@ -46,6 +49,12 @@ const Login = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (usesLocalAuth()) {
+      navigate("/");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -66,7 +75,6 @@ const Login = () => {
       }
 
       if (data.user) {
-        // Check user role
         const { data: roleData, error: roleError } = await supabase
           .from('user_roles')
           .select('role')

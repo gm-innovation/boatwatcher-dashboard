@@ -1,28 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { isElectron } from '@/lib/dataProvider';
 import type { User, Session } from '@supabase/supabase-js';
 import { useToast } from '@/components/ui/use-toast';
-
-// Fake user for Electron offline mode
-const ELECTRON_USER: User = {
-  id: 'local-admin-000',
-  aud: 'authenticated',
-  role: 'authenticated',
-  email: 'admin@local',
-  app_metadata: {},
-  user_metadata: { name: 'Admin Local' },
-  created_at: new Date().toISOString(),
-} as unknown as User;
-
-const ELECTRON_SESSION: Session = {
-  access_token: 'local-token',
-  refresh_token: 'local-refresh',
-  expires_in: 999999,
-  token_type: 'bearer',
-  user: ELECTRON_USER,
-} as unknown as Session;
+import { LOCAL_DESKTOP_SESSION, LOCAL_DESKTOP_USER } from '@/lib/authRuntime';
+import { usesLocalAuth } from '@/lib/runtimeProfile';
 
 export const useAuth = (requiredRole?: string) => {
   const [user, setUser] = useState<User | null>(null);
@@ -31,53 +13,6 @@ export const useAuth = (requiredRole?: string) => {
   const [role, setRole] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
-
-  useEffect(() => {
-    // Electron offline bypass — auto-login as local admin
-    if (isElectron()) {
-      setUser(ELECTRON_USER);
-      setSession(ELECTRON_SESSION);
-      setRole('admin');
-      setLoading(false);
-      return;
-    }
-
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        // Defer role check to avoid deadlock
-        if (session?.user) {
-          setTimeout(() => {
-            checkUserRole(session.user.id);
-          }, 0);
-        } else {
-          setRole(null);
-          if (event === 'SIGNED_OUT') {
-            navigate('/login');
-          }
-        }
-      }
-    );
-
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (!session) {
-        setLoading(false);
-        navigate('/login');
-        return;
-      }
-
-      checkUserRole(session.user.id);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [navigate]);
 
   const checkUserRole = async (userId: string) => {
     try {
@@ -98,9 +33,9 @@ export const useAuth = (requiredRole?: string) => {
 
       if (requiredRole && userRole !== requiredRole) {
         toast({
-          title: "Acesso Negado",
-          description: "Você não tem permissão para acessar esta página.",
-          variant: "destructive",
+          title: 'Acesso Negado',
+          description: 'Você não tem permissão para acessar esta página.',
+          variant: 'destructive',
         });
         navigate('/');
         return;
@@ -113,18 +48,61 @@ export const useAuth = (requiredRole?: string) => {
     }
   };
 
+  useEffect(() => {
+    if (usesLocalAuth()) {
+      setUser(LOCAL_DESKTOP_USER);
+      setSession(LOCAL_DESKTOP_SESSION);
+      setRole('admin');
+      setLoading(false);
+      return;
+    }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+
+      if (nextSession?.user) {
+        setTimeout(() => {
+          checkUserRole(nextSession.user.id);
+        }, 0);
+      } else {
+        setRole(null);
+        setLoading(false);
+
+        if (event === 'SIGNED_OUT') {
+          navigate('/login');
+        }
+      }
+    });
+
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+
+      if (!currentSession) {
+        setLoading(false);
+        navigate('/login');
+        return;
+      }
+
+      checkUserRole(currentSession.user.id);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate, requiredRole]);
+
   const signOut = async () => {
-    if (isElectron()) {
-      // In Electron, just reload
+    if (usesLocalAuth()) {
       window.location.reload();
       return;
     }
+
     const { error } = await supabase.auth.signOut();
     if (error) {
       toast({
-        title: "Erro ao sair",
+        title: 'Erro ao sair',
         description: error.message,
-        variant: "destructive",
+        variant: 'destructive',
       });
     }
   };
