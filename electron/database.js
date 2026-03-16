@@ -1131,7 +1131,22 @@ function createDatabaseAPI(db, startCode) {
     },
 
     getPendingSyncOperations() {
-      return db.prepare('SELECT * FROM sync_queue ORDER BY created_at ASC').all().map(prepareSyncOperationForUpload).filter(Boolean);
+      const rows = db.prepare('SELECT * FROM sync_queue ORDER BY created_at ASC').all();
+      const operations = [];
+
+      for (const row of rows) {
+        if (shouldDropQueuedSyncOperation(row)) {
+          db.prepare('DELETE FROM sync_queue WHERE id = ?').run(row.id);
+          continue;
+        }
+
+        const prepared = prepareSyncOperationForUpload(row);
+        if (prepared) {
+          operations.push(prepared);
+        }
+      }
+
+      return operations;
     },
 
     getPendingSyncCount() {
@@ -1149,13 +1164,7 @@ function createDatabaseAPI(db, startCode) {
     },
 
     markSyncEntitySynced(entityType, entityId, cloudId = null) {
-      const tableMap = {
-        user_company: 'user_companies',
-        company_document: 'company_documents',
-        worker_document: 'worker_documents',
-      };
-
-      const table = tableMap[entityType];
+      const table = syncEntityTableMap[entityType];
       if (!table || !entityId) return;
 
       if (cloudId) {
