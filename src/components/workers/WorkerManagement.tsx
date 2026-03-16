@@ -18,11 +18,12 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { 
-  Plus, 
-  Upload, 
-  User, 
-  Edit, 
+import { ResolvedAvatar } from '@/components/ResolvedAvatar';
+import {
+  Plus,
+  Upload,
+  User,
+  Edit,
   Trash2,
   Camera,
   CheckCircle,

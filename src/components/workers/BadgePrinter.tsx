@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import { Button } from '@/components/ui/button';
+import { useResolvedUrl } from '@/hooks/useResolvedUrl';
 import { Printer } from 'lucide-react';
 
 interface BadgePrinterProps {
