@@ -35,7 +35,8 @@ class SyncEngine {
   getStatus() {
     this.status.pendingCount =
       (this.db.getUnsyncedWorkers?.()?.length || 0) +
-      (this.db.getUnsyncedLogs?.()?.length || 0);
+      (this.db.getUnsyncedLogs?.()?.length || 0) +
+      (this.db.getPendingSyncCount?.() || 0);
     return { ...this.status };
   }
 
@@ -53,8 +54,9 @@ class SyncEngine {
     // If we just came online or have pending data, sync
     const pendingWorkers = this.db.getUnsyncedWorkers?.() || [];
     const pendingLogs = this.db.getUnsyncedLogs?.() || [];
+    const pendingOperations = this.db.getPendingSyncOperations?.() || [];
 
-    if (pendingWorkers.length > 0 || pendingLogs.length > 0 || wasOffline) {
+    if (pendingWorkers.length > 0 || pendingLogs.length > 0 || pendingOperations.length > 0 || wasOffline) {
       await this.triggerSync();
     }
 
@@ -67,6 +69,9 @@ class SyncEngine {
     this.notifyListeners();
 
     try {
+      // Upload structured pending operations first so dependent entities exist in cloud
+      await this.uploadQueuedOperations();
+
       // Upload pending logs
       await this.uploadLogs();
 
@@ -83,6 +88,28 @@ class SyncEngine {
     } finally {
       this.status.syncing = false;
       this.notifyListeners();
+    }
+  }
+
+  async uploadQueuedOperations() {
+    const operations = this.db.getPendingSyncOperations?.() || [];
+    if (operations.length === 0) return;
+
+    const response = await this.callEdgeFunction('agent-sync/upload-operations', 'POST', { operations });
+    if (!response.success || !Array.isArray(response.results)) return;
+
+    for (const result of response.results) {
+      if (!result?.queueId) continue;
+
+      if (result.success) {
+        if (result.operation === 'delete') {
+          this.db.removeSyncQueueEntry?.(result.queueId);
+          continue;
+        }
+
+        this.db.markSyncEntitySynced?.(result.entityType, result.entityId, result.cloudId || null);
+        this.db.removeSyncQueueEntry?.(result.queueId);
+      }
     }
   }
 
@@ -121,6 +148,26 @@ class SyncEngine {
       }
     } catch (e) { console.error('Download companies error:', e.message); }
 
+    // Download company/user relations
+    try {
+      const userCompaniesRes = await this.callEdgeFunction(`agent-sync/download-user-companies?since=${lastSync}`, 'GET');
+      if (userCompaniesRes.user_companies) {
+        for (const association of userCompaniesRes.user_companies) {
+          this.db.upsertUserCompanyFromCloud(association);
+        }
+      }
+    } catch (e) { console.error('Download user_companies error:', e.message); }
+
+    // Download company documents
+    try {
+      const companyDocumentsRes = await this.callEdgeFunction(`agent-sync/download-company-documents?since=${lastSync}`, 'GET');
+      if (companyDocumentsRes.company_documents) {
+        for (const document of companyDocumentsRes.company_documents) {
+          this.db.upsertCompanyDocumentFromCloud(document);
+        }
+      }
+    } catch (e) { console.error('Download company_documents error:', e.message); }
+
     // Download projects
     try {
       const projectsRes = await this.callEdgeFunction(`agent-sync/download-projects?since=${lastSync}`, 'GET');
@@ -140,6 +187,16 @@ class SyncEngine {
         }
       }
     } catch (e) { console.error('Download workers error:', e.message); }
+
+    // Download worker documents
+    try {
+      const workerDocumentsRes = await this.callEdgeFunction(`agent-sync/download-worker-documents?since=${lastSync}`, 'GET');
+      if (workerDocumentsRes.worker_documents) {
+        for (const document of workerDocumentsRes.worker_documents) {
+          this.db.upsertWorkerDocumentFromCloud(document);
+        }
+      }
+    } catch (e) { console.error('Download worker_documents error:', e.message); }
 
     this.db.setSyncMeta('last_download', new Date().toISOString());
   }

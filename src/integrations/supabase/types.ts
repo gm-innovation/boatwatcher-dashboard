@@ -223,6 +223,7 @@ export type Database = {
           file_url: string | null
           filename: string
           id: string
+          updated_at: string
         }
         Insert: {
           company_id: string
@@ -231,6 +232,7 @@ export type Database = {
           file_url?: string | null
           filename: string
           id?: string
+          updated_at?: string
         }
         Update: {
           company_id?: string
@@ -239,6 +241,7 @@ export type Database = {
           file_url?: string | null
           filename?: string
           id?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -670,18 +673,21 @@ export type Database = {
           company_id: string | null
           created_at: string
           id: string
+          updated_at: string
           user_id: string
         }
         Insert: {
           company_id?: string | null
           created_at?: string
           id?: string
+          updated_at?: string
           user_id: string
         }
         Update: {
           company_id?: string | null
           created_at?: string
           id?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: [

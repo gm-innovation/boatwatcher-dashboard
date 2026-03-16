@@ -277,6 +277,11 @@ function createDatabaseAPI(db, startCode) {
     VALUES (?, ?, ?, ?, ?, datetime('now'))
   `);
   const deleteSyncQueueByEntity = db.prepare('DELETE FROM sync_queue WHERE entity_type = ? AND entity_id = ?');
+  const syncEntityTableMap = {
+    user_company: 'user_companies',
+    company_document: 'company_documents',
+    worker_document: 'worker_documents',
+  };
 
   function parseQueueRow(row) {
     if (!row) return null;
@@ -299,6 +304,19 @@ function createDatabaseAPI(db, startCode) {
 
   function clearQueuedSyncOperation(entityType, entityId) {
     deleteSyncQueueByEntity.run(entityType, entityId);
+  }
+
+  function shouldDropQueuedSyncOperation(row) {
+    const queueRow = parseQueueRow(row);
+    if (!queueRow || queueRow.operation !== 'delete') return false;
+
+    const table = syncEntityTableMap[queueRow.entity_type];
+    if (!table) return false;
+
+    if (queueRow.payload?.cloud_id) return false;
+
+    const resolvedCloudId = resolveCloudEntityId(table, queueRow.entity_id);
+    return !resolvedCloudId;
   }
 
   function resolveCloudEntityId(table, localId) {
@@ -594,16 +612,24 @@ function createDatabaseAPI(db, startCode) {
       const associations = db.prepare('SELECT * FROM user_companies WHERE company_id = ?').all(id);
 
       for (const doc of documents) {
-        queueSyncOperation('company_document', 'delete', doc.id, {
-          cloud_id: doc.cloud_id || null,
-        });
+        if (doc.cloud_id || doc.synced) {
+          queueSyncOperation('company_document', 'delete', doc.id, {
+            cloud_id: doc.cloud_id || null,
+          });
+        } else {
+          clearQueuedSyncOperation('company_document', doc.id);
+        }
       }
 
       for (const association of associations) {
-        queueSyncOperation('user_company', 'delete', association.id, {
-          cloud_id: association.cloud_id || null,
-          user_id: association.user_id,
-        });
+        if (association.cloud_id || association.synced) {
+          queueSyncOperation('user_company', 'delete', association.id, {
+            cloud_id: association.cloud_id || null,
+            user_id: association.user_id,
+          });
+        } else {
+          clearQueuedSyncOperation('user_company', association.id);
+        }
       }
 
       db.prepare('DELETE FROM company_documents WHERE company_id = ?').run(id);
@@ -667,9 +693,14 @@ function createDatabaseAPI(db, startCode) {
       const existing = db.prepare('SELECT * FROM company_documents WHERE id = ?').get(id);
       if (!existing) return;
 
-      queueSyncOperation('company_document', 'delete', id, {
-        cloud_id: existing.cloud_id || null,
-      });
+      if (existing.cloud_id || existing.synced) {
+        queueSyncOperation('company_document', 'delete', id, {
+          cloud_id: existing.cloud_id || null,
+        });
+      } else {
+        clearQueuedSyncOperation('company_document', id);
+      }
+
       db.prepare('DELETE FROM company_documents WHERE id = ?').run(id);
     },
 
@@ -901,9 +932,14 @@ function createDatabaseAPI(db, startCode) {
       const existing = db.prepare('SELECT * FROM worker_documents WHERE id = ?').get(id);
       if (!existing) return;
 
-      queueSyncOperation('worker_document', 'delete', id, {
-        cloud_id: existing.cloud_id || null,
-      });
+      if (existing.cloud_id || existing.synced) {
+        queueSyncOperation('worker_document', 'delete', id, {
+          cloud_id: existing.cloud_id || null,
+        });
+      } else {
+        clearQueuedSyncOperation('worker_document', id);
+      }
+
       db.prepare('DELETE FROM worker_documents WHERE id = ?').run(id);
     },
 
@@ -1095,7 +1131,22 @@ function createDatabaseAPI(db, startCode) {
     },
 
     getPendingSyncOperations() {
-      return db.prepare('SELECT * FROM sync_queue ORDER BY created_at ASC').all().map(prepareSyncOperationForUpload).filter(Boolean);
+      const rows = db.prepare('SELECT * FROM sync_queue ORDER BY created_at ASC').all();
+      const operations = [];
+
+      for (const row of rows) {
+        if (shouldDropQueuedSyncOperation(row)) {
+          db.prepare('DELETE FROM sync_queue WHERE id = ?').run(row.id);
+          continue;
+        }
+
+        const prepared = prepareSyncOperationForUpload(row);
+        if (prepared) {
+          operations.push(prepared);
+        }
+      }
+
+      return operations;
     },
 
     getPendingSyncCount() {
@@ -1113,13 +1164,7 @@ function createDatabaseAPI(db, startCode) {
     },
 
     markSyncEntitySynced(entityType, entityId, cloudId = null) {
-      const tableMap = {
-        user_company: 'user_companies',
-        company_document: 'company_documents',
-        worker_document: 'worker_documents',
-      };
-
-      const table = tableMap[entityType];
+      const table = syncEntityTableMap[entityType];
       if (!table || !entityId) return;
 
       if (cloudId) {
