@@ -46,21 +46,17 @@ const peopleSubItems = [
 
 const webAdminSubItems = [
   { title: 'Dispositivos', url: '/admin/devices', icon: Server },
-  { title: 'Conectividade', url: '/admin/connectivity', icon: Wifi },
-  { title: 'Projetos', url: '/admin/projects', icon: FolderKanban },
-  { title: 'Usuários', url: '/admin/users', icon: Shield },
-  { title: 'Configurações', url: '/admin/settings', icon: Cog },
-  { title: 'Auditoria', url: '/admin/audit', icon: Activity },
-];
-
-const desktopAdminSubItems = [
-  { title: 'Dispositivos', url: '/admin/devices', icon: Server },
   { title: 'Agentes', url: '/admin/agents', icon: Bot },
   { title: 'Conectividade', url: '/admin/connectivity', icon: Wifi },
   { title: 'Projetos', url: '/admin/projects', icon: FolderKanban },
-  { title: 'Documentos', url: '/admin/documents', icon: FileWarning },
+  { title: 'Clientes', url: '/admin/clients', icon: Building2 },
+  { title: 'Usuários', url: '/admin/users', icon: Shield },
   { title: 'Configurações', url: '/admin/settings', icon: Cog },
+  { title: 'Auditoria', url: '/admin/audit', icon: Activity },
+  { title: 'Documentos', url: '/admin/documents', icon: FileWarning },
 ];
+
+const desktopAdminSubItems = webAdminSubItems;
 
 export function AppSidebar() {
   const location = useLocation();
@@ -171,7 +167,7 @@ export function AppSidebar() {
                 <SidebarGroupLabel className="cursor-pointer hover:bg-sidebar-accent rounded-md px-2 py-1 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Settings className="h-4 w-4" />
-                    <span>{isLocalRuntime ? 'Operação Local' : 'Administração'}</span>
+                    <span>{isLocalRuntime ? 'Administração Desktop' : 'Administração'}</span>
                   </div>
                   <ChevronDown className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                 </SidebarGroupLabel>

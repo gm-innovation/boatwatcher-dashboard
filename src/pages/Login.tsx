@@ -22,13 +22,13 @@ const Login = () => {
   useEffect(() => {
     const checkInitialState = async () => {
       if (usesLocalAuth()) {
-        navigate("/");
+        setCheckingSetup(false);
         return;
       }
 
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        navigate("/");
+        navigate('/');
         return;
       }
 
@@ -51,7 +51,25 @@ const Login = () => {
     e.preventDefault();
 
     if (usesLocalAuth()) {
-      navigate("/");
+      setLoading(true);
+      try {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+
+        toast({
+          title: 'Conta conectada com sucesso',
+          description: 'Os recursos sincronizados do desktop foram habilitados.',
+        });
+        navigate('/admin');
+      } catch (error: any) {
+        toast({
+          title: 'Erro ao conectar conta',
+          description: error.message === 'Invalid login credentials' ? 'Email ou senha incorretos' : error.message,
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
@@ -226,13 +244,17 @@ const Login = () => {
       <div className="w-full max-w-md space-y-8 px-4">
         <div className="flex flex-col items-center">
           <h1 className="text-3xl font-bold text-foreground mb-2">Dock Check</h1>
-          <p className="text-muted-foreground">
-            {needsSetup ? "Configure o administrador inicial" : "Faça login para continuar"}
+          <p className="text-muted-foreground text-center">
+            {usesLocalAuth()
+              ? 'Conecte uma conta para liberar sincronização e recursos de nuvem no desktop.'
+              : needsSetup
+                ? 'Configure o administrador inicial'
+                : 'Faça login para continuar'}
           </p>
         </div>
         
         <Card className="w-full p-6">
-          {needsSetup ? (
+          {needsSetup && !usesLocalAuth() ? (
             <>
               <div className="flex items-center justify-center gap-2 mb-6">
                 <Shield className="h-6 w-6 text-primary" />
@@ -289,7 +311,14 @@ const Login = () => {
             </>
           ) : (
             <>
-              <h2 className="text-2xl font-semibold text-center mb-6">Login</h2>
+              <h2 className="text-2xl font-semibold text-center mb-2">
+                {usesLocalAuth() ? 'Conectar Conta Cloud' : 'Login'}
+              </h2>
+              {usesLocalAuth() && (
+                <p className="text-sm text-muted-foreground text-center mb-6">
+                  O modo local continua funcionando sem login. Esta conexão é usada apenas para sincronização e abas integradas.
+                </p>
+              )}
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
@@ -315,7 +344,7 @@ const Login = () => {
                 </div>
                 <Button className="w-full" type="submit" disabled={loading}>
                   {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                  Entrar
+                  {usesLocalAuth() ? 'Conectar conta' : 'Entrar'}
                 </Button>
                 <div className="text-center space-y-2">
                   <button
@@ -340,12 +369,14 @@ const Login = () => {
                   >
                     Esqueceu a senha?
                   </button>
-                  <p className="text-sm text-muted-foreground">
-                    É trabalhador?{' '}
-                    <a href="/cadastro" className="text-primary hover:underline">
-                      Fazer cadastro
-                    </a>
-                  </p>
+                  {!usesLocalAuth() && (
+                    <p className="text-sm text-muted-foreground">
+                      É trabalhador?{' '}
+                      <a href="/cadastro" className="text-primary hover:underline">
+                        Fazer cadastro
+                      </a>
+                    </p>
+                  )}
                 </div>
               </form>
             </>

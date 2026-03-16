@@ -7,7 +7,11 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   role: string | null;
+  cloudUser: User | null;
+  cloudSession: Session | null;
+  hasCloudSession: boolean;
   signOut: () => Promise<void>;
+  checkUserRole: (userId: string, options?: { navigateOnFailure?: boolean }) => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);

@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { usesLocalServer } from '@/lib/runtimeProfile';
+import { fetchProjects as fetchProjectsFromProvider } from '@/hooks/useDataProvider';
 
 interface Project {
   id: string;
@@ -57,10 +59,15 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  // Fetch projects when component mounts
   useEffect(() => {
     const fetchProjects = async () => {
       try {
+        if (usesLocalServer()) {
+          const localProjects = await fetchProjectsFromProvider();
+          setProjects(localProjects || []);
+          return;
+        }
+
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.user) {
           setLoading(false);

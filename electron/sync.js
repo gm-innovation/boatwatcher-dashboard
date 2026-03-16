@@ -1,17 +1,38 @@
 const https = require('https');
-const http = require('http');
-
-const CLOUD_URL = process.env.SUPABASE_URL || '';
-const CLOUD_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
-const AGENT_TOKEN = process.env.AGENT_TOKEN || '';
 
 class SyncEngine {
   constructor(db) {
     this.db = db;
     this.interval = null;
-    this.status = { online: false, lastSync: null, pendingCount: 0, syncing: false };
     this.listeners = [];
-    this.syncIntervalMs = 60000; // 1 minute
+    this.syncIntervalMs = 60000;
+    this.status = {
+      online: false,
+      lastSync: null,
+      pendingCount: 0,
+      syncing: false,
+      configured: this.isConfigured(),
+      mode: this.isConfigured() ? 'cloud-sync' : 'local-only',
+      message: this.isConfigured()
+        ? 'Sincronização com a nuvem disponível.'
+        : 'Sincronização não configurada. Operando apenas localmente.',
+    };
+  }
+
+  get cloudUrl() {
+    return process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  }
+
+  get cloudAnonKey() {
+    return process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+  }
+
+  get agentToken() {
+    return process.env.AGENT_TOKEN || '';
+  }
+
+  isConfigured() {
+    return Boolean(this.cloudUrl && this.cloudAnonKey && this.agentToken);
   }
 
   onStatusChange(callback) {
@@ -19,12 +40,11 @@ class SyncEngine {
   }
 
   notifyListeners() {
-    for (const cb of this.listeners) cb({ ...this.status });
+    for (const cb of this.listeners) cb({ ...this.getStatus() });
   }
 
   start() {
     this.interval = setInterval(() => this.checkAndSync(), this.syncIntervalMs);
-    // Initial check
     setTimeout(() => this.checkAndSync(), 5000);
   }
 
@@ -33,15 +53,30 @@ class SyncEngine {
   }
 
   getStatus() {
+    const configured = this.isConfigured();
     this.status.pendingCount =
       (this.db.getUnsyncedWorkers?.()?.length || 0) +
       (this.db.getUnsyncedLogs?.()?.length || 0) +
       (this.db.getPendingSyncCount?.() || 0);
+    this.status.configured = configured;
+    this.status.mode = configured ? 'cloud-sync' : 'local-only';
+    this.status.message = configured
+      ? (this.status.online ? 'Sincronização online.' : 'Sem conexão com a internet.')
+      : 'Sincronização não configurada. Operando apenas localmente.';
     return { ...this.status };
   }
 
   async checkAndSync() {
-    // Check connectivity
+    const configured = this.isConfigured();
+    this.status.configured = configured;
+
+    if (!configured) {
+      this.status.online = false;
+      this.status.syncing = false;
+      this.notifyListeners();
+      return;
+    }
+
     const online = await this.checkConnectivity();
     const wasOffline = !this.status.online;
     this.status.online = online;
@@ -51,7 +86,6 @@ class SyncEngine {
       return;
     }
 
-    // If we just came online or have pending data, sync
     const pendingWorkers = this.db.getUnsyncedWorkers?.() || [];
     const pendingLogs = this.db.getUnsyncedLogs?.() || [];
     const pendingOperations = this.db.getPendingSyncOperations?.() || [];
@@ -64,30 +98,23 @@ class SyncEngine {
   }
 
   async triggerSync() {
-    if (this.status.syncing) return;
+    if (!this.isConfigured() || this.status.syncing) return;
+
     this.status.syncing = true;
     this.notifyListeners();
 
     try {
-      // Upload base entities first
       await this.uploadQueuedOperations(['company']);
-
-      // Upload pending workers after company ids are resolvable in cloud
       await this.uploadWorkers();
-
-      // Upload dependent structured operations
       await this.uploadQueuedOperations(['user_company', 'company_document', 'worker_document']);
-
-      // Upload pending logs
       await this.uploadLogs();
-
-      // Download updates from cloud
       await this.downloadUpdates();
 
       this.status.lastSync = new Date().toISOString();
       this.db.setSyncMeta('last_sync', this.status.lastSync);
     } catch (err) {
       console.error('Sync error:', err.message);
+      this.status.message = `Erro de sincronização: ${err.message}`;
     } finally {
       this.status.syncing = false;
       this.notifyListeners();
@@ -125,7 +152,7 @@ class SyncEngine {
 
     const response = await this.callEdgeFunction('agent-sync/upload-logs', 'POST', { logs });
     if (response.success) {
-      this.db.markLogsSynced(logs.map(l => l.id));
+      this.db.markLogsSynced(logs.map((l) => l.id));
     }
   }
 
@@ -144,7 +171,6 @@ class SyncEngine {
   async downloadUpdates() {
     const lastSync = this.db.getSyncMeta('last_download') || '1970-01-01T00:00:00Z';
 
-    // Download companies
     try {
       const companiesRes = await this.callEdgeFunction(`agent-sync/download-companies?since=${lastSync}`, 'GET');
       if (companiesRes.companies) {
@@ -154,7 +180,6 @@ class SyncEngine {
       }
     } catch (e) { console.error('Download companies error:', e.message); }
 
-    // Download company/user relations
     try {
       const userCompaniesRes = await this.callEdgeFunction(`agent-sync/download-user-companies?since=${lastSync}`, 'GET');
       if (userCompaniesRes.user_companies) {
@@ -164,7 +189,6 @@ class SyncEngine {
       }
     } catch (e) { console.error('Download user_companies error:', e.message); }
 
-    // Download company documents
     try {
       const companyDocumentsRes = await this.callEdgeFunction(`agent-sync/download-company-documents?since=${lastSync}`, 'GET');
       if (companyDocumentsRes.company_documents) {
@@ -174,7 +198,6 @@ class SyncEngine {
       }
     } catch (e) { console.error('Download company_documents error:', e.message); }
 
-    // Download projects
     try {
       const projectsRes = await this.callEdgeFunction(`agent-sync/download-projects?since=${lastSync}`, 'GET');
       if (projectsRes.projects) {
@@ -184,7 +207,6 @@ class SyncEngine {
       }
     } catch (e) { console.error('Download projects error:', e.message); }
 
-    // Download workers
     try {
       const workersRes = await this.callEdgeFunction(`agent-sync/download-workers?since=${lastSync}`, 'GET');
       if (workersRes.workers) {
@@ -194,7 +216,6 @@ class SyncEngine {
       }
     } catch (e) { console.error('Download workers error:', e.message); }
 
-    // Download worker documents
     try {
       const workerDocumentsRes = await this.callEdgeFunction(`agent-sync/download-worker-documents?since=${lastSync}`, 'GET');
       if (workerDocumentsRes.worker_documents) {
@@ -208,16 +229,26 @@ class SyncEngine {
   }
 
   async checkConnectivity() {
+    if (!this.isConfigured()) return false;
+
     return new Promise((resolve) => {
       const req = https.get('https://www.google.com', { timeout: 5000 }, () => resolve(true));
       req.on('error', () => resolve(false));
-      req.on('timeout', () => { req.destroy(); resolve(false); });
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(false);
+      });
     });
   }
 
   callEdgeFunction(path, method = 'GET', body = null) {
     return new Promise((resolve, reject) => {
-      const url = new URL(`${CLOUD_URL}/functions/v1/${path}`);
+      if (!this.isConfigured()) {
+        reject(new Error('Sync not configured'));
+        return;
+      }
+
+      const url = new URL(`${this.cloudUrl}/functions/v1/${path}`);
       const options = {
         hostname: url.hostname,
         port: url.port || 443,
@@ -225,8 +256,8 @@ class SyncEngine {
         method,
         headers: {
           'Content-Type': 'application/json',
-          'x-agent-token': AGENT_TOKEN,
-          'apikey': CLOUD_ANON_KEY,
+          'x-agent-token': this.agentToken,
+          apikey: this.cloudAnonKey,
         },
       };
 
@@ -234,13 +265,24 @@ class SyncEngine {
         let data = '';
         res.on('data', (chunk) => data += chunk);
         res.on('end', () => {
-          try { resolve(JSON.parse(data)); }
-          catch { reject(new Error('Invalid JSON response')); }
+          try {
+            const parsed = data ? JSON.parse(data) : {};
+            if (res.statusCode && res.statusCode >= 400) {
+              reject(new Error(parsed.error || `HTTP ${res.statusCode}`));
+              return;
+            }
+            resolve(parsed);
+          } catch {
+            reject(new Error('Invalid JSON response'));
+          }
         });
       });
 
       req.on('error', reject);
-      req.setTimeout(30000, () => { req.destroy(); reject(new Error('Timeout')); });
+      req.setTimeout(30000, () => {
+        req.destroy();
+        reject(new Error('Timeout'));
+      });
 
       if (body) req.write(JSON.stringify(body));
       req.end();
