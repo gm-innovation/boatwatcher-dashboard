@@ -1094,6 +1094,15 @@ function createDatabaseAPI(db, startCode) {
       return db.prepare('SELECT * FROM access_logs WHERE synced = 0').all();
     },
 
+    getPendingSyncOperations() {
+      return db.prepare('SELECT * FROM sync_queue ORDER BY created_at ASC').all().map(prepareSyncOperationForUpload).filter(Boolean);
+    },
+
+    getPendingSyncCount() {
+      const row = db.prepare('SELECT COUNT(*) as count FROM sync_queue').get();
+      return row?.count || 0;
+    },
+
     markWorkerSynced(id, cloudId) {
       db.prepare('UPDATE workers SET synced = 1, cloud_id = ? WHERE id = ?').run(cloudId, id);
     },
@@ -1103,13 +1112,34 @@ function createDatabaseAPI(db, startCode) {
       db.prepare(`UPDATE access_logs SET synced = 1 WHERE id IN (${placeholders})`).run(...ids);
     },
 
+    markSyncEntitySynced(entityType, entityId, cloudId = null) {
+      const tableMap = {
+        user_company: 'user_companies',
+        company_document: 'company_documents',
+        worker_document: 'worker_documents',
+      };
+
+      const table = tableMap[entityType];
+      if (!table || !entityId) return;
+
+      if (cloudId) {
+        db.prepare(`UPDATE ${table} SET synced = 1, cloud_id = ?, updated_at = datetime('now') WHERE id = ?`).run(cloudId, entityId);
+      } else {
+        db.prepare(`UPDATE ${table} SET synced = 1, updated_at = datetime('now') WHERE id = ?`).run(entityId);
+      }
+    },
+
+    removeSyncQueueEntry(queueId) {
+      db.prepare('DELETE FROM sync_queue WHERE id = ?').run(queueId);
+    },
+
     upsertWorkerFromCloud(data) {
-      const existing = db.prepare('SELECT id FROM workers WHERE cloud_id = ?').get(data.id);
+      const existing = db.prepare('SELECT id FROM workers WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
       if (existing) {
         db.prepare(`
           UPDATE workers SET name = ?, company_id = ?, role = ?, status = ?, document_number = ?, 
-          photo_url = ?, allowed_project_ids = ?, updated_at = datetime('now'), synced = 1
-          WHERE cloud_id = ?
+          photo_url = ?, allowed_project_ids = ?, updated_at = datetime('now'), synced = 1, cloud_id = ?
+          WHERE id = ?
         `).run(
           data.name,
           data.company_id,
@@ -1119,6 +1149,7 @@ function createDatabaseAPI(db, startCode) {
           data.photo_url,
           JSON.stringify(data.allowed_project_ids || []),
           data.id,
+          existing.id,
         );
       } else {
         db.prepare(`
@@ -1158,6 +1189,80 @@ function createDatabaseAPI(db, startCode) {
       } else {
         db.prepare(`INSERT INTO projects (id, name, client_id, status, location, crew_size, synced) VALUES (?, ?, ?, ?, ?, ?, 1)`)
           .run(data.id, data.name, data.client_id, data.status, data.location, data.crew_size);
+      }
+    },
+
+    upsertUserCompanyFromCloud(data) {
+      const existing = db.prepare('SELECT id FROM user_companies WHERE cloud_id = ? OR user_id = ?').get(data.id, data.user_id);
+      const localCompanyId = resolveLocalEntityId('companies', data.company_id) || data.company_id;
+      if (existing) {
+        db.prepare(`
+          UPDATE user_companies
+          SET user_id = ?, company_id = ?, updated_at = datetime('now'), synced = 1, cloud_id = ?
+          WHERE id = ?
+        `).run(data.user_id, localCompanyId, data.id, existing.id);
+      } else {
+        db.prepare(`
+          INSERT INTO user_companies (id, user_id, company_id, created_at, updated_at, synced, cloud_id)
+          VALUES (?, ?, ?, ?, datetime('now'), 1, ?)
+        `).run(uuidv4(), data.user_id, localCompanyId, data.created_at || new Date().toISOString(), data.id);
+      }
+    },
+
+    upsertCompanyDocumentFromCloud(data) {
+      const existing = db.prepare('SELECT id FROM company_documents WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
+      const localCompanyId = resolveLocalEntityId('companies', data.company_id) || data.company_id;
+      if (existing) {
+        db.prepare(`
+          UPDATE company_documents
+          SET company_id = ?, document_type = ?, filename = ?, file_url = ?, updated_at = datetime('now'), synced = 1, cloud_id = ?
+          WHERE id = ?
+        `).run(localCompanyId, data.document_type, data.filename, data.file_url || null, data.id, existing.id);
+      } else {
+        db.prepare(`
+          INSERT INTO company_documents (id, company_id, document_type, filename, file_url, created_at, updated_at, synced, cloud_id)
+          VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 1, ?)
+        `).run(uuidv4(), localCompanyId, data.document_type, data.filename, data.file_url || null, data.created_at || new Date().toISOString(), data.id);
+      }
+    },
+
+    upsertWorkerDocumentFromCloud(data) {
+      const existing = db.prepare('SELECT id FROM worker_documents WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
+      const localWorkerId = resolveLocalEntityId('workers', data.worker_id) || data.worker_id;
+      if (existing) {
+        db.prepare(`
+          UPDATE worker_documents
+          SET worker_id = ?, document_type = ?, document_url = ?, expiry_date = ?, issue_date = ?, filename = ?, extracted_data = ?, status = ?, updated_at = datetime('now'), synced = 1, cloud_id = ?
+          WHERE id = ?
+        `).run(
+          localWorkerId,
+          data.document_type,
+          data.document_url || null,
+          data.expiry_date || null,
+          data.issue_date || null,
+          data.filename || null,
+          data.extracted_data ? JSON.stringify(data.extracted_data) : null,
+          data.status || 'valid',
+          data.id,
+          existing.id,
+        );
+      } else {
+        db.prepare(`
+          INSERT INTO worker_documents (id, worker_id, document_type, document_url, expiry_date, issue_date, filename, extracted_data, status, created_at, updated_at, synced, cloud_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 1, ?)
+        `).run(
+          uuidv4(),
+          localWorkerId,
+          data.document_type,
+          data.document_url || null,
+          data.expiry_date || null,
+          data.issue_date || null,
+          data.filename || null,
+          data.extracted_data ? JSON.stringify(data.extracted_data) : null,
+          data.status || 'valid',
+          data.created_at || new Date().toISOString(),
+          data.id,
+        );
       }
     },
 
