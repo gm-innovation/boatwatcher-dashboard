@@ -7,31 +7,19 @@ import { CompanyReports } from "@/components/company-portal/CompanyReports";
 import { CompanyProfile } from "@/components/company-portal/CompanyProfile";
 import { CompanyRegistrationForm } from "@/components/company-portal/CompanyRegistrationForm";
 import { useAuth } from "@/hooks/useAuth";
+import { useCurrentCompany } from "@/hooks/useCurrentCompany";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { usesLocalServer } from "@/lib/runtimeProfile";
 
 const CompanyPortal = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [showRegistration, setShowRegistration] = useState(false);
-
-  // Check if user has a company associated
-  const { data: userCompany, isLoading: companyLoading } = useQuery({
-    queryKey: ['user-company', user?.id],
-    queryFn: async () => {
-      if (!user) return null;
-      const { data } = await supabase
-        .from('user_companies')
-        .select('company_id, companies(*)')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      return data?.companies || null;
-    },
-    enabled: !!user
-  });
+  const isLocalRuntime = usesLocalServer();
+  const { data: companyAccess, isLoading: companyLoading } = useCurrentCompany(user?.id);
+  const userCompany = companyAccess?.company;
 
   if (loading || companyLoading) {
     return (
@@ -62,7 +50,24 @@ const CompanyPortal = () => {
     );
   }
 
-  // Show registration form if user doesn't have a company
+  if (isLocalRuntime) {
+    return (
+      <div className="max-w-3xl mx-auto mt-10">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center space-y-4">
+              <Building2 className="h-12 w-12 mx-auto text-muted-foreground" />
+              <h1 className="text-2xl font-semibold">Portal da Empresa indisponível no desktop</h1>
+              <p className="text-muted-foreground">
+                Esta área ainda depende do vínculo usuário-empresa no backend web e será conectada ao servidor local na próxima fase.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!userCompany || showRegistration) {
     return <CompanyRegistrationForm onSuccess={() => setShowRegistration(false)} />;
   }

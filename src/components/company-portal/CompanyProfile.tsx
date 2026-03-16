@@ -1,14 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Building2, 
+import {
+  Building2,
   Mail,
-  Phone,
-  MapPin,
   Edit,
   Save,
   X
@@ -16,10 +14,13 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useCurrentCompany } from '@/hooks/useCurrentCompany';
 import { toast } from 'sonner';
 
 export const CompanyProfile = () => {
   const { user } = useAuth();
+  const { data: companyAccess } = useCurrentCompany(user?.id);
+  const companyId = companyAccess?.companyId;
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -28,53 +29,37 @@ export const CompanyProfile = () => {
     contact_email: ''
   });
 
-  // Get company ID for current user
-  const { data: userCompanyData } = useQuery({
-    queryKey: ['user-company-full', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return null;
-      
-      const { data, error } = await supabase
-        .from('user_companies')
-        .select('company_id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (error) throw error;
-      return data?.company_id;
-    },
-    enabled: !!user?.id
-  });
-
-  // Get company details
   const { data: company, isLoading } = useQuery({
-    queryKey: ['company-profile', userCompanyData],
+    queryKey: ['company-profile', companyId],
     queryFn: async () => {
-      if (!userCompanyData) return null;
-      
+      if (!companyId) return null;
+
       const { data, error } = await supabase
         .from('companies')
         .select('*')
-        .eq('id', userCompanyData)
+        .eq('id', companyId)
         .single();
 
       if (error) throw error;
-      
-      setFormData({
-        name: data.name || '',
-        cnpj: data.cnpj || '',
-        contact_email: data.contact_email || ''
-      });
-      
       return data;
     },
-    enabled: !!userCompanyData
+    enabled: !!companyId
   });
+
+  useEffect(() => {
+    if (!company) return;
+
+    setFormData({
+      name: company.name || '',
+      cnpj: company.cnpj || '',
+      contact_email: company.contact_email || ''
+    });
+  }, [company]);
 
   const updateCompany = useMutation({
     mutationFn: async (data: typeof formData) => {
       if (!company?.id) throw new Error('Empresa não encontrada');
-      
+
       const { error } = await supabase
         .from('companies')
         .update(data)
@@ -83,12 +68,12 @@ export const CompanyProfile = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['company-profile'] });
+      queryClient.invalidateQueries({ queryKey: ['company-profile', companyId] });
       toast.success('Dados atualizados com sucesso');
       setIsEditing(false);
     },
     onError: (error: Error) => {
-      toast.error('Erro ao atualizar: ' + error.message);
+      toast.error(`Erro ao atualizar: ${error.message}`);
     }
   });
 
@@ -117,10 +102,10 @@ export const CompanyProfile = () => {
     return (
       <Card>
         <CardContent className="pt-6">
-          <div className="text-center py-12 text-muted-foreground">
-            <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          <div className="py-12 text-center text-muted-foreground">
+            <Building2 className="mx-auto mb-4 h-12 w-12 opacity-50" />
             <p>Empresa não encontrada</p>
-            <p className="text-sm mt-1">Entre em contato com o administrador</p>
+            <p className="mt-1 text-sm">Entre em contato com o administrador</p>
           </div>
         </CardContent>
       </Card>
@@ -142,17 +127,17 @@ export const CompanyProfile = () => {
           </div>
           {!isEditing ? (
             <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-              <Edit className="h-4 w-4 mr-2" />
+              <Edit className="mr-2 h-4 w-4" />
               Editar
             </Button>
           ) : (
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleCancel}>
-                <X className="h-4 w-4 mr-2" />
+                <X className="mr-2 h-4 w-4" />
                 Cancelar
               </Button>
               <Button size="sm" onClick={handleSave} disabled={updateCompany.isPending}>
-                <Save className="h-4 w-4 mr-2" />
+                <Save className="mr-2 h-4 w-4" />
                 Salvar
               </Button>
             </div>
@@ -166,33 +151,33 @@ export const CompanyProfile = () => {
             {isEditing ? (
               <Input
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(event) => setFormData({ ...formData, name: event.target.value })}
               />
             ) : (
               <p className="text-lg font-medium">{company.name}</p>
             )}
           </div>
-          
+
           <div className="space-y-2">
             <Label>CNPJ</Label>
             {isEditing ? (
               <Input
                 value={formData.cnpj}
-                onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })}
+                onChange={(event) => setFormData({ ...formData, cnpj: event.target.value })}
                 placeholder="00.000.000/0000-00"
               />
             ) : (
               <p className="text-muted-foreground">{company.cnpj || 'Não informado'}</p>
             )}
           </div>
-          
+
           <div className="space-y-2">
             <Label>Email de Contato</Label>
             {isEditing ? (
               <Input
                 type="email"
                 value={formData.contact_email}
-                onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
+                onChange={(event) => setFormData({ ...formData, contact_email: event.target.value })}
                 placeholder="contato@empresa.com"
               />
             ) : (
@@ -202,7 +187,7 @@ export const CompanyProfile = () => {
               </div>
             )}
           </div>
-          
+
           <div className="space-y-2">
             <Label>Status</Label>
             <div>

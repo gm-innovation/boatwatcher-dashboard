@@ -14,10 +14,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { 
-  Users, 
-  Search, 
-  FileText,
+import {
+  Users,
+  Search,
   CheckCircle,
   AlertCircle,
   Clock,
@@ -27,40 +26,24 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useCurrentCompany } from '@/hooks/useCurrentCompany';
 import { EmployeeForm } from './EmployeeForm';
 import { WorkerDocumentsDialog } from './WorkerDocumentsDialog';
 import { getValidityStatus } from '@/utils/documentParser';
 
 export const MyWorkers = () => {
   const { user } = useAuth();
+  const { data: companyAccess } = useCurrentCompany(user?.id);
+  const userCompany = companyAccess?.companyId;
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [viewingDocumentsWorker, setViewingDocumentsWorker] = useState<any>(null);
 
-  // Get company ID for current user
-  const { data: userCompany } = useQuery({
-    queryKey: ['user-company', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return null;
-      
-      const { data, error } = await supabase
-        .from('user_companies')
-        .select('company_id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (error) throw error;
-      return data?.company_id;
-    },
-    enabled: !!user?.id
-  });
-
-  // Get workers for company
   const { data: workers = [], isLoading, refetch } = useQuery({
     queryKey: ['company-workers', userCompany],
     queryFn: async () => {
       if (!userCompany) return [];
-      
+
       const { data, error } = await supabase
         .from('workers')
         .select(`
@@ -76,16 +59,15 @@ export const MyWorkers = () => {
     enabled: !!userCompany
   });
 
-  // Get documents for workers
   const { data: documents = [] } = useQuery({
-    queryKey: ['workers-documents', workers.map(w => w.id)],
+    queryKey: ['workers-documents', workers.map((worker) => worker.id)],
     queryFn: async () => {
       if (workers.length === 0) return [];
-      
+
       const { data, error } = await supabase
         .from('worker_documents')
         .select('*')
-        .in('worker_id', workers.map(w => w.id));
+        .in('worker_id', workers.map((worker) => worker.id));
 
       if (error) throw error;
       return data || [];
@@ -94,62 +76,62 @@ export const MyWorkers = () => {
   });
 
   const getDocumentStatus = (workerId: string) => {
-    const workerDocs = documents.filter(d => d.worker_id === workerId);
+    const workerDocs = documents.filter((document) => document.worker_id === workerId);
     if (workerDocs.length === 0) return 'pending';
-    
-    const hasExpired = workerDocs.some(d => {
-      if (!d.expiry_date) return false;
-      return getValidityStatus(d.expiry_date) === 'expired';
+
+    const hasExpired = workerDocs.some((document) => {
+      if (!document.expiry_date) return false;
+      return getValidityStatus(document.expiry_date) === 'expired';
     });
-    
-    const hasExpiringSoon = workerDocs.some(d => {
-      if (!d.expiry_date) return false;
-      return getValidityStatus(d.expiry_date) === 'expiring_soon';
+
+    const hasExpiringSoon = workerDocs.some((document) => {
+      if (!document.expiry_date) return false;
+      return getValidityStatus(document.expiry_date) === 'expiring_soon';
     });
-    
+
     if (hasExpired) return 'expired';
     if (hasExpiringSoon) return 'expiring_soon';
     return 'valid';
   };
 
   const getDocumentCount = (workerId: string) => {
-    return documents.filter(d => d.worker_id === workerId).length;
+    return documents.filter((document) => document.worker_id === workerId).length;
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'valid':
         return (
-          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
-            <CheckCircle className="h-3 w-3 mr-1" />
+          <Badge variant="outline" className="border-primary/20 bg-primary/10 text-primary">
+            <CheckCircle className="mr-1 h-3 w-3" />
             Regular
           </Badge>
         );
       case 'expiring_soon':
         return (
-          <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">
-            <Clock className="h-3 w-3 mr-1" />
+          <Badge variant="outline" className="border-border bg-muted text-foreground">
+            <Clock className="mr-1 h-3 w-3" />
             Vencendo
           </Badge>
         );
       case 'expired':
         return (
-          <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/30">
-            <AlertCircle className="h-3 w-3 mr-1" />
+          <Badge variant="outline" className="border-destructive/30 bg-destructive/10 text-destructive">
+            <AlertCircle className="mr-1 h-3 w-3" />
             Vencido
           </Badge>
         );
       default:
         return (
-          <Badge variant="outline" className="bg-gray-500/10 text-gray-600 border-gray-500/30">
-            <Clock className="h-3 w-3 mr-1" />
+          <Badge variant="outline" className="border-border bg-muted text-muted-foreground">
+            <Clock className="mr-1 h-3 w-3" />
             Pendente
           </Badge>
         );
     }
   };
 
-  const filteredWorkers = workers.filter(worker =>
+  const filteredWorkers = workers.filter((worker) =>
     worker.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     worker.role?.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -164,27 +146,27 @@ export const MyWorkers = () => {
           </CardTitle>
           <div className="flex items-center gap-3">
             <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Buscar trabalhador..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(event) => setSearchTerm(event.target.value)}
                 className="pl-9"
               />
             </div>
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
                 <Button>
-                  <Plus className="h-4 w-4 mr-2" />
+                  <Plus className="mr-2 h-4 w-4" />
                   Novo Funcionário
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Cadastrar Novo Funcionário</DialogTitle>
                 </DialogHeader>
                 {userCompany && (
-                  <EmployeeForm 
+                  <EmployeeForm
                     companyId={userCompany}
                     onSuccess={() => {
                       setIsAddDialogOpen(false);
@@ -204,10 +186,10 @@ export const MyWorkers = () => {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
           </div>
         ) : filteredWorkers.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          <div className="py-12 text-center text-muted-foreground">
+            <Users className="mx-auto mb-4 h-12 w-12 opacity-50" />
             <p>Nenhum trabalhador encontrado</p>
-            <p className="text-sm mt-2">Clique em "Novo Funcionário" para adicionar</p>
+            <p className="mt-2 text-sm">Clique em "Novo Funcionário" para adicionar</p>
           </div>
         ) : (
           <ScrollArea className="h-[500px]">
@@ -252,12 +234,12 @@ export const MyWorkers = () => {
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
-                      <Button 
-                        variant="ghost" 
+                      <Button
+                        variant="ghost"
                         size="sm"
                         onClick={() => setViewingDocumentsWorker(worker)}
                       >
-                        <Eye className="h-4 w-4 mr-1" />
+                        <Eye className="mr-1 h-4 w-4" />
                         Ver Docs
                       </Button>
                     </TableCell>
@@ -269,14 +251,13 @@ export const MyWorkers = () => {
         )}
       </CardContent>
 
-      {/* Worker Documents Dialog */}
       <Dialog open={!!viewingDocumentsWorker} onOpenChange={(open) => !open && setViewingDocumentsWorker(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Documentos de {viewingDocumentsWorker?.name}</DialogTitle>
           </DialogHeader>
           {viewingDocumentsWorker && (
-            <WorkerDocumentsDialog 
+            <WorkerDocumentsDialog
               workerId={viewingDocumentsWorker.id}
               workerName={viewingDocumentsWorker.name}
               onClose={() => setViewingDocumentsWorker(null)}

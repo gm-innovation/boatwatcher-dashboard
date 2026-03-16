@@ -1,8 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  FolderKanban, 
+import {
+  FolderKanban,
   MapPin,
   Calendar,
   Users,
@@ -11,36 +11,20 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useCurrentCompany } from '@/hooks/useCurrentCompany';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export const MyProjects = () => {
   const { user } = useAuth();
+  const { data: companyAccess } = useCurrentCompany(user?.id);
+  const userCompany = companyAccess?.companyId;
 
-  // Get company ID for current user
-  const { data: userCompany } = useQuery({
-    queryKey: ['user-company', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return null;
-      
-      const { data, error } = await supabase
-        .from('user_companies')
-        .select('company_id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (error) throw error;
-      return data?.company_id;
-    },
-    enabled: !!user?.id
-  });
-
-  // Get workers for company to find which projects they're allowed in
   const { data: companyWorkers = [] } = useQuery({
     queryKey: ['company-workers-projects', userCompany],
     queryFn: async () => {
       if (!userCompany) return [];
-      
+
       const { data, error } = await supabase
         .from('workers')
         .select('id, allowed_project_ids')
@@ -52,19 +36,17 @@ export const MyProjects = () => {
     enabled: !!userCompany
   });
 
-  // Get unique project IDs from workers
   const projectIds = [...new Set(
     companyWorkers
-      .flatMap(w => w.allowed_project_ids || [])
+      .flatMap((worker) => worker.allowed_project_ids || [])
       .filter(Boolean)
   )];
 
-  // Get projects
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['company-projects', projectIds],
     queryFn: async () => {
       if (projectIds.length === 0) return [];
-      
+
       const { data, error } = await supabase
         .from('projects')
         .select(`
@@ -80,10 +62,9 @@ export const MyProjects = () => {
     enabled: projectIds.length > 0
   });
 
-  // Count workers per project
   const getWorkersInProject = (projectId: string) => {
-    return companyWorkers.filter(w => 
-      w.allowed_project_ids?.includes(projectId)
+    return companyWorkers.filter((worker) =>
+      worker.allowed_project_ids?.includes(projectId)
     ).length;
   };
 
@@ -121,13 +102,13 @@ export const MyProjects = () => {
                             {project.status === 'active' ? 'Ativo' : project.status}
                           </Badge>
                         </div>
-                        
+
                         {project.client && (
                           <p className="text-sm text-muted-foreground">
                             Cliente: {project.client.name}
                           </p>
                         )}
-                        
+
                         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                           {project.location && (
                             <div className="flex items-center gap-1">
@@ -138,7 +119,7 @@ export const MyProjects = () => {
                           {project.start_date && (
                             <div className="flex items-center gap-1">
                               <Calendar className="h-4 w-4" />
-                              {format(new Date(project.start_date), "dd/MM/yyyy", { locale: ptBR })}
+                              {format(new Date(project.start_date), 'dd/MM/yyyy', { locale: ptBR })}
                             </div>
                           )}
                           <div className="flex items-center gap-1">
