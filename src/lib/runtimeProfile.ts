@@ -20,7 +20,7 @@ export const getRuntimeProfile = (): RuntimeProfile => {
     target: isDesktop ? 'desktop' : 'web',
     isWeb: !isDesktop,
     isDesktop,
-    authMode: isDesktop ? 'local-bypass' : 'cloud',
+    authMode: 'cloud',
     dataMode: isDesktop ? 'local-server' : 'cloud',
     storageMode: isDesktop ? 'local-server' : 'cloud',
   };

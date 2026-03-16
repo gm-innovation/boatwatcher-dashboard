@@ -50,7 +50,7 @@ const App = () => {
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/" element={<ProtectedPage><Index /></ProtectedPage>} />
                 <Route path="/reports" element={<ProtectedPage><Reports /></ProtectedPage>} />
-                <Route path="/people/*" element={<ProtectedPage requiredRole="admin"><PeopleManagement /></ProtectedPage>} />
+                <Route path="/people/*" element={<ProtectedPage><PeopleManagement /></ProtectedPage>} />
                 <Route path="/admin/*" element={<ProtectedPage requiredRole="admin"><Admin /></ProtectedPage>} />
                 <Route path="/company-portal/*" element={<ProtectedPage><CompanyPortal /></ProtectedPage>} />
                 <Route path="/settings" element={<ProtectedPage requiredRole="admin"><ProjectSettings /></ProtectedPage>} />

@@ -1,7 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { LOCAL_DESKTOP_SESSION, LOCAL_DESKTOP_USER } from '@/lib/authRuntime';
-import { usesLocalAuth } from '@/lib/runtimeProfile';
 
 export interface ValidSession {
   accessToken: string;
@@ -11,14 +9,6 @@ export interface ValidSession {
 
 export const ensureValidSession = async (): Promise<ValidSession | null> => {
   try {
-    if (usesLocalAuth()) {
-      return {
-        accessToken: LOCAL_DESKTOP_SESSION.access_token,
-        userId: LOCAL_DESKTOP_USER.id,
-        expiresAt: 0,
-      };
-    }
-
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
     if (sessionError || !session) {
@@ -46,11 +36,6 @@ export const ensureValidSession = async (): Promise<ValidSession | null> => {
 };
 
 export const forceLogout = async (message?: string): Promise<void> => {
-  if (usesLocalAuth()) {
-    window.location.href = '/';
-    return;
-  }
-
   try {
     await supabase.auth.signOut();
   } catch (e) {
@@ -64,7 +49,7 @@ export const forceLogout = async (message?: string): Promise<void> => {
       keysToRemove.push(key);
     }
   }
-  keysToRemove.forEach(key => localStorage.removeItem(key));
+  keysToRemove.forEach((key) => localStorage.removeItem(key));
 
   if (message) {
     toast({
@@ -85,16 +70,6 @@ export const getSessionDiagnostics = async (): Promise<{
   errorMessage: string | null;
 }> => {
   try {
-    if (usesLocalAuth()) {
-      return {
-        hasLocalSession: true,
-        serverValidation: 'ok',
-        userEmail: LOCAL_DESKTOP_USER.email || null,
-        expiresAt: null,
-        errorMessage: null,
-      };
-    }
-
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
