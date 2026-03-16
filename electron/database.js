@@ -81,6 +81,9 @@ function initDatabase(userDataPath) {
       user_id TEXT NOT NULL UNIQUE,
       company_id TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      synced INTEGER DEFAULT 0,
+      cloud_id TEXT,
       FOREIGN KEY (company_id) REFERENCES companies(id)
     );
 
@@ -91,6 +94,7 @@ function initDatabase(userDataPath) {
       filename TEXT NOT NULL,
       file_url TEXT,
       created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
       synced INTEGER DEFAULT 0,
       cloud_id TEXT,
       FOREIGN KEY (company_id) REFERENCES companies(id)
@@ -205,6 +209,15 @@ function initDatabase(userDataPath) {
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS sync_queue (
+      id TEXT PRIMARY KEY DEFAULT ${SQLITE_UUID_EXPR},
+      entity_type TEXT NOT NULL,
+      entity_id TEXT,
+      operation TEXT NOT NULL,
+      payload TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_access_logs_timestamp ON access_logs(timestamp);
     CREATE INDEX IF NOT EXISTS idx_access_logs_worker ON access_logs(worker_id);
     CREATE INDEX IF NOT EXISTS idx_access_logs_synced ON access_logs(synced);
@@ -212,8 +225,12 @@ function initDatabase(userDataPath) {
     CREATE INDEX IF NOT EXISTS idx_workers_company ON workers(company_id);
     CREATE INDEX IF NOT EXISTS idx_user_companies_user ON user_companies(user_id);
     CREATE INDEX IF NOT EXISTS idx_user_companies_company ON user_companies(company_id);
+    CREATE INDEX IF NOT EXISTS idx_user_companies_synced ON user_companies(synced);
     CREATE INDEX IF NOT EXISTS idx_company_documents_company ON company_documents(company_id);
+    CREATE INDEX IF NOT EXISTS idx_company_documents_synced ON company_documents(synced);
     CREATE INDEX IF NOT EXISTS idx_worker_documents_worker ON worker_documents(worker_id);
+    CREATE INDEX IF NOT EXISTS idx_worker_documents_synced ON worker_documents(synced);
+    CREATE INDEX IF NOT EXISTS idx_sync_queue_created_at ON sync_queue(created_at);
   `);
 
   const deviceColumns = db.prepare("PRAGMA table_info(devices)").all();
@@ -227,6 +244,25 @@ function initDatabase(userDataPath) {
     db.exec("ALTER TABLE devices ADD COLUMN api_credentials TEXT DEFAULT '{}'");
   }
 
+  const userCompanyColumns = new Set(db.prepare("PRAGMA table_info(user_companies)").all().map((column) => column.name));
+  if (!userCompanyColumns.has('updated_at')) db.exec("ALTER TABLE user_companies ADD COLUMN updated_at TEXT");
+  if (!userCompanyColumns.has('synced')) db.exec("ALTER TABLE user_companies ADD COLUMN synced INTEGER DEFAULT 0");
+  if (!userCompanyColumns.has('cloud_id')) db.exec("ALTER TABLE user_companies ADD COLUMN cloud_id TEXT");
+
+  const companyDocumentColumns = new Set(db.prepare("PRAGMA table_info(company_documents)").all().map((column) => column.name));
+  if (!companyDocumentColumns.has('updated_at')) db.exec("ALTER TABLE company_documents ADD COLUMN updated_at TEXT");
+  if (!companyDocumentColumns.has('synced')) db.exec("ALTER TABLE company_documents ADD COLUMN synced INTEGER DEFAULT 0");
+  if (!companyDocumentColumns.has('cloud_id')) db.exec("ALTER TABLE company_documents ADD COLUMN cloud_id TEXT");
+
+  const workerDocumentColumns = new Set(db.prepare("PRAGMA table_info(worker_documents)").all().map((column) => column.name));
+  if (!workerDocumentColumns.has('updated_at')) db.exec("ALTER TABLE worker_documents ADD COLUMN updated_at TEXT");
+  if (!workerDocumentColumns.has('synced')) db.exec("ALTER TABLE worker_documents ADD COLUMN synced INTEGER DEFAULT 0");
+  if (!workerDocumentColumns.has('cloud_id')) db.exec("ALTER TABLE worker_documents ADD COLUMN cloud_id TEXT");
+
+  db.exec("UPDATE user_companies SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
+  db.exec("UPDATE company_documents SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
+  db.exec("UPDATE worker_documents SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
+
   const maxCode = db.prepare('SELECT MAX(code) as max_code FROM workers').get();
   const nextCode = (maxCode?.max_code || 0) + 1;
 
@@ -235,6 +271,122 @@ function initDatabase(userDataPath) {
 
 function createDatabaseAPI(db, startCode) {
   let nextWorkerCode = startCode;
+
+  const insertSyncQueue = db.prepare(`
+    INSERT INTO sync_queue (id, entity_type, entity_id, operation, payload, created_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+  `);
+  const deleteSyncQueueByEntity = db.prepare('DELETE FROM sync_queue WHERE entity_type = ? AND entity_id = ?');
+
+  function parseQueueRow(row) {
+    if (!row) return null;
+    return {
+      ...row,
+      payload: safeParseJson(row.payload, null),
+    };
+  }
+
+  function queueSyncOperation(entityType, operation, entityId, payload) {
+    deleteSyncQueueByEntity.run(entityType, entityId);
+    insertSyncQueue.run(
+      uuidv4(),
+      entityType,
+      entityId,
+      operation,
+      payload ? JSON.stringify(payload) : null,
+    );
+  }
+
+  function clearQueuedSyncOperation(entityType, entityId) {
+    deleteSyncQueueByEntity.run(entityType, entityId);
+  }
+
+  function resolveCloudEntityId(table, localId) {
+    if (!localId) return null;
+    const row = db.prepare(`SELECT id, cloud_id, synced FROM ${table} WHERE id = ? LIMIT 1`).get(localId);
+    if (!row) return null;
+    if (row.cloud_id) return row.cloud_id;
+    return row.synced ? row.id : null;
+  }
+
+  function resolveLocalEntityId(table, cloudId) {
+    if (!cloudId) return null;
+    const row = db.prepare(`SELECT id FROM ${table} WHERE cloud_id = ? OR id = ? LIMIT 1`).get(cloudId, cloudId);
+    return row?.id || null;
+  }
+
+  function prepareSyncOperationForUpload(row) {
+    const queueRow = parseQueueRow(row);
+    if (!queueRow) return null;
+    const payload = queueRow.payload || {};
+
+    if (queueRow.entity_type === 'user_company') {
+      if (queueRow.operation === 'delete') {
+        const cloudId = payload.cloud_id || resolveCloudEntityId('user_companies', queueRow.entity_id);
+        if (!cloudId) return null;
+        return { ...queueRow, payload: { cloud_id: cloudId, user_id: payload.user_id || null } };
+      }
+
+      const cloudCompanyId = resolveCloudEntityId('companies', payload.company_id);
+      if (!cloudCompanyId || !payload.user_id) return null;
+      return {
+        ...queueRow,
+        payload: {
+          user_id: payload.user_id,
+          company_id: cloudCompanyId,
+          cloud_id: payload.cloud_id || resolveCloudEntityId('user_companies', queueRow.entity_id),
+        },
+      };
+    }
+
+    if (queueRow.entity_type === 'company_document') {
+      if (queueRow.operation === 'delete') {
+        const cloudId = payload.cloud_id || resolveCloudEntityId('company_documents', queueRow.entity_id);
+        if (!cloudId) return null;
+        return { ...queueRow, payload: { cloud_id: cloudId } };
+      }
+
+      const cloudCompanyId = resolveCloudEntityId('companies', payload.company_id);
+      if (!cloudCompanyId) return null;
+      return {
+        ...queueRow,
+        payload: {
+          cloud_id: payload.cloud_id || resolveCloudEntityId('company_documents', queueRow.entity_id),
+          company_id: cloudCompanyId,
+          document_type: payload.document_type,
+          filename: payload.filename,
+          file_url: payload.file_url || null,
+        },
+      };
+    }
+
+    if (queueRow.entity_type === 'worker_document') {
+      if (queueRow.operation === 'delete') {
+        const cloudId = payload.cloud_id || resolveCloudEntityId('worker_documents', queueRow.entity_id);
+        if (!cloudId) return null;
+        return { ...queueRow, payload: { cloud_id: cloudId } };
+      }
+
+      const cloudWorkerId = resolveCloudEntityId('workers', payload.worker_id);
+      if (!cloudWorkerId) return null;
+      return {
+        ...queueRow,
+        payload: {
+          cloud_id: payload.cloud_id || resolveCloudEntityId('worker_documents', queueRow.entity_id),
+          worker_id: cloudWorkerId,
+          document_type: payload.document_type,
+          document_url: payload.document_url || null,
+          expiry_date: payload.expiry_date || null,
+          issue_date: payload.issue_date || null,
+          filename: payload.filename || null,
+          extracted_data: payload.extracted_data || null,
+          status: payload.status || 'valid',
+        },
+      };
+    }
+
+    return queueRow;
+  }
 
   return {
     // === Workers ===
@@ -374,27 +526,43 @@ function createDatabaseAPI(db, startCode) {
       );
 
       if (data.user_id) {
+        const associationId = uuidv4();
         db.prepare(`
-          INSERT INTO user_companies (id, user_id, company_id)
-          VALUES (?, ?, ?)
-          ON CONFLICT(user_id) DO UPDATE SET company_id = excluded.company_id
-        `).run(uuidv4(), data.user_id, id);
+          INSERT INTO user_companies (id, user_id, company_id, created_at, updated_at, synced)
+          VALUES (?, ?, ?, datetime('now'), datetime('now'), 0)
+          ON CONFLICT(user_id) DO UPDATE SET company_id = excluded.company_id, updated_at = datetime('now'), synced = 0
+        `).run(associationId, data.user_id, id);
+
+        const association = db.prepare('SELECT * FROM user_companies WHERE user_id = ?').get(data.user_id);
+        queueSyncOperation('user_company', 'upsert', association.id, {
+          user_id: association.user_id,
+          company_id: association.company_id,
+          cloud_id: association.cloud_id || null,
+        });
       }
 
       if (Array.isArray(data.documents) && data.documents.length > 0) {
         const insertDoc = db.prepare(`
-          INSERT INTO company_documents (id, company_id, document_type, filename, file_url, synced)
-          VALUES (?, ?, ?, ?, ?, 0)
+          INSERT INTO company_documents (id, company_id, document_type, filename, file_url, created_at, updated_at, synced)
+          VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
         `);
 
         for (const doc of data.documents) {
+          const documentId = uuidv4();
           insertDoc.run(
-            uuidv4(),
+            documentId,
             id,
             doc.document_type || 'Institucional',
             doc.filename,
             doc.file_url || null,
           );
+          queueSyncOperation('company_document', 'upsert', documentId, {
+            company_id: id,
+            document_type: doc.document_type || 'Institucional',
+            filename: doc.filename,
+            file_url: doc.file_url || null,
+            cloud_id: null,
+          });
         }
       }
 
@@ -422,6 +590,22 @@ function createDatabaseAPI(db, startCode) {
     },
 
     deleteCompany(id) {
+      const documents = db.prepare('SELECT * FROM company_documents WHERE company_id = ?').all(id);
+      const associations = db.prepare('SELECT * FROM user_companies WHERE company_id = ?').all(id);
+
+      for (const doc of documents) {
+        queueSyncOperation('company_document', 'delete', doc.id, {
+          cloud_id: doc.cloud_id || null,
+        });
+      }
+
+      for (const association of associations) {
+        queueSyncOperation('user_company', 'delete', association.id, {
+          cloud_id: association.cloud_id || null,
+          user_id: association.user_id,
+        });
+      }
+
       db.prepare('DELETE FROM company_documents WHERE company_id = ?').run(id);
       db.prepare('DELETE FROM user_companies WHERE company_id = ?').run(id);
       db.prepare('DELETE FROM companies WHERE id = ?').run(id);
@@ -434,9 +618,18 @@ function createDatabaseAPI(db, startCode) {
     createCompanyDocument(data) {
       const id = uuidv4();
       db.prepare(`
-        INSERT INTO company_documents (id, company_id, document_type, filename, file_url, synced)
-        VALUES (?, ?, ?, ?, ?, 0)
+        INSERT INTO company_documents (id, company_id, document_type, filename, file_url, created_at, updated_at, synced)
+        VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
       `).run(id, data.company_id, data.document_type, data.filename, data.file_url || null);
+
+      queueSyncOperation('company_document', 'upsert', id, {
+        company_id: data.company_id,
+        document_type: data.document_type,
+        filename: data.filename,
+        file_url: data.file_url || null,
+        cloud_id: null,
+      });
+
       return db.prepare('SELECT * FROM company_documents WHERE id = ?').get(id);
     },
 
@@ -453,13 +646,30 @@ function createDatabaseAPI(db, startCode) {
       }
       if (!sets.length) return existing;
 
+      sets.push("updated_at = datetime('now')");
       sets.push('synced = 0');
       params.push(id);
       db.prepare(`UPDATE company_documents SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-      return db.prepare('SELECT * FROM company_documents WHERE id = ?').get(id);
+
+      const updated = db.prepare('SELECT * FROM company_documents WHERE id = ?').get(id);
+      queueSyncOperation('company_document', 'upsert', id, {
+        company_id: updated.company_id,
+        document_type: updated.document_type,
+        filename: updated.filename,
+        file_url: updated.file_url || null,
+        cloud_id: updated.cloud_id || null,
+      });
+
+      return updated;
     },
 
     deleteCompanyDocument(id) {
+      const existing = db.prepare('SELECT * FROM company_documents WHERE id = ?').get(id);
+      if (!existing) return;
+
+      queueSyncOperation('company_document', 'delete', id, {
+        cloud_id: existing.cloud_id || null,
+      });
       db.prepare('DELETE FROM company_documents WHERE id = ?').run(id);
     },
 
@@ -619,8 +829,8 @@ function createDatabaseAPI(db, startCode) {
     createWorkerDocument(data) {
       const id = uuidv4();
       db.prepare(`
-        INSERT INTO worker_documents (id, worker_id, document_type, document_url, expiry_date, issue_date, filename, extracted_data, status, synced)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        INSERT INTO worker_documents (id, worker_id, document_type, document_url, expiry_date, issue_date, filename, extracted_data, status, created_at, updated_at, synced)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
       `).run(
         id,
         data.worker_id,
@@ -632,6 +842,19 @@ function createDatabaseAPI(db, startCode) {
         data.extracted_data ? JSON.stringify(data.extracted_data) : null,
         data.status || 'valid',
       );
+
+      queueSyncOperation('worker_document', 'upsert', id, {
+        worker_id: data.worker_id,
+        document_type: data.document_type,
+        document_url: data.document_url || null,
+        expiry_date: data.expiry_date || null,
+        issue_date: data.issue_date || null,
+        filename: data.filename || null,
+        extracted_data: data.extracted_data || null,
+        status: data.status || 'valid',
+        cloud_id: null,
+      });
+
       return normalizeWorkerDocumentRow(db.prepare('SELECT * FROM worker_documents WHERE id = ?').get(id));
     },
 
@@ -657,10 +880,30 @@ function createDatabaseAPI(db, startCode) {
       sets.push('synced = 0');
       params.push(id);
       db.prepare(`UPDATE worker_documents SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-      return normalizeWorkerDocumentRow(db.prepare('SELECT * FROM worker_documents WHERE id = ?').get(id));
+
+      const updated = normalizeWorkerDocumentRow(db.prepare('SELECT * FROM worker_documents WHERE id = ?').get(id));
+      queueSyncOperation('worker_document', 'upsert', id, {
+        worker_id: updated.worker_id,
+        document_type: updated.document_type,
+        document_url: updated.document_url || null,
+        expiry_date: updated.expiry_date || null,
+        issue_date: updated.issue_date || null,
+        filename: updated.filename || null,
+        extracted_data: updated.extracted_data || null,
+        status: updated.status || 'valid',
+        cloud_id: updated.cloud_id || null,
+      });
+
+      return updated;
     },
 
     deleteWorkerDocument(id) {
+      const existing = db.prepare('SELECT * FROM worker_documents WHERE id = ?').get(id);
+      if (!existing) return;
+
+      queueSyncOperation('worker_document', 'delete', id, {
+        cloud_id: existing.cloud_id || null,
+      });
       db.prepare('DELETE FROM worker_documents WHERE id = ?').run(id);
     },
 
@@ -851,6 +1094,15 @@ function createDatabaseAPI(db, startCode) {
       return db.prepare('SELECT * FROM access_logs WHERE synced = 0').all();
     },
 
+    getPendingSyncOperations() {
+      return db.prepare('SELECT * FROM sync_queue ORDER BY created_at ASC').all().map(prepareSyncOperationForUpload).filter(Boolean);
+    },
+
+    getPendingSyncCount() {
+      const row = db.prepare('SELECT COUNT(*) as count FROM sync_queue').get();
+      return row?.count || 0;
+    },
+
     markWorkerSynced(id, cloudId) {
       db.prepare('UPDATE workers SET synced = 1, cloud_id = ? WHERE id = ?').run(cloudId, id);
     },
@@ -860,13 +1112,34 @@ function createDatabaseAPI(db, startCode) {
       db.prepare(`UPDATE access_logs SET synced = 1 WHERE id IN (${placeholders})`).run(...ids);
     },
 
+    markSyncEntitySynced(entityType, entityId, cloudId = null) {
+      const tableMap = {
+        user_company: 'user_companies',
+        company_document: 'company_documents',
+        worker_document: 'worker_documents',
+      };
+
+      const table = tableMap[entityType];
+      if (!table || !entityId) return;
+
+      if (cloudId) {
+        db.prepare(`UPDATE ${table} SET synced = 1, cloud_id = ?, updated_at = datetime('now') WHERE id = ?`).run(cloudId, entityId);
+      } else {
+        db.prepare(`UPDATE ${table} SET synced = 1, updated_at = datetime('now') WHERE id = ?`).run(entityId);
+      }
+    },
+
+    removeSyncQueueEntry(queueId) {
+      db.prepare('DELETE FROM sync_queue WHERE id = ?').run(queueId);
+    },
+
     upsertWorkerFromCloud(data) {
-      const existing = db.prepare('SELECT id FROM workers WHERE cloud_id = ?').get(data.id);
+      const existing = db.prepare('SELECT id FROM workers WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
       if (existing) {
         db.prepare(`
           UPDATE workers SET name = ?, company_id = ?, role = ?, status = ?, document_number = ?, 
-          photo_url = ?, allowed_project_ids = ?, updated_at = datetime('now'), synced = 1
-          WHERE cloud_id = ?
+          photo_url = ?, allowed_project_ids = ?, updated_at = datetime('now'), synced = 1, cloud_id = ?
+          WHERE id = ?
         `).run(
           data.name,
           data.company_id,
@@ -876,6 +1149,7 @@ function createDatabaseAPI(db, startCode) {
           data.photo_url,
           JSON.stringify(data.allowed_project_ids || []),
           data.id,
+          existing.id,
         );
       } else {
         db.prepare(`
@@ -915,6 +1189,80 @@ function createDatabaseAPI(db, startCode) {
       } else {
         db.prepare(`INSERT INTO projects (id, name, client_id, status, location, crew_size, synced) VALUES (?, ?, ?, ?, ?, ?, 1)`)
           .run(data.id, data.name, data.client_id, data.status, data.location, data.crew_size);
+      }
+    },
+
+    upsertUserCompanyFromCloud(data) {
+      const existing = db.prepare('SELECT id FROM user_companies WHERE cloud_id = ? OR user_id = ?').get(data.id, data.user_id);
+      const localCompanyId = resolveLocalEntityId('companies', data.company_id) || data.company_id;
+      if (existing) {
+        db.prepare(`
+          UPDATE user_companies
+          SET user_id = ?, company_id = ?, updated_at = datetime('now'), synced = 1, cloud_id = ?
+          WHERE id = ?
+        `).run(data.user_id, localCompanyId, data.id, existing.id);
+      } else {
+        db.prepare(`
+          INSERT INTO user_companies (id, user_id, company_id, created_at, updated_at, synced, cloud_id)
+          VALUES (?, ?, ?, ?, datetime('now'), 1, ?)
+        `).run(uuidv4(), data.user_id, localCompanyId, data.created_at || new Date().toISOString(), data.id);
+      }
+    },
+
+    upsertCompanyDocumentFromCloud(data) {
+      const existing = db.prepare('SELECT id FROM company_documents WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
+      const localCompanyId = resolveLocalEntityId('companies', data.company_id) || data.company_id;
+      if (existing) {
+        db.prepare(`
+          UPDATE company_documents
+          SET company_id = ?, document_type = ?, filename = ?, file_url = ?, updated_at = datetime('now'), synced = 1, cloud_id = ?
+          WHERE id = ?
+        `).run(localCompanyId, data.document_type, data.filename, data.file_url || null, data.id, existing.id);
+      } else {
+        db.prepare(`
+          INSERT INTO company_documents (id, company_id, document_type, filename, file_url, created_at, updated_at, synced, cloud_id)
+          VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 1, ?)
+        `).run(uuidv4(), localCompanyId, data.document_type, data.filename, data.file_url || null, data.created_at || new Date().toISOString(), data.id);
+      }
+    },
+
+    upsertWorkerDocumentFromCloud(data) {
+      const existing = db.prepare('SELECT id FROM worker_documents WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
+      const localWorkerId = resolveLocalEntityId('workers', data.worker_id) || data.worker_id;
+      if (existing) {
+        db.prepare(`
+          UPDATE worker_documents
+          SET worker_id = ?, document_type = ?, document_url = ?, expiry_date = ?, issue_date = ?, filename = ?, extracted_data = ?, status = ?, updated_at = datetime('now'), synced = 1, cloud_id = ?
+          WHERE id = ?
+        `).run(
+          localWorkerId,
+          data.document_type,
+          data.document_url || null,
+          data.expiry_date || null,
+          data.issue_date || null,
+          data.filename || null,
+          data.extracted_data ? JSON.stringify(data.extracted_data) : null,
+          data.status || 'valid',
+          data.id,
+          existing.id,
+        );
+      } else {
+        db.prepare(`
+          INSERT INTO worker_documents (id, worker_id, document_type, document_url, expiry_date, issue_date, filename, extracted_data, status, created_at, updated_at, synced, cloud_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 1, ?)
+        `).run(
+          uuidv4(),
+          localWorkerId,
+          data.document_type,
+          data.document_url || null,
+          data.expiry_date || null,
+          data.issue_date || null,
+          data.filename || null,
+          data.extracted_data ? JSON.stringify(data.extracted_data) : null,
+          data.status || 'valid',
+          data.created_at || new Date().toISOString(),
+          data.id,
+        );
       }
     },
 
