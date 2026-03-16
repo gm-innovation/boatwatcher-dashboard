@@ -1,14 +1,14 @@
 /**
  * Storage Provider Abstraction
- * 
- * - Web: uses Supabase Storage (cloud buckets)
- * - Electron: uses Local Server REST API for file storage
+ *
+ * - Web: cloud storage
+ * - Desktop: Local Server REST API
  */
 
-import { isElectron } from '@/lib/dataProvider';
 import { supabase } from '@/integrations/supabase/client';
 import { getStorageUrl, getUploadedFileReference, resolveFileUrl } from '@/utils/storageUtils';
 import { localStorage as localStorageProvider } from '@/lib/localServerProvider';
+import { usesLocalServer } from '@/lib/runtimeProfile';
 
 export async function uploadFile(
   bucket: string,
@@ -16,7 +16,7 @@ export async function uploadFile(
   file: File,
   options?: { upsert?: boolean }
 ): Promise<string | null> {
-  if (isElectron()) {
+  if (usesLocalServer()) {
     return localStorageProvider.upload(bucket, path, file);
   }
 
@@ -33,7 +33,7 @@ export async function uploadFile(
 }
 
 export async function getFileUrl(bucket: string, path: string): Promise<string | null> {
-  if (isElectron()) {
+  if (usesLocalServer()) {
     return localStorageProvider.getUrl(bucket, path);
   }
 
@@ -43,12 +43,11 @@ export async function getFileUrl(bucket: string, path: string): Promise<string |
 export async function resolveUrl(storedUrl: string | null): Promise<string | null> {
   if (!storedUrl) return null;
 
-  if (isElectron()) {
-    // URLs from local server are already absolute
+  if (usesLocalServer()) {
     if (storedUrl.startsWith('http') || storedUrl.startsWith('data:')) {
       return storedUrl;
     }
-    // Relative path from local server
+
     const api = (window as any).electronAPI;
     const base = api?.getServerUrl?.() || 'http://localhost:3001';
     return `${base}${storedUrl}`;
@@ -58,9 +57,10 @@ export async function resolveUrl(storedUrl: string | null): Promise<string | nul
 }
 
 export function getPublicUrl(bucket: string, path: string): string | null {
-  if (isElectron()) {
+  if (usesLocalServer()) {
     return localStorageProvider.getUrl(bucket, path);
   }
+
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }

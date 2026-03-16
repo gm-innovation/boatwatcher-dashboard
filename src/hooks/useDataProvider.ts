@@ -1,47 +1,47 @@
 /**
  * Universal Data Provider Hook
- * 
- * Detects environment and routes data operations:
- * - Web: uses Supabase client directly
- * - Electron: uses Local Server REST API (via localServerProvider)
+ *
+ * Rotas de dados por runtime:
+ * - Web: backend cloud
+ * - Desktop: Local Server REST API
  */
 
-import { isElectron } from '@/lib/dataProvider';
 import { supabase } from '@/integrations/supabase/client';
 import { localWorkers, localCompanies, localProjects, localAccessLogs, localDevices, localJobFunctions } from '@/lib/localServerProvider';
+import { usesLocalServer } from '@/lib/runtimeProfile';
 
 // --- Companies ---
 
 export async function fetchCompanies() {
-  if (isElectron()) return localCompanies.list();
+  if (usesLocalServer()) return localCompanies.list();
   const { data, error } = await supabase.from('companies').select('*').order('name');
   if (error) throw error;
   return data;
 }
 
 export async function fetchCompanyById(id: string) {
-  if (isElectron()) return localCompanies.getById(id);
+  if (usesLocalServer()) return localCompanies.getById(id);
   const { data, error } = await supabase.from('companies').select('*').eq('id', id).single();
   if (error) throw error;
   return data;
 }
 
 export async function createCompany(companyData: Record<string, any>) {
-  if (isElectron()) return localCompanies.create(companyData);
+  if (usesLocalServer()) return localCompanies.create(companyData);
   const { data, error } = await supabase.from('companies').insert(companyData as any).select().single();
   if (error) throw error;
   return data;
 }
 
 export async function updateCompany(id: string, companyData: Record<string, any>) {
-  if (isElectron()) return localCompanies.update(id, companyData);
+  if (usesLocalServer()) return localCompanies.update(id, companyData);
   const { data, error } = await supabase.from('companies').update(companyData).eq('id', id).select().single();
   if (error) throw error;
   return data;
 }
 
 export async function deleteCompany(id: string) {
-  if (isElectron()) return localCompanies.delete(id);
+  if (usesLocalServer()) return localCompanies.delete(id);
   const { error } = await supabase.from('companies').delete().eq('id', id);
   if (error) throw error;
 }
@@ -49,7 +49,7 @@ export async function deleteCompany(id: string) {
 // --- Workers ---
 
 export async function fetchWorkers() {
-  if (isElectron()) return localWorkers.list();
+  if (usesLocalServer()) return localWorkers.list();
   const { data, error } = await supabase
     .from('workers')
     .select('*, companies(name)')
@@ -59,28 +59,28 @@ export async function fetchWorkers() {
 }
 
 export async function fetchWorkerById(id: string) {
-  if (isElectron()) return localWorkers.getById(id);
+  if (usesLocalServer()) return localWorkers.getById(id);
   const { data, error } = await supabase.from('workers').select('*').eq('id', id).single();
   if (error) throw error;
   return data;
 }
 
 export async function createWorker(workerData: Record<string, any>) {
-  if (isElectron()) return localWorkers.create(workerData);
+  if (usesLocalServer()) return localWorkers.create(workerData);
   const { data, error } = await supabase.from('workers').insert(workerData as any).select().single();
   if (error) throw error;
   return data;
 }
 
 export async function updateWorker(id: string, workerData: Record<string, any>) {
-  if (isElectron()) return localWorkers.update(id, workerData);
+  if (usesLocalServer()) return localWorkers.update(id, workerData);
   const { data, error } = await supabase.from('workers').update(workerData).eq('id', id).select().single();
   if (error) throw error;
   return data;
 }
 
 export async function deleteWorker(id: string) {
-  if (isElectron()) return localWorkers.delete(id);
+  if (usesLocalServer()) return localWorkers.delete(id);
   const { error } = await supabase.from('workers').delete().eq('id', id);
   if (error) throw error;
 }
@@ -88,7 +88,7 @@ export async function deleteWorker(id: string) {
 // --- Projects ---
 
 export async function fetchProjects() {
-  if (isElectron()) return localProjects.list();
+  if (usesLocalServer()) return localProjects.list();
   const { data, error } = await supabase
     .from('projects')
     .select('*, client:companies(name, vessels, project_managers, logo_url_light, logo_url_dark)')
@@ -98,7 +98,7 @@ export async function fetchProjects() {
 }
 
 export async function fetchProjectById(id: string) {
-  if (isElectron()) return localProjects.getById(id);
+  if (usesLocalServer()) return localProjects.getById(id);
   const { data, error } = await supabase
     .from('projects')
     .select('*, client:companies(name, vessels, project_managers, logo_url_light, logo_url_dark)')
@@ -109,14 +109,14 @@ export async function fetchProjectById(id: string) {
 }
 
 export async function createProject(projectData: Record<string, any>) {
-  if (isElectron()) return localProjects.create(projectData);
+  if (usesLocalServer()) return localProjects.create(projectData);
   const { data, error } = await supabase.from('projects').insert(projectData as any).select().single();
   if (error) throw error;
   return data;
 }
 
 export async function updateProject(id: string, projectData: Record<string, any>) {
-  if (isElectron()) return localProjects.update(id, projectData);
+  if (usesLocalServer()) return localProjects.update(id, projectData);
   const { data, error } = await supabase.from('projects').update(projectData).eq('id', id).select().single();
   if (error) throw error;
   return data;
@@ -125,7 +125,7 @@ export async function updateProject(id: string, projectData: Record<string, any>
 // --- Access Logs ---
 
 export async function fetchAccessLogs(filters?: { projectId?: string; startDate?: string; endDate?: string; limit?: number }) {
-  if (isElectron()) return localAccessLogs.list(filters as any);
+  if (usesLocalServer()) return localAccessLogs.list(filters as any);
   let query = supabase
     .from('access_logs')
     .select('*, worker:workers(id, name, document_number, company_id), device:devices(id, name, project_id)')
@@ -141,7 +141,7 @@ export async function fetchAccessLogs(filters?: { projectId?: string; startDate?
 }
 
 export async function insertAccessLog(logData: Record<string, any>) {
-  if (isElectron()) return localAccessLogs.insert(logData);
+  if (usesLocalServer()) return localAccessLogs.insert(logData);
   const { data, error } = await supabase.from('access_logs').insert(logData as any).select().single();
   if (error) throw error;
   return data;
@@ -150,7 +150,7 @@ export async function insertAccessLog(logData: Record<string, any>) {
 // --- Devices ---
 
 export async function fetchDevices(projectId?: string) {
-  if (isElectron()) return localDevices.list(projectId);
+  if (usesLocalServer()) return localDevices.list(projectId);
   let query = supabase.from('devices').select('*, project:projects(id, name)').order('name');
   if (projectId) query = query.eq('project_id', projectId);
   const { data, error } = await query;
@@ -161,14 +161,14 @@ export async function fetchDevices(projectId?: string) {
 // --- Workers on Board ---
 
 export async function fetchWorkersOnBoard(projectId: string) {
-  if (isElectron()) return localProjects.getWorkersOnBoard(projectId);
-  return null; // useWorkersOnBoard hook handles this for web
+  if (usesLocalServer()) return localProjects.getWorkersOnBoard(projectId);
+  return null;
 }
 
 // --- Job Functions ---
 
 export async function fetchJobFunctions() {
-  if (isElectron()) return localJobFunctions.list();
+  if (usesLocalServer()) return localJobFunctions.list();
   const { data, error } = await supabase.from('job_functions').select('*').order('name');
   if (error) throw error;
   return data;
