@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { isElectron } from '@/lib/dataProvider';
 import { fetchCompanies, fetchWorkers, fetchProjects, fetchProjectById } from '@/hooks/useDataProvider';
 import { supabase } from '@/integrations/supabase/client';
 import type { Company, Worker, Project } from '@/types/supabase';
 import { format, startOfDay } from 'date-fns';
+import { usesLocalServer } from '@/lib/runtimeProfile';
 
 export const useCompanies = () => {
   return useQuery({
@@ -48,8 +48,8 @@ export const useCompanyLogo = (companyId: string | null) => {
     queryKey: ['company-logo', companyId],
     queryFn: async () => {
       if (!companyId) return null;
-      
-      if (isElectron()) {
+
+      if (usesLocalServer()) {
         const companies = await fetchCompanies();
         const company = companies?.find((c: any) => c.id === companyId);
         return company ? { logo_url_light: company.logo_url_light, logo_url_dark: company.logo_url_dark } : null;
@@ -60,7 +60,7 @@ export const useCompanyLogo = (companyId: string | null) => {
         .select('logo_url_light, logo_url_dark')
         .eq('id', companyId)
         .single();
-      
+
       if (error) throw error;
       return data;
     },
@@ -68,16 +68,15 @@ export const useCompanyLogo = (companyId: string | null) => {
   });
 };
 
-// Hook para buscar trabalhadores "a bordo"
 export const useWorkersOnBoard = (projectId: string | null) => {
   const today = format(startOfDay(new Date()), 'yyyy-MM-dd');
-  
+
   return useQuery({
     queryKey: ['workers-on-board', projectId, today],
     queryFn: async () => {
       if (!projectId) return [];
 
-      if (isElectron()) {
+      if (usesLocalServer()) {
         const api = (window as any).electronAPI;
         if (api?.db?.getWorkersOnBoard) {
           return api.db.getWorkersOnBoard(projectId);
@@ -85,7 +84,6 @@ export const useWorkersOnBoard = (projectId: string | null) => {
         return [];
       }
 
-      // Buscar logs de entrada de hoje
       const { data: entryLogs, error: entryError } = await supabase
         .from('access_logs')
         .select('worker_id, worker_name, device_name, timestamp')
@@ -96,7 +94,6 @@ export const useWorkersOnBoard = (projectId: string | null) => {
 
       if (entryError) throw entryError;
 
-      // Buscar logs de saída de hoje
       const { data: exitLogs, error: exitError } = await supabase
         .from('access_logs')
         .select('worker_id, timestamp')
@@ -105,14 +102,13 @@ export const useWorkersOnBoard = (projectId: string | null) => {
 
       if (exitError) throw exitError;
 
-      // Filtrar trabalhadores que entraram e não saíram
       const workersOnBoard = new Map<string, any>();
-      
+
       for (const entry of entryLogs || []) {
         if (!entry.worker_id) continue;
-        
-        const hasExit = exitLogs?.some(exit => 
-          exit.worker_id === entry.worker_id && 
+
+        const hasExit = exitLogs?.some(exit =>
+          exit.worker_id === entry.worker_id &&
           new Date(exit.timestamp) > new Date(entry.timestamp)
         );
 
@@ -151,13 +147,12 @@ export const useWorkersOnBoard = (projectId: string | null) => {
   });
 };
 
-// Hook para agrupar empresas com trabalhadores a bordo
 export const useCompaniesOnBoard = (workersOnBoard: any[]) => {
   const companiesMap = new Map<string, { id: string; name: string; count: number }>();
 
   for (const worker of workersOnBoard) {
     if (!worker.company_id) continue;
-    
+
     if (companiesMap.has(worker.company_id)) {
       companiesMap.get(worker.company_id)!.count++;
     } else {
