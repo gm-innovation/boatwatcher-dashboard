@@ -1,5 +1,4 @@
 import { useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
 import { useDocumentExtraction } from '@/hooks/useDocumentExtraction';
@@ -21,6 +20,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { getValidityStatus, getDaysUntilExpiry } from '@/utils/documentParser';
+import { fetchWorkerDocuments, createWorkerDocument } from '@/hooks/useDataProvider';
 
 interface WorkerDocumentsDialogProps {
   workerId: string;
@@ -37,16 +37,7 @@ export const WorkerDocumentsDialog = ({ workerId, workerName, onClose }: WorkerD
   const { data: documents = [], isLoading, refetch } = useQuery({
     queryKey: ['worker-documents', workerId, isLocalRuntime],
     queryFn: async () => {
-      if (isLocalRuntime) return [];
-
-      const { data, error } = await supabase
-        .from('worker_documents')
-        .select('*')
-        .eq('worker_id', workerId)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data || [];
+      return await fetchWorkerDocuments(workerId);
     }
   });
 
@@ -56,8 +47,8 @@ export const WorkerDocumentsDialog = ({ workerId, workerName, onClose }: WorkerD
 
     if (isLocalRuntime) {
       toast({
-        title: 'Documentos indisponíveis no desktop',
-        description: 'O gerenciamento de documentos do portal ainda será conectado ao servidor local.',
+        title: 'Extração com IA indisponível no desktop',
+        description: 'Você pode adicionar documentos manualmente.',
         variant: 'destructive'
       });
       event.target.value = '';
@@ -77,27 +68,31 @@ export const WorkerDocumentsDialog = ({ workerId, workerName, onClose }: WorkerD
     const processedDocs = await extractMultipleDocuments(fileArray, workerId);
 
     if (processedDocs.length > 0) {
-      const docsToInsert = processedDocs.map((doc) => ({
-        worker_id: workerId,
-        document_type: doc.document_type,
-        document_url: doc.file_url,
-        filename: doc.filename,
-        issue_date: doc.completion_date || null,
-        expiry_date: doc.expiry_date || null,
-        extracted_data: doc.extracted_data as any,
-        status: getValidityStatus(doc.expiry_date),
-      }));
+      let successCount = 0;
+      for (const doc of processedDocs) {
+        try {
+          await createWorkerDocument({
+            worker_id: workerId,
+            document_type: doc.document_type,
+            document_url: doc.file_url,
+            filename: doc.filename,
+            issue_date: doc.completion_date || null,
+            expiry_date: doc.expiry_date || null,
+            extracted_data: doc.extracted_data,
+            status: getValidityStatus(doc.expiry_date),
+          });
+          successCount++;
+        } catch (err) {
+          console.error('Erro ao salvar documento:', err);
+        }
+      }
 
-      const { error } = await supabase
-        .from('worker_documents')
-        .insert(docsToInsert);
-
-      if (error) {
-        toast({ title: 'Erro ao salvar documentos', variant: 'destructive' });
-      } else {
-        toast({ title: `${processedDocs.length} documento(s) adicionado(s)` });
+      if (successCount > 0) {
+        toast({ title: `${successCount} documento(s) adicionado(s)` });
         refetch();
         queryClient.invalidateQueries({ queryKey: ['workers-documents'] });
+      } else {
+        toast({ title: 'Erro ao salvar documentos', variant: 'destructive' });
       }
     }
 
@@ -139,14 +134,6 @@ export const WorkerDocumentsDialog = ({ workerId, workerName, onClose }: WorkerD
 
   return (
     <div className="space-y-4">
-      {isLocalRuntime && (
-        <Alert>
-          <AlertDescription>
-            O gerenciamento de documentos de {workerName} ainda não está disponível no desktop local.
-          </AlertDescription>
-        </Alert>
-      )}
-
       <div className="space-y-2">
         <input
           ref={docsInputRef}
@@ -171,10 +158,12 @@ export const WorkerDocumentsDialog = ({ workerId, workerName, onClose }: WorkerD
             <div className="flex items-center justify-center gap-2 text-muted-foreground">
               <Plus className="h-5 w-5" />
               <span className="text-sm">Adicionar Documentos</span>
-              <Badge variant="outline" className="gap-1">
-                <Sparkles className="h-3 w-3" />
-                IA
-              </Badge>
+              {!isLocalRuntime && (
+                <Badge variant="outline" className="gap-1">
+                  <Sparkles className="h-3 w-3" />
+                  IA
+                </Badge>
+              )}
             </div>
           )}
         </div>
@@ -187,7 +176,7 @@ export const WorkerDocumentsDialog = ({ workerId, workerName, onClose }: WorkerD
       ) : documents.length === 0 ? (
         <div className="py-8 text-center text-muted-foreground">
           <FileText className="mx-auto mb-2 h-10 w-10 opacity-50" />
-          <p>{isLocalRuntime ? 'Disponível em breve no desktop' : 'Nenhum documento cadastrado'}</p>
+          <p>Nenhum documento cadastrado</p>
         </div>
       ) : (
         <ScrollArea className="h-[400px]">

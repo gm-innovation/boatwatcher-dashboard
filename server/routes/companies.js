@@ -1,6 +1,18 @@
 const express = require('express');
 const router = express.Router();
 
+router.get('/current', (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+    const companyAccess = req.db.getCompanyByUserId(userId);
+    res.json(companyAccess);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/', (req, res) => {
   try {
     const companies = req.db.getCompanies();

@@ -11,23 +11,32 @@ import {
   FileDown
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useCurrentCompany } from '@/hooks/useCurrentCompany';
+import { fetchWorkerDocumentsByWorkerIds } from '@/hooks/useDataProvider';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { usesLocalServer } from '@/lib/runtimeProfile';
+import { localWorkers } from '@/lib/localServerProvider';
+import { supabase } from '@/integrations/supabase/client';
 
 export const CompanyReports = () => {
   const { user } = useAuth();
   const { data: companyAccess } = useCurrentCompany(user?.id);
   const companyId = companyAccess?.companyId;
+  const isLocalRuntime = usesLocalServer();
   const [generatingReport, setGeneratingReport] = useState<string | null>(null);
 
   const { data: workerCount = 0 } = useQuery({
-    queryKey: ['company-worker-count', companyId],
+    queryKey: ['company-worker-count', companyId, isLocalRuntime],
     queryFn: async () => {
       if (!companyId) return 0;
+
+      if (isLocalRuntime) {
+        const workers = await localWorkers.list({ company_id: companyId });
+        return workers.length;
+      }
 
       const { count, error } = await supabase
         .from('workers')
@@ -41,25 +50,28 @@ export const CompanyReports = () => {
   });
 
   const { data: documentsSummary } = useQuery({
-    queryKey: ['company-documents-summary', companyId],
+    queryKey: ['company-documents-summary', companyId, isLocalRuntime],
     queryFn: async () => {
       if (!companyId) return { total: 0, valid: 0, expired: 0, expiring: 0 };
 
-      const { data: workers } = await supabase
-        .from('workers')
-        .select('id')
-        .eq('company_id', companyId);
+      let workerIds: string[];
+      if (isLocalRuntime) {
+        const workers = await localWorkers.list({ company_id: companyId });
+        workerIds = workers.map((w: any) => w.id);
+      } else {
+        const { data: workers } = await supabase
+          .from('workers')
+          .select('id')
+          .eq('company_id', companyId);
+        if (!workers || workers.length === 0) return { total: 0, valid: 0, expired: 0, expiring: 0 };
+        workerIds = workers.map((worker: any) => worker.id);
+      }
 
-      if (!workers || workers.length === 0) return { total: 0, valid: 0, expired: 0, expiring: 0 };
+      if (workerIds.length === 0) return { total: 0, valid: 0, expired: 0, expiring: 0 };
 
-      const workerIds = workers.map((worker) => worker.id);
+      const documents = await fetchWorkerDocumentsByWorkerIds(workerIds);
 
-      const { data: documents } = await supabase
-        .from('worker_documents')
-        .select('*')
-        .in('worker_id', workerIds);
-
-      if (!documents) return { total: 0, valid: 0, expired: 0, expiring: 0 };
+      if (!documents || documents.length === 0) return { total: 0, valid: 0, expired: 0, expiring: 0 };
 
       const now = new Date();
       const thirtyDaysFromNow = new Date();
@@ -69,7 +81,7 @@ export const CompanyReports = () => {
       let expired = 0;
       let expiring = 0;
 
-      documents.forEach((doc) => {
+      documents.forEach((doc: any) => {
         if (!doc.expiry_date) {
           valid += 1;
           return;

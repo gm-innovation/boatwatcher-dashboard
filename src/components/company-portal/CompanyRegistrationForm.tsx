@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Building2, Upload, X, FileText, Loader2, Image as ImageIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { createCompany } from '@/hooks/useDataProvider';
 
 const registrationSchema = z.object({
   name: z.string().min(1, 'Nome da empresa é obrigatório'),
@@ -88,17 +89,17 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
       const filePath = `logos/${fileName}`;
 
       if (isLocalRuntime) {
-        return await uploadFile('company-documents', filePath, logoFile, { upsert: true });
+        return await uploadFile('company-logos', filePath, logoFile, { upsert: true });
       }
 
       const { error: uploadError } = await supabase.storage
-        .from('company-documents')
+        .from('company-logos')
         .upload(filePath, logoFile);
 
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage
-        .from('company-documents')
+        .from('company-logos')
         .getPublicUrl(filePath);
 
       return data.publicUrl;
@@ -115,16 +116,6 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    if (isLocalRuntime) {
-      toast({
-        title: 'Documentos institucionais indisponíveis no desktop',
-        description: 'O cadastro de documentos institucionais do portal ainda será conectado ao servidor local.',
-        variant: 'destructive'
-      });
-      event.target.value = '';
-      return;
-    }
-
     setUploadingDocs(true);
 
     try {
@@ -140,22 +131,30 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
         const fileName = `doc-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
         const filePath = `documents/${fileName}`;
 
-        const { error: uploadError } = await supabase.storage
-          .from('company-documents')
-          .upload(filePath, file);
+        const fileUrl = isLocalRuntime
+          ? await uploadFile('company-documents', filePath, file, { upsert: true })
+          : await (async () => {
+              const { error: uploadError } = await supabase.storage
+                .from('company-documents')
+                .upload(filePath, file);
 
-        if (uploadError) {
-          console.error('Erro ao fazer upload:', uploadError);
-          continue;
-        }
+              if (uploadError) {
+                console.error('Erro ao fazer upload:', uploadError);
+                return null;
+              }
 
-        const { data } = supabase.storage
-          .from('company-documents')
-          .getPublicUrl(filePath);
+              const { data } = supabase.storage
+                .from('company-documents')
+                .getPublicUrl(filePath);
+
+              return data.publicUrl;
+            })();
+
+        if (!fileUrl) continue;
 
         newDocs.push({
           filename: file.name,
-          file_url: data.publicUrl,
+          file_url: fileUrl,
           document_type: 'Institucional'
         });
       }
@@ -191,61 +190,23 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
   const onSubmit = async (data: RegistrationFormData) => {
     if (!user) return;
 
-    if (isLocalRuntime) {
-      toast({
-        title: 'Cadastro de empresa indisponível no desktop',
-        description: 'O vínculo usuário-empresa ainda depende do backend web e será conectado ao servidor local na próxima fase.',
-        variant: 'destructive'
-      });
-      return;
-    }
-
     setIsLoading(true);
     try {
       const logoUrl = await uploadLogo();
 
-      const { data: newCompany, error: companyError } = await supabase
-        .from('companies')
-        .insert({
-          name: data.name,
-          cnpj: data.cnpj,
-          contact_email: data.email,
-          project_managers: [data.responsibleName],
-          logo_url_light: logoUrl,
-        })
-        .select()
-        .single();
+      await createCompany({
+        name: data.name,
+        cnpj: data.cnpj,
+        contact_email: data.email,
+        project_managers: [data.responsibleName],
+        logo_url_light: logoUrl,
+        user_id: user.id,
+        documents,
+      });
 
-      if (companyError) throw companyError;
-
-      const { error: userCompanyError } = await supabase
-        .from('user_companies')
-        .insert({
-          user_id: user.id,
-          company_id: newCompany.id,
-        });
-
-      if (userCompanyError) throw userCompanyError;
-
-      if (documents.length > 0) {
-        const docsToInsert = documents.map((doc) => ({
-          company_id: newCompany.id,
-          document_type: doc.document_type,
-          filename: doc.filename,
-          file_url: doc.file_url,
-        }));
-
-        const { error: docsError } = await supabase
-          .from('company_documents')
-          .insert(docsToInsert);
-
-        if (docsError) {
-          console.error('Erro ao salvar documentos:', docsError);
-        }
-      }
-
-      toast({ title: 'Perfil da empresa criado com sucesso!' });
+      toast({ title: isLocalRuntime ? 'Perfil da empresa criado no desktop com sucesso!' : 'Perfil da empresa criado com sucesso!' });
       queryClient.invalidateQueries({ queryKey: ['user-company'] });
+      queryClient.invalidateQueries({ queryKey: ['current-company-access'] });
       onSuccess();
     } catch (error: any) {
       toast({
@@ -275,7 +236,7 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
             {isLocalRuntime && (
               <Alert>
                 <AlertDescription>
-                  No desktop local, o cadastro inicial da empresa ainda não está disponível porque o vínculo usuário-empresa será conectado ao servidor local na próxima fase.
+                  No desktop local, o cadastro inicial da empresa agora usa o servidor local dedicado.
                 </AlertDescription>
               </Alert>
             )}
@@ -434,7 +395,7 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
               )}
             </div>
 
-            <Button type="submit" className="w-full" size="lg" disabled={isLoading || uploadingDocs || uploadingLogo || isLocalRuntime}>
+            <Button type="submit" className="w-full" size="lg" disabled={isLoading || uploadingDocs || uploadingLogo}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

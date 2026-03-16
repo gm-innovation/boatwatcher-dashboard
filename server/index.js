@@ -9,6 +9,8 @@ const { BackupManager } = require('./backup');
 // Routes
 const workersRoutes = require('./routes/workers');
 const companiesRoutes = require('./routes/companies');
+const companyDocumentsRoutes = require('./routes/company-documents');
+const workerDocumentsRoutes = require('./routes/worker-documents');
 const projectsRoutes = require('./routes/projects');
 const accessLogsRoutes = require('./routes/access-logs');
 const devicesRoutes = require('./routes/devices');
@@ -61,6 +63,8 @@ app.get('/api/health', (req, res) => {
 // Routes
 app.use('/api/workers', workersRoutes);
 app.use('/api/companies', companiesRoutes);
+app.use('/api/company-documents', companyDocumentsRoutes);
+app.use('/api/worker-documents', workerDocumentsRoutes);
 app.use('/api/projects', projectsRoutes);
 app.use('/api/access-logs', accessLogsRoutes);
 app.use('/api/devices', devicesRoutes);
