@@ -69,6 +69,9 @@ class SyncEngine {
     this.notifyListeners();
 
     try {
+      // Upload structured pending operations first so dependent entities exist in cloud
+      await this.uploadQueuedOperations();
+
       // Upload pending logs
       await this.uploadLogs();
 
