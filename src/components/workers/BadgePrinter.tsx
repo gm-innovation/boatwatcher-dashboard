@@ -16,6 +16,8 @@ interface BadgePrinterProps {
 }
 
 export function BadgePrinter({ worker, companyName, jobFunctionName }: BadgePrinterProps) {
+  const resolvedPhotoUrl = useResolvedUrl(worker.photo_url);
+
   const handlePrint = async () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [86, 54] });
 
