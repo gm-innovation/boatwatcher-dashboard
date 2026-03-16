@@ -134,6 +134,7 @@ export const useWorkerEnrollment = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["workers"] });
+      queryClient.invalidateQueries({ queryKey: ["devices"] });
       toast({
         title: "Operação concluída",
         description: data.message,
