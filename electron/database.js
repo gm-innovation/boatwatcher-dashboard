@@ -526,27 +526,43 @@ function createDatabaseAPI(db, startCode) {
       );
 
       if (data.user_id) {
+        const associationId = uuidv4();
         db.prepare(`
-          INSERT INTO user_companies (id, user_id, company_id)
-          VALUES (?, ?, ?)
-          ON CONFLICT(user_id) DO UPDATE SET company_id = excluded.company_id
-        `).run(uuidv4(), data.user_id, id);
+          INSERT INTO user_companies (id, user_id, company_id, created_at, updated_at, synced)
+          VALUES (?, ?, ?, datetime('now'), datetime('now'), 0)
+          ON CONFLICT(user_id) DO UPDATE SET company_id = excluded.company_id, updated_at = datetime('now'), synced = 0
+        `).run(associationId, data.user_id, id);
+
+        const association = db.prepare('SELECT * FROM user_companies WHERE user_id = ?').get(data.user_id);
+        queueSyncOperation('user_company', 'upsert', association.id, {
+          user_id: association.user_id,
+          company_id: association.company_id,
+          cloud_id: association.cloud_id || null,
+        });
       }
 
       if (Array.isArray(data.documents) && data.documents.length > 0) {
         const insertDoc = db.prepare(`
-          INSERT INTO company_documents (id, company_id, document_type, filename, file_url, synced)
-          VALUES (?, ?, ?, ?, ?, 0)
+          INSERT INTO company_documents (id, company_id, document_type, filename, file_url, created_at, updated_at, synced)
+          VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
         `);
 
         for (const doc of data.documents) {
+          const documentId = uuidv4();
           insertDoc.run(
-            uuidv4(),
+            documentId,
             id,
             doc.document_type || 'Institucional',
             doc.filename,
             doc.file_url || null,
           );
+          queueSyncOperation('company_document', 'upsert', documentId, {
+            company_id: id,
+            document_type: doc.document_type || 'Institucional',
+            filename: doc.filename,
+            file_url: doc.file_url || null,
+            cloud_id: null,
+          });
         }
       }
 
@@ -574,6 +590,22 @@ function createDatabaseAPI(db, startCode) {
     },
 
     deleteCompany(id) {
+      const documents = db.prepare('SELECT * FROM company_documents WHERE company_id = ?').all(id);
+      const associations = db.prepare('SELECT * FROM user_companies WHERE company_id = ?').all(id);
+
+      for (const doc of documents) {
+        queueSyncOperation('company_document', 'delete', doc.id, {
+          cloud_id: doc.cloud_id || null,
+        });
+      }
+
+      for (const association of associations) {
+        queueSyncOperation('user_company', 'delete', association.id, {
+          cloud_id: association.cloud_id || null,
+          user_id: association.user_id,
+        });
+      }
+
       db.prepare('DELETE FROM company_documents WHERE company_id = ?').run(id);
       db.prepare('DELETE FROM user_companies WHERE company_id = ?').run(id);
       db.prepare('DELETE FROM companies WHERE id = ?').run(id);
@@ -586,9 +618,18 @@ function createDatabaseAPI(db, startCode) {
     createCompanyDocument(data) {
       const id = uuidv4();
       db.prepare(`
-        INSERT INTO company_documents (id, company_id, document_type, filename, file_url, synced)
-        VALUES (?, ?, ?, ?, ?, 0)
+        INSERT INTO company_documents (id, company_id, document_type, filename, file_url, created_at, updated_at, synced)
+        VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
       `).run(id, data.company_id, data.document_type, data.filename, data.file_url || null);
+
+      queueSyncOperation('company_document', 'upsert', id, {
+        company_id: data.company_id,
+        document_type: data.document_type,
+        filename: data.filename,
+        file_url: data.file_url || null,
+        cloud_id: null,
+      });
+
       return db.prepare('SELECT * FROM company_documents WHERE id = ?').get(id);
     },
 
@@ -605,13 +646,30 @@ function createDatabaseAPI(db, startCode) {
       }
       if (!sets.length) return existing;
 
+      sets.push("updated_at = datetime('now')");
       sets.push('synced = 0');
       params.push(id);
       db.prepare(`UPDATE company_documents SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-      return db.prepare('SELECT * FROM company_documents WHERE id = ?').get(id);
+
+      const updated = db.prepare('SELECT * FROM company_documents WHERE id = ?').get(id);
+      queueSyncOperation('company_document', 'upsert', id, {
+        company_id: updated.company_id,
+        document_type: updated.document_type,
+        filename: updated.filename,
+        file_url: updated.file_url || null,
+        cloud_id: updated.cloud_id || null,
+      });
+
+      return updated;
     },
 
     deleteCompanyDocument(id) {
+      const existing = db.prepare('SELECT * FROM company_documents WHERE id = ?').get(id);
+      if (!existing) return;
+
+      queueSyncOperation('company_document', 'delete', id, {
+        cloud_id: existing.cloud_id || null,
+      });
       db.prepare('DELETE FROM company_documents WHERE id = ?').run(id);
     },
 
