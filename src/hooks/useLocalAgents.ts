@@ -55,20 +55,21 @@ export function useLocalAgents(projectId?: string | null) {
           localSync.getStatus(),
         ]);
 
+        const now = new Date().toISOString();
         const pseudoAgent: LocalAgent = {
           id: 'local-runtime-agent',
           name: 'Agente local do servidor',
           token: '',
           project_id: projectId || null,
           status: agentStatus?.running ? 'online' : 'offline',
-          last_seen_at: null,
-          ip_address: null,
+          last_seen_at: agentStatus?.running ? now : syncStatus?.lastSync ?? null,
+          ip_address: 'Servidor local',
           version: null,
           configuration: {
             devicesCount: agentStatus?.devicesCount ?? 0,
           },
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          created_at: now,
+          updated_at: now,
           last_sync_at: syncStatus?.lastSync ?? null,
           pending_sync_count: syncStatus?.pendingCount ?? 0,
           sync_status: syncStatus?.online ? 'online' : 'offline',

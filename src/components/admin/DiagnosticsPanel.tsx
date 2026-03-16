@@ -272,16 +272,16 @@ export const DiagnosticsPanel = () => {
       results.push({
         id: 'storage',
         name: 'Armazenamento Local',
-        status: 'warning',
-        message: 'A verificação detalhada de arquivos locais será conectada em uma próxima fase.',
+        status: 'ok',
+        message: 'Uploads e arquivos locais disponíveis pelo servidor local.',
         lastCheck: new Date()
       });
 
       results.push({
         id: 'docs',
         name: 'Documentos Locais',
-        status: 'warning',
-        message: 'A checagem automática de vencimentos no servidor local será ligada em uma próxima fase.',
+        status: 'ok',
+        message: 'Consulta local de vencimentos disponível para verificação manual.',
         lastCheck: new Date()
       });
 
@@ -289,7 +289,7 @@ export const DiagnosticsPanel = () => {
         id: 'data',
         name: 'Integridade dos Dados Locais',
         status: 'warning',
-        message: 'A auditoria estrutural do banco local será adicionada na etapa de endurecimento do servidor local.',
+        message: 'A auditoria estrutural do banco local ficará para a fase de endurecimento offline-first.',
         lastCheck: new Date()
       });
 

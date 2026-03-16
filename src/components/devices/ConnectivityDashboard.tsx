@@ -23,14 +23,17 @@ export function ConnectivityDashboard() {
   const { data: devices = [] } = useDevices(selectedProjectId);
   const { agents } = useLocalAgents(selectedProjectId);
 
+  const isAgentOnline = (agent: { status: string; last_seen_at: string | null }) => {
+    if (agent.status !== 'online') return false;
+    if (!agent.last_seen_at) return true;
+    return new Date(agent.last_seen_at).getTime() > Date.now() - 60000;
+  };
+
   const stats = useMemo(() => {
     const onlineDevices = devices.filter(d => d.status === 'online');
     const offlineDevices = devices.filter(d => d.status !== 'online');
-    const onlineAgents = agents.filter(a => {
-      const isRecent = a.last_seen_at && new Date(a.last_seen_at) > new Date(Date.now() - 60000);
-      return a.status === 'online' && isRecent;
-    });
-    
+    const onlineAgents = agents.filter(isAgentOnline);
+
     const devicesWithAgent = devices.filter(d => d.agent_id);
     const devicesWithoutAgent = devices.filter(d => !d.agent_id);
 
@@ -42,9 +45,9 @@ export function ConnectivityDashboard() {
       onlineAgents: onlineAgents.length,
       devicesWithAgent: devicesWithAgent.length,
       devicesWithoutAgent: devicesWithoutAgent.length,
-      healthPercentage: devices.length > 0 
-        ? Math.round((onlineDevices.length / devices.length) * 100) 
-        : 0
+      healthPercentage: devices.length > 0
+        ? Math.round((onlineDevices.length / devices.length) * 100)
+        : 0,
     };
   }, [devices, agents]);
 
@@ -64,7 +67,6 @@ export function ConnectivityDashboard() {
         </p>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
@@ -136,7 +138,6 @@ export function ConnectivityDashboard() {
         </Card>
       </div>
 
-      {/* Device Status Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
@@ -187,13 +188,12 @@ export function ConnectivityDashboard() {
             ) : (
               <div className="space-y-3">
                 {agents.map((agent) => {
-                  const isOnline = agent.status === 'online' && agent.last_seen_at && 
-                    new Date(agent.last_seen_at) > new Date(Date.now() - 60000);
-                  
+                  const online = isAgentOnline(agent);
+
                   return (
                     <div key={agent.id} className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <div className={`w-2 h-2 rounded-full ${online ? 'bg-green-500' : 'bg-red-500'}`} />
                         <div>
                           <p className="text-sm font-medium">{agent.name}</p>
                           {agent.ip_address && (
@@ -201,8 +201,8 @@ export function ConnectivityDashboard() {
                           )}
                         </div>
                       </div>
-                      <Badge variant="outline" className={isOnline ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'}>
-                        {isOnline ? 'Online' : 'Offline'}
+                      <Badge variant="outline" className={online ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'}>
+                        {online ? 'Online' : 'Offline'}
                       </Badge>
                     </div>
                   );
@@ -213,7 +213,6 @@ export function ConnectivityDashboard() {
         </Card>
       </div>
 
-      {/* Alerts */}
       {stats.offlineDevices > 0 && (
         <Card className="border-orange-500/20 bg-orange-500/5">
           <CardHeader className="pb-2">
@@ -228,7 +227,7 @@ export function ConnectivityDashboard() {
                 <div key={device.id} className="flex items-center justify-between text-sm">
                   <span>{device.name} está offline</span>
                   <span className="text-muted-foreground">
-                    {device.last_event_timestamp 
+                    {device.last_event_timestamp
                       ? `Último evento: ${formatDistanceToNow(new Date(device.last_event_timestamp), { addSuffix: true, locale: ptBR })}`
                       : 'Nunca conectado'
                     }

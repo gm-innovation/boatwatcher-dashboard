@@ -15,9 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { DeviceSetupInstructions } from './DeviceSetupInstructions';
 import {
-  Plus, Wifi, WifiOff, Trash2, RefreshCw, DoorOpen, Camera, Server, Link, Loader2, CheckCircle2, XCircle, Clock
+  Plus, Wifi, WifiOff, Trash2, RefreshCw, DoorOpen, Camera, Server, Link, Loader2, CheckCircle2, XCircle, Clock, Users
 } from 'lucide-react';
 import type { Device, DeviceType } from '@/types/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -40,11 +41,11 @@ const deviceSchema = z.object({
 
 type DeviceFormData = z.infer<typeof deviceSchema>;
 
-const LOCAL_DELETE_MESSAGE = 'A remoção será conectada ao servidor local em uma próxima fase.';
-
 const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => void }) => {
   const [showSetup, setShowSetup] = useState(false);
   const [sendingCommand, setSendingCommand] = useState<string | null>(null);
+  const [listedUsers, setListedUsers] = useState<any[]>([]);
+  const [isUsersDialogOpen, setIsUsersDialogOpen] = useState(false);
   const queryClient = useQueryClient();
   const isLocalRuntime = usesLocalAuth() || usesLocalServer();
 
@@ -65,7 +66,7 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
     refetchInterval: isLocalRuntime ? false : 5000,
   });
 
-  const sendAgentCommand = async (command: 'get_status' | 'release_access', payload: Record<string, unknown> = {}) => {
+  const sendAgentCommand = async (command: 'get_status' | 'release_access' | 'list_users', payload: Record<string, unknown> = {}) => {
     setSendingCommand(command);
     try {
       if (isLocalRuntime) {
@@ -87,6 +88,21 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
           });
         }
 
+        if (command === 'list_users') {
+          const result: any = await localControlId.listUsers(device.id);
+          const users = Array.isArray(result?.data?.users)
+            ? result.data.users
+            : Array.isArray(result?.data)
+              ? result.data
+              : [];
+          setListedUsers(users);
+          setIsUsersDialogOpen(true);
+          toast({
+            title: 'Usuários carregados',
+            description: `${users.length} usuário(s) retornado(s) pelo dispositivo.`,
+          });
+        }
+
         queryClient.invalidateQueries({ queryKey: ['devices'] });
         onRefresh();
         return;
@@ -97,15 +113,16 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
         return;
       }
 
+      const mappedCommand = command === 'list_users' ? 'get_status' : command;
       const { error } = await supabase.from('agent_commands').insert({
         agent_id: device.agent_id,
         device_id: device.id,
-        command,
+        command: mappedCommand,
         payload,
         status: 'pending',
       } as any);
       if (error) throw error;
-      toast({ title: 'Comando enviado', description: `Aguardando agente executar: ${command}` });
+      toast({ title: 'Comando enviado', description: `Aguardando agente executar: ${mappedCommand}` });
       queryClient.invalidateQueries({ queryKey: ['device-commands', device.id] });
     } catch (error: any) {
       toast({ title: 'Erro ao enviar comando', description: error.message, variant: 'destructive' });
@@ -115,26 +132,29 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
   };
 
   const handleDelete = async () => {
-    if (isLocalRuntime) {
-      toast({ title: 'Indisponível no modo local', description: LOCAL_DELETE_MESSAGE, variant: 'destructive' });
-      return;
-    }
-
     if (!confirm('Tem certeza que deseja remover este dispositivo?')) return;
-    const { error } = await supabase.from('devices').delete().eq('id', device.id);
-    if (error) {
-      toast({ title: 'Erro ao remover dispositivo', variant: 'destructive' });
-    } else {
+
+    try {
+      if (isLocalRuntime) {
+        await localDevices.delete(device.id);
+      } else {
+        const { error } = await supabase.from('devices').delete().eq('id', device.id);
+        if (error) throw error;
+      }
+
       toast({ title: 'Dispositivo removido' });
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
       onRefresh();
+    } catch (error: any) {
+      toast({ title: 'Erro ao remover dispositivo', description: error.message, variant: 'destructive' });
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'online': return 'bg-green-500/10 text-green-500 border-green-500/20';
-      case 'offline': return 'bg-red-500/10 text-red-500 border-red-500/20';
-      case 'error': return 'bg-orange-500/10 text-orange-500 border-orange-500/20';
+      case 'online': return 'bg-secondary text-secondary-foreground border-border';
+      case 'offline': return 'bg-muted text-muted-foreground border-border';
+      case 'error': return 'bg-destructive/10 text-destructive border-destructive/20';
       default: return 'bg-muted text-muted-foreground border-border';
     }
   };
@@ -148,7 +168,7 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
   };
 
   const getCmdStatusIcon = (status: string) => {
-    if (status === 'completed') return <CheckCircle2 className="h-3 w-3 text-green-500" />;
+    if (status === 'completed') return <CheckCircle2 className="h-3 w-3 text-primary" />;
     if (status === 'failed') return <XCircle className="h-3 w-3 text-destructive" />;
     if (status === 'in_progress') return <Loader2 className="h-3 w-3 animate-spin text-primary" />;
     return <Clock className="h-3 w-3 text-muted-foreground" />;
@@ -187,7 +207,7 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
               </div>
             )}
             {!device.agent_id && !isLocalRuntime && (
-              <div className="text-xs text-orange-500 bg-orange-500/10 rounded px-2 py-1">
+              <div className="text-xs text-muted-foreground bg-muted rounded px-2 py-1">
                 ⚠ Sem agente local associado
               </div>
             )}
@@ -212,14 +232,20 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
                 <Link className="h-4 w-4 mr-1" />
                 Configurar
               </Button>
-              <Button size="sm" variant="outline" onClick={() => sendAgentCommand('get_status')} disabled={!!sendingCommand || isLocalRuntime}>
+              <Button size="sm" variant="outline" onClick={() => sendAgentCommand('get_status')} disabled={!!sendingCommand}>
                 {sendingCommand === 'get_status' ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
                 Status
               </Button>
-              <Button size="sm" variant="outline" onClick={() => sendAgentCommand('release_access', { door_id: 1 })} disabled={!!sendingCommand || isLocalRuntime}>
+              <Button size="sm" variant="outline" onClick={() => sendAgentCommand('release_access', { door_id: 1 })} disabled={!!sendingCommand}>
                 {sendingCommand === 'release_access' ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <DoorOpen className="h-4 w-4 mr-1" />}
                 Liberar
               </Button>
+              {isLocalRuntime && (
+                <Button size="sm" variant="outline" onClick={() => sendAgentCommand('list_users')} disabled={!!sendingCommand}>
+                  {sendingCommand === 'list_users' ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Users className="h-4 w-4 mr-1" />}
+                  Usuários
+                </Button>
+              )}
               <Button size="sm" variant="ghost" className="text-destructive" onClick={handleDelete}>
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -229,6 +255,28 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
       </Card>
 
       <DeviceSetupInstructions device={device} open={showSetup} onOpenChange={setShowSetup} />
+
+      <Dialog open={isUsersDialogOpen} onOpenChange={setIsUsersDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Usuários no dispositivo</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="max-h-80 pr-4">
+            <div className="space-y-2">
+              {listedUsers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum usuário retornado pelo dispositivo.</p>
+              ) : (
+                listedUsers.map((user: any, index) => (
+                  <div key={user.id || user.user_id || index} className="rounded-md border border-border p-3 text-sm">
+                    <p className="font-medium">{user.name || user.user_name || `Usuário ${index + 1}`}</p>
+                    <p className="text-muted-foreground">ID: {user.id || user.user_id || 'N/A'}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
