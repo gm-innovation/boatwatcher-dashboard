@@ -164,7 +164,7 @@ export function AppSidebar() {
                 <SidebarGroupLabel className="cursor-pointer hover:bg-sidebar-accent rounded-md px-2 py-1 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Settings className="h-4 w-4" />
-                    <span>{isLocalRuntime ? 'Administração Desktop' : 'Administração'}</span>
+                    <span>Administração</span>
                   </div>
                   <ChevronDown className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                 </SidebarGroupLabel>
