@@ -662,9 +662,9 @@ export const DiagnosticsPanel = () => {
               <Separator />
               
               <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={runAuthDiagnostics}
                   disabled={isTestingAuth}
                   className="gap-2"
@@ -672,9 +672,9 @@ export const DiagnosticsPanel = () => {
                   <RefreshCw className={`h-3 w-3 ${isTestingAuth ? 'animate-spin' : ''}`} />
                   Testar Autenticação
                 </Button>
-                <Button 
-                  variant="destructive" 
-                  size="sm" 
+                <Button
+                  variant="destructive"
+                  size="sm"
                   onClick={handleForceLogout}
                   className="gap-2"
                 >
@@ -700,9 +700,11 @@ export const DiagnosticsPanel = () => {
         <CardContent>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Estes testes ajudam a identificar problemas de autenticação com Edge Functions.
+              {isLocalRuntime
+                ? 'No runtime local, estes testes serão substituídos por diagnósticos próprios do servidor local.'
+                : 'Estes testes ajudam a identificar problemas de autenticação com Edge Functions.'}
             </p>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* auth-ping test */}
               <div className="p-4 rounded-lg border bg-card">
@@ -713,28 +715,28 @@ export const DiagnosticsPanel = () => {
                   </div>
                   {getEdgeFunctionStatusBadge(authPingResult)}
                 </div>
-                
+
                 {authPingResult.status === 'success' && authPingResult.data && (
                   <div className="p-2 rounded bg-green-500/10 text-xs font-mono mb-3">
                     {JSON.stringify(authPingResult.data, null, 2)}
                   </div>
                 )}
-                
+
                 {authPingResult.status === 'error' && (
                   <div className="p-2 rounded bg-red-500/10 text-xs text-red-600 mb-3">
                     {authPingResult.error}
                   </div>
                 )}
-                
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={testAuthPing}
-                  disabled={isTestingAuthPing}
+                  disabled={isTestingAuthPing || isLocalRuntime}
                   className="w-full gap-2"
                 >
                   <RefreshCw className={`h-3 w-3 ${isTestingAuthPing ? 'animate-spin' : ''}`} />
-                  {isTestingAuthPing ? 'Testando...' : 'Testar auth-ping'}
+                  {isLocalRuntime ? 'Disponível em breve' : isTestingAuthPing ? 'Testando...' : 'Testar auth-ping'}
                 </Button>
               </div>
 
@@ -747,28 +749,28 @@ export const DiagnosticsPanel = () => {
                   </div>
                   {getEdgeFunctionStatusBadge(echoAuthResult)}
                 </div>
-                
+
                 {echoAuthResult.status === 'success' && echoAuthResult.data && (
                   <div className="p-2 rounded bg-green-500/10 text-xs font-mono mb-3 max-h-40 overflow-auto">
                     <pre>{JSON.stringify(echoAuthResult.data, null, 2)}</pre>
                   </div>
                 )}
-                
+
                 {echoAuthResult.status === 'error' && (
                   <div className="p-2 rounded bg-red-500/10 text-xs text-red-600 mb-3">
                     {echoAuthResult.error}
                   </div>
                 )}
-                
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={testEchoAuth}
-                  disabled={isTestingEchoAuth}
+                  disabled={isTestingEchoAuth || isLocalRuntime}
                   className="w-full gap-2"
                 >
                   <RefreshCw className={`h-3 w-3 ${isTestingEchoAuth ? 'animate-spin' : ''}`} />
-                  {isTestingEchoAuth ? 'Testando...' : 'Testar echo-auth'}
+                  {isLocalRuntime ? 'Disponível em breve' : isTestingEchoAuth ? 'Testando...' : 'Testar echo-auth'}
                 </Button>
               </div>
             </div>
