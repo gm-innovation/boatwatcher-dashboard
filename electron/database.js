@@ -216,13 +216,16 @@ function initDatabase(userDataPath) {
     CREATE INDEX IF NOT EXISTS idx_worker_documents_worker ON worker_documents(worker_id);
   `);
 
-  db.exec(`
-    ALTER TABLE devices ADD COLUMN agent_id TEXT;
-  `);
+  const deviceColumns = db.prepare("PRAGMA table_info(devices)").all();
+  const deviceColumnNames = new Set(deviceColumns.map((column) => column.name));
 
-  db.exec(`
-    ALTER TABLE devices ADD COLUMN api_credentials TEXT DEFAULT '{}';
-  `);
+  if (!deviceColumnNames.has('agent_id')) {
+    db.exec("ALTER TABLE devices ADD COLUMN agent_id TEXT");
+  }
+
+  if (!deviceColumnNames.has('api_credentials')) {
+    db.exec("ALTER TABLE devices ADD COLUMN api_credentials TEXT DEFAULT '{}'");
+  }
 
   const maxCode = db.prepare('SELECT MAX(code) as max_code FROM workers').get();
   const nextCode = (maxCode?.max_code || 0) + 1;
