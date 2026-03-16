@@ -79,7 +79,7 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
         }
 
         if (command === 'release_access') {
-          const result = await localDevicesAction('releaseAccess', device.id, payload);
+          const result = await localControlId.releaseAccess(device.id, Number(payload.door_id || 1));
           toast({
             title: result.success ? 'Comando enviado' : 'Falha ao liberar acesso',
             description: result.message || result.error || 'Não foi possível acionar a porta.',
