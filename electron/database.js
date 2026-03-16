@@ -811,6 +811,10 @@ function createDatabaseAPI(db, startCode) {
       return this.getDeviceById(id);
     },
 
+    deleteDevice(id) {
+      db.prepare('DELETE FROM devices WHERE id = ?').run(id);
+    },
+
     // === Job Functions ===
     getJobFunctions() {
       return db.prepare('SELECT * FROM job_functions ORDER BY name').all();

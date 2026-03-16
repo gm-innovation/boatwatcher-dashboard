@@ -167,6 +167,15 @@ router.put('/:id', (req, res) => {
   }
 });
 
+router.delete('/:id', (req, res) => {
+  try {
+    req.db.deleteDevice?.(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/:id/actions', async (req, res) => {
   try {
     const device = req.db.getDeviceById?.(req.params.id);

@@ -3,6 +3,7 @@ import { fetchCompanies, fetchWorkers, fetchProjects, fetchProjectById, fetchWor
 import { supabase } from '@/integrations/supabase/client';
 import type { Company, Worker, Project } from '@/types/supabase';
 import { format, startOfDay } from 'date-fns';
+import { usesLocalServer } from '@/lib/runtimeProfile';
 
 export const useCompanies = () => {
   return useQuery({
