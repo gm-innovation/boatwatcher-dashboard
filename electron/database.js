@@ -180,6 +180,8 @@ function initDatabase(userDataPath) {
       status TEXT DEFAULT 'offline',
       location TEXT,
       project_id TEXT,
+      agent_id TEXT,
+      api_credentials TEXT DEFAULT '{}',
       configuration TEXT DEFAULT '{}',
       last_event_timestamp TEXT,
       created_at TEXT DEFAULT (datetime('now')),
