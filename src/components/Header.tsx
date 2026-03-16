@@ -18,22 +18,26 @@ export const Header = () => {
   const { theme, setTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { selectedProject, selectedProjectId, setSelectedProjectId, lastUpdate, autoRefresh, setAutoRefresh, handleRefresh } = useProject();
-  const { role, signOut } = useAuthContext();
+  const { role, signOut, hasCloudSession } = useAuthContext();
 
   const isAdmin = role === 'admin';
   const isCompanyAdmin = role === 'company_admin';
   const isDesktop = isElectron();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [syncStatus, setSyncStatus] = useState<{ syncing: boolean; lastSync: string | null; pendingCount: number }>({ syncing: false, lastSync: null, pendingCount: 0 });
+  const [syncStatus, setSyncStatus] = useState<{ syncing: boolean; lastSync: string | null; pendingCount: number; configured?: boolean; message?: string }>({ syncing: false, lastSync: null, pendingCount: 0, configured: false, message: '' });
 
   useEffect(() => {
     if (!isDesktop) return;
     const api = getElectronAPI();
     if (!api) return;
     api.onConnectivityChange((online) => setIsOnline(online));
+    api.sync.getStatus().then((status) => {
+      setIsOnline(status.online);
+      setSyncStatus(status);
+    }).catch(() => undefined);
     api.onSyncStatusChange((status) => {
       setIsOnline(status.online);
-      setSyncStatus({ syncing: status.syncing, lastSync: status.lastSync, pendingCount: status.pendingCount });
+      setSyncStatus(status);
     });
   }, [isDesktop]);
 
