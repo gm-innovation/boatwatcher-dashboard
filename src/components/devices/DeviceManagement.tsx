@@ -70,7 +70,7 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
     try {
       if (isLocalRuntime) {
         if (command === 'get_status') {
-          const result = await localDevicesAction('getDeviceStatus', device.id);
+          const result = await localControlId.getDeviceStatus(device.id);
           toast({
             title: result.success ? 'Status atualizado' : 'Falha ao consultar status',
             description: result.message || result.error || 'Não foi possível consultar o dispositivo.',
