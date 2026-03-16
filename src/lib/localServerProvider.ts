@@ -45,9 +45,16 @@ export const localWorkers = {
 export const localCompanies = {
   list: () => apiFetch('/api/companies'),
   getById: (id: string) => apiFetch(`/api/companies/${id}`),
+  getCurrent: (userId: string) => apiFetch(`/api/companies/current?userId=${encodeURIComponent(userId)}`),
   create: (data: Record<string, any>) => apiFetch('/api/companies', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string, data: Record<string, any>) => apiFetch(`/api/companies/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: string) => apiFetch(`/api/companies/${id}`, { method: 'DELETE' }),
+};
+
+// --- Company Documents ---
+export const localCompanyDocuments = {
+  list: (companyId: string) => apiFetch(`/api/company-documents?companyId=${encodeURIComponent(companyId)}`),
+  create: (data: Record<string, any>) => apiFetch('/api/company-documents', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 // --- Projects ---
@@ -86,6 +93,13 @@ export const localJobFunctions = {
   create: (data: Record<string, any>) => apiFetch('/api/job-functions', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string, data: Record<string, any>) => apiFetch(`/api/job-functions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: string) => apiFetch(`/api/job-functions/${id}`, { method: 'DELETE' }),
+};
+
+// --- Worker Documents ---
+export const localWorkerDocuments = {
+  list: (workerId: string) => apiFetch(`/api/worker-documents?workerId=${encodeURIComponent(workerId)}`),
+  listByWorkers: (workerIds: string[]) => apiFetch(`/api/worker-documents?workerIds=${encodeURIComponent(workerIds.join(','))}`),
+  create: (data: Record<string, any>) => apiFetch('/api/worker-documents', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 // --- Storage ---
