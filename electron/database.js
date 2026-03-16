@@ -209,6 +209,15 @@ function initDatabase(userDataPath) {
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS sync_queue (
+      id TEXT PRIMARY KEY DEFAULT ${SQLITE_UUID_EXPR},
+      entity_type TEXT NOT NULL,
+      entity_id TEXT,
+      operation TEXT NOT NULL,
+      payload TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_access_logs_timestamp ON access_logs(timestamp);
     CREATE INDEX IF NOT EXISTS idx_access_logs_worker ON access_logs(worker_id);
     CREATE INDEX IF NOT EXISTS idx_access_logs_synced ON access_logs(synced);
@@ -216,8 +225,12 @@ function initDatabase(userDataPath) {
     CREATE INDEX IF NOT EXISTS idx_workers_company ON workers(company_id);
     CREATE INDEX IF NOT EXISTS idx_user_companies_user ON user_companies(user_id);
     CREATE INDEX IF NOT EXISTS idx_user_companies_company ON user_companies(company_id);
+    CREATE INDEX IF NOT EXISTS idx_user_companies_synced ON user_companies(synced);
     CREATE INDEX IF NOT EXISTS idx_company_documents_company ON company_documents(company_id);
+    CREATE INDEX IF NOT EXISTS idx_company_documents_synced ON company_documents(synced);
     CREATE INDEX IF NOT EXISTS idx_worker_documents_worker ON worker_documents(worker_id);
+    CREATE INDEX IF NOT EXISTS idx_worker_documents_synced ON worker_documents(synced);
+    CREATE INDEX IF NOT EXISTS idx_sync_queue_created_at ON sync_queue(created_at);
   `);
 
   const deviceColumns = db.prepare("PRAGMA table_info(devices)").all();
