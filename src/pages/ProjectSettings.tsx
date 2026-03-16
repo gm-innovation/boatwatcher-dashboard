@@ -1,4 +1,6 @@
+import type { ReactNode } from "react";
 import { Building2, Settings, Users2, Briefcase, Server, UserCheck } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import UserManagement from "@/components/UserManagement";
 import { CompanyForm } from "@/components/settings/CompanyForm";
@@ -11,8 +13,8 @@ import { usesLocalServer } from "@/lib/runtimeProfile";
 type SettingsTab = {
   value: string;
   label: string;
-  icon: any;
-  content: JSX.Element;
+  icon: LucideIcon;
+  content: ReactNode;
 };
 
 const ProjectSettings = () => {

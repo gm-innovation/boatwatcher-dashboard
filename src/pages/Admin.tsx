@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeviceManagement } from "@/components/devices/DeviceManagement";
 import UserManagement from "@/components/UserManagement";
@@ -12,14 +13,15 @@ import { DocumentExpirationCheck } from "@/components/admin/DocumentExpirationCh
 import { AgentManagement } from "@/components/devices/AgentManagement";
 import { ConnectivityDashboard } from "@/components/devices/ConnectivityDashboard";
 import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, UserCheck, FileWarning, Bot, Wifi } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { usesLocalServer } from "@/lib/runtimeProfile";
 
 type AdminTab = {
   value: string;
   label: string;
-  icon: any;
-  content: JSX.Element;
+  icon: LucideIcon;
+  content: ReactNode;
 };
 
 const Admin = () => {
