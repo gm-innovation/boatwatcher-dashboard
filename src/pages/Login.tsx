@@ -22,13 +22,13 @@ const Login = () => {
   useEffect(() => {
     const checkInitialState = async () => {
       if (usesLocalAuth()) {
-        navigate("/");
+        setCheckingSetup(false);
         return;
       }
 
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        navigate("/");
+        navigate('/');
         return;
       }
 
@@ -51,7 +51,25 @@ const Login = () => {
     e.preventDefault();
 
     if (usesLocalAuth()) {
-      navigate("/");
+      setLoading(true);
+      try {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+
+        toast({
+          title: 'Conta conectada com sucesso',
+          description: 'Os recursos sincronizados do desktop foram habilitados.',
+        });
+        navigate('/admin');
+      } catch (error: any) {
+        toast({
+          title: 'Erro ao conectar conta',
+          description: error.message === 'Invalid login credentials' ? 'Email ou senha incorretos' : error.message,
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
