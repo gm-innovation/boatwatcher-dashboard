@@ -771,8 +771,8 @@ function createDatabaseAPI(db, startCode) {
     createDevice(data) {
       const id = data.id || uuidv4();
       db.prepare(`
-        INSERT INTO devices (id, name, controlid_serial_number, controlid_ip_address, type, status, location, project_id, configuration)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO devices (id, name, controlid_serial_number, controlid_ip_address, type, status, location, project_id, agent_id, api_credentials, configuration)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         data.name,
@@ -782,6 +782,8 @@ function createDatabaseAPI(db, startCode) {
         data.status || 'offline',
         data.location || null,
         data.project_id || null,
+        data.agent_id || null,
+        JSON.stringify(data.api_credentials || {}),
         JSON.stringify(data.configuration || {}),
       );
       return this.getDeviceById(id);
@@ -792,8 +794,8 @@ function createDatabaseAPI(db, startCode) {
       const params = [];
       for (const [key, value] of Object.entries(data)) {
         if (['id', 'created_at'].includes(key)) continue;
-        if (key === 'configuration') {
-          sets.push('configuration = ?');
+        if (key === 'configuration' || key === 'api_credentials') {
+          sets.push(`${key} = ?`);
           params.push(JSON.stringify(value || {}));
         } else {
           sets.push(`${key} = ?`);
