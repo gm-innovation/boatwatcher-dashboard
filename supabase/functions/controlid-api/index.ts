@@ -15,7 +15,6 @@ interface ControlIDResponse {
   error?: string
 }
 
-// Função para fazer requisições à API do dispositivo ControlID
 async function controlIDRequest(
   device: DeviceCredentials,
   endpoint: string,
@@ -24,13 +23,12 @@ async function controlIDRequest(
 ): Promise<ControlIDResponse> {
   const baseUrl = `http://${device.ip}:${device.port || 80}`
   const url = `${baseUrl}${endpoint}`
-  
+
   try {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     }
 
-    // Autenticação básica se credenciais fornecidas
     if (device.username && device.password) {
       const auth = btoa(`${device.username}:${device.password}`)
       headers['Authorization'] = `Basic ${auth}`
@@ -69,19 +67,16 @@ async function controlIDRequest(
   }
 }
 
-// Obter informações do dispositivo
 async function getDeviceInfo(device: DeviceCredentials): Promise<ControlIDResponse> {
   return await controlIDRequest(device, '/device_info.fcgi', 'GET')
 }
 
-// Listar usuários cadastrados no dispositivo
 async function listUsers(device: DeviceCredentials): Promise<ControlIDResponse> {
   return await controlIDRequest(device, '/users.fcgi', 'POST', {
     object: 'users'
   })
 }
 
-// Cadastrar usuário no dispositivo
 async function enrollUser(
   device: DeviceCredentials,
   userId: string,
@@ -97,20 +92,18 @@ async function enrollUser(
     }]
   }
 
-  // Primeiro cadastra o usuário
   const userResult = await controlIDRequest(device, '/users.fcgi', 'POST', userData)
-  
+
   if (!userResult.success) {
     return userResult
   }
 
-  // Se tiver foto, cadastra a biometria facial
   if (userPhoto) {
     const photoData = {
       object: 'user_images',
       values: [{
         user_id: userId,
-        image: userPhoto, // Base64 encoded image
+        image: userPhoto,
         timestamp: Date.now()
       }]
     }
@@ -124,7 +117,6 @@ async function enrollUser(
   return { success: true, data: { message: 'User enrolled successfully' } }
 }
 
-// Remover usuário do dispositivo
 async function removeUser(device: DeviceCredentials, userId: string): Promise<ControlIDResponse> {
   return await controlIDRequest(device, '/users.fcgi', 'POST', {
     object: 'users',
@@ -132,7 +124,6 @@ async function removeUser(device: DeviceCredentials, userId: string): Promise<Co
   })
 }
 
-// Liberar catraca/porta manualmente
 async function releaseAccess(device: DeviceCredentials, doorId: number = 1): Promise<ControlIDResponse> {
   return await controlIDRequest(device, '/execute_actions.fcgi', 'POST', {
     actions: [{
@@ -142,7 +133,6 @@ async function releaseAccess(device: DeviceCredentials, doorId: number = 1): Pro
   })
 }
 
-// Obter status do dispositivo
 async function getDeviceStatus(device: DeviceCredentials): Promise<ControlIDResponse> {
   const info = await getDeviceInfo(device)
   if (!info.success) {
@@ -151,12 +141,18 @@ async function getDeviceStatus(device: DeviceCredentials): Promise<ControlIDResp
   return { success: true, data: { status: 'online', info: info.data } }
 }
 
-// Configurar dispositivo
 async function configureDevice(
   device: DeviceCredentials,
   config: Record<string, any>
 ): Promise<ControlIDResponse> {
   return await controlIDRequest(device, '/set_configuration.fcgi', 'POST', config)
+}
+
+async function getConfiguration(
+  device: DeviceCredentials,
+  config: Record<string, any> = { monitor: ['enable_photo_upload'] }
+): Promise<ControlIDResponse> {
+  return await controlIDRequest(device, '/get_configuration.fcgi', 'POST', config)
 }
 
 serve(async (req) => {
@@ -173,7 +169,6 @@ serve(async (req) => {
     const { action, deviceId, ...params } = await req.json()
     console.log('ControlID API Request:', { action, deviceId, params })
 
-    // Buscar credenciais do dispositivo no banco
     const { data: deviceData, error: deviceError } = await supabase
       .from('devices')
       .select('*')
@@ -200,11 +195,10 @@ serve(async (req) => {
 
       case 'getDeviceStatus':
         result = await getDeviceStatus(device)
-        // Atualizar status no banco
         if (result.success) {
           await supabase
             .from('devices')
-            .update({ 
+            .update({
               status: 'online',
               last_event_timestamp: new Date().toISOString()
             })
@@ -242,6 +236,10 @@ serve(async (req) => {
         result = await configureDevice(device, params.config)
         break
 
+      case 'getConfiguration':
+        result = await getConfiguration(device, params.config)
+        break
+
       default:
         throw new Error(`Unknown action: ${action}`)
     }
@@ -255,7 +253,7 @@ serve(async (req) => {
     console.error('ControlID API Error:', error)
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
-      { 
+      {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }

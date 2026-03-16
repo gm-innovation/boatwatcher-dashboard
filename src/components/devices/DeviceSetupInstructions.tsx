@@ -10,18 +10,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useDeviceTokens } from '@/hooks/useDeviceTokens';
 import type { Device } from '@/types/supabase';
-import { 
-  Copy, 
-  Check, 
-  Key, 
-  Link, 
-  Settings, 
-  Trash2, 
+import {
+  Copy,
+  Check,
+  Key,
+  Link,
+  Settings,
+  Trash2,
   Plus,
   AlertCircle,
   CheckCircle2,
-  Clock,
-  ExternalLink
+  Clock
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -32,13 +31,13 @@ interface DeviceSetupInstructionsProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const WEBHOOK_BASE_URL = `https://qdscawiwjhzgiqroqkik.supabase.co/functions/v1/controlid-webhook`;
+const API_BASE_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/api`;
 
 export function DeviceSetupInstructions({ device, open, onOpenChange }: DeviceSetupInstructionsProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [newTokenName, setNewTokenName] = useState('');
   const [showNewToken, setShowNewToken] = useState<string | null>(null);
-  
+
   const { tokens, isLoading, createToken, revokeToken, deleteToken } = useDeviceTokens(device.id);
 
   const copyToClipboard = (text: string, field: string) => {
@@ -53,7 +52,12 @@ export function DeviceSetupInstructions({ device, open, onOpenChange }: DeviceSe
     setNewTokenName('');
   };
 
-  const webhookUrl = `${WEBHOOK_BASE_URL}`;
+  const endpoints = {
+    events: `${API_BASE_URL}/notifications/dao`,
+    heartbeat: `${API_BASE_URL}/notifications/device_is_alive`,
+    accessPhoto: `${API_BASE_URL}/notifications/access_photo`,
+  };
+
   const activeToken = tokens.find(t => t.is_active);
 
   return (
@@ -78,43 +82,48 @@ export function DeviceSetupInstructions({ device, open, onOpenChange }: DeviceSe
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Link className="h-4 w-4" />
-                    URL do Webhook
+                    Endpoints do equipamento
                   </CardTitle>
                   <CardDescription>
-                    Configure esta URL no leitor ControlID para enviar eventos de acesso
+                    Use os endpoints abaixo conforme a documentação do ControlID.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex gap-2">
-                    <Input 
-                      value={webhookUrl} 
-                      readOnly 
-                      className="font-mono text-sm"
-                    />
-                    <Button 
-                      variant="outline" 
-                      size="icon"
-                      onClick={() => copyToClipboard(webhookUrl, 'webhook')}
-                    >
-                      {copiedField === 'webhook' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                    </Button>
-                  </div>
+                  {[
+                    { label: 'Eventos de acesso (DAO)', value: endpoints.events, key: 'events' },
+                    { label: 'Heartbeat do dispositivo', value: endpoints.heartbeat, key: 'heartbeat' },
+                    { label: 'Upload da foto de acesso', value: endpoints.accessPhoto, key: 'access-photo' },
+                  ].map((item) => (
+                    <div key={item.key} className="space-y-2">
+                      <Label className="text-sm text-muted-foreground">{item.label}</Label>
+                      <div className="flex gap-2">
+                        <Input value={item.value} readOnly className="font-mono text-sm" />
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => copyToClipboard(item.value, item.key)}
+                        >
+                          {copiedField === item.key ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
 
                   {activeToken && (
                     <div className="space-y-2">
-                      <Label className="text-sm text-muted-foreground">URL com Token (mais segura)</Label>
+                      <Label className="text-sm text-muted-foreground">Exemplo com token</Label>
                       <div className="flex gap-2">
-                        <Input 
-                          value={`${webhookUrl}?token=${activeToken.token.substring(0, 8)}...`} 
-                          readOnly 
+                        <Input
+                          value={`${endpoints.events}?token=${activeToken.token.substring(0, 8)}...`}
+                          readOnly
                           className="font-mono text-sm"
                         />
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           size="icon"
-                          onClick={() => copyToClipboard(`${webhookUrl}?token=${activeToken.token}`, 'webhook-token')}
+                          onClick={() => copyToClipboard(`${endpoints.events}?token=${activeToken.token}`, 'events-token')}
                         >
-                          {copiedField === 'webhook-token' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          {copiedField === 'events-token' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                         </Button>
                       </div>
                     </div>
@@ -135,28 +144,36 @@ export function DeviceSetupInstructions({ device, open, onOpenChange }: DeviceSe
                         <p className="text-muted-foreground">Entre no painel web do dispositivo usando o IP: <code className="bg-muted px-1 rounded">{device.controlid_ip_address}</code></p>
                       </div>
                     </div>
-                    
+
                     <div className="flex gap-3">
                       <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">2</div>
                       <div>
-                        <p className="font-medium">Configure o Webhook</p>
-                        <p className="text-muted-foreground">Navegue até Configurações → Integração → Webhook e cole a URL acima</p>
+                        <p className="font-medium">Configure os webhooks</p>
+                        <p className="text-muted-foreground">Aponte eventos de acesso para <code className="bg-muted px-1 rounded">/notifications/dao</code> e o heartbeat para <code className="bg-muted px-1 rounded">/notifications/device_is_alive</code>.</p>
                       </div>
                     </div>
-                    
+
                     <div className="flex gap-3">
                       <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">3</div>
                       <div>
-                        <p className="font-medium">Configure o Payload</p>
-                        <p className="text-muted-foreground">Selecione formato JSON e inclua os campos: serial_number, user_id, direction, time</p>
+                        <p className="font-medium">Habilite o envio da foto</p>
+                        <p className="text-muted-foreground">No <code className="bg-muted px-1 rounded">set_configuration</code>, envie <code className="bg-muted px-1 rounded">monitor.enable_photo_upload = 1</code> e configure o endpoint <code className="bg-muted px-1 rounded">/notifications/access_photo</code>.</p>
                       </div>
                     </div>
-                    
+
                     <div className="flex gap-3">
                       <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">4</div>
                       <div>
-                        <p className="font-medium">Teste a Conexão</p>
-                        <p className="text-muted-foreground">Use o botão de teste no painel do ControlID para verificar se os eventos estão chegando</p>
+                        <p className="font-medium">Valide a configuração</p>
+                        <p className="text-muted-foreground">Use <code className="bg-muted px-1 rounded">get_configuration</code> com <code className="bg-muted px-1 rounded">{'{ monitor: [enable_photo_upload] }'}</code> para confirmar que o upload está ativo.</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">5</div>
+                      <div>
+                        <p className="font-medium">Teste a conexão</p>
+                        <p className="text-muted-foreground">Faça uma identificação no equipamento e confirme se o evento e a foto aparecem no histórico recente.</p>
                       </div>
                     </div>
                   </div>
@@ -165,19 +182,40 @@ export function DeviceSetupInstructions({ device, open, onOpenChange }: DeviceSe
 
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Formato do Payload Esperado</CardTitle>
+                  <CardTitle className="text-base">Payloads esperados</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <pre className="bg-muted p-3 rounded-lg text-xs overflow-x-auto">
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">POST /api/notifications/access_photo</Label>
+                    <pre className="bg-muted p-3 rounded-lg text-xs overflow-x-auto mt-2">
 {`{
-  "serial_number": "${device.controlid_serial_number}",
-  "user_id": "uuid-do-trabalhador",
-  "direction": "entry" | "exit",
-  "time": 1234567890,
-  "score": 0.95,
-  "event_type": "access"
+  "device_id": "${device.controlid_serial_number}",
+  "time": "1532977090",
+  "portal_id": "1",
+  "identifier_id": "0",
+  "event": "7",
+  "user_id": "0",
+  "access_photo": "jpeg_em_base64"
 }`}
-                  </pre>
+                    </pre>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs text-muted-foreground">set_configuration / get_configuration</Label>
+                    <pre className="bg-muted p-3 rounded-lg text-xs overflow-x-auto mt-2">
+{`set_configuration
+{
+  monitor: {
+    enable_photo_upload: 1
+  }
+}
+
+get_configuration
+{
+  monitor: [enable_photo_upload]
+}`}
+                    </pre>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -204,22 +242,22 @@ export function DeviceSetupInstructions({ device, open, onOpenChange }: DeviceSe
                         Copie o token abaixo. Ele não será exibido novamente.
                       </p>
                       <div className="flex gap-2">
-                        <Input 
-                          value={showNewToken} 
-                          readOnly 
+                        <Input
+                          value={showNewToken}
+                          readOnly
                           className="font-mono text-xs"
                         />
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           size="icon"
                           onClick={() => copyToClipboard(showNewToken, 'new-token')}
                         >
                           {copiedField === 'new-token' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                         </Button>
                       </div>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => setShowNewToken(null)}
                         className="mt-2"
                       >
@@ -229,7 +267,7 @@ export function DeviceSetupInstructions({ device, open, onOpenChange }: DeviceSe
                   )}
 
                   <div className="flex gap-2">
-                    <Input 
+                    <Input
                       placeholder="Nome do token (opcional)"
                       value={newTokenName}
                       onChange={(e) => setNewTokenName(e.target.value)}
@@ -253,8 +291,8 @@ export function DeviceSetupInstructions({ device, open, onOpenChange }: DeviceSe
                   ) : (
                     <div className="space-y-3">
                       {tokens.map((token) => (
-                        <div 
-                          key={token.id} 
+                        <div
+                          key={token.id}
                           className={`flex items-center justify-between p-3 rounded-lg border ${
                             token.is_active ? 'bg-background' : 'bg-muted/50 opacity-60'
                           }`}
@@ -283,16 +321,16 @@ export function DeviceSetupInstructions({ device, open, onOpenChange }: DeviceSe
                             </div>
                           </div>
                           <div className="flex gap-1">
-                            <Button 
-                              variant="ghost" 
+                            <Button
+                              variant="ghost"
                               size="icon"
                               onClick={() => copyToClipboard(token.token, token.id)}
                             >
                               {copiedField === token.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                             </Button>
                             {token.is_active && (
-                              <Button 
-                                variant="ghost" 
+                              <Button
+                                variant="ghost"
                                 size="icon"
                                 onClick={() => revokeToken.mutate(token.id)}
                                 className="text-orange-500 hover:text-orange-600"
@@ -300,8 +338,8 @@ export function DeviceSetupInstructions({ device, open, onOpenChange }: DeviceSe
                                 <AlertCircle className="h-4 w-4" />
                               </Button>
                             )}
-                            <Button 
-                              variant="ghost" 
+                            <Button
+                              variant="ghost"
                               size="icon"
                               onClick={() => deleteToken.mutate(token.id)}
                               className="text-destructive hover:text-destructive"
@@ -324,21 +362,21 @@ export function DeviceSetupInstructions({ device, open, onOpenChange }: DeviceSe
                   <p className="text-muted-foreground">
                     Adicione o token como parâmetro na URL ou no header da requisição:
                   </p>
-                  
+
                   <div className="space-y-2">
                     <Label className="text-xs text-muted-foreground">Via Query Parameter:</Label>
                     <code className="block bg-muted p-2 rounded text-xs">
-                      {webhookUrl}?token=SEU_TOKEN
+                      {endpoints.events}?token=SEU_TOKEN
                     </code>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label className="text-xs text-muted-foreground">Via Header:</Label>
                     <code className="block bg-muted p-2 rounded text-xs">
                       Authorization: Bearer SEU_TOKEN
                     </code>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label className="text-xs text-muted-foreground">Via Header X-API-Key:</Label>
                     <code className="block bg-muted p-2 rounded text-xs">
