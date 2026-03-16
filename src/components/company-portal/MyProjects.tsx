@@ -9,21 +9,32 @@ import {
   Ship
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useCurrentCompany } from '@/hooks/useCurrentCompany';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { usesLocalServer } from '@/lib/runtimeProfile';
+import { localWorkers, localProjects } from '@/lib/localServerProvider';
+import { supabase } from '@/integrations/supabase/client';
 
 export const MyProjects = () => {
   const { user } = useAuth();
   const { data: companyAccess } = useCurrentCompany(user?.id);
   const userCompany = companyAccess?.companyId;
+  const isLocalRuntime = usesLocalServer();
 
   const { data: companyWorkers = [] } = useQuery({
-    queryKey: ['company-workers-projects', userCompany],
+    queryKey: ['company-workers-projects', userCompany, isLocalRuntime],
     queryFn: async () => {
       if (!userCompany) return [];
+
+      if (isLocalRuntime) {
+        const workers = await localWorkers.list({ company_id: userCompany });
+        return workers.map((w: any) => ({
+          id: w.id,
+          allowed_project_ids: w.allowed_project_ids || [],
+        }));
+      }
 
       const { data, error } = await supabase
         .from('workers')
@@ -38,14 +49,19 @@ export const MyProjects = () => {
 
   const projectIds = [...new Set(
     companyWorkers
-      .flatMap((worker) => worker.allowed_project_ids || [])
+      .flatMap((worker: any) => worker.allowed_project_ids || [])
       .filter(Boolean)
   )];
 
   const { data: projects = [], isLoading } = useQuery({
-    queryKey: ['company-projects', projectIds],
+    queryKey: ['company-projects', projectIds, isLocalRuntime],
     queryFn: async () => {
       if (projectIds.length === 0) return [];
+
+      if (isLocalRuntime) {
+        const allProjects = await localProjects.list();
+        return allProjects.filter((p: any) => projectIds.includes(p.id));
+      }
 
       const { data, error } = await supabase
         .from('projects')
@@ -63,7 +79,7 @@ export const MyProjects = () => {
   });
 
   const getWorkersInProject = (projectId: string) => {
-    return companyWorkers.filter((worker) =>
+    return companyWorkers.filter((worker: any) =>
       worker.allowed_project_ids?.includes(projectId)
     ).length;
   };
@@ -90,7 +106,7 @@ export const MyProjects = () => {
         ) : (
           <ScrollArea className="h-[500px]">
             <div className="grid gap-4">
-              {projects.map((project) => (
+              {projects.map((project: any) => (
                 <Card key={project.id} className="bg-muted/30">
                   <CardContent className="pt-4">
                     <div className="flex items-start justify-between">

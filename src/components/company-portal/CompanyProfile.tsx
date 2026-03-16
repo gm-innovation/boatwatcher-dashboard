@@ -12,9 +12,9 @@ import {
   X
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useCurrentCompany } from '@/hooks/useCurrentCompany';
+import { fetchCompanyById, updateCompany } from '@/hooks/useDataProvider';
 import { toast } from 'sonner';
 
 export const CompanyProfile = () => {
@@ -33,15 +33,7 @@ export const CompanyProfile = () => {
     queryKey: ['company-profile', companyId],
     queryFn: async () => {
       if (!companyId) return null;
-
-      const { data, error } = await supabase
-        .from('companies')
-        .select('*')
-        .eq('id', companyId)
-        .single();
-
-      if (error) throw error;
-      return data;
+      return await fetchCompanyById(companyId);
     },
     enabled: !!companyId
   });
@@ -56,16 +48,10 @@ export const CompanyProfile = () => {
     });
   }, [company]);
 
-  const updateCompany = useMutation({
+  const updateCompanyMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       if (!company?.id) throw new Error('Empresa não encontrada');
-
-      const { error } = await supabase
-        .from('companies')
-        .update(data)
-        .eq('id', company.id);
-
-      if (error) throw error;
+      return await updateCompany(company.id, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['company-profile', companyId] });
@@ -78,7 +64,7 @@ export const CompanyProfile = () => {
   });
 
   const handleSave = () => {
-    updateCompany.mutate(formData);
+    updateCompanyMutation.mutate(formData);
   };
 
   const handleCancel = () => {
@@ -136,7 +122,7 @@ export const CompanyProfile = () => {
                 <X className="mr-2 h-4 w-4" />
                 Cancelar
               </Button>
-              <Button size="sm" onClick={handleSave} disabled={updateCompany.isPending}>
+              <Button size="sm" onClick={handleSave} disabled={updateCompanyMutation.isPending}>
                 <Save className="mr-2 h-4 w-4" />
                 Salvar
               </Button>
