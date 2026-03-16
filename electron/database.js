@@ -612,16 +612,24 @@ function createDatabaseAPI(db, startCode) {
       const associations = db.prepare('SELECT * FROM user_companies WHERE company_id = ?').all(id);
 
       for (const doc of documents) {
-        queueSyncOperation('company_document', 'delete', doc.id, {
-          cloud_id: doc.cloud_id || null,
-        });
+        if (doc.cloud_id || doc.synced) {
+          queueSyncOperation('company_document', 'delete', doc.id, {
+            cloud_id: doc.cloud_id || null,
+          });
+        } else {
+          clearQueuedSyncOperation('company_document', doc.id);
+        }
       }
 
       for (const association of associations) {
-        queueSyncOperation('user_company', 'delete', association.id, {
-          cloud_id: association.cloud_id || null,
-          user_id: association.user_id,
-        });
+        if (association.cloud_id || association.synced) {
+          queueSyncOperation('user_company', 'delete', association.id, {
+            cloud_id: association.cloud_id || null,
+            user_id: association.user_id,
+          });
+        } else {
+          clearQueuedSyncOperation('user_company', association.id);
+        }
       }
 
       db.prepare('DELETE FROM company_documents WHERE company_id = ?').run(id);
