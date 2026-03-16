@@ -35,7 +35,8 @@ class SyncEngine {
   getStatus() {
     this.status.pendingCount =
       (this.db.getUnsyncedWorkers?.()?.length || 0) +
-      (this.db.getUnsyncedLogs?.()?.length || 0);
+      (this.db.getUnsyncedLogs?.()?.length || 0) +
+      (this.db.getPendingSyncCount?.() || 0);
     return { ...this.status };
   }
 
