@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadFile } from '@/lib/storageProvider';
-import { useCreateWorkerDocument } from '@/hooks/useWorkerDocuments';
+import { useCompanies, useProjects } from '@/hooks/useSupabase';
 import { useDocumentExtraction, ProcessedDocument } from '@/hooks/useDocumentExtraction';
 import { toast } from '@/hooks/use-toast';
 import { ensureValidSession } from '@/utils/ensureValidSession';

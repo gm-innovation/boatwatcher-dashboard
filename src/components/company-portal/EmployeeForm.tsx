@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { uploadFile } from '@/lib/storageProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
-import { useDocumentExtraction, ProcessedDocument, ExtractedDocumentData } from '@/hooks/useDocumentExtraction';
+import { ensureValidSession } from '@/utils/ensureValidSession';
 import { useJobFunctions } from '@/hooks/useJobFunctions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
