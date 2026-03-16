@@ -21,4 +21,23 @@ router.post('/', (req, res) => {
   }
 });
 
+router.put('/:id', (req, res) => {
+  try {
+    const document = req.db.updateCompanyDocument(req.params.id, req.body);
+    if (!document) return res.status(404).json({ error: 'Document not found' });
+    res.json(document);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/:id', (req, res) => {
+  try {
+    req.db.deleteCompanyDocument(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
