@@ -136,7 +136,7 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {isCompanyAdmin && !isLocalRuntime && (
+        {isCompanyAdmin && (
           <SidebarGroup>
             <SidebarGroupLabel>Portal da Empresa</SidebarGroupLabel>
             <SidebarGroupContent>
