@@ -92,6 +92,7 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
   const createStrike = useCreateWorkerStrike();
   const deleteStrike = useDeleteWorkerStrike();
   const queryClient = useQueryClient();
+  const resolvedPhotoUrl = useResolvedUrl(worker?.photo_url);
 
   const { register, handleSubmit, reset } = useForm<AdditionalDataForm>({
     resolver: zodResolver(additionalDataSchema),
