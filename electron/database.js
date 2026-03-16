@@ -278,6 +278,7 @@ function createDatabaseAPI(db, startCode) {
   `);
   const deleteSyncQueueByEntity = db.prepare('DELETE FROM sync_queue WHERE entity_type = ? AND entity_id = ?');
   const syncEntityTableMap = {
+    company: 'companies',
     user_company: 'user_companies',
     company_document: 'company_documents',
     worker_document: 'worker_documents',
@@ -337,6 +338,30 @@ function createDatabaseAPI(db, startCode) {
     const queueRow = parseQueueRow(row);
     if (!queueRow) return null;
     const payload = queueRow.payload || {};
+
+    if (queueRow.entity_type === 'company') {
+      if (queueRow.operation === 'delete') {
+        const cloudId = payload.cloud_id || resolveCloudEntityId('companies', queueRow.entity_id);
+        if (!cloudId) return null;
+        return { ...queueRow, payload: { cloud_id: cloudId } };
+      }
+
+      if (!payload.name) return null;
+      return {
+        ...queueRow,
+        payload: {
+          cloud_id: payload.cloud_id || resolveCloudEntityId('companies', queueRow.entity_id),
+          name: payload.name,
+          cnpj: payload.cnpj || null,
+          contact_email: payload.contact_email || null,
+          logo_url_light: payload.logo_url_light || null,
+          logo_url_dark: payload.logo_url_dark || null,
+          status: payload.status || 'active',
+          vessels: payload.vessels || [],
+          project_managers: payload.project_managers || [],
+        },
+      };
+    }
 
     if (queueRow.entity_type === 'user_company') {
       if (queueRow.operation === 'delete') {
