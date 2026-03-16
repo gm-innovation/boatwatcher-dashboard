@@ -91,6 +91,28 @@ class SyncEngine {
     }
   }
 
+  async uploadQueuedOperations() {
+    const operations = this.db.getPendingSyncOperations?.() || [];
+    if (operations.length === 0) return;
+
+    const response = await this.callEdgeFunction('agent-sync/upload-operations', 'POST', { operations });
+    if (!response.success || !Array.isArray(response.results)) return;
+
+    for (const result of response.results) {
+      if (!result?.queueId) continue;
+
+      if (result.success) {
+        if (result.operation === 'delete') {
+          this.db.removeSyncQueueEntry?.(result.queueId);
+          continue;
+        }
+
+        this.db.markSyncEntitySynced?.(result.entityType, result.entityId, result.cloudId || null);
+        this.db.removeSyncQueueEntry?.(result.queueId);
+      }
+    }
+  }
+
   async uploadLogs() {
     const logs = this.db.getUnsyncedLogs?.() || [];
     if (logs.length === 0) return;
