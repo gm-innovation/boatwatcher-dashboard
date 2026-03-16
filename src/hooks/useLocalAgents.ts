@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 import { usesLocalAuth, usesLocalServer } from '@/lib/runtimeProfile';
+import { localAgent, localSync } from '@/lib/localServerProvider';
 
 interface LocalAgent {
   id: string;
@@ -46,9 +47,35 @@ export function useLocalAgents(projectId?: string | null) {
   const isLocalRuntime = usesLocalAuth() || usesLocalServer();
 
   const { data: agents = [], isLoading, error } = useQuery({
-    queryKey: ['local-agents', projectId],
+    queryKey: ['local-agents', projectId, isLocalRuntime],
     queryFn: async () => {
-      if (isLocalRuntime) return [] as LocalAgent[];
+      if (isLocalRuntime) {
+        const [agentStatus, syncStatus] = await Promise.all([
+          localAgent.getStatus(),
+          localSync.getStatus(),
+        ]);
+
+        const pseudoAgent: LocalAgent = {
+          id: 'local-runtime-agent',
+          name: 'Agente local do servidor',
+          token: '',
+          project_id: projectId || null,
+          status: agentStatus?.running ? 'online' : 'offline',
+          last_seen_at: null,
+          ip_address: null,
+          version: null,
+          configuration: {
+            devicesCount: agentStatus?.devicesCount ?? 0,
+          },
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          last_sync_at: syncStatus?.lastSync ?? null,
+          pending_sync_count: syncStatus?.pendingCount ?? 0,
+          sync_status: syncStatus?.online ? 'online' : 'offline',
+        };
+
+        return [pseudoAgent];
+      }
 
       let query = supabase
         .from('local_agents')
@@ -137,13 +164,44 @@ export function useLocalAgents(projectId?: string | null) {
     }
   });
 
+  const startAgent = useMutation({
+    mutationFn: async () => {
+      if (!isLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
+      return localAgent.start();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['local-agents'] });
+      toast({ title: 'Agente local iniciado' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Erro ao iniciar agente', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  const stopAgent = useMutation({
+    mutationFn: async () => {
+      if (!isLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
+      return localAgent.stop();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['local-agents'] });
+      toast({ title: 'Agente local parado' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Erro ao parar agente', description: error.message, variant: 'destructive' });
+    }
+  });
+
   return {
     agents,
     isLoading,
     error,
     createAgent,
     deleteAgent,
-    regenerateToken
+    regenerateToken,
+    startAgent,
+    stopAgent,
+    isLocalRuntime,
   };
 }
 
