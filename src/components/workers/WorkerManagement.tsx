@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -8,6 +8,7 @@ import { isElectron } from '@/lib/dataProvider';
 import { supabase } from '@/integrations/supabase/client';
 import { useWorkers, useCompanies, useProjects } from '@/hooks/useSupabase';
 import { useDevices, useWorkerEnrollment } from '@/hooks/useControlID';
+import { useResolvedUrl } from '@/hooks/useResolvedUrl';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,7 +57,8 @@ interface WorkerFormProps {
 
 const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(worker?.photo_url || null);
+  const resolvedWorkerPhotoUrl = useResolvedUrl(worker?.photo_url);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -77,6 +79,11 @@ const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
   });
 
   const selectedProjects = watch('allowed_project_ids');
+
+  useEffect(() => {
+    setPhotoFile(null);
+    setPhotoPreview(resolvedWorkerPhotoUrl ?? null);
+  }, [worker?.id, resolvedWorkerPhotoUrl]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
