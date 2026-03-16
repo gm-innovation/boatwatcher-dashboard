@@ -123,6 +123,50 @@ serve(async (req) => {
             throw new Error('Invalid operation payload')
           }
 
+          if (entityType === 'company') {
+            if (kind === 'delete') {
+              if (!payload.cloud_id) throw new Error('cloud_id required for deletion')
+              const { error } = await supabase.from('companies').delete().eq('id', payload.cloud_id)
+              if (error) throw error
+              results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: payload.cloud_id })
+              continue
+            }
+
+            const companyPayload = {
+              name: payload.name,
+              cnpj: payload.cnpj ?? null,
+              contact_email: payload.contact_email ?? null,
+              logo_url_light: payload.logo_url_light ?? null,
+              logo_url_dark: payload.logo_url_dark ?? null,
+              status: payload.status ?? 'active',
+              vessels: payload.vessels ?? [],
+              project_managers: payload.project_managers ?? [],
+            }
+
+            if (!companyPayload.name) {
+              throw new Error('name is required')
+            }
+
+            if (payload.cloud_id) {
+              const { error } = await supabase
+                .from('companies')
+                .update(companyPayload)
+                .eq('id', payload.cloud_id)
+              if (error) throw error
+              results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: payload.cloud_id })
+              continue
+            }
+
+            const { data, error } = await supabase
+              .from('companies')
+              .insert(companyPayload)
+              .select('id')
+              .single()
+            if (error) throw error
+            results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: data.id })
+            continue
+          }
+
           if (entityType === 'user_company') {
             if (kind === 'delete') {
               if (!payload.cloud_id) throw new Error('cloud_id required for deletion')
@@ -329,8 +373,9 @@ serve(async (req) => {
             await supabase.from('workers').update({
               name: w.name,
               role: w.role,
-              company_id: w.company_id,
+              company_id: w.company_id || null,
               status: w.status || 'pending_review',
+              allowed_project_ids: agent.project_id ? [agent.project_id] : [],
               updated_at: new Date().toISOString(),
             }).eq('id', cloudId)
           }
@@ -341,7 +386,7 @@ serve(async (req) => {
           const { data: inserted, error: insertError } = await supabase.from('workers').insert({
             name: w.name,
             document_number: w.document_number,
-            company_id: w.company_id,
+            company_id: w.company_id || null,
             role: w.role,
             status: 'pending_review',
             allowed_project_ids: agent.project_id ? [agent.project_id] : [],
@@ -380,6 +425,17 @@ serve(async (req) => {
         .gte('updated_at', since)
       if (error) throw error
       return new Response(JSON.stringify({ company_documents: companyDocuments || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // GET /download-companies
+    if (req.method === 'GET' && action === 'download-companies') {
+      const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'
+      const { data: companies, error } = await supabase
+        .from('companies')
+        .select('id, name, cnpj, contact_email, logo_url_light, logo_url_dark, status, vessels, project_managers, created_at, updated_at')
+        .gte('updated_at', since)
+      if (error) throw error
+      return new Response(JSON.stringify({ companies: companies || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // GET /download-projects

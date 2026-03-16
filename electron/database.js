@@ -278,6 +278,7 @@ function createDatabaseAPI(db, startCode) {
   `);
   const deleteSyncQueueByEntity = db.prepare('DELETE FROM sync_queue WHERE entity_type = ? AND entity_id = ?');
   const syncEntityTableMap = {
+    company: 'companies',
     user_company: 'user_companies',
     company_document: 'company_documents',
     worker_document: 'worker_documents',
@@ -337,6 +338,30 @@ function createDatabaseAPI(db, startCode) {
     const queueRow = parseQueueRow(row);
     if (!queueRow) return null;
     const payload = queueRow.payload || {};
+
+    if (queueRow.entity_type === 'company') {
+      if (queueRow.operation === 'delete') {
+        const cloudId = payload.cloud_id || resolveCloudEntityId('companies', queueRow.entity_id);
+        if (!cloudId) return null;
+        return { ...queueRow, payload: { cloud_id: cloudId } };
+      }
+
+      if (!payload.name) return null;
+      return {
+        ...queueRow,
+        payload: {
+          cloud_id: payload.cloud_id || resolveCloudEntityId('companies', queueRow.entity_id),
+          name: payload.name,
+          cnpj: payload.cnpj || null,
+          contact_email: payload.contact_email || null,
+          logo_url_light: payload.logo_url_light || null,
+          logo_url_dark: payload.logo_url_dark || null,
+          status: payload.status || 'active',
+          vessels: payload.vessels || [],
+          project_managers: payload.project_managers || [],
+        },
+      };
+    }
 
     if (queueRow.entity_type === 'user_company') {
       if (queueRow.operation === 'delete') {
@@ -543,6 +568,18 @@ function createDatabaseAPI(db, startCode) {
         JSON.stringify(data.project_managers || []),
       );
 
+      queueSyncOperation('company', 'upsert', id, {
+        name: data.name,
+        cnpj: data.cnpj || null,
+        contact_email: data.contact_email || null,
+        logo_url_light: data.logo_url_light || null,
+        logo_url_dark: data.logo_url_dark || null,
+        status: data.status || 'active',
+        vessels: data.vessels || [],
+        project_managers: data.project_managers || [],
+        cloud_id: null,
+      });
+
       if (data.user_id) {
         const associationId = uuidv4();
         db.prepare(`
@@ -604,10 +641,25 @@ function createDatabaseAPI(db, startCode) {
       sets.push('synced = 0');
       params.push(id);
       db.prepare(`UPDATE companies SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-      return this.getCompanyById(id);
+      const updated = this.getCompanyById(id);
+      if (updated) {
+        queueSyncOperation('company', 'upsert', id, {
+          name: updated.name,
+          cnpj: updated.cnpj || null,
+          contact_email: updated.contact_email || null,
+          logo_url_light: updated.logo_url_light || null,
+          logo_url_dark: updated.logo_url_dark || null,
+          status: updated.status || 'active',
+          vessels: updated.vessels || [],
+          project_managers: updated.project_managers || [],
+          cloud_id: updated.cloud_id || null,
+        });
+      }
+      return updated;
     },
 
     deleteCompany(id) {
+      const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(id);
       const documents = db.prepare('SELECT * FROM company_documents WHERE company_id = ?').all(id);
       const associations = db.prepare('SELECT * FROM user_companies WHERE company_id = ?').all(id);
 
@@ -630,6 +682,14 @@ function createDatabaseAPI(db, startCode) {
         } else {
           clearQueuedSyncOperation('user_company', association.id);
         }
+      }
+
+      if (company?.cloud_id || company?.synced) {
+        queueSyncOperation('company', 'delete', id, {
+          cloud_id: company?.cloud_id || null,
+        });
+      } else {
+        clearQueuedSyncOperation('company', id);
       }
 
       db.prepare('DELETE FROM company_documents WHERE company_id = ?').run(id);
@@ -1123,7 +1183,17 @@ function createDatabaseAPI(db, startCode) {
 
     // === Sync helpers ===
     getUnsyncedWorkers() {
-      return db.prepare('SELECT * FROM workers WHERE synced = 0').all();
+      return db.prepare('SELECT * FROM workers WHERE synced = 0').all()
+        .map(normalizeWorkerRow)
+        .map((worker) => {
+          const cloudCompanyId = worker.company_id ? resolveCloudEntityId('companies', worker.company_id) : null;
+          if (worker.company_id && !cloudCompanyId) return null;
+          return {
+            ...worker,
+            company_id: cloudCompanyId || worker.company_id || null,
+          };
+        })
+        .filter(Boolean);
     },
 
     getUnsyncedLogs() {
@@ -1180,6 +1250,7 @@ function createDatabaseAPI(db, startCode) {
 
     upsertWorkerFromCloud(data) {
       const existing = db.prepare('SELECT id FROM workers WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
+      const localCompanyId = resolveLocalEntityId('companies', data.company_id) || data.company_id;
       if (existing) {
         db.prepare(`
           UPDATE workers SET name = ?, company_id = ?, role = ?, status = ?, document_number = ?, 
@@ -1187,7 +1258,7 @@ function createDatabaseAPI(db, startCode) {
           WHERE id = ?
         `).run(
           data.name,
-          data.company_id,
+          localCompanyId,
           data.role,
           data.status,
           data.document_number,
@@ -1204,7 +1275,7 @@ function createDatabaseAPI(db, startCode) {
           uuidv4(),
           data.code || 0,
           data.name,
-          data.company_id,
+          localCompanyId,
           data.role,
           data.status,
           data.document_number,
@@ -1216,13 +1287,40 @@ function createDatabaseAPI(db, startCode) {
     },
 
     upsertCompanyFromCloud(data) {
-      const existing = db.prepare('SELECT id FROM companies WHERE id = ?').get(data.id);
+      const existing = db.prepare('SELECT id FROM companies WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
       if (existing) {
-        db.prepare(`UPDATE companies SET name = ?, cnpj = ?, status = ?, updated_at = datetime('now'), synced = 1 WHERE id = ?`)
-          .run(data.name, data.cnpj, data.status, data.id);
+        db.prepare(`
+          UPDATE companies
+          SET name = ?, cnpj = ?, contact_email = ?, logo_url_light = ?, logo_url_dark = ?, status = ?, vessels = ?, project_managers = ?, updated_at = datetime('now'), synced = 1, cloud_id = ?
+          WHERE id = ?
+        `).run(
+          data.name,
+          data.cnpj || null,
+          data.contact_email || null,
+          data.logo_url_light || null,
+          data.logo_url_dark || null,
+          data.status || 'active',
+          JSON.stringify(data.vessels || []),
+          JSON.stringify(data.project_managers || []),
+          data.id,
+          existing.id,
+        );
       } else {
-        db.prepare(`INSERT INTO companies (id, name, cnpj, status, synced) VALUES (?, ?, ?, ?, 1)`)
-          .run(data.id, data.name, data.cnpj, data.status);
+        db.prepare(`
+          INSERT INTO companies (id, name, cnpj, contact_email, logo_url_light, logo_url_dark, status, vessels, project_managers, synced, cloud_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        `).run(
+          uuidv4(),
+          data.name,
+          data.cnpj || null,
+          data.contact_email || null,
+          data.logo_url_light || null,
+          data.logo_url_dark || null,
+          data.status || 'active',
+          JSON.stringify(data.vessels || []),
+          JSON.stringify(data.project_managers || []),
+          data.id,
+        );
       }
     },
 

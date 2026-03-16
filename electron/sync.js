@@ -69,14 +69,17 @@ class SyncEngine {
     this.notifyListeners();
 
     try {
-      // Upload structured pending operations first so dependent entities exist in cloud
-      await this.uploadQueuedOperations();
+      // Upload base entities first
+      await this.uploadQueuedOperations(['company']);
+
+      // Upload pending workers after company ids are resolvable in cloud
+      await this.uploadWorkers();
+
+      // Upload dependent structured operations
+      await this.uploadQueuedOperations(['user_company', 'company_document', 'worker_document']);
 
       // Upload pending logs
       await this.uploadLogs();
-
-      // Upload pending workers
-      await this.uploadWorkers();
 
       // Download updates from cloud
       await this.downloadUpdates();
@@ -91,8 +94,11 @@ class SyncEngine {
     }
   }
 
-  async uploadQueuedOperations() {
-    const operations = this.db.getPendingSyncOperations?.() || [];
+  async uploadQueuedOperations(entityTypes = null) {
+    let operations = this.db.getPendingSyncOperations?.() || [];
+    if (Array.isArray(entityTypes) && entityTypes.length > 0) {
+      operations = operations.filter((operation) => entityTypes.includes(operation.entity_type));
+    }
     if (operations.length === 0) return;
 
     const response = await this.callEdgeFunction('agent-sync/upload-operations', 'POST', { operations });
