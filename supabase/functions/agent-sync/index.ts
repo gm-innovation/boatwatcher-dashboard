@@ -123,6 +123,50 @@ serve(async (req) => {
             throw new Error('Invalid operation payload')
           }
 
+          if (entityType === 'company') {
+            if (kind === 'delete') {
+              if (!payload.cloud_id) throw new Error('cloud_id required for deletion')
+              const { error } = await supabase.from('companies').delete().eq('id', payload.cloud_id)
+              if (error) throw error
+              results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: payload.cloud_id })
+              continue
+            }
+
+            const companyPayload = {
+              name: payload.name,
+              cnpj: payload.cnpj ?? null,
+              contact_email: payload.contact_email ?? null,
+              logo_url_light: payload.logo_url_light ?? null,
+              logo_url_dark: payload.logo_url_dark ?? null,
+              status: payload.status ?? 'active',
+              vessels: payload.vessels ?? [],
+              project_managers: payload.project_managers ?? [],
+            }
+
+            if (!companyPayload.name) {
+              throw new Error('name is required')
+            }
+
+            if (payload.cloud_id) {
+              const { error } = await supabase
+                .from('companies')
+                .update(companyPayload)
+                .eq('id', payload.cloud_id)
+              if (error) throw error
+              results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: payload.cloud_id })
+              continue
+            }
+
+            const { data, error } = await supabase
+              .from('companies')
+              .insert(companyPayload)
+              .select('id')
+              .single()
+            if (error) throw error
+            results.push({ queueId, entityType, entityId, operation: kind, success: true, cloudId: data.id })
+            continue
+          }
+
           if (entityType === 'user_company') {
             if (kind === 'delete') {
               if (!payload.cloud_id) throw new Error('cloud_id required for deletion')
