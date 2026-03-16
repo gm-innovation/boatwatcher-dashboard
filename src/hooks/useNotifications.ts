@@ -2,13 +2,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Notification } from '@/types/supabase';
+import { usesLocalAuth, usesLocalServer } from '@/lib/runtimeProfile';
 
 export const useNotifications = () => {
   const queryClient = useQueryClient();
+  const isLocalRuntime = usesLocalAuth() || usesLocalServer();
 
   const { data: notifications = [], isLoading } = useQuery({
     queryKey: ['notifications'],
     queryFn: async () => {
+      if (isLocalRuntime) return [];
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return [];
 
@@ -28,6 +32,8 @@ export const useNotifications = () => {
 
   const markAsReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {
+      if (isLocalRuntime) return;
+
       const { error } = await supabase
         .from('notifications')
         .update({ is_read: true })
@@ -42,6 +48,8 @@ export const useNotifications = () => {
 
   const markAllAsReadMutation = useMutation({
     mutationFn: async () => {
+      if (isLocalRuntime) return;
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
 
@@ -58,13 +66,16 @@ export const useNotifications = () => {
     },
   });
 
-  // Realtime subscription
   useEffect(() => {
+    if (isLocalRuntime) return;
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
     const setupSubscription = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
 
-      const channel = supabase
+      channel = supabase
         .channel('notifications-changes')
         .on(
           'postgres_changes',
@@ -79,14 +90,14 @@ export const useNotifications = () => {
           }
         )
         .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
     };
 
     setupSubscription();
-  }, [queryClient]);
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [isLocalRuntime, queryClient]);
 
   return {
     notifications,
