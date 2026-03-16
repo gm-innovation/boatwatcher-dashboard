@@ -113,7 +113,9 @@ serve(async (req) => {
         .eq('status', 'active')
 
       if (error) throw error
-      return new Response(JSON.stringify({ workers: workers || [], timestamp: new Date().toISOString() }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+
+      const workersWithPhotos = await Promise.all((workers || []).map((worker) => attachWorkerPhotoSignedUrl(supabase, worker)))
+      return new Response(JSON.stringify({ workers: workersWithPhotos, timestamp: new Date().toISOString() }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // POST /status (heartbeat)
