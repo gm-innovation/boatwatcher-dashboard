@@ -227,22 +227,17 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
     const fileName = `${workerId}.${fileExt}`;
     const filePath = `workers/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('worker-photos')
-      .upload(filePath, photoFile, { upsert: true });
+    const result = await uploadFile('worker-photos', filePath, photoFile, { upsert: true });
 
-    if (uploadError) {
-      console.error('[uploadPhoto] Upload error:', uploadError);
+    if (!result) {
       toast({
         title: 'Erro no upload da foto',
-        description: uploadError.message,
+        description: 'Não foi possível salvar a foto do trabalhador.',
         variant: 'destructive'
       });
-      return null;
     }
 
-    const { data } = await supabase.storage.from('worker-photos').createSignedUrl(filePath, 3600);
-    return data?.signedUrl || null;
+    return result;
   };
 
   const saveDocuments = async (workerId: string) => {

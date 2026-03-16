@@ -227,15 +227,12 @@ export const MyWorkers = () => {
                   <TableRow key={worker.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8">
-                          {worker.photo_url ? (
-                            <AvatarImage src={worker.photo_url} alt={worker.name} />
-                          ) : (
-                            <AvatarFallback>
-                              {worker.name.slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          )}
-                        </Avatar>
+                        <ResolvedAvatar
+                          className="h-8 w-8"
+                          photoUrl={worker.photo_url}
+                          name={worker.name}
+                          fallback="initials"
+                        />
                         <span className="font-medium">{worker.name}</span>
                       </div>
                     </TableCell>
