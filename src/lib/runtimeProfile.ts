@@ -25,7 +25,6 @@ export const getRuntimeProfile = (): RuntimeProfile => {
     storageMode: isDesktop ? 'local-server' : 'cloud',
   };
 };
-};
 
 export const usesLocalAuth = () => getRuntimeProfile().authMode === 'local-bypass';
 export const usesLocalServer = () => getRuntimeProfile().dataMode === 'local-server';

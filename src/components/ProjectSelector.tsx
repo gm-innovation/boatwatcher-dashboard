@@ -1,12 +1,11 @@
-import { useProjects } from '@/hooks/useSupabase';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+} from '@/components/ui/select';
+import { Loader2 } from 'lucide-react';
 import { useProject } from '@/contexts/ProjectContext';
 
 interface ProjectSelectorProps {
@@ -15,13 +14,9 @@ interface ProjectSelectorProps {
 }
 
 export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectSelectorProps) => {
-  const { projects: contextProjects, loading: contextLoading } = useProject();
-  const { data: queryProjects = [], isLoading: queryLoading } = useProjects();
+  const { projects, loading } = useProject();
 
-  const projects = contextProjects.length > 0 || contextLoading ? contextProjects : queryProjects;
-  const isLoading = contextLoading || queryLoading;
-
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -30,22 +25,19 @@ export const ProjectSelector = ({ selectedProjectId, onProjectSelect }: ProjectS
     );
   }
 
-  const selectedProject = projects.find((p) => p.id === selectedProjectId);
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
 
   return (
-    <Select
-      value={selectedProjectId || undefined}
-      onValueChange={onProjectSelect}
-    >
+    <Select value={selectedProjectId || undefined} onValueChange={onProjectSelect}>
       <SelectTrigger className="w-[300px]">
         <SelectValue placeholder="Selecione um projeto">
-          {selectedProject?.name || 'Selecione um projeto'}
+          {selectedProject ? `${selectedProject.client?.name || 'Cliente'} — ${selectedProject.name}` : 'Selecione um projeto'}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {projects.map((project) => (
           <SelectItem key={project.id} value={project.id}>
-            {project.name}
+            {project.client?.name ? `${project.client.name} — ${project.name}` : project.name}
           </SelectItem>
         ))}
       </SelectContent>
