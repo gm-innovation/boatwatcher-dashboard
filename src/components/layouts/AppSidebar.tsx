@@ -59,7 +59,6 @@ const desktopAdminSubItems = webAdminSubItems;
 export function AppSidebar() {
   const location = useLocation();
   const { role } = useAuthContext();
-  const isLocalRuntime = usesLocalServer();
 
   const currentPath = location.pathname;
   const isPeopleActive = currentPath.startsWith('/people');
@@ -71,9 +70,9 @@ export function AppSidebar() {
     return currentPath.startsWith(path);
   };
 
-  const isAdmin = role === 'admin' || isLocalRuntime;
+  const isAdmin = role === 'admin';
   const isCompanyAdmin = role === 'company_admin';
-  const adminSubItems = isLocalRuntime ? desktopAdminSubItems : webAdminSubItems;
+  const adminSubItems = webAdminSubItems;
 
   return (
     <Sidebar collapsible="icon">
