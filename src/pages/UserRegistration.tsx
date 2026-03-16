@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
+import { uploadFile } from '@/lib/storageProvider';
 import { toast } from '@/hooks/use-toast';
 import { ensureValidSession } from '@/utils/ensureValidSession';
 import { Button } from '@/components/ui/button';
@@ -205,22 +206,17 @@ const UserRegistration = () => {
     const fileName = `${workerId}.${fileExt}`;
     const filePath = `workers/${fileName}`;
 
-    const { error } = await supabase.storage
-      .from('worker-photos')
-      .upload(filePath, photoFile, { upsert: true });
+    const result = await uploadFile('worker-photos', filePath, photoFile, { upsert: true });
 
-    if (error) {
-      console.error('[uploadPhoto] Upload error:', error);
+    if (!result) {
       toast({
         title: 'Erro no upload da foto',
-        description: error.message,
+        description: 'Não foi possível salvar a foto do trabalhador.',
         variant: 'destructive'
       });
-      return null;
     }
 
-    const { data } = await supabase.storage.from('worker-photos').createSignedUrl(filePath, 3600);
-    return data?.signedUrl || null;
+    return result;
   };
 
   const onSubmit = async (data: RegistrationFormData) => {

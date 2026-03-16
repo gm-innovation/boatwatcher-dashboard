@@ -3,15 +3,14 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
+import { uploadFile } from '@/lib/storageProvider';
 import { useCompanies, useProjects } from '@/hooks/useSupabase';
 import { useCreateWorkerDocument } from '@/hooks/useWorkerDocuments';
 import { useDocumentExtraction, ProcessedDocument } from '@/hooks/useDocumentExtraction';
 import { toast } from '@/hooks/use-toast';
 import { ensureValidSession } from '@/utils/ensureValidSession';
 import { useQueryClient } from '@tanstack/react-query';
-
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -227,22 +226,17 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
     const fileName = `${workerId}.${fileExt}`;
     const filePath = `workers/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('worker-photos')
-      .upload(filePath, photoFile, { upsert: true });
+    const result = await uploadFile('worker-photos', filePath, photoFile, { upsert: true });
 
-    if (uploadError) {
-      console.error('[uploadPhoto] Upload error:', uploadError);
+    if (!result) {
       toast({
         title: 'Erro no upload da foto',
-        description: uploadError.message,
+        description: 'Não foi possível salvar a foto do trabalhador.',
         variant: 'destructive'
       });
-      return null;
     }
 
-    const { data } = await supabase.storage.from('worker-photos').createSignedUrl(filePath, 3600);
-    return data?.signedUrl || null;
+    return result;
   };
 
   const saveDocuments = async (workerId: string) => {

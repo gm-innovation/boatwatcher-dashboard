@@ -18,11 +18,12 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { 
-  Plus, 
-  Upload, 
-  User, 
-  Edit, 
+import { ResolvedAvatar } from '@/components/ResolvedAvatar';
+import {
+  Plus,
+  Upload,
+  User,
+  Edit,
   Trash2,
   Camera,
   CheckCircle,
@@ -306,13 +307,12 @@ const EnrollmentDialog = ({ worker, onClose }: EnrollmentDialogProps) => {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 pb-4 border-b">
-        <Avatar className="h-12 w-12">
-          {worker.photo_url ? (
-            <AvatarImage src={worker.photo_url} alt={worker.name} />
-          ) : (
-            <AvatarFallback><User className="h-6 w-6" /></AvatarFallback>
-          )}
-        </Avatar>
+        <ResolvedAvatar
+          className="h-12 w-12"
+          photoUrl={worker.photo_url}
+          name={worker.name}
+          iconClassName="h-6 w-6"
+        />
         <div>
           <p className="font-medium">{worker.name}</p>
           <p className="text-sm text-muted-foreground">{worker.document_number}</p>
@@ -491,13 +491,12 @@ export const WorkerManagement = () => {
                 </td>
                 <td className="p-4">
                   <div className="flex items-center gap-3">
-                    <Avatar className="h-8 w-8">
-                      {worker.photo_url ? (
-                        <AvatarImage src={worker.photo_url} alt={worker.name} />
-                      ) : (
-                        <AvatarFallback><User className="h-4 w-4" /></AvatarFallback>
-                      )}
-                    </Avatar>
+                    <ResolvedAvatar
+                      className="h-8 w-8"
+                      photoUrl={worker.photo_url}
+                      name={worker.name}
+                      iconClassName="h-4 w-4"
+                    />
                     <span className="font-medium">{worker.name}</span>
                   </div>
                 </td>

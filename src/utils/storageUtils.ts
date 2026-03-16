@@ -1,25 +1,62 @@
 import { supabase } from '@/integrations/supabase/client';
 
+const privateBuckets = ['worker-photos', 'worker-documents'] as const;
+type PrivateBucket = (typeof privateBuckets)[number];
+
+function extractPrivateStorageReference(storedUrl: string): { bucket: PrivateBucket; path: string } | null {
+  if (storedUrl.startsWith('storage://')) {
+    const rest = storedUrl.replace('storage://', '');
+    const slashIndex = rest.indexOf('/');
+
+    if (slashIndex === -1) return null;
+
+    const bucket = rest.substring(0, slashIndex) as PrivateBucket;
+    const path = rest.substring(slashIndex + 1);
+
+    if (privateBuckets.includes(bucket) && path) {
+      return { bucket, path };
+    }
+  }
+
+  const rawPathMatch = storedUrl.match(/^(worker-photos|worker-documents)\/(.+)$/);
+  if (rawPathMatch) {
+    return {
+      bucket: rawPathMatch[1] as PrivateBucket,
+      path: rawPathMatch[2],
+    };
+  }
+
+  const objectUrlMatch = storedUrl.match(
+    /\/storage\/v1\/(?:object|render\/image)\/(?:public|sign)\/(worker-photos|worker-documents)\/([^?]+)/,
+  );
+  if (objectUrlMatch) {
+    return {
+      bucket: objectUrlMatch[1] as PrivateBucket,
+      path: decodeURIComponent(objectUrlMatch[2]),
+    };
+  }
+
+  return null;
+}
+
 /**
  * Gets a URL for a file in a storage bucket.
  * For private buckets (worker-photos, worker-documents), creates a signed URL.
  * For public buckets, returns the public URL.
  */
 export async function getStorageUrl(bucket: string, path: string): Promise<string | null> {
-  const privateBuckets = ['worker-photos', 'worker-documents'];
-  
-  if (privateBuckets.includes(bucket)) {
+  if (privateBuckets.includes(bucket as PrivateBucket)) {
     const { data, error } = await supabase.storage
       .from(bucket)
-      .createSignedUrl(path, 3600); // 1 hour
-    
+      .createSignedUrl(path, 3600);
+
     if (error) {
       console.error(`[getStorageUrl] Error creating signed URL for ${bucket}/${path}:`, error);
       return null;
     }
     return data.signedUrl;
   }
-  
+
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }
@@ -30,46 +67,25 @@ export async function getStorageUrl(bucket: string, path: string): Promise<strin
  * For public buckets, we store the full public URL for backward compatibility.
  */
 export function getUploadedFileReference(bucket: string, path: string): string {
-  const privateBuckets = ['worker-photos', 'worker-documents'];
-  
-  if (privateBuckets.includes(bucket)) {
-    // Store as storage:// URI for private buckets
+  if (privateBuckets.includes(bucket as PrivateBucket)) {
     return `storage://${bucket}/${path}`;
   }
-  
+
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }
 
 /**
  * Resolves a stored file reference to a displayable URL.
- * Handles both storage:// URIs (new private format) and legacy public URLs.
+ * Handles storage:// URIs, raw bucket paths, signed URLs and legacy public URLs.
  */
 export async function resolveFileUrl(storedUrl: string | null): Promise<string | null> {
   if (!storedUrl) return null;
-  
-  // New format: storage://bucket/path
-  if (storedUrl.startsWith('storage://')) {
-    const rest = storedUrl.replace('storage://', '');
-    const slashIndex = rest.indexOf('/');
-    const bucket = rest.substring(0, slashIndex);
-    const path = rest.substring(slashIndex + 1);
-    return getStorageUrl(bucket, path);
+
+  const reference = extractPrivateStorageReference(storedUrl);
+  if (reference) {
+    return getStorageUrl(reference.bucket, reference.path);
   }
-  
-  // Legacy: full public URL - still works if bucket was public when stored
-  // For now, return as-is. If bucket is now private, this URL won't work.
-  // We detect this and try to extract the path and create a signed URL.
-  const workerPhotosMatch = storedUrl.match(/\/storage\/v1\/object\/public\/worker-photos\/(.+)/);
-  if (workerPhotosMatch) {
-    return getStorageUrl('worker-photos', workerPhotosMatch[1]);
-  }
-  
-  const workerDocsMatch = storedUrl.match(/\/storage\/v1\/object\/public\/worker-documents\/(.+)/);
-  if (workerDocsMatch) {
-    return getStorageUrl('worker-documents', workerDocsMatch[1]);
-  }
-  
-  // Public URL or external URL - return as-is
+
   return storedUrl;
 }

@@ -9,6 +9,7 @@ import { useCompanies, useProjects } from '@/hooks/useSupabase';
 import { useWorkerDocuments } from '@/hooks/useWorkerDocuments';
 import { useWorkerStrikes, useCreateWorkerStrike, useDeleteWorkerStrike } from '@/hooks/useWorkerStrikes';
 import { toast } from '@/hooks/use-toast';
+import { useResolvedUrl } from '@/hooks/useResolvedUrl';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -92,6 +93,7 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
   const createStrike = useCreateWorkerStrike();
   const deleteStrike = useDeleteWorkerStrike();
   const queryClient = useQueryClient();
+  const resolvedPhotoUrl = useResolvedUrl(worker?.photo_url);
 
   const { register, handleSubmit, reset } = useForm<AdditionalDataForm>({
     resolver: zodResolver(additionalDataSchema),
@@ -288,8 +290,8 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
                   <div className="flex gap-6">
                     <div className="flex-shrink-0">
                       <Avatar className="h-24 w-24">
-                        {worker.photo_url ? (
-                          <AvatarImage src={worker.photo_url} alt={worker.name} />
+                        {resolvedPhotoUrl ? (
+                          <AvatarImage src={resolvedPhotoUrl} alt={worker.name} />
                         ) : (
                           <AvatarFallback className="text-2xl">
                             <User className="h-10 w-10" />

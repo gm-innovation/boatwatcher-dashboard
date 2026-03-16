@@ -5,9 +5,9 @@ import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle, XCircle, User, Clock, AlertTriangle } from 'lucide-react';
+import { ResolvedAvatar } from '@/components/ResolvedAvatar';
+import { CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 export const PendingRegistrations = () => {
@@ -107,15 +107,12 @@ export const PendingRegistrations = () => {
                     className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-muted/50"
                   >
                     <div className="flex items-center gap-4">
-                      <Avatar className="h-12 w-12">
-                        {worker.photo_url ? (
-                          <AvatarImage src={worker.photo_url} alt={worker.name} />
-                        ) : (
-                          <AvatarFallback>
-                            <User className="h-6 w-6" />
-                          </AvatarFallback>
-                        )}
-                      </Avatar>
+                      <ResolvedAvatar
+                        className="h-12 w-12"
+                        photoUrl={worker.photo_url}
+                        name={worker.name}
+                        iconClassName="h-6 w-6"
+                      />
                       <div>
                         <p className="font-medium">{worker.name}</p>
                         <p className="text-sm text-muted-foreground">{worker.document_number}</p>

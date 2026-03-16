@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import { Button } from '@/components/ui/button';
+import { useResolvedUrl } from '@/hooks/useResolvedUrl';
 import { Printer } from 'lucide-react';
 
 interface BadgePrinterProps {
@@ -15,6 +16,8 @@ interface BadgePrinterProps {
 }
 
 export function BadgePrinter({ worker, companyName, jobFunctionName }: BadgePrinterProps) {
+  const resolvedPhotoUrl = useResolvedUrl(worker.photo_url);
+
   const handlePrint = async () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [86, 54] });
 
@@ -31,11 +34,11 @@ export function BadgePrinter({ worker, companyName, jobFunctionName }: BadgePrin
     doc.text(companyName || 'IDENTIFICAÇÃO', 43, 7, { align: 'center' });
 
     // Photo placeholder
-    if (worker.photo_url) {
+    if (resolvedPhotoUrl) {
       try {
         const img = new Image();
         img.crossOrigin = 'anonymous';
-        img.src = worker.photo_url;
+        img.src = resolvedPhotoUrl;
         await new Promise((resolve, reject) => {
           img.onload = resolve;
           img.onerror = reject;
