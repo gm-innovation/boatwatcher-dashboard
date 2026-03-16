@@ -7,7 +7,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import { localWorkers, localCompanies, localProjects, localAccessLogs, localDevices, localJobFunctions } from '@/lib/localServerProvider';
+import { localWorkers, localCompanies, localProjects, localAccessLogs, localDevices, localJobFunctions, localCompanyDocuments, localWorkerDocuments } from '@/lib/localServerProvider';
 import { usesLocalServer } from '@/lib/runtimeProfile';
 
 // --- Companies ---
@@ -22,6 +22,17 @@ export async function fetchCompanies() {
 export async function fetchCompanyById(id: string) {
   if (usesLocalServer()) return localCompanies.getById(id);
   const { data, error } = await supabase.from('companies').select('*').eq('id', id).single();
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchCurrentCompanyByUserId(userId: string) {
+  if (usesLocalServer()) return localCompanies.getCurrent(userId);
+  const { data, error } = await supabase
+    .from('user_companies')
+    .select('company_id, companies(*)')
+    .eq('user_id', userId)
+    .maybeSingle();
   if (error) throw error;
   return data;
 }
@@ -44,6 +55,20 @@ export async function deleteCompany(id: string) {
   if (usesLocalServer()) return localCompanies.delete(id);
   const { error } = await supabase.from('companies').delete().eq('id', id);
   if (error) throw error;
+}
+
+export async function fetchCompanyDocuments(companyId: string) {
+  if (usesLocalServer()) return localCompanyDocuments.list(companyId);
+  const { data, error } = await supabase.from('company_documents').select('*').eq('company_id', companyId).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function createCompanyDocument(data: Record<string, any>) {
+  if (usesLocalServer()) return localCompanyDocuments.create(data);
+  const { data: result, error } = await supabase.from('company_documents').insert(data as any).select().single();
+  if (error) throw error;
+  return result;
 }
 
 // --- Workers ---
@@ -83,6 +108,27 @@ export async function deleteWorker(id: string) {
   if (usesLocalServer()) return localWorkers.delete(id);
   const { error } = await supabase.from('workers').delete().eq('id', id);
   if (error) throw error;
+}
+
+export async function fetchWorkerDocuments(workerId: string) {
+  if (usesLocalServer()) return localWorkerDocuments.list(workerId);
+  const { data, error } = await supabase.from('worker_documents').select('*').eq('worker_id', workerId).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchWorkerDocumentsByWorkerIds(workerIds: string[]) {
+  if (usesLocalServer()) return localWorkerDocuments.listByWorkers(workerIds);
+  const { data, error } = await supabase.from('worker_documents').select('*').in('worker_id', workerIds);
+  if (error) throw error;
+  return data;
+}
+
+export async function createWorkerDocument(documentData: Record<string, any>) {
+  if (usesLocalServer()) return localWorkerDocuments.create(documentData);
+  const { data, error } = await supabase.from('worker_documents').insert(documentData as any).select().single();
+  if (error) throw error;
+  return data;
 }
 
 // --- Projects ---

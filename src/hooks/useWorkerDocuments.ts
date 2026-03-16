@@ -2,13 +2,21 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import type { WorkerDocument } from '@/types/supabase';
+import { usesLocalServer } from '@/lib/runtimeProfile';
+import { localWorkerDocuments } from '@/lib/localServerProvider';
 
 export const useWorkerDocuments = (workerId: string | null) => {
+  const isLocalRuntime = usesLocalServer();
+
   return useQuery({
-    queryKey: ['worker-documents', workerId],
+    queryKey: ['worker-documents', workerId, isLocalRuntime],
     queryFn: async () => {
       if (!workerId) return [];
-      
+
+      if (isLocalRuntime) {
+        return (await localWorkerDocuments.list(workerId)) as WorkerDocument[];
+      }
+
       const { data, error } = await supabase
         .from('worker_documents')
         .select('*')
@@ -68,6 +76,7 @@ export const useExpiredDocuments = () => {
 
 export const useCreateWorkerDocument = () => {
   const queryClient = useQueryClient();
+  const isLocalRuntime = usesLocalServer();
 
   return useMutation({
     mutationFn: async (data: {
@@ -80,6 +89,10 @@ export const useCreateWorkerDocument = () => {
       extracted_data?: Record<string, any> | null;
       status?: string;
     }) => {
+      if (isLocalRuntime) {
+        return await localWorkerDocuments.create(data);
+      }
+
       const { data: result, error } = await supabase
         .from('worker_documents')
         .insert({
@@ -112,8 +125,8 @@ export const useUpdateWorkerDocument = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, workerId, data }: { 
-      id: string; 
+    mutationFn: async ({ id, workerId, data }: {
+      id: string;
       workerId: string;
       data: Partial<WorkerDocument>;
     }) => {
