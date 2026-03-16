@@ -5,6 +5,7 @@ const fs = require('fs');
 
 let mainWindow;
 let localServerUrl = 'http://localhost:3001';
+const devServerUrl = process.env.DOCKCHECK_DESKTOP_DEV_URL || 'http://localhost:8080';
 
 // Load server URL from config file
 function loadServerConfig() {
