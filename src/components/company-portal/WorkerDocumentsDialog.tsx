@@ -1,22 +1,22 @@
-import { useState, useRef } from 'react';
+import { useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
-import { useDocumentExtraction, ProcessedDocument } from '@/hooks/useDocumentExtraction';
+import { useDocumentExtraction } from '@/hooks/useDocumentExtraction';
+import { usesLocalServer } from '@/lib/runtimeProfile';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
-import { 
-  FileText, 
-  Upload, 
-  Loader2, 
-  CheckCircle, 
-  AlertCircle, 
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  FileText,
+  Loader2,
+  CheckCircle,
+  AlertCircle,
   Clock,
   ExternalLink,
-  X,
   Plus,
   Sparkles
 } from 'lucide-react';
@@ -30,13 +30,15 @@ interface WorkerDocumentsDialogProps {
 
 export const WorkerDocumentsDialog = ({ workerId, workerName, onClose }: WorkerDocumentsDialogProps) => {
   const queryClient = useQueryClient();
+  const isLocalRuntime = usesLocalServer();
   const { extractMultipleDocuments, isExtracting, progress } = useDocumentExtraction();
   const docsInputRef = useRef<HTMLInputElement>(null);
 
-  // Get existing documents
   const { data: documents = [], isLoading, refetch } = useQuery({
-    queryKey: ['worker-documents', workerId],
+    queryKey: ['worker-documents', workerId, isLocalRuntime],
     queryFn: async () => {
+      if (isLocalRuntime) return [];
+
       const { data, error } = await supabase
         .from('worker_documents')
         .select('*')
@@ -52,9 +54,19 @@ export const WorkerDocumentsDialog = ({ workerId, workerName, onClose }: WorkerD
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    const fileArray = Array.from(files).filter(f => 
-      f.type === 'application/pdf' || 
-      f.type.startsWith('image/')
+    if (isLocalRuntime) {
+      toast({
+        title: 'Documentos indisponíveis no desktop',
+        description: 'O gerenciamento de documentos do portal ainda será conectado ao servidor local.',
+        variant: 'destructive'
+      });
+      event.target.value = '';
+      return;
+    }
+
+    const fileArray = Array.from(files).filter((file) =>
+      file.type === 'application/pdf' ||
+      file.type.startsWith('image/')
     );
 
     if (fileArray.length === 0) {
@@ -63,10 +75,9 @@ export const WorkerDocumentsDialog = ({ workerId, workerName, onClose }: WorkerD
     }
 
     const processedDocs = await extractMultipleDocuments(fileArray, workerId);
-    
+
     if (processedDocs.length > 0) {
-      // Save to database
-      const docsToInsert = processedDocs.map(doc => ({
+      const docsToInsert = processedDocs.map((doc) => ({
         worker_id: workerId,
         document_type: doc.document_type,
         document_url: doc.file_url,
@@ -98,35 +109,44 @@ export const WorkerDocumentsDialog = ({ workerId, workerName, onClose }: WorkerD
   const getStatusBadge = (expiryDate: string | null) => {
     const status = getValidityStatus(expiryDate);
     const daysUntil = getDaysUntilExpiry(expiryDate);
-    
+
     switch (status) {
       case 'valid':
         return (
-          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
-            <CheckCircle className="h-3 w-3 mr-1" />
+          <Badge variant="outline" className="border-primary/20 bg-primary/10 text-primary">
+            <CheckCircle className="mr-1 h-3 w-3" />
             Válido {daysUntil !== null && `(${daysUntil}d)`}
           </Badge>
         );
       case 'expiring_soon':
         return (
-          <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">
-            <Clock className="h-3 w-3 mr-1" />
+          <Badge variant="outline" className="border-border bg-muted text-foreground">
+            <Clock className="mr-1 h-3 w-3" />
             Vence em {daysUntil}d
           </Badge>
         );
       case 'expired':
         return (
-          <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/30">
-            <AlertCircle className="h-3 w-3 mr-1" />
+          <Badge variant="outline" className="border-destructive/30 bg-destructive/10 text-destructive">
+            <AlertCircle className="mr-1 h-3 w-3" />
             Vencido há {Math.abs(daysUntil || 0)}d
           </Badge>
         );
+      default:
+        return null;
     }
   };
 
   return (
     <div className="space-y-4">
-      {/* Add Documents */}
+      {isLocalRuntime && (
+        <Alert>
+          <AlertDescription>
+            O gerenciamento de documentos de {workerName} ainda não está disponível no desktop local.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="space-y-2">
         <input
           ref={docsInputRef}
@@ -136,16 +156,16 @@ export const WorkerDocumentsDialog = ({ workerId, workerName, onClose }: WorkerD
           onChange={handleDocumentsSelect}
           className="hidden"
         />
-        
-        <div 
+
+        <div
           onClick={() => !isExtracting && docsInputRef.current?.click()}
-          className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+          className="cursor-pointer rounded-lg border-2 border-dashed p-4 text-center transition-colors hover:bg-muted/50"
         >
           {isExtracting ? (
             <div className="space-y-2">
-              <Loader2 className="h-6 w-6 mx-auto text-primary animate-spin" />
+              <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
               <p className="text-sm text-muted-foreground">Processando com IA...</p>
-              <Progress value={progress} className="max-w-xs mx-auto" />
+              <Progress value={progress} className="mx-auto max-w-xs" />
             </div>
           ) : (
             <div className="flex items-center justify-center gap-2 text-muted-foreground">
@@ -160,15 +180,14 @@ export const WorkerDocumentsDialog = ({ workerId, workerName, onClose }: WorkerD
         </div>
       </div>
 
-      {/* Documents List */}
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : documents.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          <FileText className="h-10 w-10 mx-auto mb-2 opacity-50" />
-          <p>Nenhum documento cadastrado</p>
+        <div className="py-8 text-center text-muted-foreground">
+          <FileText className="mx-auto mb-2 h-10 w-10 opacity-50" />
+          <p>{isLocalRuntime ? 'Disponível em breve no desktop' : 'Nenhum documento cadastrado'}</p>
         </div>
       ) : (
         <ScrollArea className="h-[400px]">
@@ -176,14 +195,14 @@ export const WorkerDocumentsDialog = ({ workerId, workerName, onClose }: WorkerD
             {documents.map((doc: any) => (
               <Card key={doc.id} className="p-3">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-muted">
+                  <div className="rounded-lg bg-muted p-2">
                     <FileText className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
                       {doc.filename || doc.document_type}
                     </p>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
                       <Badge variant="secondary" className="text-xs">
                         {doc.document_type}
                       </Badge>
@@ -211,7 +230,7 @@ export const WorkerDocumentsDialog = ({ workerId, workerName, onClose }: WorkerD
         </ScrollArea>
       )}
 
-      <div className="flex justify-end pt-4 border-t">
+      <div className="border-t pt-4 flex justify-end">
         <Button variant="outline" onClick={onClose}>
           Fechar
         </Button>

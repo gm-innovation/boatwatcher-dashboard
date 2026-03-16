@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { ensureValidSession } from '@/utils/ensureValidSession';
 import { identifyDocumentType, parseDocumentDate, calculateExpiryDate, normalizeDocumentType, DocumentType } from '@/utils/documentParser';
+import { usesLocalServer } from '@/lib/runtimeProfile';
 
 export interface ExtractedDocumentData {
   document_type?: DocumentType;
@@ -38,6 +39,7 @@ interface UseDocumentExtractionReturn {
 export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
   const [isExtracting, setIsExtracting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const isLocalRuntime = usesLocalServer();
 
   const uploadToStorage = async (file: File): Promise<string | null> => {
     try {
@@ -66,18 +68,23 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
   };
 
   const extractDocument = async (file: File, workerId?: string): Promise<ProcessedDocument | null> => {
+    if (isLocalRuntime) {
+      toast({
+        title: 'Extração indisponível no desktop',
+        description: 'A extração de documentos ainda não foi conectada ao servidor local.',
+        variant: 'destructive'
+      });
+      return null;
+    }
+
     try {
-      // 1. Validate session with the server FIRST
       const validSession = await ensureValidSession();
-      
+
       if (!validSession) {
-        // ensureValidSession already handles toast and redirect for expired sessions
-        // If it returns null without redirect, user is simply not logged in
         console.warn('[extractDocument] No valid session');
         return null;
       }
 
-      // 2. Upload do arquivo
       const fileUrl = await uploadToStorage(file);
       if (!fileUrl) {
         toast({
@@ -88,12 +95,8 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
         return null;
       }
 
-      // 3. Identificar tipo preliminar pelo nome
       const preliminaryType = identifyDocumentType(file.name);
 
-      // 4. Chamar edge function usando supabase.functions.invoke (mais seguro)
-      console.log('[extractDocument] Calling edge function with valid token');
-      
       let { data, error } = await supabase.functions.invoke('extract-document-data', {
         headers: {
           Authorization: `Bearer ${validSession.accessToken}`,
@@ -106,15 +109,11 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
         },
       });
 
-      // Se retornar erro de autenticação, tenta refresh e repete
       if (error && (error.message?.includes('401') || error.message?.includes('Invalid JWT'))) {
-        console.log('[extractDocument] Got 401, attempting token refresh...');
-        
         const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
         const newToken = refreshed.session?.access_token;
-        
+
         if (!refreshError && newToken) {
-          console.log('[extractDocument] Token refreshed, retrying...');
           ({ data, error } = await supabase.functions.invoke('extract-document-data', {
             headers: {
               Authorization: `Bearer ${newToken}`,
@@ -133,8 +132,7 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
 
       if (error) {
         console.error('[extractDocument] Edge function error:', error);
-        
-        // Verificar se é erro de autenticação (401)
+
         if (error.message?.includes('401') || error.message?.includes('Invalid JWT')) {
           toast({
             title: 'Sessão expirada',
@@ -143,14 +141,13 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
           });
           return null;
         }
-        
-        // Para outros erros, retornar documento com dados mínimos
+
         toast({
           title: 'Erro na extração',
           description: 'Não foi possível extrair dados do documento. Tente novamente.',
           variant: 'destructive'
         });
-        
+
         return {
           filename: file.name,
           file_url: fileUrl,
@@ -164,14 +161,9 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
       }
 
       const extractedData: ExtractedDocumentData = data?.extracted_data || {};
-      
-      // 5. Processar datas
       const completionDate = parseDocumentDate(extractedData.completion_date);
       const documentType = normalizeDocumentType(extractedData.document_type || preliminaryType);
-      const expiryDate = parseDocumentDate(extractedData.expiry_date) || 
-                         calculateExpiryDate(completionDate, documentType);
-
-      console.log('[extractDocument] Success, extracted data:', Object.keys(extractedData));
+      const expiryDate = parseDocumentDate(extractedData.expiry_date) || calculateExpiryDate(completionDate, documentType);
 
       return {
         filename: file.name,
@@ -183,7 +175,6 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
         extracted_data: extractedData,
         upload_date: new Date().toISOString()
       };
-
     } catch (error) {
       console.error('[extractDocument] Erro ao processar documento:', error);
       toast({
@@ -196,33 +187,41 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
   };
 
   const extractMultipleDocuments = async (files: File[], workerId?: string): Promise<ProcessedDocument[]> => {
+    if (isLocalRuntime) {
+      toast({
+        title: 'Extração indisponível no desktop',
+        description: 'A extração de documentos ainda não foi conectada ao servidor local.',
+        variant: 'destructive'
+      });
+      return [];
+    }
+
     setIsExtracting(true);
     setProgress(0);
-    
-    // Validate session once before processing all files
+
     const validSession = await ensureValidSession();
     if (!validSession) {
       setIsExtracting(false);
       return [];
     }
-    
+
     const results: ProcessedDocument[] = [];
     const total = files.length;
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const result = await extractDocument(file, workerId);
-      
+
       if (result) {
         results.push(result);
       }
-      
+
       setProgress(Math.round(((i + 1) / total) * 100));
     }
 
     setIsExtracting(false);
     setProgress(0);
-    
+
     return results;
   };
 

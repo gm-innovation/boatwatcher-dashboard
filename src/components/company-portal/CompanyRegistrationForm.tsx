@@ -3,12 +3,15 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
+import { uploadFile } from '@/lib/storageProvider';
+import { usesLocalServer } from '@/lib/runtimeProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Building2, Upload, X, FileText, Loader2, Image as ImageIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -35,16 +38,15 @@ interface CompanyRegistrationFormProps {
 
 export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormProps) => {
   const { user } = useAuth();
+  const isLocalRuntime = usesLocalServer();
   const [isLoading, setIsLoading] = useState(false);
   const queryClient = useQueryClient();
-  
-  // Logo upload
+
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>('');
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
-  
-  // Documents upload
+
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
   const [uploadingDocs, setUploadingDocs] = useState(false);
   const docsInputRef = useRef<HTMLInputElement>(null);
@@ -68,23 +70,26 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
     }
 
     setLogoFile(file);
-    
-    // Create preview
+
     const reader = new FileReader();
-    reader.onload = (e) => {
-      setLogoPreview(e.target?.result as string);
+    reader.onload = (loadEvent) => {
+      setLogoPreview(loadEvent.target?.result as string);
     };
     reader.readAsDataURL(file);
   };
 
   const uploadLogo = async (): Promise<string | null> => {
     if (!logoFile) return null;
-    
+
     setUploadingLogo(true);
     try {
       const fileExt = logoFile.name.split('.').pop();
       const fileName = `logo-${Date.now()}.${fileExt}`;
       const filePath = `logos/${fileName}`;
+
+      if (isLocalRuntime) {
+        return await uploadFile('company-documents', filePath, logoFile, { upsert: true });
+      }
 
       const { error: uploadError } = await supabase.storage
         .from('company-documents')
@@ -110,11 +115,21 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
+    if (isLocalRuntime) {
+      toast({
+        title: 'Documentos institucionais indisponíveis no desktop',
+        description: 'O cadastro de documentos institucionais do portal ainda será conectado ao servidor local.',
+        variant: 'destructive'
+      });
+      event.target.value = '';
+      return;
+    }
+
     setUploadingDocs(true);
-    
+
     try {
       const newDocs: UploadedDocument[] = [];
-      
+
       for (const file of Array.from(files)) {
         if (file.size > 10 * 1024 * 1024) {
           toast({ title: `${file.name} excede 10MB`, variant: 'destructive' });
@@ -145,8 +160,8 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
         });
       }
 
-      setDocuments(prev => [...prev, ...newDocs]);
-      
+      setDocuments((previous) => [...previous, ...newDocs]);
+
       if (newDocs.length > 0) {
         toast({ title: `${newDocs.length} documento(s) carregado(s)` });
       }
@@ -162,7 +177,7 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
   };
 
   const removeDocument = (index: number) => {
-    setDocuments(prev => prev.filter((_, i) => i !== index));
+    setDocuments((previous) => previous.filter((_, currentIndex) => currentIndex !== index));
   };
 
   const removeLogo = () => {
@@ -175,13 +190,20 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
 
   const onSubmit = async (data: RegistrationFormData) => {
     if (!user) return;
-    
+
+    if (isLocalRuntime) {
+      toast({
+        title: 'Cadastro de empresa indisponível no desktop',
+        description: 'O vínculo usuário-empresa ainda depende do backend web e será conectado ao servidor local na próxima fase.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
-      // Upload logo if exists
       const logoUrl = await uploadLogo();
 
-      // Create company
       const { data: newCompany, error: companyError } = await supabase
         .from('companies')
         .insert({
@@ -196,7 +218,6 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
 
       if (companyError) throw companyError;
 
-      // Associate user with company
       const { error: userCompanyError } = await supabase
         .from('user_companies')
         .insert({
@@ -206,9 +227,8 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
 
       if (userCompanyError) throw userCompanyError;
 
-      // Save company documents
       if (documents.length > 0) {
-        const docsToInsert = documents.map(doc => ({
+        const docsToInsert = documents.map((doc) => ({
           company_id: newCompany.id,
           document_type: doc.document_type,
           filename: doc.filename,
@@ -228,10 +248,10 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
       queryClient.invalidateQueries({ queryKey: ['user-company'] });
       onSuccess();
     } catch (error: any) {
-      toast({ 
-        title: 'Erro ao criar perfil', 
-        description: error.message, 
-        variant: 'destructive' 
+      toast({
+        title: 'Erro ao criar perfil',
+        description: error.message,
+        variant: 'destructive'
       });
     } finally {
       setIsLoading(false);
@@ -239,10 +259,10 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
   };
 
   return (
-    <div className="max-w-2xl mx-auto mt-12">
+    <div className="mx-auto mt-12 max-w-2xl">
       <Card>
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 p-4 rounded-full bg-primary/10 w-fit">
+          <div className="mx-auto mb-4 w-fit rounded-full bg-primary/10 p-4">
             <Building2 className="h-12 w-12 text-primary" />
           </div>
           <CardTitle className="text-2xl">Portal da Empresa</CardTitle>
@@ -252,32 +272,40 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            {isLocalRuntime && (
+              <Alert>
+                <AlertDescription>
+                  No desktop local, o cadastro inicial da empresa ainda não está disponível porque o vínculo usuário-empresa será conectado ao servidor local na próxima fase.
+                </AlertDescription>
+              </Alert>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="name">Nome da Empresa *</Label>
-              <Input 
-                id="name" 
-                placeholder="Ex: Construtora XYZ Ltda" 
-                {...register('name')} 
+              <Input
+                id="name"
+                placeholder="Ex: Construtora XYZ Ltda"
+                {...register('name')}
               />
               {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="cnpj">CNPJ *</Label>
-              <Input 
-                id="cnpj" 
-                placeholder="00.000.000/0000-00" 
-                {...register('cnpj')} 
+              <Input
+                id="cnpj"
+                placeholder="00.000.000/0000-00"
+                {...register('cnpj')}
               />
               {errors.cnpj && <p className="text-sm text-destructive">{errors.cnpj.message}</p>}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="responsibleName">Nome do Responsável *</Label>
-              <Input 
-                id="responsibleName" 
-                placeholder="Nome completo do responsável" 
-                {...register('responsibleName')} 
+              <Input
+                id="responsibleName"
+                placeholder="Nome completo do responsável"
+                {...register('responsibleName')}
               />
               {errors.responsibleName && <p className="text-sm text-destructive">{errors.responsibleName.message}</p>}
             </div>
@@ -285,25 +313,24 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="email">E-mail *</Label>
-                <Input 
-                  id="email" 
+                <Input
+                  id="email"
                   type="email"
-                  placeholder="contato@empresa.com" 
-                  {...register('email')} 
+                  placeholder="contato@empresa.com"
+                  {...register('email')}
                 />
                 {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Telefone</Label>
-                <Input 
-                  id="phone" 
-                  placeholder="(00) 00000-0000" 
-                  {...register('phone')} 
+                <Input
+                  id="phone"
+                  placeholder="(00) 00000-0000"
+                  {...register('phone')}
                 />
               </div>
             </div>
 
-            {/* Logo Upload */}
             <div className="space-y-2">
               <Label>Logo da Empresa</Label>
               <input
@@ -313,9 +340,9 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
                 onChange={handleLogoSelect}
                 className="hidden"
               />
-              
+
               {logoPreview ? (
-                <div className="flex items-center gap-4 p-4 border rounded-lg">
+                <div className="flex items-center gap-4 rounded-lg border p-4">
                   <Avatar className="h-16 w-16">
                     <AvatarImage src={logoPreview} alt="Logo preview" />
                     <AvatarFallback>
@@ -338,26 +365,25 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
                   </Button>
                 </div>
               ) : (
-                <div 
+                <div
                   onClick={() => logoInputRef.current?.click()}
-                  className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                  className="cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors hover:bg-muted/50"
                 >
                   {uploadingLogo ? (
-                    <Loader2 className="h-8 w-8 mx-auto mb-2 text-muted-foreground animate-spin" />
+                    <Loader2 className="mx-auto mb-2 h-8 w-8 animate-spin text-muted-foreground" />
                   ) : (
-                    <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                    <Upload className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
                   )}
                   <p className="text-sm text-muted-foreground">
                     Clique ou arraste para enviar o logo
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     PNG, JPG até 2MB
                   </p>
                 </div>
               )}
             </div>
 
-            {/* Documents Upload */}
             <div className="space-y-2">
               <Label>Documentos Institucionais</Label>
               <input
@@ -368,32 +394,31 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
                 onChange={handleDocumentsSelect}
                 className="hidden"
               />
-              
-              <div 
+
+              <div
                 onClick={() => !uploadingDocs && docsInputRef.current?.click()}
-                className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                className="cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors hover:bg-muted/50"
               >
                 {uploadingDocs ? (
-                  <Loader2 className="h-8 w-8 mx-auto mb-2 text-muted-foreground animate-spin" />
+                  <Loader2 className="mx-auto mb-2 h-8 w-8 animate-spin text-muted-foreground" />
                 ) : (
-                  <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                  <Upload className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
                 )}
                 <p className="text-sm text-muted-foreground">
                   Contrato Social, Alvará, Certidões
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="mt-1 text-xs text-muted-foreground">
                   PDF, JPG até 10MB cada
                 </p>
               </div>
 
-              {/* Documents List */}
               {documents.length > 0 && (
-                <div className="space-y-2 mt-4">
+                <div className="mt-4 space-y-2">
                   {documents.map((doc, index) => (
-                    <div key={index} className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <div key={index} className="flex items-center gap-3 rounded-lg bg-muted/50 p-3">
                       <FileText className="h-5 w-5 text-muted-foreground" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{doc.filename}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{doc.filename}</p>
                       </div>
                       <Button
                         type="button"
@@ -409,10 +434,10 @@ export const CompanyRegistrationForm = ({ onSuccess }: CompanyRegistrationFormPr
               )}
             </div>
 
-            <Button type="submit" className="w-full" size="lg" disabled={isLoading || uploadingDocs || uploadingLogo}>
+            <Button type="submit" className="w-full" size="lg" disabled={isLoading || uploadingDocs || uploadingLogo || isLocalRuntime}>
               {isLoading ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Criando perfil...
                 </>
               ) : (
