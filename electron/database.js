@@ -272,6 +272,122 @@ function initDatabase(userDataPath) {
 function createDatabaseAPI(db, startCode) {
   let nextWorkerCode = startCode;
 
+  const insertSyncQueue = db.prepare(`
+    INSERT INTO sync_queue (id, entity_type, entity_id, operation, payload, created_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+  `);
+  const deleteSyncQueueByEntity = db.prepare('DELETE FROM sync_queue WHERE entity_type = ? AND entity_id = ?');
+
+  function parseQueueRow(row) {
+    if (!row) return null;
+    return {
+      ...row,
+      payload: safeParseJson(row.payload, null),
+    };
+  }
+
+  function queueSyncOperation(entityType, operation, entityId, payload) {
+    deleteSyncQueueByEntity.run(entityType, entityId);
+    insertSyncQueue.run(
+      uuidv4(),
+      entityType,
+      entityId,
+      operation,
+      payload ? JSON.stringify(payload) : null,
+    );
+  }
+
+  function clearQueuedSyncOperation(entityType, entityId) {
+    deleteSyncQueueByEntity.run(entityType, entityId);
+  }
+
+  function resolveCloudEntityId(table, localId) {
+    if (!localId) return null;
+    const row = db.prepare(`SELECT id, cloud_id, synced FROM ${table} WHERE id = ? LIMIT 1`).get(localId);
+    if (!row) return null;
+    if (row.cloud_id) return row.cloud_id;
+    return row.synced ? row.id : null;
+  }
+
+  function resolveLocalEntityId(table, cloudId) {
+    if (!cloudId) return null;
+    const row = db.prepare(`SELECT id FROM ${table} WHERE cloud_id = ? OR id = ? LIMIT 1`).get(cloudId, cloudId);
+    return row?.id || null;
+  }
+
+  function prepareSyncOperationForUpload(row) {
+    const queueRow = parseQueueRow(row);
+    if (!queueRow) return null;
+    const payload = queueRow.payload || {};
+
+    if (queueRow.entity_type === 'user_company') {
+      if (queueRow.operation === 'delete') {
+        const cloudId = payload.cloud_id || resolveCloudEntityId('user_companies', queueRow.entity_id);
+        if (!cloudId) return null;
+        return { ...queueRow, payload: { cloud_id: cloudId, user_id: payload.user_id || null } };
+      }
+
+      const cloudCompanyId = resolveCloudEntityId('companies', payload.company_id);
+      if (!cloudCompanyId || !payload.user_id) return null;
+      return {
+        ...queueRow,
+        payload: {
+          user_id: payload.user_id,
+          company_id: cloudCompanyId,
+          cloud_id: payload.cloud_id || resolveCloudEntityId('user_companies', queueRow.entity_id),
+        },
+      };
+    }
+
+    if (queueRow.entity_type === 'company_document') {
+      if (queueRow.operation === 'delete') {
+        const cloudId = payload.cloud_id || resolveCloudEntityId('company_documents', queueRow.entity_id);
+        if (!cloudId) return null;
+        return { ...queueRow, payload: { cloud_id: cloudId } };
+      }
+
+      const cloudCompanyId = resolveCloudEntityId('companies', payload.company_id);
+      if (!cloudCompanyId) return null;
+      return {
+        ...queueRow,
+        payload: {
+          cloud_id: payload.cloud_id || resolveCloudEntityId('company_documents', queueRow.entity_id),
+          company_id: cloudCompanyId,
+          document_type: payload.document_type,
+          filename: payload.filename,
+          file_url: payload.file_url || null,
+        },
+      };
+    }
+
+    if (queueRow.entity_type === 'worker_document') {
+      if (queueRow.operation === 'delete') {
+        const cloudId = payload.cloud_id || resolveCloudEntityId('worker_documents', queueRow.entity_id);
+        if (!cloudId) return null;
+        return { ...queueRow, payload: { cloud_id: cloudId } };
+      }
+
+      const cloudWorkerId = resolveCloudEntityId('workers', payload.worker_id);
+      if (!cloudWorkerId) return null;
+      return {
+        ...queueRow,
+        payload: {
+          cloud_id: payload.cloud_id || resolveCloudEntityId('worker_documents', queueRow.entity_id),
+          worker_id: cloudWorkerId,
+          document_type: payload.document_type,
+          document_url: payload.document_url || null,
+          expiry_date: payload.expiry_date || null,
+          issue_date: payload.issue_date || null,
+          filename: payload.filename || null,
+          extracted_data: payload.extracted_data || null,
+          status: payload.status || 'valid',
+        },
+      };
+    }
+
+    return queueRow;
+  }
+
   return {
     // === Workers ===
     getWorkers(filters = {}) {
