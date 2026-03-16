@@ -24,25 +24,33 @@ import {
   Eye
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useCurrentCompany } from '@/hooks/useCurrentCompany';
 import { EmployeeForm } from './EmployeeForm';
 import { WorkerDocumentsDialog } from './WorkerDocumentsDialog';
 import { getValidityStatus } from '@/utils/documentParser';
+import { fetchWorkerDocumentsByWorkerIds } from '@/hooks/useDataProvider';
+import { supabase } from '@/integrations/supabase/client';
+import { usesLocalServer } from '@/lib/runtimeProfile';
+import { localWorkers } from '@/lib/localServerProvider';
 
 export const MyWorkers = () => {
   const { user } = useAuth();
   const { data: companyAccess } = useCurrentCompany(user?.id);
   const userCompany = companyAccess?.companyId;
+  const isLocalRuntime = usesLocalServer();
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [viewingDocumentsWorker, setViewingDocumentsWorker] = useState<any>(null);
 
   const { data: workers = [], isLoading, refetch } = useQuery({
-    queryKey: ['company-workers', userCompany],
+    queryKey: ['company-workers', userCompany, isLocalRuntime],
     queryFn: async () => {
       if (!userCompany) return [];
+
+      if (isLocalRuntime) {
+        return await localWorkers.list({ company_id: userCompany });
+      }
 
       const { data, error } = await supabase
         .from('workers')
@@ -60,31 +68,24 @@ export const MyWorkers = () => {
   });
 
   const { data: documents = [] } = useQuery({
-    queryKey: ['workers-documents', workers.map((worker) => worker.id)],
+    queryKey: ['workers-documents', workers.map((worker) => worker.id), isLocalRuntime],
     queryFn: async () => {
       if (workers.length === 0) return [];
-
-      const { data, error } = await supabase
-        .from('worker_documents')
-        .select('*')
-        .in('worker_id', workers.map((worker) => worker.id));
-
-      if (error) throw error;
-      return data || [];
+      return await fetchWorkerDocumentsByWorkerIds(workers.map((worker) => worker.id));
     },
     enabled: workers.length > 0
   });
 
   const getDocumentStatus = (workerId: string) => {
-    const workerDocs = documents.filter((document) => document.worker_id === workerId);
+    const workerDocs = documents.filter((document: any) => document.worker_id === workerId);
     if (workerDocs.length === 0) return 'pending';
 
-    const hasExpired = workerDocs.some((document) => {
+    const hasExpired = workerDocs.some((document: any) => {
       if (!document.expiry_date) return false;
       return getValidityStatus(document.expiry_date) === 'expired';
     });
 
-    const hasExpiringSoon = workerDocs.some((document) => {
+    const hasExpiringSoon = workerDocs.some((document: any) => {
       if (!document.expiry_date) return false;
       return getValidityStatus(document.expiry_date) === 'expiring_soon';
     });
@@ -95,7 +96,7 @@ export const MyWorkers = () => {
   };
 
   const getDocumentCount = (workerId: string) => {
-    return documents.filter((document) => document.worker_id === workerId).length;
+    return documents.filter((document: any) => document.worker_id === workerId).length;
   };
 
   const getStatusBadge = (status: string) => {
@@ -131,7 +132,7 @@ export const MyWorkers = () => {
     }
   };
 
-  const filteredWorkers = workers.filter((worker) =>
+  const filteredWorkers = workers.filter((worker: any) =>
     worker.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     worker.role?.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -205,7 +206,7 @@ export const MyWorkers = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredWorkers.map((worker) => (
+                {filteredWorkers.map((worker: any) => (
                   <TableRow key={worker.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">

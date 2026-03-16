@@ -11,13 +11,11 @@ import { useCurrentCompany } from "@/hooks/useCurrentCompany";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { usesLocalServer } from "@/lib/runtimeProfile";
 
 const CompanyPortal = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [showRegistration, setShowRegistration] = useState(false);
-  const isLocalRuntime = usesLocalServer();
   const { data: companyAccess, isLoading: companyLoading } = useCurrentCompany(user?.id);
   const userCompany = companyAccess?.company;
 
@@ -43,24 +41,6 @@ const CompanyPortal = () => {
               <Button onClick={() => navigate('/login')}>
                 Fazer Login
               </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (isLocalRuntime) {
-    return (
-      <div className="max-w-3xl mx-auto mt-10">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center space-y-4">
-              <Building2 className="h-12 w-12 mx-auto text-muted-foreground" />
-              <h1 className="text-2xl font-semibold">Portal da Empresa indisponível no desktop</h1>
-              <p className="text-muted-foreground">
-                Esta área ainda depende do vínculo usuário-empresa no backend web e será conectada ao servidor local na próxima fase.
-              </p>
             </div>
           </CardContent>
         </Card>
