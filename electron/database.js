@@ -277,6 +277,11 @@ function createDatabaseAPI(db, startCode) {
     VALUES (?, ?, ?, ?, ?, datetime('now'))
   `);
   const deleteSyncQueueByEntity = db.prepare('DELETE FROM sync_queue WHERE entity_type = ? AND entity_id = ?');
+  const syncEntityTableMap = {
+    user_company: 'user_companies',
+    company_document: 'company_documents',
+    worker_document: 'worker_documents',
+  };
 
   function parseQueueRow(row) {
     if (!row) return null;
@@ -299,6 +304,19 @@ function createDatabaseAPI(db, startCode) {
 
   function clearQueuedSyncOperation(entityType, entityId) {
     deleteSyncQueueByEntity.run(entityType, entityId);
+  }
+
+  function shouldDropQueuedSyncOperation(row) {
+    const queueRow = parseQueueRow(row);
+    if (!queueRow || queueRow.operation !== 'delete') return false;
+
+    const table = syncEntityTableMap[queueRow.entity_type];
+    if (!table) return false;
+
+    if (queueRow.payload?.cloud_id) return false;
+
+    const resolvedCloudId = resolveCloudEntityId(table, queueRow.entity_id);
+    return !resolvedCloudId;
   }
 
   function resolveCloudEntityId(table, localId) {
