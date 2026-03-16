@@ -10,25 +10,26 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { 
-  Plus, 
-  Copy, 
-  Check, 
-  Trash2, 
-  RefreshCw, 
-  Server, 
-  Wifi, 
+import {
+  Plus,
+  Copy,
+  Check,
+  Trash2,
+  RefreshCw,
+  Server,
+  Wifi,
   WifiOff,
   Clock,
   Terminal,
   CheckCircle2,
-  XCircle,
   Loader2,
   Download,
   Key,
   CloudUpload,
   DatabaseZap,
-  ArrowUpDown
+  ArrowUpDown,
+  Play,
+  Square,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -37,12 +38,24 @@ const AGENT_RELAY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent
 
 export function AgentManagement() {
   const { selectedProjectId } = useProject();
-  const { agents, isLoading, createAgent, deleteAgent, regenerateToken } = useLocalAgents(selectedProjectId);
+  const {
+    agents,
+    isLoading,
+    createAgent,
+    deleteAgent,
+    regenerateToken,
+    startAgent,
+    stopAgent,
+    isLocalRuntime,
+  } = useLocalAgents(selectedProjectId);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newAgentName, setNewAgentName] = useState('');
   const [newAgentToken, setNewAgentToken] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+
+  const desktopAgent = agents[0];
+  useAgentCommands(isLocalRuntime ? null : selectedAgent);
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text);
@@ -52,10 +65,10 @@ export function AgentManagement() {
 
   const handleCreateAgent = async () => {
     if (!newAgentName.trim()) return;
-    
-    const result = await createAgent.mutateAsync({ 
-      name: newAgentName, 
-      projectId: selectedProjectId || undefined 
+
+    const result = await createAgent.mutateAsync({
+      name: newAgentName,
+      projectId: selectedProjectId || undefined
     });
     setNewAgentToken(result.plainToken);
     setNewAgentName('');
@@ -69,18 +82,18 @@ export function AgentManagement() {
 
   const getStatusBadge = (status: string, lastSeenAt: string | null) => {
     const isRecent = lastSeenAt && new Date(lastSeenAt) > new Date(Date.now() - 60000);
-    
-    if (status === 'online' && isRecent) {
+
+    if (status === 'online' && (isRecent || isLocalRuntime)) {
       return (
-        <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20">
+        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
           <Wifi className="h-3 w-3 mr-1" />
           Online
         </Badge>
       );
     }
-    
+
     return (
-      <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20">
+      <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
         <WifiOff className="h-3 w-3 mr-1" />
         Offline
       </Badge>
@@ -107,95 +120,119 @@ export function AgentManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-xl font-semibold">Agentes Locais</h2>
           <p className="text-sm text-muted-foreground">
-            Gerencie agentes que conectam leitores em redes locais ao sistema
+            {isLocalRuntime
+              ? 'Controle o processo local que monitora dispositivos e sincronização no desktop.'
+              : 'Gerencie agentes que conectam leitores em redes locais ao sistema.'}
           </p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
-          setIsCreateDialogOpen(open);
-          if (!open) {
-            setNewAgentToken(null);
-            setNewAgentName('');
-          }
-        }}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Agente
+
+        {isLocalRuntime ? (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => startAgent.mutate()}
+              disabled={startAgent.isPending || desktopAgent?.status === 'online'}
+            >
+              {startAgent.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
+              Iniciar Agente
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Criar Novo Agente Local</DialogTitle>
-            </DialogHeader>
-            
-            {newAgentToken ? (
-              <div className="space-y-4">
-                <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-                  <div className="flex items-center gap-2 text-green-600 mb-2">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span className="font-medium">Agente criado com sucesso!</span>
+            <Button
+              variant="outline"
+              onClick={() => stopAgent.mutate()}
+              disabled={stopAgent.isPending || desktopAgent?.status !== 'online'}
+            >
+              {stopAgent.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Square className="h-4 w-4 mr-2" />}
+              Parar Agente
+            </Button>
+          </div>
+        ) : (
+          <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
+            setIsCreateDialogOpen(open);
+            if (!open) {
+              setNewAgentToken(null);
+              setNewAgentName('');
+            }
+          }}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Agente
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Criar Novo Agente Local</DialogTitle>
+              </DialogHeader>
+
+              {newAgentToken ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg">
+                    <div className="flex items-center gap-2 text-primary mb-2">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span className="font-medium">Agente criado com sucesso!</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Copie o token abaixo e configure no script do agente. Este token não será exibido novamente.
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        value={newAgentToken}
+                        readOnly
+                        className="font-mono text-xs"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => copyToClipboard(newAgentToken, 'new-agent-token')}
+                      >
+                        {copiedField === 'new-agent-token' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Copie o token abaixo e configure no script do agente. Este token não será exibido novamente.
-                  </p>
-                  <div className="flex gap-2">
-                    <Input 
-                      value={newAgentToken} 
-                      readOnly 
-                      className="font-mono text-xs"
+                  <Button
+                    className="w-full"
+                    onClick={() => {
+                      setIsCreateDialogOpen(false);
+                      setNewAgentToken(null);
+                    }}
+                  >
+                    Fechar
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Nome do Agente</Label>
+                    <Input
+                      placeholder="Ex: Agente Portaria Principal"
+                      value={newAgentName}
+                      onChange={(e) => setNewAgentName(e.target.value)}
                     />
-                    <Button 
-                      variant="outline" 
-                      size="icon"
-                      onClick={() => copyToClipboard(newAgentToken, 'new-agent-token')}
-                    >
-                      {copiedField === 'new-agent-token' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button onClick={handleCreateAgent} disabled={createAgent.isPending || !newAgentName.trim()}>
+                      {createAgent.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      Criar Agente
                     </Button>
                   </div>
                 </div>
-                <Button 
-                  className="w-full" 
-                  onClick={() => {
-                    setIsCreateDialogOpen(false);
-                    setNewAgentToken(null);
-                  }}
-                >
-                  Fechar
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Nome do Agente</Label>
-                  <Input 
-                    placeholder="Ex: Agente Portaria Principal"
-                    value={newAgentName}
-                    onChange={(e) => setNewAgentName(e.target.value)}
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                    Cancelar
-                  </Button>
-                  <Button onClick={handleCreateAgent} disabled={createAgent.isPending || !newAgentName.trim()}>
-                    {createAgent.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    Criar Agente
-                  </Button>
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+              )}
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       <Tabs defaultValue="agents" className="w-full">
         <TabsList>
           <TabsTrigger value="agents">Agentes ({agents.length})</TabsTrigger>
-          <TabsTrigger value="setup">Instalação</TabsTrigger>
+          {!isLocalRuntime && <TabsTrigger value="setup">Instalação</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="agents" className="mt-4">
@@ -213,10 +250,12 @@ export function AgentManagement() {
                 <p className="text-sm text-muted-foreground text-center mb-4">
                   Crie um agente para conectar leitores em redes locais
                 </p>
-                <Button onClick={() => setIsCreateDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Criar Primeiro Agente
-                </Button>
+                {!isLocalRuntime && (
+                  <Button onClick={() => setIsCreateDialogOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Criar Primeiro Agente
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -224,7 +263,7 @@ export function AgentManagement() {
               {agents.map((agent) => (
                 <Card key={agent.id}>
                   <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
                       <div className="flex items-center gap-3">
                         <div className="p-2 rounded-lg bg-primary/10">
                           <Server className="h-5 w-5 text-primary" />
@@ -251,31 +290,29 @@ export function AgentManagement() {
                             Visto {formatDistanceToNow(new Date(agent.last_seen_at), { addSuffix: true, locale: ptBR })}
                           </span>
                         )}
+                        {isLocalRuntime && (
+                          <span>Dispositivos monitorados: {Number(agent.configuration?.devicesCount || 0)}</span>
+                        )}
                       </div>
 
-                      {/* Sync status indicators */}
                       <div className="flex flex-wrap gap-2">
                         {agent.sync_status && (
                           <Badge variant="outline" className={
-                            agent.sync_status === 'synced' 
-                              ? 'bg-primary/10 text-primary border-primary/20' 
-                              : agent.sync_status === 'pending' 
-                                ? 'bg-accent text-accent-foreground border-accent' 
-                                : 'bg-muted text-muted-foreground border-border'
+                            agent.sync_status === 'online'
+                              ? 'bg-primary/10 text-primary border-primary/20'
+                              : 'bg-muted text-muted-foreground border-border'
                           }>
-                            {agent.sync_status === 'synced' ? (
-                              <><CheckCircle2 className="h-3 w-3 mr-1" /> Sincronizado</>
-                            ) : agent.sync_status === 'pending' ? (
-                              <><CloudUpload className="h-3 w-3 mr-1" /> Pendente</>
+                            {agent.sync_status === 'online' ? (
+                              <><CheckCircle2 className="h-3 w-3 mr-1" /> Sync online</>
                             ) : (
-                              <><ArrowUpDown className="h-3 w-3 mr-1" /> {agent.sync_status}</>
+                              <><ArrowUpDown className="h-3 w-3 mr-1" /> Sync offline</>
                             )}
                           </Badge>
                         )}
                         {(agent.pending_sync_count ?? 0) > 0 && (
                           <Badge variant="secondary">
                             <DatabaseZap className="h-3 w-3 mr-1" />
-                            {agent.pending_sync_count} logs pendentes
+                            {agent.pending_sync_count} pendências
                           </Badge>
                         )}
                         {agent.last_sync_at && (
@@ -285,17 +322,18 @@ export function AgentManagement() {
                           </span>
                         )}
                       </div>
-                      {selectedAgent === agent.id && newAgentToken && (
-                        <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                          <p className="text-sm text-yellow-600 mb-2">Novo token gerado:</p>
+
+                      {selectedAgent === agent.id && newAgentToken && !isLocalRuntime && (
+                        <div className="p-3 bg-accent/30 border border-border rounded-lg">
+                          <p className="text-sm mb-2">Novo token gerado:</p>
                           <div className="flex gap-2">
-                            <Input 
-                              value={newAgentToken} 
-                              readOnly 
+                            <Input
+                              value={newAgentToken}
+                              readOnly
                               className="font-mono text-xs"
                             />
-                            <Button 
-                              variant="outline" 
+                            <Button
+                              variant="outline"
                               size="icon"
                               onClick={() => copyToClipboard(newAgentToken, `token-${agent.id}`)}
                             >
@@ -306,38 +344,41 @@ export function AgentManagement() {
                       )}
 
                       <div className="flex flex-wrap gap-2 pt-2">
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedAgent(agent.id);
-                            // Open commands dialog
-                          }}
-                        >
-                          <Terminal className="h-4 w-4 mr-1" />
-                          Comandos
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => handleRegenerateToken(agent.id)}
-                          disabled={regenerateToken.isPending}
-                        >
-                          <Key className="h-4 w-4 mr-1" />
-                          Regenerar Token
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          className="text-destructive"
-                          onClick={() => {
-                            if (confirm('Tem certeza que deseja remover este agente?')) {
-                              deleteAgent.mutate(agent.id);
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {!isLocalRuntime && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedAgent(agent.id);
+                              }}
+                            >
+                              <Terminal className="h-4 w-4 mr-1" />
+                              Comandos
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleRegenerateToken(agent.id)}
+                              disabled={regenerateToken.isPending}
+                            >
+                              <Key className="h-4 w-4 mr-1" />
+                              Regenerar Token
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive"
+                              onClick={() => {
+                                if (confirm('Tem certeza que deseja remover este agente?')) {
+                                  deleteAgent.mutate(agent.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -347,120 +388,122 @@ export function AgentManagement() {
           )}
         </TabsContent>
 
-        <TabsContent value="setup" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Download className="h-4 w-4" />
-                Script do Agente Local
-              </CardTitle>
-              <CardDescription>
-                Execute este script Python em um computador na mesma rede dos leitores ControlID
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Requisitos</Label>
+        {!isLocalRuntime && (
+          <TabsContent value="setup" className="mt-4 space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Download className="h-4 w-4" />
+                  Script do Agente Local
+                </CardTitle>
+                <CardDescription>
+                  Execute este script Python em um computador na mesma rede dos leitores ControlID
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Requisitos</Label>
+                  </div>
+                  <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
+                    <li>Python 3.7 ou superior</li>
+                    <li>Biblioteca requests: <code className="bg-muted px-1 rounded">pip install requests</code></li>
+                    <li>Acesso à rede local dos leitores</li>
+                    <li>Acesso à internet para comunicação com o servidor</li>
+                  </ul>
                 </div>
-                <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
-                  <li>Python 3.7 ou superior</li>
-                  <li>Biblioteca requests: <code className="bg-muted px-1 rounded">pip install requests</code></li>
-                  <li>Acesso à rede local dos leitores</li>
-                  <li>Acesso à internet para comunicação com o servidor</li>
-                </ul>
-              </div>
 
-              <Separator />
+                <Separator />
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Script Python (v2.0 — offline-first)</Label>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    asChild
-                  >
-                    <a href="/controlid_agent.py" download="controlid_agent.py">
-                      <Download className="h-4 w-4 mr-1" />
-                      Download
-                    </a>
-                  </Button>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Script Python (v2.0 — offline-first)</Label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                    >
+                      <a href="/controlid_agent.py" download="controlid_agent.py">
+                        <Download className="h-4 w-4 mr-1" />
+                        Download
+                      </a>
+                    </Button>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Script com SQLite local, sync queue e suporte offline. Baixe e configure com o <code className="bg-muted px-1 rounded">config.json</code> abaixo.
+                  </p>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Script com SQLite local, sync queue e suporte offline. Baixe e configure com o <code className="bg-muted px-1 rounded">config.json</code> abaixo.
-                </p>
-              </div>
 
-              <Separator />
+                <Separator />
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>config.json (template)</Label>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => copyToClipboard(configTemplate, 'config-json')}
-                  >
-                    {copiedField === 'config-json' ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
-                    Copiar
-                  </Button>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>config.json (template)</Label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copyToClipboard(configTemplate, 'config-json')}
+                    >
+                      {copiedField === 'config-json' ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                      Copiar
+                    </Button>
+                  </div>
+                  <ScrollArea className="h-48 w-full rounded-md border">
+                    <pre className="p-4 text-xs font-mono">
+                      {configTemplate}
+                    </pre>
+                  </ScrollArea>
                 </div>
-                <ScrollArea className="h-48 w-full rounded-md border">
-                  <pre className="p-4 text-xs font-mono">
-                    {configTemplate}
-                  </pre>
-                </ScrollArea>
-              </div>
 
-              <Separator />
+                <Separator />
 
-              <div className="space-y-3">
-                <Label>Instruções de Instalação</Label>
-                <div className="space-y-2 text-sm">
-                  <div className="flex gap-3">
-                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">1</div>
-                    <p>Crie um novo agente na aba "Agentes" e copie o token gerado</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">2</div>
-                    <p>Baixe o script <code className="bg-muted px-1 rounded">controlid_agent.py</code> acima</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">3</div>
-                    <p>Copie o template <code className="bg-muted px-1 rounded">config.json</code> e preencha o token, IPs dos dispositivos e device IDs</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">4</div>
-                    <p>Instale dependências: <code className="bg-muted px-1 rounded">pip install requests</code></p>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">5</div>
-                    <p>Execute: <code className="bg-muted px-1 rounded">python controlid_agent.py</code></p>
+                <div className="space-y-3">
+                  <Label>Instruções de Instalação</Label>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex gap-3">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">1</div>
+                      <p>Crie um novo agente na aba "Agentes" e copie o token gerado</p>
+                    </div>
+                    <div className="flex gap-3">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">2</div>
+                      <p>Baixe o script <code className="bg-muted px-1 rounded">controlid_agent.py</code> acima</p>
+                    </div>
+                    <div className="flex gap-3">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">3</div>
+                      <p>Copie o template <code className="bg-muted px-1 rounded">config.json</code> e preencha o token, IPs dos dispositivos e device IDs</p>
+                    </div>
+                    <div className="flex gap-3">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">4</div>
+                      <p>Instale dependências: <code className="bg-muted px-1 rounded">pip install requests</code></p>
+                    </div>
+                    <div className="flex gap-3">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">5</div>
+                      <p>Execute: <code className="bg-muted px-1 rounded">python controlid_agent.py</code></p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Arquitetura</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-sm text-muted-foreground space-y-2">
-                <p>O agente v2.0 funciona com arquitetura offline-first:</p>
-                <ol className="list-decimal list-inside space-y-1 ml-2">
-                  <li>Eventos dos leitores são salvos localmente em SQLite</li>
-                  <li>Uma thread de sync envia logs pendentes para a nuvem em lote</li>
-                  <li>Workers são sincronizados periodicamente do servidor</li>
-                  <li>Heartbeats reportam status e contagem de pendências</li>
-                  <li>Se a internet cair, os dados ficam na fila local até reconectar</li>
-                </ol>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Arquitetura</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-sm text-muted-foreground space-y-2">
+                  <p>O agente v2.0 funciona com arquitetura offline-first:</p>
+                  <ol className="list-decimal list-inside space-y-1 ml-2">
+                    <li>Eventos dos leitores são salvos localmente em SQLite</li>
+                    <li>Uma thread de sync envia logs pendentes para a nuvem em lote</li>
+                    <li>Workers são sincronizados periodicamente do servidor</li>
+                    <li>Heartbeats reportam status e contagem de pendências</li>
+                    <li>Se a internet cair, os dados ficam na fila local até reconectar</li>
+                  </ol>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
