@@ -5,9 +5,9 @@ import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle, XCircle, User, Clock, AlertTriangle } from 'lucide-react';
+import { ResolvedAvatar } from '@/components/ResolvedAvatar';
+import { CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 export const PendingRegistrations = () => {
