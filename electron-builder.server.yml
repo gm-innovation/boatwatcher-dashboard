@@ -9,6 +9,7 @@ extraMetadata:
 
 directories:
   output: local-server-dist
+  buildResources: build
 
 files:
   - electron/local-server-main.js
@@ -16,7 +17,7 @@ files:
   - electron/sync.js
   - electron/agent.js
   - server/**/*
-  - public/favicon.ico
+  - build/icon.png
   - public/favicon-512.png
 
 asarUnpack:
@@ -31,7 +32,7 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  icon: public/favicon.ico
+  icon: build/icon.png
   artifactName: DockCheck-Local-Server-Setup-${version}.${ext}
 
 nsis:
