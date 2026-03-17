@@ -1,7 +1,29 @@
 const { app, Tray, Menu, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { startLocalServer } = require('../server/index');
+
+function logToFile(message) {
+  try {
+    const logPath = path.join(app.getPath('userData'), 'error.log');
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync(logPath, `[${timestamp}] ${message}\n`);
+  } catch (_) { /* ignore */ }
+}
+
+// Catch uncaught exceptions early
+process.on('uncaughtException', (err) => {
+  logToFile(`UNCAUGHT EXCEPTION: ${err.stack || err.message}`);
+});
+process.on('unhandledRejection', (reason) => {
+  logToFile(`UNHANDLED REJECTION: ${reason}`);
+});
+
+let startLocalServer;
+try {
+  startLocalServer = require('../server/index').startLocalServer;
+} catch (err) {
+  logToFile(`FAILED TO REQUIRE server/index: ${err.stack || err.message}`);
+}
 
 let tray = null;
 let serverRuntime = null;
