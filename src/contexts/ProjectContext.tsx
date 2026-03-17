@@ -1,8 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { usesLocalServer } from '@/lib/runtimeProfile';
 import { fetchProjects as fetchProjectsFromProvider, fetchCurrentCompanyByUserId } from '@/hooks/useDataProvider';
 import { useAuthContext } from '@/contexts/AuthContext';
+import { useRuntimeProfile } from '@/hooks/useRuntimeProfile';
 
 interface Project {
   id: string;
@@ -37,6 +36,7 @@ const PROJECT_STORAGE_KEY = 'dockcheck:selected-project-id';
 
 export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const { user, role } = useAuthContext();
+  const { dataMode } = useRuntimeProfile();
   const [selectedProjectId, setSelectedProjectIdState] = useState<string | null>(() => localStorage.getItem(PROJECT_STORAGE_KEY));
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -73,8 +73,6 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    if (!usesLocalServer()) return;
-
     const handleSyncUpdated = () => {
       setSyncRefreshKey((prev) => prev + 1);
       setLastUpdate(new Date());
@@ -95,50 +93,16 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       setLoading(true);
 
       try {
-        if (usesLocalServer()) {
-          const localProjects = ((await fetchProjectsFromProvider()) || []) as Project[];
+        const providerProjects = ((await fetchProjectsFromProvider()) || []) as Project[];
 
-          if (role === 'admin') {
-            setProjects(localProjects);
-            return;
-          }
-
-          const companyAccess = await fetchCurrentCompanyByUserId(user.id);
-          const companyId = companyAccess?.company_id || null;
-          setProjects(localProjects.filter((project) => project.client_id === companyId));
+        if (role === 'admin') {
+          setProjects(providerProjects);
           return;
         }
 
-        const { data, error } = await supabase
-          .from('projects')
-          .select(`
-            id,
-            name,
-            client_id,
-            status,
-            client:companies (
-              id,
-              name,
-              logo_url_light,
-              logo_url_dark
-            )
-          `)
-          .order('name');
-
-        if (error) {
-          console.error('Error fetching projects:', error);
-          return;
-        }
-
-        setProjects(
-          (data || []).map((project: any) => ({
-            id: project.id,
-            name: project.name,
-            client_id: project.client_id,
-            status: project.status,
-            client: project.client,
-          })),
-        );
+        const companyAccess = await fetchCurrentCompanyByUserId(user.id);
+        const companyId = companyAccess?.company_id || null;
+        setProjects(providerProjects.filter((project) => project.client_id === companyId));
       } catch (error) {
         console.error('Error fetching projects:', error);
       } finally {
@@ -147,7 +111,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     };
 
     fetchProjects();
-  }, [user, role, syncRefreshKey]);
+  }, [user, role, syncRefreshKey, dataMode]);
 
   useEffect(() => {
     if (!projects.length) {

@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 import { useToast } from '@/components/ui/use-toast';
 import { getElectronAPI } from '@/lib/dataProvider';
-import { usesLocalServer } from '@/lib/runtimeProfile';
+import { shouldUseLocalServer } from '@/lib/runtimeProfile';
 
 export const useAuth = (requiredRole?: string) => {
   const [user, setUser] = useState<User | null>(null);
@@ -15,7 +15,7 @@ export const useAuth = (requiredRole?: string) => {
   const { toast } = useToast();
 
   const bootstrapDesktopSync = async (accessToken?: string) => {
-    if (!usesLocalServer() || !accessToken) return;
+    if (!accessToken || !(await shouldUseLocalServer())) return;
 
     const electronApi = getElectronAPI();
     if (!electronApi?.sync?.bootstrap) return;
