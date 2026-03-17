@@ -25,8 +25,8 @@ function ensureRuntimeDirectories() {
 
 function getTrayIconPath() {
   return app.isPackaged
-    ? path.join(process.resourcesPath, 'public', 'favicon.ico')
-    : path.join(__dirname, '../public/favicon.ico');
+    ? path.join(process.resourcesPath, 'build', 'icon.png')
+    : path.join(__dirname, '../public/favicon-512.png');
 }
 
 function setTrayMenu(statusText) {
