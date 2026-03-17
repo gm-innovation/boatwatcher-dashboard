@@ -1,14 +1,44 @@
 const { app, Tray, Menu, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+
+// --- Robust logging (works even before app is ready) ---
+function resolveLogDir() {
+  const candidates = [];
+
+  try { candidates.push(app.getPath('userData')); } catch (_) { /* not ready yet */ }
+
+  if (process.env.APPDATA) {
+    candidates.push(path.join(process.env.APPDATA, 'Dock Check Local Server'));
+  }
+  if (process.env.LOCALAPPDATA) {
+    candidates.push(path.join(process.env.LOCALAPPDATA, 'Dock Check Local Server'));
+  }
+  candidates.push(os.tmpdir());
+
+  for (const dir of candidates) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      return dir;
+    } catch (_) { /* try next */ }
+  }
+  return os.tmpdir();
+}
+
+const LOG_DIR = resolveLogDir();
+const LOG_PATH = path.join(LOG_DIR, 'error.log');
 
 function logToFile(message) {
   try {
-    const logPath = path.join(app.getPath('userData'), 'error.log');
     const timestamp = new Date().toISOString();
-    fs.appendFileSync(logPath, `[${timestamp}] ${message}\n`);
+    fs.appendFileSync(LOG_PATH, `[${timestamp}] ${message}\n`);
   } catch (_) { /* ignore */ }
 }
+
+logToFile(`=== BOOT START === PID=${process.pid} argv=${JSON.stringify(process.argv)}`);
+logToFile(`Log file location: ${LOG_PATH}`);
+logToFile(`app.isPackaged: ${app.isPackaged}, appPath: ${(() => { try { return app.getAppPath(); } catch(e) { return 'N/A'; } })()}`);
 
 // Catch uncaught exceptions early
 process.on('uncaughtException', (err) => {
@@ -18,9 +48,11 @@ process.on('unhandledRejection', (reason) => {
   logToFile(`UNHANDLED REJECTION: ${reason}`);
 });
 
+// --- Load server module ---
 let startLocalServer;
 try {
   startLocalServer = require('../server/index').startLocalServer;
+  logToFile('server/index module loaded successfully');
 } catch (err) {
   logToFile(`FAILED TO REQUIRE server/index: ${err.stack || err.message}`);
 }
@@ -30,6 +62,7 @@ let serverRuntime = null;
 
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) {
+  logToFile('Another instance is already running — quitting');
   app.quit();
 }
 
@@ -45,10 +78,34 @@ function ensureRuntimeDirectories() {
   fs.mkdirSync(process.env.BW_BACKUP_DIR, { recursive: true });
 }
 
-function getTrayIconPath() {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, 'build', 'icon.png')
-    : path.join(__dirname, '../public/favicon-512.png');
+function findIcon() {
+  const candidates = [];
+
+  if (app.isPackaged) {
+    candidates.push(
+      path.join(process.resourcesPath, 'build', 'icon.png'),
+      path.join(process.resourcesPath, 'app.asar.unpacked', 'build', 'icon.png'),
+      path.join(process.resourcesPath, 'app.asar.unpacked', 'public', 'favicon-512.png'),
+    );
+    // Also try inside the asar (Electron can read from asar)
+    try {
+      const appPath = app.getAppPath();
+      candidates.push(
+        path.join(appPath, 'build', 'icon.png'),
+        path.join(appPath, 'public', 'favicon-512.png'),
+      );
+    } catch (_) { /* ignore */ }
+  } else {
+    candidates.push(path.join(__dirname, '../public/favicon-512.png'));
+  }
+
+  for (const c of candidates) {
+    logToFile(`Checking icon: ${c} — exists: ${fs.existsSync(c)}`);
+    if (fs.existsSync(c)) return c;
+  }
+
+  logToFile('WARNING: No icon found, Tray may fail');
+  return candidates[0]; // best-effort
 }
 
 function setTrayMenu(statusText) {
@@ -64,6 +121,15 @@ function setTrayMenu(statusText) {
     {
       label: 'Abrir pasta de backups',
       click: () => shell.openPath(process.env.BW_BACKUP_DIR || ''),
+    },
+    { type: 'separator' },
+    {
+      label: 'Abrir pasta de logs',
+      click: () => shell.openPath(LOG_DIR),
+    },
+    {
+      label: 'Abrir error.log',
+      click: () => shell.openPath(LOG_PATH),
     },
     { type: 'separator' },
     {
@@ -96,24 +162,34 @@ app.on('second-instance', () => {
 });
 
 app.on('before-quit', () => {
+  logToFile('App quitting');
   serverRuntime?.stop?.();
 });
 
 app.whenReady().then(async () => {
-  app.setAppUserModelId('com.dockcheck.localserver');
-  app.setLoginItemSettings({ openAtLogin: true });
-
-  tray = new Tray(getTrayIconPath());
-  setTrayMenu('Inicializando...');
+  logToFile('app.whenReady fired');
 
   try {
-    if (!startLocalServer) throw new Error('server/index module failed to load — check error.log');
+    app.setAppUserModelId('com.dockcheck.localserver');
+    app.setLoginItemSettings({ openAtLogin: true });
+
+    // Create Tray inside try/catch
+    const iconPath = findIcon();
+    logToFile(`Creating Tray with icon: ${iconPath}`);
+    tray = new Tray(iconPath);
+    setTrayMenu('Inicializando...');
+    logToFile('Tray created successfully');
+
+    if (!startLocalServer) {
+      throw new Error('server/index module failed to load — check error.log');
+    }
+
     await bootLocalServer();
     logToFile('Server started successfully');
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha ao iniciar o servidor local.';
+    const message = error instanceof Error ? error.stack || error.message : String(error);
     logToFile(`BOOT ERROR: ${message}`);
-    dialog.showErrorBox('Dock Check Local Server', message);
+    dialog.showErrorBox('Dock Check Local Server', `Falha ao iniciar.\n\nDetalhes no log:\n${LOG_PATH}\n\n${message}`);
     app.quit();
   }
 });
