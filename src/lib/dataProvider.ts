@@ -8,6 +8,17 @@
  * All hooks in the app should use this layer instead of importing supabase directly.
  */
 
+export interface UpdaterStatus {
+  configured: boolean;
+  checking: boolean;
+  available: boolean;
+  downloading: boolean;
+  downloaded: boolean;
+  version: string | null;
+  progress: number;
+  error: string | null;
+}
+
 export const isElectron = (): boolean => {
   return !!(window as any).electronAPI;
 };
@@ -76,8 +87,18 @@ export const getElectronAPI = () => {
       start: () => Promise<void>;
       stop: () => Promise<void>;
     };
+    updater: {
+      getStatus: () => Promise<UpdaterStatus>;
+      checkForUpdates: () => Promise<{ ok: boolean; reason?: string }>;
+      installDownloadedUpdate: () => Promise<boolean>;
+    };
+    getServerUrl: () => string;
+    setServerUrl: (url: string) => Promise<boolean>;
+    getUpdateUrl: () => string;
+    setUpdateUrl: (url: string) => Promise<boolean>;
     isOnline: () => boolean;
     onSyncStatusChange: (callback: (status: any) => void) => void;
+    onUpdaterStatusChange: (callback: (status: UpdaterStatus) => void) => void;
     onConnectivityChange: (callback: (online: boolean) => void) => void;
   };
 };
