@@ -92,9 +92,9 @@ export const getElectronAPI = () => {
       checkForUpdates: () => Promise<{ ok: boolean; reason?: string }>;
       installDownloadedUpdate: () => Promise<boolean>;
     };
-    getServerUrl: () => Promise<string>;
+    getServerUrl: () => string;
     setServerUrl: (url: string) => Promise<boolean>;
-    getUpdateUrl: () => Promise<string>;
+    getUpdateUrl: () => string;
     setUpdateUrl: (url: string) => Promise<boolean>;
     isOnline: () => boolean;
     onSyncStatusChange: (callback: (status: any) => void) => void;

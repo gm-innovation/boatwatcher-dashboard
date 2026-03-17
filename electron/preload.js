@@ -42,9 +42,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // App configuration
-  getServerUrl: () => ipcRenderer.invoke('config:getServerUrl'),
+  getServerUrl: () => ipcRenderer.sendSync('config:getServerUrlSync'),
   setServerUrl: (url) => ipcRenderer.invoke('config:setServerUrl', url),
-  getUpdateUrl: () => ipcRenderer.invoke('config:getUpdateUrl'),
+  getUpdateUrl: () => ipcRenderer.sendSync('config:getUpdateUrlSync'),
   setUpdateUrl: (url) => ipcRenderer.invoke('config:setUpdateUrl', url),
 
   // Update flow

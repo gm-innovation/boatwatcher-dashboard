@@ -331,12 +331,16 @@ function registerIpcHandlers() {
   ipcMain.handle('agent:stop', () => apiCall('POST', '/api/sync/agent/stop'));
 
   // === App config ===
-  ipcMain.handle('config:getServerUrl', () => localServerUrl);
+  ipcMain.on('config:getServerUrlSync', (event) => {
+    event.returnValue = localServerUrl;
+  });
   ipcMain.handle('config:setServerUrl', (_, url) => {
     saveAppConfig({ serverUrl: url });
     return true;
   });
-  ipcMain.handle('config:getUpdateUrl', () => updateFeedUrl);
+  ipcMain.on('config:getUpdateUrlSync', (event) => {
+    event.returnValue = updateFeedUrl;
+  });
   ipcMain.handle('config:setUpdateUrl', (_, url) => {
     saveAppConfig({ updateUrl: url.trim() });
     return true;
