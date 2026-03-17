@@ -740,8 +740,10 @@ export const DiagnosticsPanel = () => {
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               {isLocalRuntime
-                ? 'No runtime local, estes testes serão substituídos por diagnósticos próprios do servidor local.'
-                : 'Estes testes ajudam a identificar problemas de autenticação com Edge Functions.'}
+                ? 'No runtime local, estes testes são substituídos por diagnósticos próprios do servidor local.'
+                : isDesktopFallback
+                  ? 'O desktop está em fallback para a nuvem. Estes testes validam o backend online enquanto o servidor local segue indisponível.'
+                  : 'Estes testes ajudam a identificar problemas de autenticação com as funções do backend.'}
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

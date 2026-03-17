@@ -415,7 +415,7 @@ export function AgentManagement() {
           )}
         </TabsContent>
 
-        {!isLocalRuntime && (
+        {!isLocalRuntime && !isDesktopRuntime && (
           <TabsContent value="setup" className="mt-4 space-y-4">
             <Card>
               <CardHeader>
