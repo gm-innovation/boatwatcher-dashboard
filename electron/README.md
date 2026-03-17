@@ -35,13 +35,22 @@ npm run electron:dev
 ## Build do Instalador
 
 ```bash
-# Build do React + Electron
+# Build local do React + Electron
 npm run build:electron
 
-# Gera o instalador em ./electron-dist/
+# Gera o instalador em ./electron-dist/ sem precisar de variáveis do GitHub
 # Windows: DockCheck-Setup.exe
 # Linux: DockCheck.AppImage
 ```
+
+## Publicação automática
+
+```bash
+# Usado apenas no CI/GitHub Actions
+npm run build:electron:publish
+```
+
+Esse comando usa a configuração de release com publicação no GitHub Releases.
 
 ## Arquitetura
 

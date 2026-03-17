@@ -78,18 +78,14 @@ The Desktop app is configured to publish release artifacts to GitHub Releases an
 https://github.com/<owner>/<repo>/releases/latest/download
 ```
 
-### Manual release
+### Local Desktop build
 
 ```sh
 npm ci
 npm run build:electron
 ```
 
-Upload the generated files from `electron-dist/` to a GitHub Release:
-
-- the Windows installer `.exe`
-- `latest.yml`
-- any generated `.blockmap` files
+This generates the installer locally without requiring `GH_OWNER` or `GH_REPO`.
 
 ### Automatic release from GitHub Actions
 
@@ -106,6 +102,8 @@ Then create and push a version tag:
 git tag v1.0.1
 git push origin v1.0.1
 ```
+
+The workflow runs `npm run build:electron:publish`, which publishes the Windows installer, `latest.yml`, and generated `.blockmap` files to GitHub Releases.
 
 The app will continue asking the operator for authorization before downloading or installing the update.
 
