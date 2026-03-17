@@ -351,6 +351,7 @@ function registerIpcHandlers() {
 
   // === Sync operations (proxied) ===
   ipcMain.handle('sync:getStatus', () => apiCall('GET', '/api/sync/status'));
+  ipcMain.handle('sync:bootstrap', (_, accessToken) => apiCall('POST', '/api/sync/bootstrap', { accessToken }));
   ipcMain.handle('sync:trigger', () => apiCall('POST', '/api/sync/trigger'));
 
   // === Agent operations (proxied) ===

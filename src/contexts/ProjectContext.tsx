@@ -44,6 +44,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [syncRefreshKey, setSyncRefreshKey] = useState(0);
   const refreshCallbacksRef = useRef<(() => void)[]>([]);
 
   const setSelectedProjectId = useCallback((id: string | null) => {
@@ -69,6 +70,18 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       refreshCallbacksRef.current = refreshCallbacksRef.current.filter((fn) => fn !== cb);
     };
+  }, []);
+
+  useEffect(() => {
+    if (!usesLocalServer()) return;
+
+    const handleSyncUpdated = () => {
+      setSyncRefreshKey((prev) => prev + 1);
+      setLastUpdate(new Date());
+    };
+
+    window.addEventListener('desktop-sync-updated', handleSyncUpdated);
+    return () => window.removeEventListener('desktop-sync-updated', handleSyncUpdated);
   }, []);
 
   useEffect(() => {
@@ -134,7 +147,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     };
 
     fetchProjects();
-  }, [user, role]);
+  }, [user, role, syncRefreshKey]);
 
   useEffect(() => {
     if (!projects.length) {

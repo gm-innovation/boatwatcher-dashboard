@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Sync engine (on local server)
   sync: {
     getStatus: () => ipcRenderer.invoke('sync:getStatus'),
+    bootstrap: (accessToken) => ipcRenderer.invoke('sync:bootstrap', accessToken),
     triggerSync: () => ipcRenderer.invoke('sync:trigger'),
   },
 

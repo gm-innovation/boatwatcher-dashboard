@@ -80,6 +80,15 @@ export const getElectronAPI = () => {
         mode?: 'cloud-sync' | 'local-only';
         message?: string;
       }>;
+      bootstrap: (accessToken: string) => Promise<{
+        online: boolean;
+        lastSync: string | null;
+        pendingCount: number;
+        syncing?: boolean;
+        configured?: boolean;
+        mode?: 'cloud-sync' | 'local-only';
+        message?: string;
+      }>;
       triggerSync: () => Promise<void>;
     };
     agent: {
