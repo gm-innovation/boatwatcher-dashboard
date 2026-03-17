@@ -594,6 +594,16 @@ export const DiagnosticsPanel = () => {
         </div>
       </div>
 
+      {isDesktopFallback && (
+        <Alert>
+          <Cloud className="h-4 w-4" />
+          <AlertTitle>Desktop em fallback para a nuvem</AlertTitle>
+          <AlertDescription>
+            O backend online está disponível para leitura e edição, mas verificações e controles estritamente locais ficam limitados até o servidor local responder novamente.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Environment Info */}
       <Card className="border border-border/50">
         <CardHeader className="pb-3">
@@ -603,14 +613,26 @@ export const DiagnosticsPanel = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Origin</p>
-              <p className="text-sm font-mono bg-muted/50 px-2 py-1 rounded">{window.location.origin}</p>
+              <p className="text-xs text-muted-foreground">Ambiente</p>
+              <p className="text-sm font-medium">{runtimeProfile.isDesktop ? 'Desktop' : 'Web'}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Modo de Dados</p>
+              <p className="text-sm font-medium">{isLocalRuntime ? 'Servidor local' : isDesktopFallback ? 'Fallback em nuvem' : 'Nuvem'}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Servidor Local</p>
+              <p className="text-sm font-medium">{runtimeProfile.isDesktop ? (runtimeProfile.localServerAvailable ? 'Online' : 'Indisponível') : 'Não se aplica'}</p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Data/Hora Local</p>
               <p className="text-sm font-mono bg-muted/50 px-2 py-1 rounded">{new Date().toLocaleString()}</p>
+            </div>
+            <div className="space-y-1 md:col-span-2 xl:col-span-4">
+              <p className="text-xs text-muted-foreground">Origin</p>
+              <p className="text-sm font-mono bg-muted/50 px-2 py-1 rounded">{window.location.origin}</p>
             </div>
           </div>
         </CardContent>
