@@ -240,10 +240,20 @@ export function AgentManagement() {
         )}
       </div>
 
+      {isDesktopFallback && (
+        <Alert>
+          <Cloud className="h-4 w-4" />
+          <AlertTitle>Fallback em nuvem ativo</AlertTitle>
+          <AlertDescription>
+            O desktop continua carregando dados online, mas iniciar/parar agente, executar comandos locais e gerenciar tokens do runtime local ficam bloqueados enquanto o servidor local estiver indisponível.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Tabs defaultValue="agents" className="w-full">
         <TabsList>
           <TabsTrigger value="agents">Agentes ({agents.length})</TabsTrigger>
-          {!isLocalRuntime && <TabsTrigger value="setup">Instalação</TabsTrigger>}
+          {!isLocalRuntime && !isDesktopRuntime && <TabsTrigger value="setup">Instalação</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="agents" className="mt-4">
