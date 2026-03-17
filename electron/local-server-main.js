@@ -170,6 +170,7 @@ app.on('before-quit', () => {
 });
 
 app.whenReady().then(async () => {
+  if (isSecondInstance) return;
   logToFile('app.whenReady fired');
 
   try {
