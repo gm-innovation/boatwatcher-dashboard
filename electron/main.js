@@ -102,10 +102,38 @@ function createWindow() {
     },
   });
 
-  if (app.isPackaged) {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
-  } else {
-    mainWindow.loadURL(devServerUrl);
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('[desktop] renderer loaded', mainWindow.webContents.getURL());
+  });
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return;
+    console.error('[desktop] renderer failed to load', {
+      errorCode,
+      errorDescription,
+      validatedURL,
+    });
+  });
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[desktop] renderer process gone', details);
+  });
+
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (level < 2) return;
+    const log = level >= 3 ? console.error : console.warn;
+    log('[renderer]', { message, line, sourceId });
+  });
+
+  const loadPromise = app.isPackaged
+    ? mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+    : mainWindow.loadURL(devServerUrl);
+
+  loadPromise.catch((error) => {
+    console.error('[desktop] failed to start renderer', error);
+  });
+
+  if (!app.isPackaged) {
     mainWindow.webContents.openDevTools();
   }
 

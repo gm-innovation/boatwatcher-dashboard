@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -241,9 +241,9 @@ const Login = () => {
                   </button>
                   <p className="text-sm text-muted-foreground">
                     É trabalhador?{' '}
-                    <a href="/cadastro" className="text-primary hover:underline">
+                    <Link to="/cadastro" className="text-primary hover:underline">
                       Fazer cadastro
-                    </a>
+                    </Link>
                   </p>
                 </div>
               </form>

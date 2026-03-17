@@ -4,7 +4,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route } from "react-router-dom";
+import { getRuntimeProfile } from "@/lib/runtimeProfile";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import ProjectSettings from "./pages/ProjectSettings";
@@ -36,13 +37,15 @@ const ProtectedPage = ({ children, requiredRole }: { children: React.ReactNode; 
 );
 
 const App = () => {
+  const Router = getRuntimeProfile().isDesktop ? HashRouter : BrowserRouter;
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
         <TooltipProvider>
           <Toaster />
           <Sonner />
-          <BrowserRouter>
+          <Router>
             <AuthProvider>
               <Routes>
                 <Route path="/login" element={<Login />} />
@@ -58,7 +61,7 @@ const App = () => {
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AuthProvider>
-          </BrowserRouter>
+          </Router>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
