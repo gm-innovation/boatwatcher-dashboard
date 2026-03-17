@@ -3,8 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchDevices, fetchAccessLogs } from "@/hooks/useDataProvider";
 import { toast } from "@/components/ui/use-toast";
 import type { Device, AccessLog } from "@/types/supabase";
-import { usesLocalServer } from "@/lib/runtimeProfile";
 import { localControlId } from "@/lib/localServerProvider";
+import { useRuntimeProfile } from "@/hooks/useRuntimeProfile";
+
+const DESKTOP_LOCAL_ONLY_MESSAGE = 'O servidor local está indisponível no desktop. Os dados seguem em fallback para a nuvem, mas ações diretas em hardware ficam desabilitadas.';
 
 // Hook para buscar dispositivos
 export const useDevices = (projectId?: string | null) => {
@@ -43,7 +45,9 @@ export const useAccessLogs = (
 // Hook para ações no dispositivo ControlID
 export const useControlIDActions = () => {
   const queryClient = useQueryClient();
-  const isLocalRuntime = usesLocalServer();
+  const runtimeProfile = useRuntimeProfile();
+  const isDesktopLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
+  const isDesktopFallback = runtimeProfile.isDesktop && runtimeProfile.fallbackActive;
 
   const executeAction = useMutation({
     mutationFn: async ({ 
@@ -55,7 +59,11 @@ export const useControlIDActions = () => {
       deviceId: string; 
       [key: string]: any 
     }) => {
-      if (isLocalRuntime) {
+      if (isDesktopFallback) {
+        throw new Error(DESKTOP_LOCAL_ONLY_MESSAGE);
+      }
+
+      if (isDesktopLocalRuntime) {
         switch (action) {
           case 'getDeviceStatus':
             return localControlId.getDeviceStatus(deviceId);
@@ -103,13 +111,16 @@ export const useControlIDActions = () => {
     configureDevice: (deviceId: string, config: Record<string, any>) => 
       executeAction.mutateAsync({ action: 'configureDevice', deviceId, config }),
     isLoading: executeAction.isPending,
+    isDesktopFallback,
   };
 };
 
 // Hook para enrollment de trabalhadores
 export const useWorkerEnrollment = () => {
   const queryClient = useQueryClient();
-  const isLocalRuntime = usesLocalServer();
+  const runtimeProfile = useRuntimeProfile();
+  const isDesktopLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
+  const isDesktopFallback = runtimeProfile.isDesktop && runtimeProfile.fallbackActive;
 
   const enrollWorker = useMutation({
     mutationFn: async ({ 
@@ -121,7 +132,11 @@ export const useWorkerEnrollment = () => {
       deviceIds: string[]; 
       action?: 'enroll' | 'remove' 
     }) => {
-      if (isLocalRuntime) {
+      if (isDesktopFallback) {
+        throw new Error(DESKTOP_LOCAL_ONLY_MESSAGE);
+      }
+
+      if (isDesktopLocalRuntime) {
         return localControlId.enrollWorker(workerId, deviceIds, action);
       }
 
@@ -155,6 +170,7 @@ export const useWorkerEnrollment = () => {
     remove: (workerId: string, deviceIds: string[]) => 
       enrollWorker.mutateAsync({ workerId, deviceIds, action: 'remove' }),
     isLoading: enrollWorker.isPending,
+    isDesktopFallback,
   };
 };
 

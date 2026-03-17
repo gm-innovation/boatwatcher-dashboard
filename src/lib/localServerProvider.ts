@@ -1,19 +1,64 @@
 /**
  * Local Server Provider
- * 
+ *
  * Makes HTTP requests to the dedicated local server (Express API)
  * instead of accessing SQLite directly. Used when running in Electron.
- * 
+ *
  * The local server URL is configured via:
- * - window.electronAPI.getServerUrl() 
+ * - window.electronAPI.getServerUrl()
  * - or defaults to http://localhost:3001
  */
+
+const LOCAL_SERVER_EVENT = 'local-server-availability-changed';
+const LOCAL_SERVER_CACHE_MS = 5000;
+
+let lastKnownAvailability = false;
+let lastCheckedAt = 0;
+let inFlightAvailabilityCheck: Promise<boolean> | null = null;
+
+const isDesktopRuntime = () => typeof window !== 'undefined' && !!(window as any).electronAPI;
 
 const getBaseUrl = (): string => {
   if (typeof window !== 'undefined' && (window as any).electronAPI?.getServerUrl) {
     return (window as any).electronAPI.getServerUrl();
   }
   return 'http://localhost:3001';
+};
+
+const setLocalServerAvailability = (available: boolean) => {
+  const changed = lastKnownAvailability !== available;
+  lastKnownAvailability = available;
+  lastCheckedAt = Date.now();
+
+  if (changed && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(LOCAL_SERVER_EVENT, { detail: { available } }));
+  }
+};
+
+const fetchHealth = async (timeoutMs = 1500) => {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${getBaseUrl()}/api/health`, {
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const data = await response.json().catch(() => ({ ok: response.ok }));
+
+    if (!response.ok) {
+      throw new Error((data as { error?: string }).error || response.statusText || 'Servidor local indisponível');
+    }
+
+    setLocalServerAvailability(true);
+    return data;
+  } catch (error) {
+    setLocalServerAvailability(false);
+    throw error instanceof Error ? error : new Error('Servidor local indisponível');
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 };
 
 async function apiFetch<T = any>(path: string, options?: RequestInit): Promise<T> {
@@ -28,6 +73,44 @@ async function apiFetch<T = any>(path: string, options?: RequestInit): Promise<T
   }
   return res.json();
 }
+
+export const getLocalServerAvailabilitySnapshot = () => lastKnownAvailability;
+
+export const subscribeToLocalServerAvailability = (callback: (available: boolean) => void) => {
+  if (typeof window === 'undefined') return () => undefined;
+
+  const handler = (event: Event) => {
+    callback(Boolean((event as CustomEvent<{ available?: boolean }>).detail?.available));
+  };
+
+  window.addEventListener(LOCAL_SERVER_EVENT, handler as EventListener);
+  return () => window.removeEventListener(LOCAL_SERVER_EVENT, handler as EventListener);
+};
+
+export const refreshLocalServerAvailability = async (options?: { force?: boolean; timeoutMs?: number }) => {
+  if (!isDesktopRuntime()) {
+    setLocalServerAvailability(false);
+    return false;
+  }
+
+  const now = Date.now();
+  if (!options?.force && now - lastCheckedAt < LOCAL_SERVER_CACHE_MS) {
+    return lastKnownAvailability;
+  }
+
+  if (inFlightAvailabilityCheck) {
+    return inFlightAvailabilityCheck;
+  }
+
+  inFlightAvailabilityCheck = fetchHealth(options?.timeoutMs)
+    .then(() => true)
+    .catch(() => false)
+    .finally(() => {
+      inFlightAvailabilityCheck = null;
+    });
+
+  return inFlightAvailabilityCheck;
+};
 
 // --- Workers ---
 export const localWorkers = {
@@ -179,5 +262,5 @@ export const localAgent = {
 
 // --- Health ---
 export const localHealth = {
-  check: () => apiFetch('/api/health'),
+  check: (timeoutMs?: number) => fetchHealth(timeoutMs),
 };
