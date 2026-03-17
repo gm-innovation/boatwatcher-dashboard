@@ -64,6 +64,51 @@ This project is built with .
 
 Simply open [Lovable](https://lovable.dev/projects/3e981c04-bfa7-4702-822c-2908ab036748) and click on Share -> Publish.
 
+## Desktop updates via GitHub Releases
+
+The Desktop app is configured to publish release artifacts to GitHub Releases and consume updates from the latest release download URL.
+
+### Release requirements
+
+- Use Node.js 20 LTS for Desktop builds.
+- Increase `version` in `package.json` before every release.
+- Set the Desktop update URL to:
+
+```text
+https://github.com/<owner>/<repo>/releases/latest/download
+```
+
+### Manual release
+
+```sh
+npm ci
+npm run build:electron
+```
+
+Upload the generated files from `electron-dist/` to a GitHub Release:
+
+- the Windows installer `.exe`
+- `latest.yml`
+- any generated `.blockmap` files
+
+### Automatic release from GitHub Actions
+
+This repository includes a workflow that publishes Desktop builds when you push a tag like `v1.0.1`.
+
+Required repository settings:
+
+- enable GitHub Actions
+- keep the default `GITHUB_TOKEN` with permission to write contents/releases
+
+Then create and push a version tag:
+
+```sh
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+The app will continue asking the operator for authorization before downloading or installing the update.
+
 ## I want to use a custom domain - is that possible?
 
 We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
