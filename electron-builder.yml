@@ -12,12 +12,7 @@ files:
   - dist/**/*
   - electron/**/*
 
-publish:
-  provider: github
-  owner: ${env.GH_OWNER}
-  repo: ${env.GH_REPO}
-  releaseType: release
-  vPrefixedTagName: true
+# Release publishing config lives in electron-builder.release.yml
 
 win:
   target:

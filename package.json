@@ -16,8 +16,8 @@
     "server:dev": "npm --prefix server run dev",
     "electron:dev": "wait-on tcp:8080 && electron .",
     "desktop:dev": "concurrently -k \"npm run server:dev\" \"npm run dev\" \"npm run electron:dev\"",
-    "build:electron": "npm run build && electron-builder",
-    "build:electron:publish": "npm run build && electron-builder --publish always"
+    "build:electron": "npm run build && electron-builder --publish never",
+    "build:electron:publish": "npm run build && electron-builder --config electron-builder.yml --config electron-builder.release.yml --publish always"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
