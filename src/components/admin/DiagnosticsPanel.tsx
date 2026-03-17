@@ -209,6 +209,18 @@ export const DiagnosticsPanel = () => {
 
     await runAuthDiagnostics();
 
+    if (runtimeProfile.isDesktop && !isLocalRuntime) {
+      results.push({
+        id: 'local-server',
+        name: 'Servidor Local do Desktop',
+        status: isDesktopFallback ? 'warning' : 'error',
+        message: isDesktopFallback
+          ? 'Indisponível no momento. O desktop está operando com fallback em nuvem para dados administrativos.'
+          : 'Servidor local indisponível.',
+        lastCheck: new Date(),
+      });
+    }
+
     if (isLocalRuntime) {
       try {
         const start = Date.now();
