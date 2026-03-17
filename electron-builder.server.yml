@@ -44,5 +44,5 @@ nsis:
   shortcutName: Dock Check Local Server
   deleteAppDataOnUninstall: true
   uninstallDisplayName: Dock Check Local Server
-  runAfterFinish: false
+  runAfterFinish: true
   
