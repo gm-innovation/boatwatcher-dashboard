@@ -1,6 +1,8 @@
 const path = require('path');
+const crypto = require('crypto');
 const Database = require('better-sqlite3');
-const { v4: uuidv4 } = require('uuid');
+
+const uuidv4 = () => crypto.randomUUID();
 
 let db;
 

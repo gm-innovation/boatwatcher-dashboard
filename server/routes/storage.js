@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const router = express.Router();
 
 const DATA_DIR = process.env.BW_DATA_DIR || path.join(__dirname, '..', 'data');
@@ -9,7 +9,7 @@ const DATA_DIR = process.env.BW_DATA_DIR || path.join(__dirname, '..', 'data');
 router.post('/upload', express.raw({ type: '*/*', limit: '50mb' }), (req, res) => {
   try {
     const bucket = req.query.bucket || 'general';
-    const filename = req.query.path || `${uuidv4()}.bin`;
+    const filename = req.query.path || `${crypto.randomUUID()}.bin`;
     const dir = path.join(DATA_DIR, 'files', bucket);
     
     fs.mkdirSync(dir, { recursive: true });
