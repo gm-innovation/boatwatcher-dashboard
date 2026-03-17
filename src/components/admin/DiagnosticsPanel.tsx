@@ -56,12 +56,14 @@ interface EdgeFunctionTestResult {
 }
 
 export const DiagnosticsPanel = () => {
+  const runtimeProfile = useRuntimeProfile();
   const [isRunning, setIsRunning] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DiagnosticItem[]>([]);
   const [lastRunTime, setLastRunTime] = useState<Date | null>(null);
   const [authDiagnostics, setAuthDiagnostics] = useState<AuthDiagnostics | null>(null);
   const [isTestingAuth, setIsTestingAuth] = useState(false);
-  const isLocalRuntime = usesLocalAuth() || usesLocalServer();
+  const isLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
+  const isDesktopFallback = runtimeProfile.isDesktop && runtimeProfile.fallbackActive;
 
   const [authPingResult, setAuthPingResult] = useState<EdgeFunctionTestResult>({ status: 'pending' });
   const [echoAuthResult, setEchoAuthResult] = useState<EdgeFunctionTestResult>({ status: 'pending' });
