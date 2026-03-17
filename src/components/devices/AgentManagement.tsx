@@ -130,7 +130,9 @@ export function AgentManagement() {
           <p className="text-sm text-muted-foreground">
             {isLocalRuntime
               ? 'Controle o processo local que monitora dispositivos e sincronização no desktop.'
-              : 'Gerencie agentes que conectam leitores em redes locais ao sistema.'}
+              : isDesktopFallback
+                ? 'O desktop está operando com fallback em nuvem. Dados administrativos seguem online, mas os controles locais do agente ficam indisponíveis até o servidor local voltar.'
+                : 'Gerencie agentes que conectam leitores em redes locais ao sistema.'}
           </p>
         </div>
 
@@ -153,6 +155,11 @@ export function AgentManagement() {
               Parar Agente
             </Button>
           </div>
+        ) : isDesktopFallback ? (
+          <Button variant="outline" disabled>
+            <Cloud className="h-4 w-4 mr-2" />
+            Controles locais indisponíveis
+          </Button>
         ) : (
           <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
             setIsCreateDialogOpen(open);
