@@ -118,6 +118,6 @@ app.whenReady().then(async () => {
   }
 });
 
-app.on('window-all-closed', (event) => {
-  event.preventDefault();
+app.on('window-all-closed', () => {
+  // Tray-only app — do not quit when no windows are open
 });
