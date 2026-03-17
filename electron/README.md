@@ -2,72 +2,67 @@
 
 ## Pré-requisitos
 
-- Node.js 18+ instalado
-- npm ou yarn
+- Node.js 20 LTS
+- npm
 
 ## Setup
 
 ```bash
-# 1. Instalar dependências do projeto web
 npm install
-
-# 2. Instalar dependências do Electron
-npm install --save-dev electron electron-builder
-npm install better-sqlite3 uuid
-
-# 3. Configurar variáveis de ambiente
-# Crie um arquivo .env na raiz com:
-SUPABASE_URL=https://qdscawiwjhzgiqroqkik.supabase.co
-SUPABASE_ANON_KEY=<sua_anon_key>
-AGENT_TOKEN=<token_do_agente_local>
 ```
 
 ## Desenvolvimento
 
 ```bash
-# Terminal 1: Rodar o Vite dev server
+# App web
 npm run dev
 
-# Terminal 2: Rodar o Electron em modo dev
-npm run electron:dev
+# Desktop com servidor local em desenvolvimento
+npm run desktop:dev
 ```
 
-## Build do Instalador
+## Build do Desktop
 
 ```bash
-# Build local do React + Electron
 npm run build:electron
-
-# Gera o instalador em ./electron-dist/ sem precisar de variáveis do GitHub
-# Windows: DockCheck-Setup.exe
-# Linux: DockCheck.AppImage
 ```
 
-## Publicação automática
+Saída:
+- `electron-dist/`
+- instalador do **Dock Check Desktop**
+
+## Build do servidor local separado
 
 ```bash
-# Usado apenas no CI/GitHub Actions
-npm run build:electron:publish
+npm run build:local-server
 ```
 
-Esse comando usa a configuração de release com publicação no GitHub Releases.
+Saída:
+- `local-server-dist/`
+- instalador do **Dock Check Local Server**
 
-## Arquitetura
+Esse build gera um app separado, próprio para a máquina servidora/local, executando o servidor em background e inicializando com o Windows.
 
-```
-electron/
-├── main.js       — Processo principal (janela, IPC)
-├── preload.js    — Bridge segura (contextBridge)
-├── database.js   — SQLite local (CRUD completo)
-├── sync.js       — Sincronização bidirecional com cloud
-├── agent.js      — Polling de leitores ControlID
-└── README.md     — Este arquivo
+## Arquitetura atual
+
+```text
+Dock Check Desktop        -> cliente do operador
+Dock Check Local Server   -> API local + SQLite + Agent + Sync
+Lovable Cloud             -> autenticação + sincronização + fallback
 ```
 
 ## Como funciona
 
-1. O app Electron carrega a mesma interface React do sistema web
-2. Um `dataProvider` detecta se está no Electron e redireciona chamadas para SQLite local
-3. O motor de sync verifica conectividade a cada 60s e sincroniza dados pendentes
-4. O agente ControlID faz polling dos leitores na rede local a cada 5s
-5. Todos os dados ficam salvos localmente — funciona 100% offline
+1. O operador usa o Desktop normalmente
+2. O Desktop lê a URL salva em `server-config.json`
+3. Quando o servidor local responde, o Desktop opera em modo local
+4. Quando ele não responde, o Desktop entra em fallback automaticamente
+5. O servidor local pode estar na mesma máquina (`localhost`) ou em outro IP da rede
+
+## Configuração de conexão do Desktop
+
+Exemplos de URL do servidor local:
+
+- mesma máquina: `http://localhost:3001`
+- servidor dedicado na rede: `http://192.168.1.100:3001`
+

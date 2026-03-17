@@ -8,7 +8,7 @@ const { AgentController } = require('../electron/agent');
 const { BackupManager } = require('./backup');
 
 function loadEnvFile(filePath) {
-  if (!fs.existsSync(filePath)) return;
+  if (!filePath || !fs.existsSync(filePath)) return;
 
   const content = fs.readFileSync(filePath, 'utf-8');
   for (const rawLine of content.split(/\r?\n/)) {
@@ -27,10 +27,29 @@ function loadEnvFile(filePath) {
   }
 }
 
-loadEnvFile(path.join(__dirname, '../.env'));
+function loadRuntimeEnvironment() {
+  const envCandidates = [
+    path.join(process.cwd(), '.env'),
+    path.join(__dirname, '../.env'),
+    typeof process.resourcesPath === 'string' ? path.join(process.resourcesPath, '.env') : null,
+  ].filter(Boolean);
+
+  const visited = new Set();
+  for (const candidate of envCandidates) {
+    if (visited.has(candidate)) continue;
+    visited.add(candidate);
+    loadEnvFile(candidate);
+  }
+}
+
+loadRuntimeEnvironment();
 
 const CLOUD_URL_FALLBACK = 'https://qdscawiwjhzgiqroqkik.supabase.co';
 const CLOUD_PUBLISHABLE_KEY_FALLBACK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkc2Nhd2l3amh6Z2lxcm9xa2lrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMDU0MzIsImV4cCI6MjA4MjU4MTQzMn0.mAafTW0F94MGywqhrf8Q2mhXl4F2btKKGNPSALBLy18';
+const DEFAULT_HOST = process.env.BW_HOST || '0.0.0.0';
+const DEFAULT_PORT = Number(process.env.BW_PORT || 3001);
+const DEFAULT_DATA_DIR = process.env.BW_DATA_DIR || path.join(__dirname, 'data');
+const DEFAULT_BACKUP_DIR = process.env.BW_BACKUP_DIR || path.join(__dirname, 'backups');
 
 if (!process.env.SUPABASE_URL) {
   process.env.SUPABASE_URL = process.env.VITE_SUPABASE_URL || CLOUD_URL_FALLBACK;
@@ -52,65 +71,111 @@ const jobFunctionsRoutes = require('./routes/job-functions');
 const storageRoutes = require('./routes/storage');
 const syncRoutes = require('./routes/sync');
 
-const PORT = process.env.BW_PORT || 3001;
-const DATA_DIR = process.env.BW_DATA_DIR || path.join(__dirname, 'data');
-const BACKUP_DIR = process.env.BW_BACKUP_DIR || path.join(__dirname, 'backups');
+function ensureDirectory(dirPath) {
+  fs.mkdirSync(dirPath, { recursive: true });
+}
 
-const app = express();
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+function createLocalServer(options = {}) {
+  const host = options.host || DEFAULT_HOST;
+  const port = Number(options.port || DEFAULT_PORT);
+  const dataDir = options.dataDir || DEFAULT_DATA_DIR;
+  const backupDir = options.backupDir || DEFAULT_BACKUP_DIR;
 
-// Initialize database
-const db = initDatabase(DATA_DIR);
+  ensureDirectory(dataDir);
+  ensureDirectory(backupDir);
+  ensureDirectory(path.join(dataDir, 'files'));
 
-// Initialize sync engine
-const syncEngine = new SyncEngine(db);
-syncEngine.start();
+  const serverApp = express();
+  serverApp.use(cors());
+  serverApp.use(express.json({ limit: '50mb' }));
 
-// Initialize ControlID agent
-const agentController = new AgentController(db);
+  const db = initDatabase(dataDir);
+  const syncEngine = new SyncEngine(db);
+  syncEngine.start();
 
-// Initialize backup manager
-const backupManager = new BackupManager(DATA_DIR, BACKUP_DIR);
-backupManager.start();
+  const agentController = new AgentController(db);
+  const backupManager = new BackupManager(dataDir, backupDir);
+  backupManager.start();
 
-// Attach db to request for route handlers
-app.use((req, res, next) => {
-  req.db = db;
-  req.syncEngine = syncEngine;
-  req.agentController = agentController;
-  next();
-});
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    version: '1.0.0',
-    uptime: process.uptime(),
-    database: 'connected',
-    sync: syncEngine.getStatus(),
-    agent: agentController.getStatus(),
+  serverApp.use((req, _res, next) => {
+    req.db = db;
+    req.syncEngine = syncEngine;
+    req.agentController = agentController;
+    next();
   });
-});
 
-// Routes
-app.use('/api/workers', workersRoutes);
-app.use('/api/companies', companiesRoutes);
-app.use('/api/company-documents', companyDocumentsRoutes);
-app.use('/api/worker-documents', workerDocumentsRoutes);
-app.use('/api/projects', projectsRoutes);
-app.use('/api/access-logs', accessLogsRoutes);
-app.use('/api/devices', devicesRoutes);
-app.use('/api/job-functions', jobFunctionsRoutes);
-app.use('/api/storage', storageRoutes);
-app.use('/api/sync', syncRoutes);
+  serverApp.get('/api/health', (_req, res) => {
+    res.json({
+      status: 'ok',
+      version: '1.0.0',
+      uptime: process.uptime(),
+      database: 'connected',
+      runtime: {
+        host,
+        port,
+        dataDir,
+        backupDir,
+        mode: 'dedicated-local-server',
+      },
+      sync: syncEngine.getStatus(),
+      agent: agentController.getStatus(),
+    });
+  });
 
-// Serve uploaded files
-app.use('/files', express.static(path.join(DATA_DIR, 'files')));
+  serverApp.use('/api/workers', workersRoutes);
+  serverApp.use('/api/companies', companiesRoutes);
+  serverApp.use('/api/company-documents', companyDocumentsRoutes);
+  serverApp.use('/api/worker-documents', workerDocumentsRoutes);
+  serverApp.use('/api/projects', projectsRoutes);
+  serverApp.use('/api/access-logs', accessLogsRoutes);
+  serverApp.use('/api/devices', devicesRoutes);
+  serverApp.use('/api/job-functions', jobFunctionsRoutes);
+  serverApp.use('/api/storage', storageRoutes);
+  serverApp.use('/api/sync', syncRoutes);
+  serverApp.use('/files', express.static(path.join(dataDir, 'files')));
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[Dock Check Server] Running on http://0.0.0.0:${PORT}`);
-  console.log(`[Dock Check Server] Data dir: ${DATA_DIR}`);
-  console.log(`[Dock Check Server] Backup dir: ${BACKUP_DIR}`);
-});
+  return {
+    app: serverApp,
+    db,
+    syncEngine,
+    agentController,
+    backupManager,
+    host,
+    port,
+    dataDir,
+    backupDir,
+  };
+}
+
+function startLocalServer(options = {}) {
+  const runtime = createLocalServer(options);
+  const server = runtime.app.listen(runtime.port, runtime.host, () => {
+    console.log(`[Dock Check Server] Running on http://${runtime.host}:${runtime.port}`);
+    console.log(`[Dock Check Server] Data dir: ${runtime.dataDir}`);
+    console.log(`[Dock Check Server] Backup dir: ${runtime.backupDir}`);
+  });
+
+  const stop = () => {
+    runtime.syncEngine.stop();
+    runtime.agentController.stop();
+    runtime.backupManager.stop();
+    if (server.listening) {
+      server.close();
+    }
+  };
+
+  return {
+    ...runtime,
+    server,
+    stop,
+  };
+}
+
+if (require.main === module) {
+  startLocalServer();
+}
+
+module.exports = {
+  createLocalServer,
+  startLocalServer,
+};

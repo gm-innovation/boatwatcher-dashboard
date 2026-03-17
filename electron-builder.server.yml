@@ -1,0 +1,42 @@
+appId: com.dockcheck.localserver
+productName: Dock Check Local Server
+copyright: Copyright © 2026 Dock Check
+
+extends: null
+
+extraMetadata:
+  main: electron/local-server-main.js
+
+directories:
+  output: local-server-dist
+
+files:
+  - electron/local-server-main.js
+  - electron/database.js
+  - electron/sync.js
+  - electron/agent.js
+  - server/**/*
+  - public/favicon.ico
+  - public/favicon-512.png
+
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+  - '**/*.node'
+
+npmRebuild: true
+
+generateUpdatesFilesForAllChannels: false
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: public/favicon.ico
+  artifactName: DockCheck-Local-Server-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Dock Check Local Server

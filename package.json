@@ -15,10 +15,13 @@
     "preview": "vite preview",
     "server:start": "npm --prefix server run start",
     "server:dev": "npm --prefix server run dev",
+    "local-server:dev": "electron electron/local-server-main.js",
     "electron:dev": "wait-on tcp:8080 && electron .",
     "desktop:dev": "concurrently -k \"npm run server:dev\" \"npm run dev\" \"npm run electron:dev\"",
     "build:electron": "npm run build:desktop && electron-builder --publish never",
-    "build:electron:publish": "npm run build:desktop && electron-builder --config electron-builder.yml --config electron-builder.release.yml --publish always"
+    "build:electron:publish": "npm run build:desktop && electron-builder --config electron-builder.yml --config electron-builder.release.yml --publish always",
+    "build:local-server": "electron-builder --config electron-builder.server.yml --publish never",
+    "build:local-server:dir": "electron-builder --config electron-builder.server.yml --dir --publish never"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
