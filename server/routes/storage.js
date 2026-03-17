@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const router = express.Router();
 
 const DATA_DIR = process.env.BW_DATA_DIR || path.join(__dirname, '..', 'data');
