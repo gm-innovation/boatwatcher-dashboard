@@ -107,9 +107,12 @@ app.whenReady().then(async () => {
   setTrayMenu('Inicializando...');
 
   try {
+    if (!startLocalServer) throw new Error('server/index module failed to load — check error.log');
     await bootLocalServer();
+    logToFile('Server started successfully');
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao iniciar o servidor local.';
+    logToFile(`BOOT ERROR: ${message}`);
     dialog.showErrorBox('Dock Check Local Server', message);
     app.quit();
   }
