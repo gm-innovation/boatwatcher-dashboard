@@ -532,6 +532,7 @@ export const DiagnosticsPanel = () => {
 
   const getIcon = (id: string) => {
     switch (id) {
+      case 'local-server': return <HardDrive className="h-5 w-5" />;
       case 'db': return <Database className="h-5 w-5" />;
       case 'auth': return <Server className="h-5 w-5" />;
       case 'devices': return <Wifi className="h-5 w-5" />;
