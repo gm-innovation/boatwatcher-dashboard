@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 import { useToast } from '@/components/ui/use-toast';
+import { getElectronAPI } from '@/lib/dataProvider';
+import { usesLocalServer } from '@/lib/runtimeProfile';
 
 export const useAuth = (requiredRole?: string) => {
   const [user, setUser] = useState<User | null>(null);
@@ -12,7 +14,24 @@ export const useAuth = (requiredRole?: string) => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const checkUserRole = async (userId: string, options?: { navigateOnFailure?: boolean }) => {
+  const bootstrapDesktopSync = async (accessToken?: string) => {
+    if (!usesLocalServer() || !accessToken) return;
+
+    const electronApi = getElectronAPI();
+    if (!electronApi?.sync?.bootstrap) return;
+
+    try {
+      await electronApi.sync.bootstrap(accessToken);
+      window.dispatchEvent(new CustomEvent('desktop-sync-updated'));
+    } catch (error) {
+      console.error('Error bootstrapping desktop sync:', error);
+    }
+  };
+
+  const checkUserRole = async (
+    userId: string,
+    options?: { navigateOnFailure?: boolean; accessToken?: string },
+  ) => {
     try {
       const { data: roleData, error } = await supabase
         .from('user_roles')
@@ -39,6 +58,7 @@ export const useAuth = (requiredRole?: string) => {
         return null;
       }
 
+      await bootstrapDesktopSync(options?.accessToken);
       setLoading(false);
       return userRole;
     } catch (error) {
@@ -55,7 +75,7 @@ export const useAuth = (requiredRole?: string) => {
 
       if (nextSession?.user) {
         setTimeout(() => {
-          checkUserRole(nextSession.user.id);
+          checkUserRole(nextSession.user.id, { accessToken: nextSession.access_token });
         }, 0);
       } else {
         setRole(null);
@@ -77,7 +97,7 @@ export const useAuth = (requiredRole?: string) => {
         return;
       }
 
-      checkUserRole(currentSession.user.id);
+      checkUserRole(currentSession.user.id, { accessToken: currentSession.access_token });
     });
 
     return () => subscription.unsubscribe();

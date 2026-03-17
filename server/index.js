@@ -29,12 +29,15 @@ function loadEnvFile(filePath) {
 
 loadEnvFile(path.join(__dirname, '../.env'));
 
-if (!process.env.SUPABASE_URL && process.env.VITE_SUPABASE_URL) {
-  process.env.SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+const CLOUD_URL_FALLBACK = 'https://qdscawiwjhzgiqroqkik.supabase.co';
+const CLOUD_PUBLISHABLE_KEY_FALLBACK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkc2Nhd2l3amh6Z2lxcm9xa2lrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMDU0MzIsImV4cCI6MjA4MjU4MTQzMn0.mAafTW0F94MGywqhrf8Q2mhXl4F2btKKGNPSALBLy18';
+
+if (!process.env.SUPABASE_URL) {
+  process.env.SUPABASE_URL = process.env.VITE_SUPABASE_URL || CLOUD_URL_FALLBACK;
 }
 
-if (!process.env.SUPABASE_ANON_KEY && process.env.VITE_SUPABASE_PUBLISHABLE_KEY) {
-  process.env.SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+if (!process.env.SUPABASE_ANON_KEY) {
+  process.env.SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || CLOUD_PUBLISHABLE_KEY_FALLBACK;
 }
 
 // Routes

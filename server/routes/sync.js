@@ -10,6 +10,20 @@ router.get('/status', (req, res) => {
   }
 });
 
+router.post('/bootstrap', async (req, res) => {
+  try {
+    const { accessToken } = req.body || {};
+    if (!accessToken) {
+      return res.status(400).json({ error: 'accessToken is required' });
+    }
+
+    const status = await req.syncEngine.bootstrapFromAccessToken(accessToken);
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/trigger', async (req, res) => {
   try {
     await req.syncEngine.triggerSync();
