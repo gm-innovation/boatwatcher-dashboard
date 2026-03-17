@@ -2,6 +2,8 @@
   "name": "vite_react_shadcn_ts",
   "private": true,
   "version": "0.0.0",
+  "description": "Dock Check Desktop and web dashboard for workforce, access, and device operations.",
+  "author": "Dock Check",
   "type": "module",
   "main": "electron/main.js",
   "scripts": {
@@ -52,7 +54,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
     "date-fns": "^3.6.0",
-    "electron-updater": "^6.8.3",
+    "electron-updater": "^6.6.2",
     "embla-carousel-react": "^8.3.0",
     "input-otp": "^1.2.4",
     "jspdf": "^3.0.0",
