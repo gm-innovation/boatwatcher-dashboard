@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -22,13 +23,14 @@ import {
   Globe,
   Zap,
   Copy,
-  CheckCheck
+  CheckCheck,
+  Cloud,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { getSessionDiagnostics, forceLogout } from '@/utils/ensureValidSession';
 import { toast } from '@/hooks/use-toast';
 import { localAgent, localHealth, localSync } from '@/lib/localServerProvider';
-import { usesLocalAuth, usesLocalServer } from '@/lib/runtimeProfile';
+import { useRuntimeProfile } from '@/hooks/useRuntimeProfile';
 
 interface DiagnosticItem {
   id: string;
