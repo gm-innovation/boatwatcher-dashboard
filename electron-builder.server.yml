@@ -6,6 +6,7 @@ extends: null
 
 extraMetadata:
   main: electron/local-server-main.js
+  type: commonjs
 
 directories:
   output: local-server-dist
