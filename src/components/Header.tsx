@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { Clock, Moon, Sun, LogOut, LayoutDashboard, FileText, Users, Building2, Shield, Menu, RefreshCw, ToggleLeft, ToggleRight, Wifi, WifiOff, Cloud, CloudOff } from 'lucide-react';
+import { Clock, Moon, Sun, LogOut, LayoutDashboard, FileText, Users, Building2, Shield, Menu, RefreshCw, ToggleLeft, ToggleRight, Cloud, CloudOff, HardDrive } from 'lucide-react';
 import { isElectron, getElectronAPI } from '@/lib/dataProvider';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -10,6 +10,7 @@ import { ProjectSelector } from '@/components/ProjectSelector';
 import { useProject } from '@/contexts/ProjectContext';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { useRuntimeProfile } from '@/hooks/useRuntimeProfile';
 
 export const Header = () => {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ export const Header = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { selectedProject, selectedProjectId, setSelectedProjectId, lastUpdate, autoRefresh, setAutoRefresh, handleRefresh } = useProject();
   const { role, signOut, hasCloudSession } = useAuthContext();
+  const runtimeProfile = useRuntimeProfile();
 
   const isAdmin = role === 'admin';
   const isCompanyAdmin = role === 'company_admin';
@@ -74,9 +76,26 @@ export const Header = () => {
     );
   };
 
+  const desktopStatus = runtimeProfile.localServerAvailable
+    ? {
+        icon: HardDrive,
+        label: 'Servidor local online',
+        className: 'text-foreground',
+      }
+    : runtimeProfile.fallbackActive
+      ? {
+          icon: Cloud,
+          label: 'Fallback em nuvem ativo',
+          className: 'text-foreground',
+        }
+      : {
+          icon: CloudOff,
+          label: 'Offline',
+          className: 'text-muted-foreground',
+        };
+
   return (
     <header className="fixed top-0 left-0 right-0 w-full bg-background/95 backdrop-blur-sm border-b border-border animate-fade-in z-50">
-      {/* Upper section - Logos */}
       <div className="w-full border-b border-border/50">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 py-2">
           {clientLogo ? (
@@ -92,11 +111,9 @@ export const Header = () => {
         </div>
       </div>
 
-      {/* Navigation bar */}
       <div className="w-full border-b border-border/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-1">
           <div className="flex items-center justify-between">
-            {/* Mobile Menu */}
             <div className="lg:hidden">
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
                 <SheetTrigger asChild>
@@ -154,7 +171,6 @@ export const Header = () => {
               </Sheet>
             </div>
 
-            {/* Desktop Navigation */}
             <div className="hidden lg:flex items-center gap-1">
               <NavButton path="/" icon={LayoutDashboard} label="Dashboard" />
               <NavButton path="/reports" icon={FileText} label="Relatórios" />
@@ -163,7 +179,6 @@ export const Header = () => {
               <NavButton path="/admin" icon={Shield} label="Administração" condition={isAdmin} />
             </div>
 
-            {/* Right - Refresh + Controls */}
             <div className="flex items-center gap-2">
               <span className="hidden sm:inline text-xs text-muted-foreground">
                 Atualizado: {format(lastUpdate, 'HH:mm:ss')}
@@ -188,25 +203,14 @@ export const Header = () => {
 
               {isDesktop && (
                 <div className="hidden lg:flex items-center gap-2 border-l border-border pl-2">
-                  {syncStatus.configured ? (
-                    isOnline ? (
-                      <span className="flex items-center gap-1 text-xs text-foreground">
-                        <Cloud className="h-4 w-4 text-primary" /> Online
-                        {syncStatus.syncing && <RefreshCw className="h-3 w-3 animate-spin" />}
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <CloudOff className="h-4 w-4" /> Offline
-                        {syncStatus.pendingCount > 0 && (
-                          <span className="bg-primary text-primary-foreground text-[10px] px-1 rounded-full">{syncStatus.pendingCount}</span>
-                        )}
-                      </span>
-                    )
-                  ) : (
-                    <Button variant="ghost" size="sm" className="h-auto px-2 text-xs" onClick={() => navigate('/login')}>
-                      <CloudOff className="h-4 w-4 mr-1" /> Sync não configurado
-                    </Button>
-                  )}
+                  <span className={`flex items-center gap-1 text-xs ${desktopStatus.className}`}>
+                    <desktopStatus.icon className="h-4 w-4 text-primary" />
+                    {desktopStatus.label}
+                    {runtimeProfile.localServerAvailable && syncStatus.syncing && <RefreshCw className="h-3 w-3 animate-spin" />}
+                    {!runtimeProfile.localServerAvailable && syncStatus.pendingCount > 0 && (
+                      <span className="bg-primary text-primary-foreground text-[10px] px-1 rounded-full">{syncStatus.pendingCount}</span>
+                    )}
+                  </span>
                 </div>
               )}
               <div className="hidden lg:flex items-center gap-1 border-l border-border pl-2">
@@ -228,7 +232,6 @@ export const Header = () => {
         </div>
       </div>
 
-      {/* Project Selector bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
         <ProjectSelector selectedProjectId={selectedProjectId} onProjectSelect={setSelectedProjectId} />
       </div>
