@@ -37,13 +37,15 @@ const ProtectedPage = ({ children, requiredRole }: { children: React.ReactNode; 
 );
 
 const App = () => {
+  const Router = getRuntimeProfile().isDesktop ? HashRouter : BrowserRouter;
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
         <TooltipProvider>
           <Toaster />
           <Sonner />
-          <BrowserRouter>
+          <Router>
             <AuthProvider>
               <Routes>
                 <Route path="/login" element={<Login />} />
@@ -59,7 +61,7 @@ const App = () => {
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AuthProvider>
-          </BrowserRouter>
+          </Router>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
