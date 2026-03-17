@@ -49,6 +49,8 @@ export function AgentManagement() {
     startAgent,
     stopAgent,
     isLocalRuntime,
+    isDesktopFallback,
+    isDesktopRuntime,
   } = useLocalAgents(selectedProjectId);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newAgentName, setNewAgentName] = useState('');
