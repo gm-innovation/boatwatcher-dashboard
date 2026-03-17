@@ -1,4 +1,5 @@
 import { isElectron } from '@/lib/dataProvider';
+import { getLocalServerAvailabilitySnapshot, refreshLocalServerAvailability } from '@/lib/localServerProvider';
 
 export type RuntimeTarget = 'web' | 'desktop';
 export type AuthMode = 'cloud' | 'local-bypass';
@@ -11,19 +12,30 @@ export interface RuntimeProfile {
   authMode: AuthMode;
   dataMode: DataMode;
   storageMode: DataMode;
+  localServerAvailable: boolean;
+  fallbackActive: boolean;
 }
 
 export const getRuntimeProfile = (): RuntimeProfile => {
   const isDesktop = isElectron();
+  const localServerAvailable = isDesktop && getLocalServerAvailabilitySnapshot();
+  const dataMode: DataMode = localServerAvailable ? 'local-server' : 'cloud';
 
   return {
     target: isDesktop ? 'desktop' : 'web',
     isWeb: !isDesktop,
     isDesktop,
     authMode: 'cloud',
-    dataMode: isDesktop ? 'local-server' : 'cloud',
-    storageMode: isDesktop ? 'local-server' : 'cloud',
+    dataMode,
+    storageMode: dataMode,
+    localServerAvailable,
+    fallbackActive: isDesktop && !localServerAvailable,
   };
+};
+
+export const shouldUseLocalServer = async () => {
+  if (!isElectron()) return false;
+  return refreshLocalServerAvailability();
 };
 
 export const usesLocalAuth = () => getRuntimeProfile().authMode === 'local-bypass';
