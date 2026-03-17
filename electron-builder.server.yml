@@ -45,4 +45,4 @@ nsis:
   deleteAppDataOnUninstall: true
   uninstallDisplayName: Dock Check Local Server
   runAfterFinish: false
-  include: installer.nsh
+  
