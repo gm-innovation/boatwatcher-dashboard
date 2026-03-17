@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -22,13 +23,14 @@ import {
   Globe,
   Zap,
   Copy,
-  CheckCheck
+  CheckCheck,
+  Cloud,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { getSessionDiagnostics, forceLogout } from '@/utils/ensureValidSession';
 import { toast } from '@/hooks/use-toast';
 import { localAgent, localHealth, localSync } from '@/lib/localServerProvider';
-import { usesLocalAuth, usesLocalServer } from '@/lib/runtimeProfile';
+import { useRuntimeProfile } from '@/hooks/useRuntimeProfile';
 
 interface DiagnosticItem {
   id: string;
@@ -54,12 +56,14 @@ interface EdgeFunctionTestResult {
 }
 
 export const DiagnosticsPanel = () => {
+  const runtimeProfile = useRuntimeProfile();
   const [isRunning, setIsRunning] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DiagnosticItem[]>([]);
   const [lastRunTime, setLastRunTime] = useState<Date | null>(null);
   const [authDiagnostics, setAuthDiagnostics] = useState<AuthDiagnostics | null>(null);
   const [isTestingAuth, setIsTestingAuth] = useState(false);
-  const isLocalRuntime = usesLocalAuth() || usesLocalServer();
+  const isLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
+  const isDesktopFallback = runtimeProfile.isDesktop && runtimeProfile.fallbackActive;
 
   const [authPingResult, setAuthPingResult] = useState<EdgeFunctionTestResult>({ status: 'pending' });
   const [echoAuthResult, setEchoAuthResult] = useState<EdgeFunctionTestResult>({ status: 'pending' });
@@ -204,6 +208,18 @@ export const DiagnosticsPanel = () => {
     const results: DiagnosticItem[] = [];
 
     await runAuthDiagnostics();
+
+    if (runtimeProfile.isDesktop && !isLocalRuntime) {
+      results.push({
+        id: 'local-server',
+        name: 'Servidor Local do Desktop',
+        status: isDesktopFallback ? 'warning' : 'error',
+        message: isDesktopFallback
+          ? 'Indisponível no momento. O desktop está operando com fallback em nuvem para dados administrativos.'
+          : 'Servidor local indisponível.',
+        lastCheck: new Date(),
+      });
+    }
 
     if (isLocalRuntime) {
       try {
@@ -494,7 +510,7 @@ export const DiagnosticsPanel = () => {
 
   useEffect(() => {
     runDiagnostics();
-  }, []);
+  }, [runtimeProfile.isDesktop, runtimeProfile.localServerAvailable, runtimeProfile.fallbackActive]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -516,6 +532,7 @@ export const DiagnosticsPanel = () => {
 
   const getIcon = (id: string) => {
     switch (id) {
+      case 'local-server': return <HardDrive className="h-5 w-5" />;
       case 'db': return <Database className="h-5 w-5" />;
       case 'auth': return <Server className="h-5 w-5" />;
       case 'devices': return <Wifi className="h-5 w-5" />;
@@ -577,6 +594,16 @@ export const DiagnosticsPanel = () => {
         </div>
       </div>
 
+      {isDesktopFallback && (
+        <Alert>
+          <Cloud className="h-4 w-4" />
+          <AlertTitle>Desktop em fallback para a nuvem</AlertTitle>
+          <AlertDescription>
+            O backend online está disponível para leitura e edição, mas verificações e controles estritamente locais ficam limitados até o servidor local responder novamente.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Environment Info */}
       <Card className="border border-border/50">
         <CardHeader className="pb-3">
@@ -586,14 +613,26 @@ export const DiagnosticsPanel = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Origin</p>
-              <p className="text-sm font-mono bg-muted/50 px-2 py-1 rounded">{window.location.origin}</p>
+              <p className="text-xs text-muted-foreground">Ambiente</p>
+              <p className="text-sm font-medium">{runtimeProfile.isDesktop ? 'Desktop' : 'Web'}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Modo de Dados</p>
+              <p className="text-sm font-medium">{isLocalRuntime ? 'Servidor local' : isDesktopFallback ? 'Fallback em nuvem' : 'Nuvem'}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Servidor Local</p>
+              <p className="text-sm font-medium">{runtimeProfile.isDesktop ? (runtimeProfile.localServerAvailable ? 'Online' : 'Indisponível') : 'Não se aplica'}</p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Data/Hora Local</p>
               <p className="text-sm font-mono bg-muted/50 px-2 py-1 rounded">{new Date().toLocaleString()}</p>
+            </div>
+            <div className="space-y-1 md:col-span-2 xl:col-span-4">
+              <p className="text-xs text-muted-foreground">Origin</p>
+              <p className="text-sm font-mono bg-muted/50 px-2 py-1 rounded">{window.location.origin}</p>
             </div>
           </div>
         </CardContent>
@@ -701,8 +740,10 @@ export const DiagnosticsPanel = () => {
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               {isLocalRuntime
-                ? 'No runtime local, estes testes serão substituídos por diagnósticos próprios do servidor local.'
-                : 'Estes testes ajudam a identificar problemas de autenticação com Edge Functions.'}
+                ? 'No runtime local, estes testes são substituídos por diagnósticos próprios do servidor local.'
+                : isDesktopFallback
+                  ? 'O desktop está em fallback para a nuvem. Estes testes validam o backend online enquanto o servidor local segue indisponível.'
+                  : 'Estes testes ajudam a identificar problemas de autenticação com as funções do backend.'}
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

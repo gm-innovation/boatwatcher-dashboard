@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -25,6 +26,7 @@ import {
   Loader2,
   Download,
   Key,
+  Cloud,
   CloudUpload,
   DatabaseZap,
   ArrowUpDown,
@@ -47,6 +49,8 @@ export function AgentManagement() {
     startAgent,
     stopAgent,
     isLocalRuntime,
+    isDesktopFallback,
+    isDesktopRuntime,
   } = useLocalAgents(selectedProjectId);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newAgentName, setNewAgentName] = useState('');
@@ -126,7 +130,9 @@ export function AgentManagement() {
           <p className="text-sm text-muted-foreground">
             {isLocalRuntime
               ? 'Controle o processo local que monitora dispositivos e sincronização no desktop.'
-              : 'Gerencie agentes que conectam leitores em redes locais ao sistema.'}
+              : isDesktopFallback
+                ? 'O desktop está operando com fallback em nuvem. Dados administrativos seguem online, mas os controles locais do agente ficam indisponíveis até o servidor local voltar.'
+                : 'Gerencie agentes que conectam leitores em redes locais ao sistema.'}
           </p>
         </div>
 
@@ -149,6 +155,11 @@ export function AgentManagement() {
               Parar Agente
             </Button>
           </div>
+        ) : isDesktopFallback ? (
+          <Button variant="outline" disabled>
+            <Cloud className="h-4 w-4 mr-2" />
+            Controles locais indisponíveis
+          </Button>
         ) : (
           <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
             setIsCreateDialogOpen(open);
@@ -229,10 +240,20 @@ export function AgentManagement() {
         )}
       </div>
 
+      {isDesktopFallback && (
+        <Alert>
+          <Cloud className="h-4 w-4" />
+          <AlertTitle>Fallback em nuvem ativo</AlertTitle>
+          <AlertDescription>
+            O desktop continua carregando dados online, mas iniciar/parar agente, executar comandos locais e gerenciar tokens do runtime local ficam bloqueados enquanto o servidor local estiver indisponível.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Tabs defaultValue="agents" className="w-full">
         <TabsList>
           <TabsTrigger value="agents">Agentes ({agents.length})</TabsTrigger>
-          {!isLocalRuntime && <TabsTrigger value="setup">Instalação</TabsTrigger>}
+          {!isLocalRuntime && !isDesktopRuntime && <TabsTrigger value="setup">Instalação</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="agents" className="mt-4">
@@ -250,7 +271,7 @@ export function AgentManagement() {
                 <p className="text-sm text-muted-foreground text-center mb-4">
                   Crie um agente para conectar leitores em redes locais
                 </p>
-                {!isLocalRuntime && (
+                {!isLocalRuntime && !isDesktopFallback && (
                   <Button onClick={() => setIsCreateDialogOpen(true)}>
                     <Plus className="h-4 w-4 mr-2" />
                     Criar Primeiro Agente
@@ -323,7 +344,7 @@ export function AgentManagement() {
                         )}
                       </div>
 
-                      {selectedAgent === agent.id && newAgentToken && !isLocalRuntime && (
+                      {selectedAgent === agent.id && newAgentToken && !isLocalRuntime && !isDesktopFallback && (
                         <div className="p-3 bg-accent/30 border border-border rounded-lg">
                           <p className="text-sm mb-2">Novo token gerado:</p>
                           <div className="flex gap-2">
@@ -343,8 +364,14 @@ export function AgentManagement() {
                         </div>
                       )}
 
+                      {isDesktopFallback && (
+                        <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                          Este desktop está em fallback para a nuvem. Acompanhe o status do agente, mas use a web ou restabeleça o servidor local para comandos e manutenção local.
+                        </div>
+                      )}
+
                       <div className="flex flex-wrap gap-2 pt-2">
-                        {!isLocalRuntime && (
+                        {!isLocalRuntime && !isDesktopFallback && (
                           <>
                             <Button
                               size="sm"
@@ -388,7 +415,7 @@ export function AgentManagement() {
           )}
         </TabsContent>
 
-        {!isLocalRuntime && (
+        {!isLocalRuntime && !isDesktopRuntime && (
           <TabsContent value="setup" className="mt-4 space-y-4">
             <Card>
               <CardHeader>
