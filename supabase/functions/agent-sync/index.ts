@@ -64,6 +64,73 @@ async function attachWorkerPhotoSignedUrl(supabase: ReturnType<typeof createClie
   return { ...worker, photo_signed_url: signedData?.signedUrl ?? null }
 }
 
+function getAnonClient(accessToken: string) {
+  return createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_PUBLISHABLE_KEY') ?? '',
+    {
+      global: {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    },
+  )
+}
+
+async function getAuthenticatedUser(accessToken: string) {
+  const authClient = getAnonClient(accessToken)
+  const { data, error } = await authClient.auth.getUser()
+  if (error) throw error
+  return data.user
+}
+
+async function resolveBootstrapProjectId(supabase: ReturnType<typeof createClient>, userId: string) {
+  const { data: roleRow } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (roleRow?.role === 'admin') {
+    const { data: project } = await supabase
+      .from('projects')
+      .select('id')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+
+    return project?.id ?? null
+  }
+
+  const { data: companyAccess } = await supabase
+    .from('user_companies')
+    .select('company_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (companyAccess?.company_id) {
+    const { data: companyProject } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('client_id', companyAccess.company_id)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+
+    if (companyProject?.id) return companyProject.id
+  }
+
+  const { data: userProject } = await supabase
+    .from('user_projects')
+    .select('project_id')
+    .eq('user_id', userId)
+    .limit(1)
+    .maybeSingle()
+
+  return userProject?.project_id ?? null
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -75,6 +142,78 @@ serve(async (req) => {
   )
 
   try {
+    const url = new URL(req.url)
+    const action = url.pathname.split('/').pop() || ''
+
+    if (req.method === 'POST' && action === 'bootstrap') {
+      const accessToken = (req.headers.get('authorization') || '').replace('Bearer ', '')
+      if (!accessToken) {
+        return new Response(JSON.stringify({ error: 'Authorization required' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      const user = await getAuthenticatedUser(accessToken)
+      if (!user) {
+        return new Response(JSON.stringify({ error: 'Invalid user session' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      const body = await req.json().catch(() => ({}))
+      const stationName = (body.stationName || `desktop-${user.id.slice(0, 8)}`).toString().trim().slice(0, 120)
+      const projectId = await resolveBootstrapProjectId(supabase, user.id)
+      const ipAddress = req.headers.get('x-forwarded-for') || 'unknown'
+
+      const { data: existingAgent, error: existingError } = await supabase
+        .from('local_agents')
+        .select('id, token')
+        .eq('created_by', user.id)
+        .eq('name', stationName)
+        .maybeSingle()
+
+      if (existingError) throw existingError
+
+      if (existingAgent) {
+        const { error: updateError } = await supabase
+          .from('local_agents')
+          .update({
+            project_id: projectId,
+            status: 'online',
+            sync_status: 'configuring',
+            last_seen_at: new Date().toISOString(),
+            ip_address: ipAddress,
+            version: body.version || null,
+          })
+          .eq('id', existingAgent.id)
+
+        if (updateError) throw updateError
+
+        return new Response(JSON.stringify({ success: true, token: existingAgent.token, agentId: existingAgent.id, projectId }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const agentToken = crypto.randomUUID()
+      const { data: createdAgent, error: insertError } = await supabase
+        .from('local_agents')
+        .insert({
+          name: stationName,
+          token: agentToken,
+          created_by: user.id,
+          project_id: projectId,
+          status: 'online',
+          sync_status: 'configuring',
+          last_seen_at: new Date().toISOString(),
+          ip_address: ipAddress,
+          version: body.version || null,
+        })
+        .select('id, token')
+        .single()
+
+      if (insertError) throw insertError
+
+      return new Response(JSON.stringify({ success: true, token: createdAgent.token, agentId: createdAgent.id, projectId }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     const token = (req.headers.get('x-agent-token') || req.headers.get('authorization'))?.replace('Bearer ', '')
     if (!token) {
       return new Response(JSON.stringify({ error: 'Token required' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
@@ -84,9 +223,6 @@ serve(async (req) => {
     if (!agent) {
       return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
-
-    const url = new URL(req.url)
-    const action = url.pathname.split('/').pop() || ''
 
     // POST /upload-logs
     if (req.method === 'POST' && action === 'upload-logs') {

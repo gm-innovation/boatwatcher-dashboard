@@ -1,4 +1,5 @@
 const https = require('https');
+const os = require('os');
 
 class SyncEngine {
   constructor(db) {
@@ -28,7 +29,7 @@ class SyncEngine {
   }
 
   get agentToken() {
-    return process.env.AGENT_TOKEN || '';
+    return process.env.AGENT_TOKEN || this.db.getSyncMeta?.('agent_token') || '';
   }
 
   isConfigured() {
@@ -64,6 +65,34 @@ class SyncEngine {
       ? (this.status.online ? 'Sincronização online.' : 'Sem conexão com a internet.')
       : 'Sincronização não configurada. Operando apenas localmente.';
     return { ...this.status };
+  }
+
+  async bootstrapFromAccessToken(accessToken) {
+    if (!this.cloudUrl || !this.cloudAnonKey) {
+      throw new Error('Sincronização em nuvem indisponível nesta instalação.');
+    }
+
+    const response = await this.callAuthenticatedEdgeFunction('agent-sync/bootstrap', 'POST', {
+      stationName: os.hostname(),
+      platform: process.platform,
+      version: process.env.npm_package_version || null,
+    }, accessToken);
+
+    if (!response?.success || !response?.token) {
+      throw new Error(response?.error || 'Falha ao configurar a sincronização.');
+    }
+
+    process.env.AGENT_TOKEN = response.token;
+    this.db.setSyncMeta?.('agent_token', response.token);
+    this.db.setSyncMeta?.('last_download', '1970-01-01T00:00:00Z');
+
+    this.status.configured = true;
+    this.status.mode = 'cloud-sync';
+    this.status.message = 'Sincronização configurada. Baixando dados iniciais...';
+    this.notifyListeners();
+
+    await this.triggerSync();
+    return this.getStatus();
   }
 
   async checkAndSync() {
@@ -229,7 +258,7 @@ class SyncEngine {
   }
 
   async checkConnectivity() {
-    if (!this.isConfigured()) return false;
+    if (!this.cloudUrl || !this.cloudAnonKey) return false;
 
     return new Promise((resolve) => {
       const req = https.get('https://www.google.com', { timeout: 5000 }, () => resolve(true));
@@ -242,12 +271,27 @@ class SyncEngine {
   }
 
   callEdgeFunction(path, method = 'GET', body = null) {
-    return new Promise((resolve, reject) => {
-      if (!this.isConfigured()) {
-        reject(new Error('Sync not configured'));
-        return;
-      }
+    if (!this.isConfigured()) {
+      return Promise.reject(new Error('Sync not configured'));
+    }
 
+    return this.callFunction(path, method, body, {
+      'x-agent-token': this.agentToken,
+    });
+  }
+
+  callAuthenticatedEdgeFunction(path, method = 'GET', body = null, accessToken = '') {
+    if (!this.cloudUrl || !this.cloudAnonKey) {
+      return Promise.reject(new Error('Cloud sync unavailable'));
+    }
+
+    return this.callFunction(path, method, body, {
+      Authorization: `Bearer ${accessToken}`,
+    });
+  }
+
+  callFunction(path, method = 'GET', body = null, extraHeaders = {}) {
+    return new Promise((resolve, reject) => {
       const url = new URL(`${this.cloudUrl}/functions/v1/${path}`);
       const options = {
         hostname: url.hostname,
@@ -256,8 +300,8 @@ class SyncEngine {
         method,
         headers: {
           'Content-Type': 'application/json',
-          'x-agent-token': this.agentToken,
           apikey: this.cloudAnonKey,
+          ...extraHeaders,
         },
       };
 
