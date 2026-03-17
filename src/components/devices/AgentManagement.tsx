@@ -344,7 +344,7 @@ export function AgentManagement() {
                         )}
                       </div>
 
-                      {selectedAgent === agent.id && newAgentToken && !isLocalRuntime && (
+                      {selectedAgent === agent.id && newAgentToken && !isLocalRuntime && !isDesktopFallback && (
                         <div className="p-3 bg-accent/30 border border-border rounded-lg">
                           <p className="text-sm mb-2">Novo token gerado:</p>
                           <div className="flex gap-2">
@@ -364,8 +364,14 @@ export function AgentManagement() {
                         </div>
                       )}
 
+                      {isDesktopFallback && (
+                        <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                          Este desktop está em fallback para a nuvem. Acompanhe o status do agente, mas use a web ou restabeleça o servidor local para comandos e manutenção local.
+                        </div>
+                      )}
+
                       <div className="flex flex-wrap gap-2 pt-2">
-                        {!isLocalRuntime && (
+                        {!isLocalRuntime && !isDesktopFallback && (
                           <>
                             <Button
                               size="sm"
