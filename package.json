@@ -20,6 +20,7 @@
     "desktop:dev": "concurrently -k \"npm run server:dev\" \"npm run dev\" \"npm run electron:dev\"",
     "build:electron": "npm run build:desktop && electron-builder --publish never",
     "build:electron:publish": "npm run build:desktop && electron-builder --config electron-builder.yml --config electron-builder.release.yml --publish always",
+    "prebuild:local-server": "node scripts/verify-local-server-deps.cjs",
     "build:local-server": "electron-builder --config electron-builder.server.yml --publish never",
     "build:local-server:dir": "electron-builder --config electron-builder.server.yml --dir --publish never"
   },
