@@ -510,7 +510,7 @@ export const DiagnosticsPanel = () => {
 
   useEffect(() => {
     runDiagnostics();
-  }, []);
+  }, [runtimeProfile.isDesktop, runtimeProfile.localServerAvailable, runtimeProfile.fallbackActive]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
