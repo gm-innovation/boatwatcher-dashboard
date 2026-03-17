@@ -67,6 +67,7 @@ if (!singleInstanceLock) {
   logToFile('Another instance is already running — quitting');
   app.quit();
 }
+const isSecondInstance = !singleInstanceLock;
 
 function ensureRuntimeDirectories() {
   const userDataPath = app.getPath('userData');
