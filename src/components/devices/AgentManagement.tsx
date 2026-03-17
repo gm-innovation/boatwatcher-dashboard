@@ -271,7 +271,7 @@ export function AgentManagement() {
                 <p className="text-sm text-muted-foreground text-center mb-4">
                   Crie um agente para conectar leitores em redes locais
                 </p>
-                {!isLocalRuntime && (
+                {!isLocalRuntime && !isDesktopFallback && (
                   <Button onClick={() => setIsCreateDialogOpen(true)}>
                     <Plus className="h-4 w-4 mr-2" />
                     Criar Primeiro Agente
