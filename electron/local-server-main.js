@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
+app.setName('Dock Check Local Server');
+
 // --- Robust logging (works even before app is ready) ---
 function resolveLogDir() {
   const candidates = [];
