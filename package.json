@@ -22,7 +22,7 @@
     "build:electron:publish": "npm run build:desktop && electron-builder --config electron-builder.yml --config electron-builder.release.yml --publish always",
     "build:local-server": "electron-builder --config electron-builder.server.yml --publish never",
     "build:local-server:dir": "electron-builder --config electron-builder.server.yml --dir --publish never"
-  }
+  },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
     "@radix-ui/react-accordion": "^1.2.0",
