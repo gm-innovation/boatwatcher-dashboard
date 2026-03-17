@@ -41,9 +41,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     stop: () => ipcRenderer.invoke('agent:stop'),
   },
 
-  // Server configuration
+  // App configuration
   getServerUrl: () => ipcRenderer.invoke('config:getServerUrl'),
   setServerUrl: (url) => ipcRenderer.invoke('config:setServerUrl', url),
+  getUpdateUrl: () => ipcRenderer.invoke('config:getUpdateUrl'),
+  setUpdateUrl: (url) => ipcRenderer.invoke('config:setUpdateUrl', url),
+
+  // Update flow
+  updater: {
+    getStatus: () => ipcRenderer.invoke('updater:getStatus'),
+    checkForUpdates: () => ipcRenderer.invoke('updater:checkForUpdates'),
+    installDownloadedUpdate: () => ipcRenderer.invoke('updater:installDownloadedUpdate'),
+  },
 
   // Connectivity (checks local server reachability)
   isOnline: () => navigator.onLine,
@@ -52,6 +61,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Event listeners
   onSyncStatusChange: (callback) => {
     ipcRenderer.on('sync-status-changed', (_, status) => callback(status));
+  },
+  onUpdaterStatusChange: (callback) => {
+    ipcRenderer.on('updater:status', (_, status) => callback(status));
   },
   onConnectivityChange: (callback) => {
     window.addEventListener('online', () => callback(true));

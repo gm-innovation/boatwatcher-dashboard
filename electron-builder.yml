@@ -9,23 +9,16 @@ directories:
 files:
   - dist/**/*
   - electron/**/*
-  - public/favicon.ico
-
-extraResources:
-  - from: public/favicon.ico
-    to: favicon.ico
 
 win:
   target:
     - target: nsis
       arch: [x64]
-  icon: public/favicon.ico
+  icon: build/icon.png
 
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  installerIcon: public/favicon.ico
-  uninstallerIcon: public/favicon.ico
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Dock Check
@@ -35,14 +28,14 @@ linux:
     - target: AppImage
       arch: [x64]
   category: Utility
-  icon: public/favicon.ico
+  icon: build/icon.png
 
 mac:
   target:
     - target: dmg
       arch: [x64, arm64]
   category: public.app-category.business
-  icon: public/favicon.ico
+  icon: build/icon.png
 
 # Electron main process entry
 extends: null
