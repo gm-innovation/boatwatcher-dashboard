@@ -3,15 +3,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 import type { JobFunction, RequiredDocument } from '@/types/supabase';
 import { localJobFunctions } from '@/lib/localServerProvider';
-import { usesLocalServer } from '@/lib/runtimeProfile';
+import { useRuntimeProfile } from '@/hooks/useRuntimeProfile';
 
 export const useJobFunctions = () => {
-  const isLocalRuntime = usesLocalServer();
+  const runtimeProfile = useRuntimeProfile();
+  const isDesktopLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
 
   return useQuery({
-    queryKey: ['job-functions', isLocalRuntime],
+    queryKey: ['job-functions', runtimeProfile.dataMode],
     queryFn: async () => {
-      if (isLocalRuntime) {
+      if (isDesktopLocalRuntime) {
         return await localJobFunctions.list();
       }
 
@@ -27,14 +28,15 @@ export const useJobFunctions = () => {
 };
 
 export const useJobFunctionById = (id: string | null) => {
-  const isLocalRuntime = usesLocalServer();
+  const runtimeProfile = useRuntimeProfile();
+  const isDesktopLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
 
   return useQuery({
-    queryKey: ['job-function', id, isLocalRuntime],
+    queryKey: ['job-function', id, runtimeProfile.dataMode],
     queryFn: async () => {
       if (!id) return null;
 
-      if (isLocalRuntime) {
+      if (isDesktopLocalRuntime) {
         const jobFunctions = await localJobFunctions.list();
         return (jobFunctions as JobFunction[]).find((item) => item.id === id) ?? null;
       }
@@ -53,12 +55,13 @@ export const useJobFunctionById = (id: string | null) => {
 };
 
 export const useRequiredDocuments = (jobFunctionId: string | null) => {
-  const isLocalRuntime = usesLocalServer();
+  const runtimeProfile = useRuntimeProfile();
+  const isDesktopLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
 
   return useQuery({
-    queryKey: ['required-documents', jobFunctionId, isLocalRuntime],
+    queryKey: ['required-documents', jobFunctionId, runtimeProfile.dataMode],
     queryFn: async () => {
-      if (!jobFunctionId || isLocalRuntime) return [];
+      if (!jobFunctionId || isDesktopLocalRuntime) return [];
 
       const { data, error } = await supabase
         .from('required_documents')
@@ -75,11 +78,12 @@ export const useRequiredDocuments = (jobFunctionId: string | null) => {
 
 export const useCreateJobFunction = () => {
   const queryClient = useQueryClient();
-  const isLocalRuntime = usesLocalServer();
+  const runtimeProfile = useRuntimeProfile();
+  const isDesktopLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
 
   return useMutation({
     mutationFn: async (data: { name: string; description?: string }) => {
-      if (isLocalRuntime) {
+      if (isDesktopLocalRuntime) {
         return await localJobFunctions.create(data);
       }
 
@@ -104,11 +108,12 @@ export const useCreateJobFunction = () => {
 
 export const useUpdateJobFunction = () => {
   const queryClient = useQueryClient();
-  const isLocalRuntime = usesLocalServer();
+  const runtimeProfile = useRuntimeProfile();
+  const isDesktopLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: { name: string; description?: string } }) => {
-      if (isLocalRuntime) {
+      if (isDesktopLocalRuntime) {
         return await localJobFunctions.update(id, data);
       }
 
@@ -131,11 +136,12 @@ export const useUpdateJobFunction = () => {
 
 export const useDeleteJobFunction = () => {
   const queryClient = useQueryClient();
-  const isLocalRuntime = usesLocalServer();
+  const runtimeProfile = useRuntimeProfile();
+  const isDesktopLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
 
   return useMutation({
     mutationFn: async (id: string) => {
-      if (isLocalRuntime) {
+      if (isDesktopLocalRuntime) {
         return await localJobFunctions.delete(id);
       }
 
@@ -158,7 +164,6 @@ export const useDeleteJobFunction = () => {
 
 export const useCreateRequiredDocument = () => {
   const queryClient = useQueryClient();
-  const isLocalRuntime = usesLocalServer();
 
   return useMutation({
     mutationFn: async (data: {
@@ -167,10 +172,6 @@ export const useCreateRequiredDocument = () => {
       validity_days?: number;
       is_mandatory?: boolean
     }) => {
-      if (isLocalRuntime) {
-        throw new Error('Documentos obrigatórios ainda não foram conectados ao servidor local.');
-      }
-
       const { data: result, error } = await supabase
         .from('required_documents')
         .insert(data)
@@ -192,14 +193,9 @@ export const useCreateRequiredDocument = () => {
 
 export const useDeleteRequiredDocument = () => {
   const queryClient = useQueryClient();
-  const isLocalRuntime = usesLocalServer();
 
   return useMutation({
     mutationFn: async ({ id, jobFunctionId }: { id: string; jobFunctionId: string }) => {
-      if (isLocalRuntime) {
-        throw new Error('Documentos obrigatórios ainda não foram conectados ao servidor local.');
-      }
-
       const { error } = await supabase
         .from('required_documents')
         .delete()

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
-import { usesLocalAuth, usesLocalServer } from '@/lib/runtimeProfile';
+import { useRuntimeProfile } from '@/hooks/useRuntimeProfile';
 
 interface DeviceToken {
   id: string;
@@ -20,16 +20,17 @@ function generateSecureToken(): string {
   return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-const LOCAL_RUNTIME_MESSAGE = 'A gestão local de tokens será conectada na fase de integração completa do servidor local.';
+const LOCAL_RUNTIME_MESSAGE = 'A gestão local de tokens será conectada quando o servidor local estiver disponível no desktop.';
 
 export function useDeviceTokens(deviceId: string | null) {
   const queryClient = useQueryClient();
-  const isLocalRuntime = usesLocalAuth() || usesLocalServer();
+  const runtimeProfile = useRuntimeProfile();
+  const isDesktopLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
 
   const { data: tokens = [], isLoading, error } = useQuery({
-    queryKey: ['device-tokens', deviceId],
+    queryKey: ['device-tokens', deviceId, runtimeProfile.dataMode],
     queryFn: async () => {
-      if (!deviceId || isLocalRuntime) return [];
+      if (!deviceId || isDesktopLocalRuntime) return [];
 
       const { data, error } = await supabase
         .from('device_api_tokens')
@@ -46,7 +47,7 @@ export function useDeviceTokens(deviceId: string | null) {
   const createToken = useMutation({
     mutationFn: async ({ name, expiresInDays }: { name?: string; expiresInDays?: number }) => {
       if (!deviceId) throw new Error('Device ID is required');
-      if (isLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
+      if (isDesktopLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
 
       const token = generateSecureToken();
       const expiresAt = expiresInDays
@@ -78,7 +79,7 @@ export function useDeviceTokens(deviceId: string | null) {
 
   const revokeToken = useMutation({
     mutationFn: async (tokenId: string) => {
-      if (isLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
+      if (isDesktopLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
 
       const { error } = await supabase
         .from('device_api_tokens')
@@ -98,7 +99,7 @@ export function useDeviceTokens(deviceId: string | null) {
 
   const deleteToken = useMutation({
     mutationFn: async (tokenId: string) => {
-      if (isLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
+      if (isDesktopLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
 
       const { error } = await supabase
         .from('device_api_tokens')

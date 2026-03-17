@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
-import { usesLocalAuth, usesLocalServer } from '@/lib/runtimeProfile';
 import { localAgent, localSync } from '@/lib/localServerProvider';
+import { useRuntimeProfile } from '@/hooks/useRuntimeProfile';
 
 interface LocalAgent {
   id: string;
@@ -40,16 +40,22 @@ function generateSecureToken(): string {
   return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-const LOCAL_RUNTIME_MESSAGE = 'Esta ação ficará disponível quando concluirmos a integração completa do servidor local com agentes e comandos.';
+const LOCAL_ONLY_MESSAGE = 'O servidor local está indisponível no desktop. O fallback em nuvem está ativo, mas controles do agente local ficam desabilitados.';
 
 export function useLocalAgents(projectId?: string | null) {
   const queryClient = useQueryClient();
-  const isLocalRuntime = usesLocalAuth() || usesLocalServer();
+  const runtimeProfile = useRuntimeProfile();
+  const isDesktopLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
+  const isDesktopFallback = runtimeProfile.isDesktop && runtimeProfile.fallbackActive;
 
   const { data: agents = [], isLoading, error } = useQuery({
-    queryKey: ['local-agents', projectId, isLocalRuntime],
+    queryKey: ['local-agents', projectId, runtimeProfile.dataMode, isDesktopFallback],
     queryFn: async () => {
-      if (isLocalRuntime) {
+      if (isDesktopFallback) {
+        return [] as LocalAgent[];
+      }
+
+      if (isDesktopLocalRuntime) {
         const [agentStatus, syncStatus] = await Promise.all([
           localAgent.getStatus(),
           localSync.getStatus(),
@@ -95,7 +101,7 @@ export function useLocalAgents(projectId?: string | null) {
 
   const createAgent = useMutation({
     mutationFn: async ({ name, projectId }: { name: string; projectId?: string }) => {
-      if (isLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
+      if (runtimeProfile.isDesktop) throw new Error(LOCAL_ONLY_MESSAGE);
 
       const token = generateSecureToken();
       const { data, error } = await supabase
@@ -123,7 +129,7 @@ export function useLocalAgents(projectId?: string | null) {
 
   const deleteAgent = useMutation({
     mutationFn: async (agentId: string) => {
-      if (isLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
+      if (runtimeProfile.isDesktop) throw new Error(LOCAL_ONLY_MESSAGE);
 
       const { error } = await supabase
         .from('local_agents')
@@ -143,7 +149,7 @@ export function useLocalAgents(projectId?: string | null) {
 
   const regenerateToken = useMutation({
     mutationFn: async (agentId: string) => {
-      if (isLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
+      if (runtimeProfile.isDesktop) throw new Error(LOCAL_ONLY_MESSAGE);
 
       const newToken = generateSecureToken();
       const { data, error } = await supabase
@@ -167,7 +173,7 @@ export function useLocalAgents(projectId?: string | null) {
 
   const startAgent = useMutation({
     mutationFn: async () => {
-      if (!isLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
+      if (!isDesktopLocalRuntime) throw new Error(LOCAL_ONLY_MESSAGE);
       return localAgent.start();
     },
     onSuccess: () => {
@@ -181,7 +187,7 @@ export function useLocalAgents(projectId?: string | null) {
 
   const stopAgent = useMutation({
     mutationFn: async () => {
-      if (!isLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
+      if (!isDesktopLocalRuntime) throw new Error(LOCAL_ONLY_MESSAGE);
       return localAgent.stop();
     },
     onSuccess: () => {
@@ -202,18 +208,21 @@ export function useLocalAgents(projectId?: string | null) {
     regenerateToken,
     startAgent,
     stopAgent,
-    isLocalRuntime,
+    isLocalRuntime: isDesktopLocalRuntime,
+    isDesktopFallback,
+    isDesktopRuntime: runtimeProfile.isDesktop,
   };
 }
 
 export function useAgentCommands(agentId: string | null) {
   const queryClient = useQueryClient();
-  const isLocalRuntime = usesLocalAuth() || usesLocalServer();
+  const runtimeProfile = useRuntimeProfile();
+  const isDesktopRuntime = runtimeProfile.isDesktop;
 
   const { data: commands = [], isLoading, error } = useQuery({
-    queryKey: ['agent-commands', agentId],
+    queryKey: ['agent-commands', agentId, isDesktopRuntime],
     queryFn: async () => {
-      if (!agentId || isLocalRuntime) return [];
+      if (!agentId || isDesktopRuntime) return [];
 
       const { data, error } = await supabase
         .from('agent_commands')
@@ -233,7 +242,7 @@ export function useAgentCommands(agentId: string | null) {
       return data as (AgentCommand & { devices: { id: string; name: string; controlid_serial_number: string } })[];
     },
     enabled: !!agentId,
-    refetchInterval: isLocalRuntime ? false : 5000
+    refetchInterval: isDesktopRuntime ? false : 5000
   });
 
   const sendCommand = useMutation({
@@ -248,7 +257,7 @@ export function useAgentCommands(agentId: string | null) {
       command: string;
       payload?: Record<string, unknown>
     }) => {
-      if (isLocalRuntime) throw new Error(LOCAL_RUNTIME_MESSAGE);
+      if (isDesktopRuntime) throw new Error(LOCAL_ONLY_MESSAGE);
 
       const { data, error } = await supabase
         .from('agent_commands')
