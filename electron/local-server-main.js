@@ -407,7 +407,7 @@ function setTrayMenu(statusText) {
     { label: statusText, enabled: false },
     { type: 'separator' },
     { label: 'Abrir painel de configuração', click: () => openConfigWindow() },
-    { label: 'Verificar atualização', click: () => { autoUpdater.checkForUpdates(); openConfigWindow(); } },
+    { label: 'Verificar atualização', click: () => { try { autoUpdater.checkForUpdates(); } catch (_) {} openConfigWindow(); } },
     { type: 'separator' },
     { label: 'Abrir pasta de dados', click: () => shell.openPath(process.env.BW_DATA_DIR || '') },
     { label: 'Abrir pasta de backups', click: () => shell.openPath(process.env.BW_BACKUP_DIR || '') },
