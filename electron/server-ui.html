@@ -82,7 +82,6 @@
     .success-msg { color: #4ade80; font-size: 13px; }
 
     /* Dashboard */
-    .dashboard { display: none; }
     .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
     .card {
       background: #18181b;
@@ -200,7 +199,7 @@
 </div>
 
 <!-- Dashboard Screen -->
-<div class="container dashboard" id="dashboardScreen">
+<div class="container" id="dashboardScreen" style="display:none;">
   <div class="actions-bar">
     <button class="btn btn-primary btn-sm" onclick="handleForceSync()">⟳ Forçar Sync</button>
     <button class="btn btn-ghost btn-sm" onclick="handleOpenFolder('data')">📂 Dados</button>
@@ -289,11 +288,16 @@
   let refreshTimer = null;
 
   async function init() {
+    if (!window.serverAPI) {
+      document.getElementById('setupScreen').innerHTML =
+        '<div class="setup-screen"><div class="logo">⚠️</div><h2>Erro</h2><p>API do servidor não disponível. Verifique se o preload está configurado.</p></div>';
+      return;
+    }
     try {
       const config = await window.serverAPI.getAgentConfig();
       if (config && config.token) {
         showDashboard();
-        refreshDashboard();
+        await refreshDashboard();
         refreshTimer = setInterval(refreshDashboard, 10000);
       } else {
         showSetup();
@@ -305,15 +309,27 @@
   }
 
   function showSetup() {
-    document.getElementById('setupScreen').style.display = '';
+    document.getElementById('setupScreen').style.display = 'block';
     document.getElementById('dashboardScreen').style.display = 'none';
-    if (refreshTimer) clearInterval(refreshTimer);
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
   }
 
   function showDashboard() {
     document.getElementById('setupScreen').style.display = 'none';
-    document.getElementById('dashboardScreen').style.display = '';
+    document.getElementById('dashboardScreen').style.display = 'block';
   }
+
+  // Global error handler
+  window.onerror = function(msg, src, line) {
+    console.error('Global error:', msg, src, line);
+    var log = document.getElementById('logContent');
+    if (log) log.textContent = 'ERRO JS: ' + msg + ' (linha ' + line + ')\n' + log.textContent;
+  };
+  window.onunhandledrejection = function(e) {
+    console.error('Unhandled rejection:', e.reason);
+    var log = document.getElementById('logContent');
+    if (log) log.textContent = 'ERRO (promise): ' + (e.reason?.message || e.reason) + '\n' + log.textContent;
+  };
 
   async function handleConnect() {
     const token = document.getElementById('tokenInput').value.trim();
