@@ -327,6 +327,33 @@ function registerIpcHandlers() {
     const target = paths[type];
     if (target) shell.openPath(target);
   });
+
+  // --- Auto-updater IPC ---
+  ipcMain.handle('server:check-update', async () => {
+    try {
+      await autoUpdater.checkForUpdates();
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('server:download-update', async () => {
+    try {
+      await autoUpdater.downloadUpdate();
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('server:install-update', () => {
+    autoUpdater.quitAndInstall(false, true);
+  });
+
+  ipcMain.handle('server:get-update-status', () => {
+    return updateStatus;
+  });
 }
 
 // --- Cloud HTTP helper ---
