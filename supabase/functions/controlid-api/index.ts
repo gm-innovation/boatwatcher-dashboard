@@ -15,23 +15,31 @@ interface ControlIDResponse {
   error?: string
 }
 
+function buildUrl(device: DeviceCredentials, endpoint: string, queryParams = ''): string {
+  const qs = queryParams ? `?${queryParams}` : ''
+  return `http://${device.ip}:${device.port || 80}/${endpoint}${qs}`
+}
+
+function buildAuthHeaders(device: DeviceCredentials): Record<string, string> {
+  const headers: Record<string, string> = {}
+  if (device.username && device.password) {
+    headers['Authorization'] = `Basic ${btoa(`${device.username}:${device.password}`)}`
+  }
+  return headers
+}
+
 async function controlIDRequest(
   device: DeviceCredentials,
   endpoint: string,
   method: string = 'GET',
   body?: any
 ): Promise<ControlIDResponse> {
-  const baseUrl = `http://${device.ip}:${device.port || 80}`
-  const url = `${baseUrl}${endpoint}`
+  const url = buildUrl(device, endpoint)
 
   try {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-    }
-
-    if (device.username && device.password) {
-      const auth = btoa(`${device.username}:${device.password}`)
-      headers['Authorization'] = `Basic ${auth}`
+      ...buildAuthHeaders(device),
     }
 
     console.log(`ControlID Request: ${method} ${url}`)
@@ -43,13 +51,10 @@ async function controlIDRequest(
     })
 
     const text = await response.text()
-    console.log(`ControlID Response (${response.status}):`, text)
+    console.log(`ControlID Response (${response.status}):`, text.substring(0, 500))
 
     if (!response.ok) {
-      return {
-        success: false,
-        error: `HTTP ${response.status}: ${text}`
-      }
+      return { success: false, error: `HTTP ${response.status}: ${text}` }
     }
 
     try {
@@ -60,72 +65,124 @@ async function controlIDRequest(
     }
   } catch (error) {
     console.error('ControlID Request Error:', error)
-    return {
-      success: false,
-      error: error.message
+    return { success: false, error: error.message }
+  }
+}
+
+async function controlIDRequestBinary(
+  device: DeviceCredentials,
+  endpoint: string,
+  queryParams: string,
+  imageData: Uint8Array
+): Promise<ControlIDResponse> {
+  const url = buildUrl(device, endpoint, queryParams)
+
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/octet-stream',
+      ...buildAuthHeaders(device),
     }
+
+    console.log(`ControlID Binary Request: POST ${url} (${imageData.byteLength} bytes)`)
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: imageData,
+    })
+
+    const text = await response.text()
+    console.log(`ControlID Binary Response (${response.status}):`, text.substring(0, 500))
+
+    if (!response.ok) {
+      return { success: false, error: `HTTP ${response.status}: ${text}` }
+    }
+
+    try {
+      const data = JSON.parse(text)
+      return { success: true, data }
+    } catch {
+      return { success: true, data: text }
+    }
+  } catch (error) {
+    console.error('ControlID Binary Request Error:', error)
+    return { success: false, error: error.message }
   }
 }
 
 async function getDeviceInfo(device: DeviceCredentials): Promise<ControlIDResponse> {
-  return await controlIDRequest(device, '/device_info.fcgi', 'GET')
+  return await controlIDRequest(device, 'device_info.fcgi', 'GET')
 }
 
 async function listUsers(device: DeviceCredentials): Promise<ControlIDResponse> {
-  return await controlIDRequest(device, '/users.fcgi', 'POST', {
-    object: 'users'
-  })
+  return await controlIDRequest(device, 'users.fcgi', 'POST', { object: 'users' })
 }
 
 async function enrollUser(
   device: DeviceCredentials,
-  userId: string,
+  userId: number,
   userName: string,
+  registration: string,
   userPhoto?: string
 ): Promise<ControlIDResponse> {
-  const userData: any = {
+  // Step 1: Create user via /create_objects.fcgi
+  const userResult = await controlIDRequest(device, 'create_objects.fcgi', 'POST', {
     object: 'users',
     values: [{
       id: userId,
       name: userName,
-      registration: userId,
+      registration: registration,
     }]
-  }
-
-  const userResult = await controlIDRequest(device, '/users.fcgi', 'POST', userData)
+  })
 
   if (!userResult.success) {
     return userResult
   }
 
+  // Step 2: Send photo via /user_set_image.fcgi (binary)
   if (userPhoto) {
-    const photoData = {
-      object: 'user_images',
-      values: [{
-        user_id: userId,
-        image: userPhoto,
-        timestamp: Date.now()
-      }]
-    }
+    try {
+      const binaryString = atob(userPhoto)
+      const bytes = new Uint8Array(binaryString.length)
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i)
+      }
 
-    const photoResult = await controlIDRequest(device, '/user_images.fcgi', 'POST', photoData)
-    if (!photoResult.success) {
-      console.warn('Failed to enroll photo, but user was created:', photoResult.error)
+      const timestamp = Math.floor(Date.now() / 1000)
+      const queryParams = `user_id=${userId}&timestamp=${timestamp}&match=0`
+
+      const photoResult = await controlIDRequestBinary(device, 'user_set_image.fcgi', queryParams, bytes)
+      if (!photoResult.success) {
+        console.warn('Failed to enroll photo, but user was created:', photoResult.error)
+      } else if (photoResult.data?.success === false) {
+        const errors = (photoResult.data.errors || []).map((e: any) => e.message).join('; ')
+        console.warn('Photo rejected by device:', errors)
+      }
+    } catch (photoErr) {
+      console.warn('Photo enrollment error:', photoErr.message)
     }
   }
 
   return { success: true, data: { message: 'User enrolled successfully' } }
 }
 
-async function removeUser(device: DeviceCredentials, userId: string): Promise<ControlIDResponse> {
-  return await controlIDRequest(device, '/users.fcgi', 'POST', {
+async function removeUser(device: DeviceCredentials, userId: number): Promise<ControlIDResponse> {
+  // Step 1: Remove photo via /user_destroy_image.fcgi
+  try {
+    await controlIDRequest(device, 'user_destroy_image.fcgi', 'POST', { user_id: userId })
+  } catch (err) {
+    console.warn('Failed to remove photo:', err.message)
+  }
+
+  // Step 2: Remove user via /destroy_objects.fcgi
+  return await controlIDRequest(device, 'destroy_objects.fcgi', 'POST', {
     object: 'users',
     where: { users: { id: userId } }
   })
 }
 
 async function releaseAccess(device: DeviceCredentials, doorId: number = 1): Promise<ControlIDResponse> {
-  return await controlIDRequest(device, '/execute_actions.fcgi', 'POST', {
+  return await controlIDRequest(device, 'execute_actions.fcgi', 'POST', {
     actions: [{
       action: 'door',
       parameters: `door=${doorId}`
@@ -145,14 +202,14 @@ async function configureDevice(
   device: DeviceCredentials,
   config: Record<string, any>
 ): Promise<ControlIDResponse> {
-  return await controlIDRequest(device, '/set_configuration.fcgi', 'POST', config)
+  return await controlIDRequest(device, 'set_configuration.fcgi', 'POST', config)
 }
 
 async function getConfiguration(
   device: DeviceCredentials,
   config: Record<string, any> = { monitor: ['enable_photo_upload'] }
 ): Promise<ControlIDResponse> {
-  return await controlIDRequest(device, '/get_configuration.fcgi', 'POST', config)
+  return await controlIDRequest(device, 'get_configuration.fcgi', 'POST', config)
 }
 
 serve(async (req) => {
@@ -167,7 +224,7 @@ serve(async (req) => {
     )
 
     const { action, deviceId, ...params } = await req.json()
-    console.log('ControlID API Request:', { action, deviceId, params })
+    console.log('ControlID API Request:', { action, deviceId, params: Object.keys(params) })
 
     const { data: deviceData, error: deviceError } = await supabase
       .from('devices')
@@ -179,11 +236,12 @@ serve(async (req) => {
       throw new Error(`Device not found: ${deviceId}`)
     }
 
+    const creds = deviceData.api_credentials as Record<string, any> || {}
     const device: DeviceCredentials = {
       ip: deviceData.controlid_ip_address,
-      username: deviceData.api_credentials?.username,
-      password: deviceData.api_credentials?.password,
-      port: deviceData.api_credentials?.port || 80
+      username: creds.username || creds.user,
+      password: creds.password,
+      port: creds.port || 80
     }
 
     let result: ControlIDResponse
@@ -215,18 +273,19 @@ serve(async (req) => {
         result = await listUsers(device)
         break
 
-      case 'enrollUser':
-        result = await enrollUser(
-          device,
-          params.userId,
-          params.userName,
-          params.userPhoto
-        )
+      case 'enrollUser': {
+        // Use worker code (integer) as ControlID ID
+        const workerCode = Number(params.workerCode || params.userId)
+        const registration = String(params.registration || params.userId)
+        result = await enrollUser(device, workerCode, params.userName, registration, params.userPhoto)
         break
+      }
 
-      case 'removeUser':
-        result = await removeUser(device, params.userId)
+      case 'removeUser': {
+        const removeCode = Number(params.workerCode || params.userId)
+        result = await removeUser(device, removeCode)
         break
+      }
 
       case 'releaseAccess':
         result = await releaseAccess(device, params.doorId)
