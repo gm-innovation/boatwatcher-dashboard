@@ -465,6 +465,10 @@ app.whenReady().then(async () => {
     if (!token) {
       openConfigWindow();
     }
+
+    // Check for updates on startup and every 6 hours
+    setTimeout(() => { try { autoUpdater.checkForUpdates(); } catch (_) {} }, 10000);
+    setInterval(() => { try { autoUpdater.checkForUpdates(); } catch (_) {} }, 6 * 60 * 60 * 1000);
   } catch (error) {
     const message = error instanceof Error ? error.stack || error.message : String(error);
     logToFile(`BOOT ERROR: ${message}`);
