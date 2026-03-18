@@ -42,6 +42,46 @@ try {
   logToFile(`FAILED TO REQUIRE server/index: ${err.stack || err.message}`);
 }
 
+// --- Auto-updater setup ---
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = true;
+
+let updateStatus = { status: 'idle' }; // idle | checking | available | downloading | downloaded | error
+
+function sendUpdaterStatus(data) {
+  updateStatus = data;
+  if (configWindow && !configWindow.isDestroyed()) {
+    configWindow.webContents.send('updater-status', data);
+  }
+}
+
+autoUpdater.on('checking-for-update', () => {
+  sendUpdaterStatus({ status: 'checking' });
+});
+
+autoUpdater.on('update-available', (info) => {
+  logToFile(`Update available: ${info.version}`);
+  sendUpdaterStatus({ status: 'available', version: info.version, releaseDate: info.releaseDate });
+});
+
+autoUpdater.on('update-not-available', () => {
+  sendUpdaterStatus({ status: 'idle', lastCheck: new Date().toISOString() });
+});
+
+autoUpdater.on('download-progress', (progress) => {
+  sendUpdaterStatus({ status: 'downloading', percent: Math.round(progress.percent) });
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  logToFile(`Update downloaded: ${info.version}`);
+  sendUpdaterStatus({ status: 'downloaded', version: info.version });
+});
+
+autoUpdater.on('error', (err) => {
+  logToFile(`Auto-updater error: ${err.message}`);
+  sendUpdaterStatus({ status: 'error', message: err.message });
+});
+
 let tray = null;
 let configWindow = null;
 let serverRuntime = null;
