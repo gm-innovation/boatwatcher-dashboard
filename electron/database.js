@@ -1156,6 +1156,35 @@ function createDatabaseAPI(db, startCode) {
       db.prepare('DELETE FROM devices WHERE id = ?').run(id);
     },
 
+    upsertDeviceFromCloud(data) {
+      if (!data.id) return;
+      const existing = db.prepare('SELECT id FROM devices WHERE id = ?').get(data.id);
+      if (existing) {
+        db.prepare(`
+          UPDATE devices SET name = ?, controlid_serial_number = ?, controlid_ip_address = ?,
+          type = ?, status = ?, location = ?, project_id = ?, agent_id = ?,
+          api_credentials = ?, configuration = ?, updated_at = datetime('now')
+          WHERE id = ?
+        `).run(
+          data.name, data.controlid_serial_number || null, data.controlid_ip_address || null,
+          data.type || 'facial_reader', data.status || 'offline', data.location || null,
+          data.project_id || null, data.agent_id || null,
+          JSON.stringify(data.api_credentials || {}), JSON.stringify(data.configuration || {}),
+          data.id
+        );
+      } else {
+        db.prepare(`
+          INSERT INTO devices (id, name, controlid_serial_number, controlid_ip_address, type, status, location, project_id, agent_id, api_credentials, configuration)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          data.id, data.name, data.controlid_serial_number || null, data.controlid_ip_address || null,
+          data.type || 'facial_reader', data.status || 'offline', data.location || null,
+          data.project_id || null, data.agent_id || null,
+          JSON.stringify(data.api_credentials || {}), JSON.stringify(data.configuration || {})
+        );
+      }
+    },
+
     // === Job Functions ===
     getJobFunctions() {
       return db.prepare('SELECT * FROM job_functions ORDER BY name').all();
