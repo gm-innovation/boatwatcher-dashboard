@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dock Check Local Server</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f1117;
+      color: #e4e4e7;
+      min-height: 100vh;
+    }
+    .header {
+      background: #18181b;
+      border-bottom: 1px solid #27272a;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #fafafa;
+    }
+    .header .version {
+      font-size: 12px;
+      color: #71717a;
+      margin-left: auto;
+    }
+    .container { padding: 24px; max-width: 900px; margin: 0 auto; }
+
+    /* Setup screen */
+    .setup-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: calc(100vh - 80px);
+      gap: 24px;
+    }
+    .setup-screen .logo { font-size: 48px; }
+    .setup-screen h2 { font-size: 22px; color: #fafafa; }
+    .setup-screen p { color: #a1a1aa; text-align: center; max-width: 400px; line-height: 1.5; }
+    .token-input {
+      width: 100%;
+      max-width: 420px;
+      padding: 12px 16px;
+      background: #18181b;
+      border: 1px solid #3f3f46;
+      border-radius: 8px;
+      color: #fafafa;
+      font-size: 14px;
+      font-family: monospace;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .token-input:focus { border-color: #3b82f6; }
+    .token-input::placeholder { color: #52525b; }
+
+    .btn {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-primary { background: #3b82f6; color: #fff; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-primary:disabled { background: #1e3a5f; color: #64748b; cursor: not-allowed; }
+    .btn-danger { background: #dc2626; color: #fff; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-sm { padding: 6px 14px; font-size: 12px; }
+    .btn-ghost { background: transparent; color: #a1a1aa; border: 1px solid #3f3f46; }
+    .btn-ghost:hover { background: #27272a; }
+
+    .error-msg { color: #f87171; font-size: 13px; margin-top: -8px; }
+    .success-msg { color: #4ade80; font-size: 13px; }
+
+    /* Dashboard */
+    .dashboard { display: none; }
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .card {
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .card-full { grid-column: 1 / -1; }
+    .card h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #a1a1aa;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+    .card .value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #fafafa;
+    }
+    .card .sub { font-size: 13px; color: #71717a; margin-top: 4px; }
+
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .status-online { background: #4ade80; }
+    .status-offline { background: #f87171; }
+    .status-syncing { background: #facc15; }
+
+    /* Devices table */
+    .devices-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .devices-table th {
+      text-align: left;
+      padding: 8px 12px;
+      color: #71717a;
+      font-weight: 500;
+      border-bottom: 1px solid #27272a;
+    }
+    .devices-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #1e1e23;
+      vertical-align: middle;
+    }
+    .devices-table tr:hover td { background: #1c1c22; }
+
+    .conn-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .conn-ok { background: #052e16; color: #4ade80; }
+    .conn-fail { background: #450a0a; color: #f87171; }
+    .conn-pending { background: #1c1917; color: #a1a1aa; }
+
+    /* Logs */
+    .log-area {
+      background: #09090b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #a1a1aa;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .actions-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #3f3f46;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state {
+      text-align: center;
+      padding: 24px;
+      color: #52525b;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <span style="font-size:24px;">⚓</span>
+  <h1>Dock Check Local Server</h1>
+  <span class="version" id="versionLabel">v1.0.0</span>
+</div>
+
+<!-- Setup Screen -->
+<div class="container" id="setupScreen">
+  <div class="setup-screen">
+    <div class="logo">🔗</div>
+    <h2>Conectar ao Sistema</h2>
+    <p>Cole o token do agente gerado na interface web para vincular este servidor local ao projeto e dispositivos correspondentes.</p>
+    <input type="text" class="token-input" id="tokenInput" placeholder="Cole o token do agente aqui..." autocomplete="off" spellcheck="false">
+    <div id="setupError" class="error-msg" style="display:none;"></div>
+    <button class="btn btn-primary" id="connectBtn" onclick="handleConnect()">
+      Conectar
+    </button>
+  </div>
+</div>
+
+<!-- Dashboard Screen -->
+<div class="container dashboard" id="dashboardScreen">
+  <div class="actions-bar">
+    <button class="btn btn-primary btn-sm" onclick="handleForceSync()">⟳ Forçar Sync</button>
+    <button class="btn btn-ghost btn-sm" onclick="handleOpenFolder('data')">📂 Dados</button>
+    <button class="btn btn-ghost btn-sm" onclick="handleOpenFolder('backups')">📂 Backups</button>
+    <button class="btn btn-ghost btn-sm" onclick="handleOpenFolder('logs')">📂 Logs</button>
+    <button class="btn btn-danger btn-sm" style="margin-left:auto;" onclick="handleDisconnect()">Desconectar</button>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <h3>Servidor</h3>
+      <div class="value" id="serverStatus">
+        <span class="status-dot status-offline"></span>Offline
+      </div>
+      <div class="sub" id="serverInfo">—</div>
+    </div>
+
+    <div class="card">
+      <h3>Agente / Projeto</h3>
+      <div class="value" id="agentName">—</div>
+      <div class="sub" id="projectName">—</div>
+    </div>
+
+    <div class="card">
+      <h3>Sincronização</h3>
+      <div class="value" id="syncStatus">
+        <span class="status-dot status-offline"></span>Não configurado
+      </div>
+      <div class="sub" id="syncInfo">—</div>
+    </div>
+
+    <div class="card">
+      <h3>Token</h3>
+      <div class="value" style="font-size:14px; font-family:monospace; word-break:break-all;" id="tokenDisplay">—</div>
+    </div>
+
+    <!-- Devices -->
+    <div class="card card-full">
+      <h3>Dispositivos ControlID</h3>
+      <div id="devicesContainer">
+        <div class="empty-state">Nenhum dispositivo vinculado.</div>
+      </div>
+    </div>
+
+    <!-- Logs -->
+    <div class="card card-full">
+      <h3>Últimas Linhas do Log</h3>
+      <div class="log-area" id="logContent">Carregando...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let refreshTimer = null;
+
+  async function init() {
+    try {
+      const config = await window.serverAPI.getAgentConfig();
+      if (config && config.token) {
+        showDashboard();
+        refreshDashboard();
+        refreshTimer = setInterval(refreshDashboard, 10000);
+      } else {
+        showSetup();
+      }
+    } catch (e) {
+      showSetup();
+    }
+  }
+
+  function showSetup() {
+    document.getElementById('setupScreen').style.display = '';
+    document.getElementById('dashboardScreen').style.display = 'none';
+    if (refreshTimer) clearInterval(refreshTimer);
+  }
+
+  function showDashboard() {
+    document.getElementById('setupScreen').style.display = 'none';
+    document.getElementById('dashboardScreen').style.display = '';
+  }
+
+  async function handleConnect() {
+    const token = document.getElementById('tokenInput').value.trim();
+    if (!token) return;
+
+    const btn = document.getElementById('connectBtn');
+    const errEl = document.getElementById('setupError');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Validando...';
+    errEl.style.display = 'none';
+
+    try {
+      const result = await window.serverAPI.setAgentToken(token);
+      if (result && result.error) {
+        errEl.textContent = result.error;
+        errEl.style.display = '';
+      } else {
+        showDashboard();
+        refreshDashboard();
+        refreshTimer = setInterval(refreshDashboard, 10000);
+      }
+    } catch (e) {
+      errEl.textContent = e.message || 'Erro ao conectar';
+      errEl.style.display = '';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = 'Conectar';
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!confirm('Desconectar este servidor do agente? O servidor continuará rodando, mas sem sincronização.')) return;
+    try {
+      await window.serverAPI.removeAgentToken();
+    } catch (_) {}
+    showSetup();
+  }
+
+  async function handleForceSync() {
+    try {
+      await window.serverAPI.triggerSync();
+      setTimeout(refreshDashboard, 2000);
+    } catch (_) {}
+  }
+
+  async function handleOpenFolder(type) {
+    try { await window.serverAPI.openFolder(type); } catch (_) {}
+  }
+
+  async function handleTestDevice(ip, btnEl) {
+    btnEl.disabled = true;
+    btnEl.textContent = '...';
+    try {
+      const result = await window.serverAPI.testDeviceConnection(ip);
+      const row = btnEl.closest('tr');
+      const statusCell = row.querySelector('.device-conn-status');
+      if (result && result.ok) {
+        statusCell.innerHTML = '<span class="conn-status conn-ok">● Online</span>';
+      } else {
+        statusCell.innerHTML = '<span class="conn-status conn-fail">● Offline</span>';
+      }
+    } catch (_) {}
+    btnEl.disabled = false;
+    btnEl.textContent = 'Testar';
+  }
+
+  async function refreshDashboard() {
+    try {
+      const [health, config, devices, logs] = await Promise.all([
+        window.serverAPI.getServerHealth(),
+        window.serverAPI.getAgentConfig(),
+        window.serverAPI.getDevices(),
+        window.serverAPI.getLogContent(),
+      ]);
+
+      // Server status
+      if (health) {
+        const dot = health.status === 'ok' ? 'status-online' : 'status-offline';
+        document.getElementById('serverStatus').innerHTML =
+          `<span class="status-dot ${dot}"></span>${health.status === 'ok' ? 'Online' : 'Offline'}`;
+        document.getElementById('serverInfo').textContent =
+          `Porta ${health.runtime?.port || '3001'} · Uptime ${formatUptime(health.uptime)}`;
+      }
+
+      // Agent info
+      if (config) {
+        document.getElementById('agentName').textContent = config.agentName || 'Agente local';
+        document.getElementById('projectName').textContent = config.projectName ? `Projeto: ${config.projectName}` : 'Projeto não vinculado';
+        document.getElementById('tokenDisplay').textContent = config.tokenMasked || '—';
+
+        // Sync
+        const syncDot = config.syncOnline ? 'status-online' : (config.syncConfigured ? 'status-offline' : 'status-offline');
+        const syncLabel = config.syncOnline ? 'Online' : (config.syncConfigured ? 'Offline' : 'Não configurado');
+        document.getElementById('syncStatus').innerHTML =
+          `<span class="status-dot ${syncDot}"></span>${syncLabel}`;
+        document.getElementById('syncInfo').textContent =
+          config.lastSync ? `Último sync: ${new Date(config.lastSync).toLocaleString('pt-BR')}` : 'Nenhuma sincronização realizada';
+      }
+
+      // Devices
+      renderDevices(devices || []);
+
+      // Logs
+      document.getElementById('logContent').textContent = logs || 'Sem logs disponíveis.';
+
+    } catch (e) {
+      console.error('Refresh error:', e);
+    }
+  }
+
+  function renderDevices(devices) {
+    const container = document.getElementById('devicesContainer');
+    if (!devices.length) {
+      container.innerHTML = '<div class="empty-state">Nenhum dispositivo vinculado a este agente.</div>';
+      return;
+    }
+
+    let html = `<table class="devices-table">
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>IP</th>
+          <th>Serial</th>
+          <th>Localização</th>
+          <th>Conectividade</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+    for (const d of devices) {
+      html += `<tr>
+        <td>${esc(d.name)}</td>
+        <td style="font-family:monospace;">${esc(d.controlid_ip_address || '—')}</td>
+        <td style="font-family:monospace;">${esc(d.controlid_serial_number || '—')}</td>
+        <td>${esc(d.location || '—')}</td>
+        <td class="device-conn-status"><span class="conn-status conn-pending">● Não testado</span></td>
+        <td><button class="btn btn-ghost btn-sm" onclick="handleTestDevice('${esc(d.controlid_ip_address)}', this)">Testar</button></td>
+      </tr>`;
+    }
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  }
+
+  function formatUptime(seconds) {
+    if (!seconds) return '—';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  }
+
+  function esc(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+  }
+
+  // Enter key on token input
+  document.getElementById('tokenInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleConnect();
+  });
+
+  init();
+</script>
+
+</body>
+</html>
