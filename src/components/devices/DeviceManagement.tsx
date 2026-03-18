@@ -18,7 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { DeviceSetupInstructions } from './DeviceSetupInstructions';
 import {
-  Plus, Wifi, WifiOff, Trash2, RefreshCw, DoorOpen, Camera, Server, Link, Loader2, CheckCircle2, XCircle, Clock, Users
+  Plus, Wifi, WifiOff, Trash2, RefreshCw, DoorOpen, Camera, Server, Link, Loader2, CheckCircle2, XCircle, Clock, Users, Copy
 } from 'lucide-react';
 import type { Device, DeviceType } from '@/types/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -200,6 +200,13 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
           <div className="space-y-3">
             <div className="text-sm text-muted-foreground">
               <span className="font-medium">Serial:</span> {device.controlid_serial_number}
+            </div>
+            <div className="text-sm text-muted-foreground flex items-center gap-2">
+              <span className="font-medium">ID:</span>
+              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono select-all">{device.id}</code>
+              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => { navigator.clipboard.writeText(device.id); toast({ title: 'ID copiado!' }); }}>
+                <Copy className="h-3 w-3" />
+              </Button>
             </div>
             {device.location && (
               <div className="text-sm text-muted-foreground">
