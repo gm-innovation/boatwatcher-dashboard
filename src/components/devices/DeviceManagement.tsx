@@ -18,7 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { DeviceSetupInstructions } from './DeviceSetupInstructions';
 import {
-  Plus, Wifi, WifiOff, Trash2, RefreshCw, DoorOpen, Camera, Server, Link, Loader2, CheckCircle2, XCircle, Clock, Users
+  Plus, Wifi, WifiOff, Trash2, RefreshCw, DoorOpen, Camera, Server, Link, Loader2, CheckCircle2, XCircle, Clock, Users, Copy
 } from 'lucide-react';
 import type { Device, DeviceType } from '@/types/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
