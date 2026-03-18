@@ -561,9 +561,9 @@
         <td style="font-family:monospace;">${esc(d.controlid_ip_address || '—')}</td>
         <td style="font-family:monospace;">${esc(d.controlid_serial_number || '—')}</td>
         <td>${credLabel}</td>
-        <td class="device-conn-status"><span class="conn-status conn-pending">● Não testado</span></td>
+        <td class="device-conn-status">${getConnStatusHtml(d.id)}</td>
         <td style="white-space:nowrap;">
-          <button class="btn btn-ghost btn-sm" onclick="handleTestDevice('${esc(d.controlid_ip_address)}', this)">Testar</button>
+          <button class="btn btn-ghost btn-sm" onclick="handleTestDevice('${esc(d.id)}', '${esc(d.controlid_ip_address)}', this)">Testar</button>
           <button class="btn btn-danger btn-sm btn-icon" onclick="handleRemoveDevice('${esc(d.id)}')" title="Remover">✕</button>
         </td>
       </tr>`;
@@ -571,6 +571,13 @@
 
     html += '</tbody></table>';
     container.innerHTML = html;
+  }
+
+  function getConnStatusHtml(deviceId) {
+    const s = deviceConnStatus[deviceId];
+    if (s === 'ok') return '<span class="conn-status conn-ok">● Online</span>';
+    if (s === 'fail') return '<span class="conn-status conn-fail">● Offline</span>';
+    return '<span class="conn-status conn-pending">● Não testado</span>';
   }
 
   function formatUptime(seconds) {
