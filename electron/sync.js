@@ -243,6 +243,9 @@ class SyncEngine {
       if (workersRes.workers) {
         for (const worker of workersRes.workers) {
           this.db.upsertWorkerFromCloud(worker);
+          if (worker.photo_signed_url) {
+            await this.autoEnrollWorkerPhoto(worker);
+          }
         }
       }
     } catch (e) { console.error('Download workers error:', e.message); }
