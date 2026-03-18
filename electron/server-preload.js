@@ -12,4 +12,14 @@ contextBridge.exposeInMainWorld('serverAPI', {
   triggerSync: () => ipcRenderer.invoke('server:trigger-sync'),
   getLogContent: () => ipcRenderer.invoke('server:get-log-content'),
   openFolder: (type) => ipcRenderer.invoke('server:open-folder', type),
+
+  // Auto-updater
+  checkForUpdate: () => ipcRenderer.invoke('server:check-update'),
+  downloadUpdate: () => ipcRenderer.invoke('server:download-update'),
+  installUpdate: () => ipcRenderer.invoke('server:install-update'),
+  onUpdaterStatus: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('updater-status', handler);
+    return () => ipcRenderer.removeListener('updater-status', handler);
+  },
 });

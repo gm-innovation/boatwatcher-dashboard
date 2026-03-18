@@ -1,4 +1,5 @@
 const { app, BrowserWindow, Tray, Menu, shell, dialog, ipcMain } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -40,6 +41,46 @@ try {
 } catch (err) {
   logToFile(`FAILED TO REQUIRE server/index: ${err.stack || err.message}`);
 }
+
+// --- Auto-updater setup ---
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = true;
+
+let updateStatus = { status: 'idle' }; // idle | checking | available | downloading | downloaded | error
+
+function sendUpdaterStatus(data) {
+  updateStatus = data;
+  if (configWindow && !configWindow.isDestroyed()) {
+    configWindow.webContents.send('updater-status', data);
+  }
+}
+
+autoUpdater.on('checking-for-update', () => {
+  sendUpdaterStatus({ status: 'checking' });
+});
+
+autoUpdater.on('update-available', (info) => {
+  logToFile(`Update available: ${info.version}`);
+  sendUpdaterStatus({ status: 'available', version: info.version, releaseDate: info.releaseDate });
+});
+
+autoUpdater.on('update-not-available', () => {
+  sendUpdaterStatus({ status: 'idle', lastCheck: new Date().toISOString() });
+});
+
+autoUpdater.on('download-progress', (progress) => {
+  sendUpdaterStatus({ status: 'downloading', percent: Math.round(progress.percent) });
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  logToFile(`Update downloaded: ${info.version}`);
+  sendUpdaterStatus({ status: 'downloaded', version: info.version });
+});
+
+autoUpdater.on('error', (err) => {
+  logToFile(`Auto-updater error: ${err.message}`);
+  sendUpdaterStatus({ status: 'error', message: err.message });
+});
 
 let tray = null;
 let configWindow = null;
@@ -286,6 +327,33 @@ function registerIpcHandlers() {
     const target = paths[type];
     if (target) shell.openPath(target);
   });
+
+  // --- Auto-updater IPC ---
+  ipcMain.handle('server:check-update', async () => {
+    try {
+      await autoUpdater.checkForUpdates();
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('server:download-update', async () => {
+    try {
+      await autoUpdater.downloadUpdate();
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('server:install-update', () => {
+    autoUpdater.quitAndInstall(false, true);
+  });
+
+  ipcMain.handle('server:get-update-status', () => {
+    return updateStatus;
+  });
 }
 
 // --- Cloud HTTP helper ---
@@ -333,6 +401,7 @@ function setTrayMenu(statusText) {
     { label: statusText, enabled: false },
     { type: 'separator' },
     { label: 'Abrir painel de configuração', click: () => openConfigWindow() },
+    { label: 'Verificar atualização', click: () => { autoUpdater.checkForUpdates(); openConfigWindow(); } },
     { type: 'separator' },
     { label: 'Abrir pasta de dados', click: () => shell.openPath(process.env.BW_DATA_DIR || '') },
     { label: 'Abrir pasta de backups', click: () => shell.openPath(process.env.BW_BACKUP_DIR || '') },
@@ -396,6 +465,10 @@ app.whenReady().then(async () => {
     if (!token) {
       openConfigWindow();
     }
+
+    // Check for updates on startup and every 6 hours
+    setTimeout(() => { try { autoUpdater.checkForUpdates(); } catch (_) {} }, 10000);
+    setInterval(() => { try { autoUpdater.checkForUpdates(); } catch (_) {} }, 6 * 60 * 60 * 1000);
   } catch (error) {
     const message = error instanceof Error ? error.stack || error.message : String(error);
     logToFile(`BOOT ERROR: ${message}`);
