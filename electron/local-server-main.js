@@ -43,8 +43,14 @@ try {
 }
 
 // --- Auto-updater setup ---
-autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = true;
+let updaterReady = false;
+try {
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+  updaterReady = true;
+} catch (err) {
+  logToFile(`Auto-updater init warning (app-update.yml missing?): ${err.message}`);
+}
 
 let updateStatus = { status: 'idle' }; // idle | checking | available | downloading | downloaded | error
 
