@@ -280,7 +280,7 @@ class SyncEngine {
 
     let photoBase64 = null;
     try {
-      const response = await new Promise((resolve, reject) => {
+      const photoBuffer = await new Promise((resolve, reject) => {
         const url = new URL(worker.photo_signed_url);
         const mod = url.protocol === 'https:' ? https : require('http');
         const req = mod.get(worker.photo_signed_url, { timeout: 15000 }, (res) => {
@@ -291,7 +291,7 @@ class SyncEngine {
         req.on('error', reject);
         req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
       });
-      photoBase64 = response.toString('base64');
+      photoBase64 = photoBuffer.toString('base64');
     } catch (err) {
       console.error(`Auto-enroll photo download failed for worker ${worker.id}:`, err.message);
       return;
@@ -306,9 +306,10 @@ class SyncEngine {
       if (!device || !device.controlid_ip_address) continue;
 
       try {
+        // Pass full worker object — enrollUserOnDevice uses worker.code as ControlID integer ID
         const result = await enrollUserOnDevice(device, worker, photoBase64);
         if (result.success) {
-          console.log(`Auto-enrolled photo for worker ${worker.name} on device ${device.name}`);
+          console.log(`Auto-enrolled worker ${worker.name} (code=${worker.code}) on device ${device.name}`);
         } else {
           console.warn(`Auto-enroll warning for ${worker.name} on ${device.name}:`, result.warning || result.error);
         }
