@@ -276,6 +276,26 @@
       </div>
     </div>
 
+    <!-- Update -->
+    <div class="card card-full">
+      <h3>Atualização</h3>
+      <div id="updateSection">
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <span style="font-size:14px; color:#a1a1aa;" id="updateLabel">Versão atual: <strong id="currentVersion" style="color:#fafafa;">—</strong></span>
+          <button class="btn btn-ghost btn-sm" id="checkUpdateBtn" onclick="handleCheckUpdate()">Verificar atualização</button>
+          <button class="btn btn-primary btn-sm" id="downloadUpdateBtn" style="display:none;" onclick="handleDownloadUpdate()">Baixar atualização</button>
+          <button class="btn btn-success btn-sm" id="installUpdateBtn" style="display:none;" onclick="handleInstallUpdate()">Instalar e reiniciar</button>
+        </div>
+        <div id="updateStatus" class="sub" style="margin-top:8px;"></div>
+        <div id="updateProgress" style="display:none; margin-top:8px;">
+          <div style="background:#27272a; border-radius:4px; height:6px; overflow:hidden;">
+            <div id="updateProgressBar" style="background:#3b82f6; height:100%; width:0%; transition:width 0.3s;"></div>
+          </div>
+          <span class="sub" id="updateProgressLabel" style="margin-top:4px; display:block;">0%</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Logs -->
     <div class="card card-full">
       <h3>Últimas Linhas do Log</h3>
