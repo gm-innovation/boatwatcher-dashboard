@@ -2,11 +2,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-interface EnrollmentRequest {
-  workerId: string
-  deviceIds: string[]
-}
-
 interface DeviceCredentials {
   ip: string
   username?: string
@@ -14,36 +9,42 @@ interface DeviceCredentials {
   port?: number
 }
 
+function buildUrl(device: DeviceCredentials, endpoint: string, queryParams = ''): string {
+  const qs = queryParams ? `?${queryParams}` : ''
+  return `http://${device.ip}:${device.port || 80}/${endpoint}${qs}`
+}
+
+function buildAuthHeaders(device: DeviceCredentials): Record<string, string> {
+  const headers: Record<string, string> = {}
+  if (device.username && device.password) {
+    headers['Authorization'] = `Basic ${btoa(`${device.username}:${device.password}`)}`
+  }
+  return headers
+}
+
+async function deviceRequest(device: DeviceCredentials, endpoint: string, body: any): Promise<Response> {
+  return await fetch(buildUrl(device, endpoint), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(device) },
+    body: JSON.stringify(body),
+  })
+}
+
 async function enrollUserOnDevice(
   device: DeviceCredentials,
-  userId: string,
+  workerCode: number,
   userName: string,
-  userPhoto?: string
-): Promise<{ success: boolean; error?: string }> {
-  const baseUrl = `http://${device.ip}:${device.port || 80}`
-  
+  photoBase64?: string
+): Promise<{ success: boolean; error?: string; warning?: string }> {
   try {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    }
-
-    if (device.username && device.password) {
-      const auth = btoa(`${device.username}:${device.password}`)
-      headers['Authorization'] = `Basic ${auth}`
-    }
-
-    // Cadastrar usuário
-    const userResponse = await fetch(`${baseUrl}/users.fcgi`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        object: 'users',
-        values: [{
-          id: userId,
-          name: userName,
-          registration: userId,
-        }]
-      })
+    // Step 1: Create user via /create_objects.fcgi
+    const userResponse = await deviceRequest(device, 'create_objects.fcgi', {
+      object: 'users',
+      values: [{
+        id: workerCode,
+        name: userName,
+        registration: String(workerCode),
+      }]
     })
 
     if (!userResponse.ok) {
@@ -51,23 +52,36 @@ async function enrollUserOnDevice(
       return { success: false, error: `Failed to create user: ${text}` }
     }
 
-    // Se tiver foto, cadastrar biometria facial
-    if (userPhoto) {
-      const photoResponse = await fetch(`${baseUrl}/user_images.fcgi`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          object: 'user_images',
-          values: [{
-            user_id: userId,
-            image: userPhoto,
-            timestamp: Date.now()
-          }]
-        })
-      })
+    // Step 2: Send photo via /user_set_image.fcgi (binary octet-stream)
+    if (photoBase64) {
+      try {
+        const binaryString = atob(photoBase64)
+        const bytes = new Uint8Array(binaryString.length)
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i)
+        }
 
-      if (!photoResponse.ok) {
-        console.warn('Failed to enroll photo, user created without biometrics')
+        const timestamp = Math.floor(Date.now() / 1000)
+        const url = buildUrl(device, 'user_set_image.fcgi', `user_id=${workerCode}&timestamp=${timestamp}&match=0`)
+
+        const photoResponse = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream', ...buildAuthHeaders(device) },
+          body: bytes,
+        })
+
+        if (!photoResponse.ok) {
+          console.warn('Failed to enroll photo, user created without biometrics')
+        } else {
+          const photoResult = await photoResponse.json().catch(() => null)
+          if (photoResult && photoResult.success === false) {
+            const errors = (photoResult.errors || []).map((e: any) => e.message).join('; ')
+            return { success: true, warning: `Foto rejeitada: ${errors}` }
+          }
+        }
+      } catch (photoErr) {
+        console.warn('Photo enrollment error:', photoErr.message)
+        return { success: true, warning: `Foto falhou: ${photoErr.message}` }
       }
     }
 
@@ -79,27 +93,20 @@ async function enrollUserOnDevice(
 
 async function removeUserFromDevice(
   device: DeviceCredentials,
-  userId: string
+  workerCode: number
 ): Promise<{ success: boolean; error?: string }> {
-  const baseUrl = `http://${device.ip}:${device.port || 80}`
-  
   try {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+    // Step 1: Remove photo via /user_destroy_image.fcgi
+    try {
+      await deviceRequest(device, 'user_destroy_image.fcgi', { user_id: workerCode })
+    } catch (e) {
+      console.warn('Failed to remove photo:', e.message)
     }
 
-    if (device.username && device.password) {
-      const auth = btoa(`${device.username}:${device.password}`)
-      headers['Authorization'] = `Basic ${auth}`
-    }
-
-    const response = await fetch(`${baseUrl}/users.fcgi`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        object: 'users',
-        where: { users: { id: userId } }
-      })
+    // Step 2: Remove user via /destroy_objects.fcgi
+    const response = await deviceRequest(device, 'destroy_objects.fcgi', {
+      object: 'users',
+      where: { users: { id: workerCode } }
     })
 
     if (!response.ok) {
@@ -145,10 +152,10 @@ serve(async (req) => {
     const { action, workerId, deviceIds } = await req.json()
     console.log('Worker Enrollment Request:', { action, workerId, deviceIds, userId: claimsData.claims.sub })
 
-    // Buscar dados do trabalhador
+    // Fetch worker with code field
     const { data: worker, error: workerError } = await supabase
       .from('workers')
-      .select('id, name, photo_url, devices_enrolled')
+      .select('id, name, code, photo_url, devices_enrolled, document_number')
       .eq('id', workerId)
       .single()
 
@@ -156,7 +163,9 @@ serve(async (req) => {
       throw new Error(`Worker not found: ${workerId}`)
     }
 
-    // Buscar dispositivos
+    const workerCode = Number(worker.code)
+
+    // Fetch devices
     const { data: devices, error: devicesError } = await supabase
       .from('devices')
       .select('id, controlid_ip_address, api_credentials, name')
@@ -166,17 +175,22 @@ serve(async (req) => {
       throw new Error('No valid devices found')
     }
 
-    const results: Record<string, { success: boolean; error?: string }> = {}
+    const results: Record<string, { success: boolean; error?: string; warning?: string }> = {}
     let enrolledDevices = worker.devices_enrolled || []
 
-    // Buscar foto do trabalhador se existir
+    // Download worker photo if exists
     let photoBase64: string | undefined
     if (worker.photo_url) {
       try {
         const photoResponse = await fetch(worker.photo_url)
         if (photoResponse.ok) {
           const photoBuffer = await photoResponse.arrayBuffer()
-          photoBase64 = btoa(String.fromCharCode(...new Uint8Array(photoBuffer)))
+          const bytes = new Uint8Array(photoBuffer)
+          let binary = ''
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i])
+          }
+          photoBase64 = btoa(binary)
         }
       } catch (e) {
         console.warn('Failed to fetch worker photo:', e)
@@ -184,27 +198,23 @@ serve(async (req) => {
     }
 
     for (const device of devices) {
+      const creds = device.api_credentials as Record<string, any> || {}
       const deviceCredentials: DeviceCredentials = {
         ip: device.controlid_ip_address,
-        username: device.api_credentials?.username,
-        password: device.api_credentials?.password,
-        port: device.api_credentials?.port || 80
+        username: creds.username || creds.user,
+        password: creds.password,
+        port: creds.port || 80
       }
 
       if (action === 'enroll') {
-        const result = await enrollUserOnDevice(
-          deviceCredentials,
-          worker.id,
-          worker.name,
-          photoBase64
-        )
+        const result = await enrollUserOnDevice(deviceCredentials, workerCode, worker.name, photoBase64)
         results[device.id] = result
 
         if (result.success && !enrolledDevices.includes(device.id)) {
           enrolledDevices.push(device.id)
         }
       } else if (action === 'remove') {
-        const result = await removeUserFromDevice(deviceCredentials, worker.id)
+        const result = await removeUserFromDevice(deviceCredentials, workerCode)
         results[device.id] = result
 
         if (result.success) {
@@ -213,7 +223,7 @@ serve(async (req) => {
       }
     }
 
-    // Atualizar lista de dispositivos inscritos do trabalhador
+    // Update worker's enrolled devices list
     await supabase
       .from('workers')
       .update({ devices_enrolled: enrolledDevices })

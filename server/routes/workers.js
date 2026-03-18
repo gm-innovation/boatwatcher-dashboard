@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { enrollUserOnDevice, removeUserFromDevice, loadPhotoAsBase64 } = require('../lib/controlid');
+const { enrollUserOnDevice, removeUserFromDevice, loadPhotoAsBase64, getWorkerControlIdCode } = require('../lib/controlid');
 
 router.get('/', (req, res) => {
   try {
@@ -87,7 +87,7 @@ router.post('/:id/enrollment', async (req, res) => {
       try {
         const result = action === 'enroll'
           ? await enrollUserOnDevice(device, worker, photoBase64)
-          : await removeUserFromDevice(device, worker.id);
+          : await removeUserFromDevice(device, worker.id, worker.code);
 
         if (result.success) {
           if (action === 'enroll') nextEnrolled.add(device.id);
@@ -140,8 +140,24 @@ router.post('/:id/enrollment', async (req, res) => {
   }
 });
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
+    const worker = req.db.getWorkerById(req.params.id);
+    if (!worker) return res.status(404).json({ error: 'Worker not found' });
+
+    // Remove from all enrolled devices before deleting
+    const enrolledDevices = Array.isArray(worker.devices_enrolled) ? worker.devices_enrolled : [];
+    for (const deviceId of enrolledDevices) {
+      const device = req.db.getDeviceById?.(deviceId);
+      if (!device || !device.controlid_ip_address) continue;
+      try {
+        await removeUserFromDevice(device, worker.id, worker.code);
+        console.log(`Removed worker ${worker.name} from device ${device.name}`);
+      } catch (err) {
+        console.warn(`Failed to remove worker ${worker.name} from device ${device.name}: ${err.message}`);
+      }
+    }
+
     req.db.deleteWorker(req.params.id);
     res.json({ success: true });
   } catch (err) {
