@@ -286,6 +286,8 @@
 
 <script>
   let refreshTimer = null;
+  let deviceConnStatus = {}; // deviceId → 'ok' | 'fail'
+  let initialTestDone = false;
 
   async function init() {
     if (!window.serverAPI) {
@@ -365,7 +367,33 @@
   }
 
   async function handleForceSync() {
-    try { await window.serverAPI.triggerSync(); setTimeout(refreshDashboard, 2000); } catch (_) {}
+    const btn = document.querySelector('.actions-bar .btn-primary');
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Sincronizando...';
+    try {
+      await window.serverAPI.triggerSync();
+      btn.innerHTML = '✓ Sync concluído';
+      btn.classList.remove('btn-primary');
+      btn.classList.add('btn-success');
+      setTimeout(() => {
+        btn.innerHTML = originalHTML;
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-primary');
+        btn.disabled = false;
+      }, 2500);
+      setTimeout(refreshDashboard, 1500);
+    } catch (e) {
+      btn.innerHTML = '✕ Erro no sync';
+      btn.classList.remove('btn-primary');
+      btn.classList.add('btn-danger');
+      setTimeout(() => {
+        btn.innerHTML = originalHTML;
+        btn.classList.remove('btn-danger');
+        btn.classList.add('btn-primary');
+        btn.disabled = false;
+      }, 3000);
+    }
   }
 
   function handleOpenFolder(type) {
@@ -432,21 +460,38 @@
     } catch (_) {}
   }
 
-  async function handleTestDevice(ip, btnEl) {
+  async function handleTestDevice(id, ip, btnEl) {
     btnEl.disabled = true;
     btnEl.textContent = '...';
     try {
       const result = await window.serverAPI.testDeviceConnection(ip);
-      const row = btnEl.closest('tr');
-      const statusCell = row.querySelector('.device-conn-status');
-      if (result && result.ok) {
-        statusCell.innerHTML = '<span class="conn-status conn-ok">● Online</span>';
-      } else {
-        statusCell.innerHTML = '<span class="conn-status conn-fail">● Offline</span>';
-      }
-    } catch (_) {}
+      deviceConnStatus[id] = (result && result.ok) ? 'ok' : 'fail';
+    } catch (_) {
+      deviceConnStatus[id] = 'fail';
+    }
+    // Update just the status cell without full re-render
+    const row = btnEl.closest('tr');
+    const statusCell = row.querySelector('.device-conn-status');
+    if (deviceConnStatus[id] === 'ok') {
+      statusCell.innerHTML = '<span class="conn-status conn-ok">● Online</span>';
+    } else {
+      statusCell.innerHTML = '<span class="conn-status conn-fail">● Offline</span>';
+    }
     btnEl.disabled = false;
     btnEl.textContent = 'Testar';
+  }
+
+  async function autoTestAllDevices(devices) {
+    for (const d of devices) {
+      if (d.controlid_ip_address && !deviceConnStatus[d.id]) {
+        try {
+          const result = await window.serverAPI.testDeviceConnection(d.controlid_ip_address);
+          deviceConnStatus[d.id] = (result && result.ok) ? 'ok' : 'fail';
+        } catch (_) {
+          deviceConnStatus[d.id] = 'fail';
+        }
+      }
+    }
   }
 
   async function refreshDashboard() {
@@ -480,7 +525,14 @@
       }
 
       // Devices
-      renderDevices(devices || []);
+      const deviceList = devices || [];
+      renderDevices(deviceList);
+
+      // Auto-test devices on first load
+      if (!initialTestDone && deviceList.length > 0) {
+        initialTestDone = true;
+        autoTestAllDevices(deviceList).then(() => renderDevices(deviceList));
+      }
 
       // Logs
       document.getElementById('logContent').textContent = logs || 'Sem logs disponíveis.';
@@ -509,9 +561,9 @@
         <td style="font-family:monospace;">${esc(d.controlid_ip_address || '—')}</td>
         <td style="font-family:monospace;">${esc(d.controlid_serial_number || '—')}</td>
         <td>${credLabel}</td>
-        <td class="device-conn-status"><span class="conn-status conn-pending">● Não testado</span></td>
+        <td class="device-conn-status">${getConnStatusHtml(d.id)}</td>
         <td style="white-space:nowrap;">
-          <button class="btn btn-ghost btn-sm" onclick="handleTestDevice('${esc(d.controlid_ip_address)}', this)">Testar</button>
+          <button class="btn btn-ghost btn-sm" onclick="handleTestDevice('${esc(d.id)}', '${esc(d.controlid_ip_address)}', this)">Testar</button>
           <button class="btn btn-danger btn-sm btn-icon" onclick="handleRemoveDevice('${esc(d.id)}')" title="Remover">✕</button>
         </td>
       </tr>`;
@@ -519,6 +571,13 @@
 
     html += '</tbody></table>';
     container.innerHTML = html;
+  }
+
+  function getConnStatusHtml(deviceId) {
+    const s = deviceConnStatus[deviceId];
+    if (s === 'ok') return '<span class="conn-status conn-ok">● Online</span>';
+    if (s === 'fail') return '<span class="conn-status conn-fail">● Offline</span>';
+    return '<span class="conn-status conn-pending">● Não testado</span>';
   }
 
   function formatUptime(seconds) {
