@@ -286,6 +286,8 @@
 
 <script>
   let refreshTimer = null;
+  let deviceConnStatus = {}; // deviceId → 'ok' | 'fail'
+  let initialTestDone = false;
 
   async function init() {
     if (!window.serverAPI) {
