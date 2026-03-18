@@ -115,6 +115,8 @@ class SyncEngine {
       return;
     }
 
+    await this.sendHeartbeat();
+
     const pendingWorkers = this.db.getUnsyncedWorkers?.() || [];
     const pendingLogs = this.db.getUnsyncedLogs?.() || [];
     const pendingOperations = this.db.getPendingSyncOperations?.() || [];
@@ -241,6 +243,9 @@ class SyncEngine {
       if (workersRes.workers) {
         for (const worker of workersRes.workers) {
           this.db.upsertWorkerFromCloud(worker);
+          if (worker.photo_signed_url) {
+            await this.autoEnrollWorkerPhoto(worker);
+          }
         }
       }
     } catch (e) { console.error('Download workers error:', e.message); }
@@ -255,6 +260,62 @@ class SyncEngine {
     } catch (e) { console.error('Download worker_documents error:', e.message); }
 
     this.db.setSyncMeta('last_download', new Date().toISOString());
+  }
+
+  async sendHeartbeat() {
+    try {
+      await this.callEdgeFunction('agent-sync/status', 'POST', {
+        version: process.env.npm_package_version || '1.0.0',
+        sync_status: this.status.syncing ? 'syncing' : 'idle',
+        pending_count: this.status.pendingCount,
+      });
+    } catch (err) {
+      console.error('Heartbeat error:', err.message);
+    }
+  }
+
+  async autoEnrollWorkerPhoto(worker) {
+    const devicesEnrolled = Array.isArray(worker.devices_enrolled) ? worker.devices_enrolled : [];
+    if (devicesEnrolled.length === 0) return;
+
+    let photoBase64 = null;
+    try {
+      const response = await new Promise((resolve, reject) => {
+        const url = new URL(worker.photo_signed_url);
+        const mod = url.protocol === 'https:' ? https : require('http');
+        const req = mod.get(worker.photo_signed_url, { timeout: 15000 }, (res) => {
+          const chunks = [];
+          res.on('data', (chunk) => chunks.push(chunk));
+          res.on('end', () => resolve(Buffer.concat(chunks)));
+        });
+        req.on('error', reject);
+        req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+      });
+      photoBase64 = response.toString('base64');
+    } catch (err) {
+      console.error(`Auto-enroll photo download failed for worker ${worker.id}:`, err.message);
+      return;
+    }
+
+    if (!photoBase64) return;
+
+    const { enrollUserOnDevice } = require('../server/lib/controlid');
+
+    for (const deviceId of devicesEnrolled) {
+      const device = this.db.getDeviceById?.(deviceId);
+      if (!device || !device.controlid_ip_address) continue;
+
+      try {
+        const result = await enrollUserOnDevice(device, worker, photoBase64);
+        if (result.success) {
+          console.log(`Auto-enrolled photo for worker ${worker.name} on device ${device.name}`);
+        } else {
+          console.warn(`Auto-enroll warning for ${worker.name} on ${device.name}:`, result.warning || result.error);
+        }
+      } catch (err) {
+        console.error(`Auto-enroll failed for ${worker.name} on ${device.name}:`, err.message);
+      }
+    }
   }
 
   async checkConnectivity() {
