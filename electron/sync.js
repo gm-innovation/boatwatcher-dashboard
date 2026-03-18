@@ -115,6 +115,8 @@ class SyncEngine {
       return;
     }
 
+    await this.sendHeartbeat();
+
     const pendingWorkers = this.db.getUnsyncedWorkers?.() || [];
     const pendingLogs = this.db.getUnsyncedLogs?.() || [];
     const pendingOperations = this.db.getPendingSyncOperations?.() || [];
