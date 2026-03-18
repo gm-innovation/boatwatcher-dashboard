@@ -288,11 +288,16 @@
   let refreshTimer = null;
 
   async function init() {
+    if (!window.serverAPI) {
+      document.getElementById('setupScreen').innerHTML =
+        '<div class="setup-screen"><div class="logo">⚠️</div><h2>Erro</h2><p>API do servidor não disponível. Verifique se o preload está configurado.</p></div>';
+      return;
+    }
     try {
       const config = await window.serverAPI.getAgentConfig();
       if (config && config.token) {
         showDashboard();
-        refreshDashboard();
+        await refreshDashboard();
         refreshTimer = setInterval(refreshDashboard, 10000);
       } else {
         showSetup();
@@ -304,15 +309,27 @@
   }
 
   function showSetup() {
-    document.getElementById('setupScreen').style.display = '';
+    document.getElementById('setupScreen').style.display = 'block';
     document.getElementById('dashboardScreen').style.display = 'none';
-    if (refreshTimer) clearInterval(refreshTimer);
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
   }
 
   function showDashboard() {
     document.getElementById('setupScreen').style.display = 'none';
-    document.getElementById('dashboardScreen').style.display = '';
+    document.getElementById('dashboardScreen').style.display = 'block';
   }
+
+  // Global error handler
+  window.onerror = function(msg, src, line) {
+    console.error('Global error:', msg, src, line);
+    var log = document.getElementById('logContent');
+    if (log) log.textContent = 'ERRO JS: ' + msg + ' (linha ' + line + ')\n' + log.textContent;
+  };
+  window.onunhandledrejection = function(e) {
+    console.error('Unhandled rejection:', e.reason);
+    var log = document.getElementById('logContent');
+    if (log) log.textContent = 'ERRO (promise): ' + (e.reason?.message || e.reason) + '\n' + log.textContent;
+  };
 
   async function handleConnect() {
     const token = document.getElementById('tokenInput').value.trim();
