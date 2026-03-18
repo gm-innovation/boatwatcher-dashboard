@@ -459,6 +459,39 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, results }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    // GET /download-devices
+    if (req.method === 'GET' && action === 'download-devices') {
+      const { data: devices, error } = await supabase
+        .from('devices')
+        .select('id, name, controlid_ip_address, controlid_serial_number, type, status, location, project_id, api_credentials, configuration')
+        .eq('agent_id', agent.id)
+
+      if (error) throw error
+
+      // Also fetch agent info and project name
+      const { data: agentInfo } = await supabase
+        .from('local_agents')
+        .select('id, name, project_id, status')
+        .eq('id', agent.id)
+        .single()
+
+      let projectName = null
+      if (agentInfo?.project_id) {
+        const { data: project } = await supabase
+          .from('projects')
+          .select('name')
+          .eq('id', agentInfo.project_id)
+          .single()
+        projectName = project?.name ?? null
+      }
+
+      return new Response(JSON.stringify({
+        devices: devices || [],
+        agent: agentInfo ? { id: agentInfo.id, name: agentInfo.name, project_id: agentInfo.project_id, project_name: projectName } : null,
+        timestamp: new Date().toISOString(),
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     // GET /download-workers
     if (req.method === 'GET' && action === 'download-workers') {
       const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'

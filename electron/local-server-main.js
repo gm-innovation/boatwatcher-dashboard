@@ -1,29 +1,20 @@
-const { app, Tray, Menu, shell, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, shell, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const http = require('http');
 
 app.setName('Dock Check Local Server');
 
-// --- Robust logging (works even before app is ready) ---
+// --- Robust logging ---
 function resolveLogDir() {
   const candidates = [];
-
-  try { candidates.push(app.getPath('userData')); } catch (_) { /* not ready yet */ }
-
-  if (process.env.APPDATA) {
-    candidates.push(path.join(process.env.APPDATA, 'Dock Check Local Server'));
-  }
-  if (process.env.LOCALAPPDATA) {
-    candidates.push(path.join(process.env.LOCALAPPDATA, 'Dock Check Local Server'));
-  }
+  try { candidates.push(app.getPath('userData')); } catch (_) {}
+  if (process.env.APPDATA) candidates.push(path.join(process.env.APPDATA, 'Dock Check Local Server'));
+  if (process.env.LOCALAPPDATA) candidates.push(path.join(process.env.LOCALAPPDATA, 'Dock Check Local Server'));
   candidates.push(os.tmpdir());
-
   for (const dir of candidates) {
-    try {
-      fs.mkdirSync(dir, { recursive: true });
-      return dir;
-    } catch (_) { /* try next */ }
+    try { fs.mkdirSync(dir, { recursive: true }); return dir; } catch (_) {}
   }
   return os.tmpdir();
 }
@@ -32,23 +23,14 @@ const LOG_DIR = resolveLogDir();
 const LOG_PATH = path.join(LOG_DIR, 'error.log');
 
 function logToFile(message) {
-  try {
-    const timestamp = new Date().toISOString();
-    fs.appendFileSync(LOG_PATH, `[${timestamp}] ${message}\n`);
-  } catch (_) { /* ignore */ }
+  try { fs.appendFileSync(LOG_PATH, `[${new Date().toISOString()}] ${message}\n`); } catch (_) {}
 }
 
 logToFile(`=== BOOT START === PID=${process.pid} argv=${JSON.stringify(process.argv)}`);
 logToFile(`Log file location: ${LOG_PATH}`);
-logToFile(`app.isPackaged: ${app.isPackaged}, appPath: ${(() => { try { return app.getAppPath(); } catch(e) { return 'N/A'; } })()}`);
 
-// Catch uncaught exceptions early
-process.on('uncaughtException', (err) => {
-  logToFile(`UNCAUGHT EXCEPTION: ${err.stack || err.message}`);
-});
-process.on('unhandledRejection', (reason) => {
-  logToFile(`UNHANDLED REJECTION: ${reason}`);
-});
+process.on('uncaughtException', (err) => logToFile(`UNCAUGHT EXCEPTION: ${err.stack || err.message}`));
+process.on('unhandledRejection', (reason) => logToFile(`UNHANDLED REJECTION: ${reason}`));
 
 // --- Load server module ---
 let startLocalServer;
@@ -60,6 +42,7 @@ try {
 }
 
 let tray = null;
+let configWindow = null;
 let serverRuntime = null;
 
 const singleInstanceLock = app.requestSingleInstanceLock();
@@ -71,76 +54,256 @@ const isSecondInstance = !singleInstanceLock;
 
 function ensureRuntimeDirectories() {
   const userDataPath = app.getPath('userData');
-
   process.env.BW_HOST = process.env.BW_HOST || '0.0.0.0';
   process.env.BW_PORT = process.env.BW_PORT || '3001';
   process.env.BW_DATA_DIR = process.env.BW_DATA_DIR || path.join(userDataPath, 'data');
   process.env.BW_BACKUP_DIR = process.env.BW_BACKUP_DIR || path.join(userDataPath, 'backups');
-
   fs.mkdirSync(process.env.BW_DATA_DIR, { recursive: true });
   fs.mkdirSync(process.env.BW_BACKUP_DIR, { recursive: true });
 }
 
 function findIcon() {
   const candidates = [];
-
   if (app.isPackaged) {
     candidates.push(
       path.join(process.resourcesPath, 'build', 'icon.png'),
       path.join(process.resourcesPath, 'app.asar.unpacked', 'build', 'icon.png'),
       path.join(process.resourcesPath, 'app.asar.unpacked', 'public', 'favicon-512.png'),
     );
-    // Also try inside the asar (Electron can read from asar)
     try {
       const appPath = app.getAppPath();
-      candidates.push(
-        path.join(appPath, 'build', 'icon.png'),
-        path.join(appPath, 'public', 'favicon-512.png'),
-      );
-    } catch (_) { /* ignore */ }
+      candidates.push(path.join(appPath, 'build', 'icon.png'), path.join(appPath, 'public', 'favicon-512.png'));
+    } catch (_) {}
   } else {
     candidates.push(path.join(__dirname, '../public/favicon-512.png'));
   }
-
   for (const c of candidates) {
-    logToFile(`Checking icon: ${c} — exists: ${fs.existsSync(c)}`);
     if (fs.existsSync(c)) return c;
   }
-
   logToFile('WARNING: No icon found, Tray may fail');
-  return candidates[0]; // best-effort
+  return candidates[0];
 }
 
+// --- Config Window ---
+function openConfigWindow() {
+  if (configWindow) {
+    configWindow.focus();
+    return;
+  }
+
+  configWindow = new BrowserWindow({
+    width: 920,
+    height: 680,
+    title: 'Dock Check Local Server',
+    icon: findIcon(),
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'server-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  configWindow.loadFile(path.join(__dirname, 'server-ui.html'));
+  configWindow.on('closed', () => { configWindow = null; });
+}
+
+// --- IPC Handlers ---
+function registerIpcHandlers() {
+  ipcMain.handle('server:get-health', async () => {
+    try {
+      const res = await fetch(`http://localhost:${process.env.BW_PORT || 3001}/api/health`);
+      return await res.json();
+    } catch {
+      return { status: 'offline' };
+    }
+  });
+
+  ipcMain.handle('server:get-agent-config', () => {
+    if (!serverRuntime?.db) return null;
+    const token = serverRuntime.db.getSyncMeta?.('agent_token') || '';
+    const agentName = serverRuntime.db.getSyncMeta?.('agent_name') || '';
+    const projectName = serverRuntime.db.getSyncMeta?.('project_name') || '';
+    const syncStatus = serverRuntime.syncEngine?.getStatus?.() || {};
+
+    return {
+      token: token,
+      tokenMasked: token ? token.slice(0, 8) + '...' + token.slice(-4) : '',
+      agentName,
+      projectName,
+      syncOnline: syncStatus.online || false,
+      syncConfigured: syncStatus.configured || false,
+      lastSync: syncStatus.lastSync || null,
+    };
+  });
+
+  ipcMain.handle('server:set-agent-token', async (_event, token) => {
+    if (!serverRuntime?.db || !token) return { error: 'Servidor não inicializado.' };
+
+    try {
+      // Validate token by calling the cloud endpoint to download devices
+      const syncEngine = serverRuntime.syncEngine;
+      if (!syncEngine.cloudUrl || !syncEngine.cloudAnonKey) {
+        return { error: 'Configuração de nuvem indisponível.' };
+      }
+
+      // First validate via heartbeat
+      const heartbeatResult = await callCloudFunction(
+        syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
+        'agent-sync/status', 'POST', { version: '1.0.0' }
+      );
+
+      if (heartbeatResult.error) {
+        return { error: `Token inválido: ${heartbeatResult.error}` };
+      }
+
+      // Download devices assigned to this agent
+      const devicesResult = await callCloudFunction(
+        syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
+        'agent-sync/download-devices', 'GET', null
+      );
+
+      // Save token
+      serverRuntime.db.setSyncMeta?.('agent_token', token);
+      process.env.AGENT_TOKEN = token;
+
+      // Save agent/project info
+      if (devicesResult.agent) {
+        serverRuntime.db.setSyncMeta?.('agent_name', devicesResult.agent.name || '');
+        serverRuntime.db.setSyncMeta?.('project_name', devicesResult.agent.project_name || '');
+      }
+
+      // Save devices to local SQLite
+      if (Array.isArray(devicesResult.devices)) {
+        for (const device of devicesResult.devices) {
+          serverRuntime.db.upsertDeviceFromCloud?.(device);
+        }
+        logToFile(`Saved ${devicesResult.devices.length} devices from cloud`);
+      }
+
+      // Reload agent controller devices
+      serverRuntime.agentController?.reloadDevices?.();
+
+      // Reset sync timestamp so full download happens
+      serverRuntime.db.setSyncMeta?.('last_download', '1970-01-01T00:00:00Z');
+
+      // Trigger sync
+      serverRuntime.syncEngine?.triggerSync?.();
+
+      return { success: true, devicesCount: devicesResult.devices?.length || 0 };
+    } catch (err) {
+      logToFile(`set-agent-token error: ${err.message}`);
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('server:remove-agent-token', () => {
+    if (!serverRuntime?.db) return;
+    serverRuntime.db.setSyncMeta?.('agent_token', '');
+    serverRuntime.db.setSyncMeta?.('agent_name', '');
+    serverRuntime.db.setSyncMeta?.('project_name', '');
+    delete process.env.AGENT_TOKEN;
+    logToFile('Agent token removed');
+  });
+
+  ipcMain.handle('server:get-devices', () => {
+    if (!serverRuntime?.db) return [];
+    return serverRuntime.db.getDevices?.() || [];
+  });
+
+  ipcMain.handle('server:test-device-connection', async (_event, ip) => {
+    if (!ip) return { ok: false };
+    return new Promise((resolve) => {
+      const req = http.get(`http://${ip}/api/status`, { timeout: 3000 }, (res) => {
+        resolve({ ok: res.statusCode < 500 });
+      });
+      req.on('error', () => resolve({ ok: false }));
+      req.on('timeout', () => { req.destroy(); resolve({ ok: false }); });
+    });
+  });
+
+  ipcMain.handle('server:trigger-sync', async () => {
+    try {
+      await serverRuntime?.syncEngine?.triggerSync?.();
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('server:get-log-content', () => {
+    try {
+      const content = fs.readFileSync(LOG_PATH, 'utf-8');
+      const lines = content.split('\n');
+      return lines.slice(-100).join('\n');
+    } catch {
+      return 'Não foi possível ler o log.';
+    }
+  });
+
+  ipcMain.handle('server:open-folder', (_event, type) => {
+    const paths = {
+      data: process.env.BW_DATA_DIR,
+      backups: process.env.BW_BACKUP_DIR,
+      logs: LOG_DIR,
+    };
+    const target = paths[type];
+    if (target) shell.openPath(target);
+  });
+}
+
+// --- Cloud HTTP helper ---
+function callCloudFunction(cloudUrl, anonKey, agentToken, fnPath, method, body) {
+  const https = require('https');
+  return new Promise((resolve, reject) => {
+    const url = new URL(`${cloudUrl}/functions/v1/${fnPath}`);
+    const options = {
+      hostname: url.hostname,
+      port: url.port || 443,
+      path: url.pathname + url.search,
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: anonKey,
+        'x-agent-token': agentToken,
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => data += chunk);
+      res.on('end', () => {
+        try {
+          const parsed = data ? JSON.parse(data) : {};
+          if (res.statusCode >= 400) {
+            resolve({ error: parsed.error || `HTTP ${res.statusCode}` });
+            return;
+          }
+          resolve(parsed);
+        } catch { resolve({ error: 'Invalid JSON response' }); }
+      });
+    });
+    req.on('error', (e) => reject(e));
+    req.setTimeout(15000, () => { req.destroy(); reject(new Error('Timeout')); });
+    if (body) req.write(JSON.stringify(body));
+    req.end();
+  });
+}
+
+// --- Tray Menu ---
 function setTrayMenu(statusText) {
   if (!tray) return;
-
   const menu = Menu.buildFromTemplate([
     { label: statusText, enabled: false },
     { type: 'separator' },
-    {
-      label: 'Abrir pasta de dados',
-      click: () => shell.openPath(process.env.BW_DATA_DIR || ''),
-    },
-    {
-      label: 'Abrir pasta de backups',
-      click: () => shell.openPath(process.env.BW_BACKUP_DIR || ''),
-    },
+    { label: 'Abrir painel de configuração', click: () => openConfigWindow() },
     { type: 'separator' },
-    {
-      label: 'Abrir pasta de logs',
-      click: () => shell.openPath(LOG_DIR),
-    },
-    {
-      label: 'Abrir error.log',
-      click: () => shell.openPath(LOG_PATH),
-    },
+    { label: 'Abrir pasta de dados', click: () => shell.openPath(process.env.BW_DATA_DIR || '') },
+    { label: 'Abrir pasta de backups', click: () => shell.openPath(process.env.BW_BACKUP_DIR || '') },
+    { label: 'Abrir pasta de logs', click: () => shell.openPath(LOG_DIR) },
     { type: 'separator' },
-    {
-      label: 'Encerrar servidor local',
-      click: () => app.quit(),
-    },
+    { label: 'Encerrar servidor local', click: () => app.quit() },
   ]);
-
   tray.setContextMenu(menu);
   tray.setToolTip(`Dock Check Local Server — ${statusText}`);
 }
@@ -154,14 +317,13 @@ async function bootLocalServer() {
     backupDir: process.env.BW_BACKUP_DIR,
   });
 
-  const statusText = `Online em http://${serverRuntime.host}:${serverRuntime.port}`;
-  setTrayMenu(statusText);
+  const port = serverRuntime.port || process.env.BW_PORT || '3001';
+  setTrayMenu(`Online em http://localhost:${port}`);
 }
 
+// --- App lifecycle ---
 app.on('second-instance', () => {
-  if (tray) {
-    tray.popUpContextMenu();
-  }
+  openConfigWindow();
 });
 
 app.on('before-quit', () => {
@@ -177,10 +339,12 @@ app.whenReady().then(async () => {
     app.setAppUserModelId('com.dockcheck.localserver');
     app.setLoginItemSettings({ openAtLogin: true });
 
-    // Create Tray inside try/catch
+    registerIpcHandlers();
+
     const iconPath = findIcon();
     logToFile(`Creating Tray with icon: ${iconPath}`);
     tray = new Tray(iconPath);
+    tray.on('double-click', () => openConfigWindow());
     setTrayMenu('Inicializando...');
     logToFile('Tray created successfully');
 
@@ -190,6 +354,12 @@ app.whenReady().then(async () => {
 
     await bootLocalServer();
     logToFile('Server started successfully');
+
+    // Auto-open config window on first run if no token configured
+    const token = serverRuntime?.db?.getSyncMeta?.('agent_token');
+    if (!token) {
+      openConfigWindow();
+    }
   } catch (error) {
     const message = error instanceof Error ? error.stack || error.message : String(error);
     logToFile(`BOOT ERROR: ${message}`);
