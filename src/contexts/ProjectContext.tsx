@@ -93,9 +93,12 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       setLoading(true);
 
       try {
-        const providerProjects = ((await fetchProjectsFromProvider()) || []) as Project[];
+        // Admin (Super Admin) uses bypassLocal to see all projects from Supabase
+        const isAdmin = role === 'admin';
+        const providerProjects = ((await fetchProjectsFromProvider({ bypassLocal: isAdmin })) || []) as Project[];
 
-        if (role === 'admin') {
+        if (isAdmin) { // Use isAdmin variable here
+
           setProjects(providerProjects);
           return;
         }

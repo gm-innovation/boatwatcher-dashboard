@@ -21,8 +21,8 @@ import {
 } from '@/lib/localServerProvider';
 import { shouldUseLocalServer } from '@/lib/runtimeProfile';
 
-async function executeWithDesktopFallback<T>(localOperation: () => Promise<T>, cloudOperation: () => Promise<T>): Promise<T> {
-  if (!(await shouldUseLocalServer())) {
+async function executeWithDesktopFallback<T>(localOperation: () => Promise<T>, cloudOperation: () => Promise<T>, forceCloud: boolean = false): Promise<T> {
+  if (forceCloud || !(await shouldUseLocalServer())) {
     return cloudOperation();
   }
 
@@ -312,7 +312,7 @@ export async function deleteWorkerDocument(id: string) {
 
 // --- Projects ---
 
-export async function fetchProjects() {
+export async function fetchProjects(options?: { bypassLocal?: boolean }) {
   return executeWithDesktopFallback(
     () => localProjects.list(),
     async () => {
@@ -323,6 +323,7 @@ export async function fetchProjects() {
       if (error) throw error;
       return data;
     },
+    options?.bypassLocal
   );
 }
 
