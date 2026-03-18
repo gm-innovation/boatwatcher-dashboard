@@ -201,6 +201,13 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
             <div className="text-sm text-muted-foreground">
               <span className="font-medium">Serial:</span> {device.controlid_serial_number}
             </div>
+            <div className="text-sm text-muted-foreground flex items-center gap-2">
+              <span className="font-medium">ID:</span>
+              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono select-all">{device.id}</code>
+              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => { navigator.clipboard.writeText(device.id); toast({ title: 'ID copiado!' }); }}>
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
             {device.location && (
               <div className="text-sm text-muted-foreground">
                 <span className="font-medium">Local:</span> {device.location}
