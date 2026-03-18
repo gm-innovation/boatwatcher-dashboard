@@ -29,7 +29,14 @@ asarUnpack:
 
 npmRebuild: true
 
-generateUpdatesFilesForAllChannels: false
+generateUpdatesFilesForAllChannels: true
+
+publish:
+  provider: github
+  owner: ${env.GH_OWNER}
+  repo: ${env.GH_REPO}
+  releaseType: release
+  vPrefixedTagName: true
 
 win:
   target:

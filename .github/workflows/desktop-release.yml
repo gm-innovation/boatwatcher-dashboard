@@ -31,3 +31,6 @@ jobs:
 
       - name: Build and publish Desktop release
         run: npm run build:electron:publish
+
+      - name: Build and publish Local Server release
+        run: npm run build:local-server:publish
