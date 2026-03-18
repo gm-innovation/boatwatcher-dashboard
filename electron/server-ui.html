@@ -614,10 +614,123 @@
     return div.innerHTML;
   }
 
+  // --- Auto-updater UI ---
+  function setupUpdaterListener() {
+    if (!window.serverAPI.onUpdaterStatus) return;
+    window.serverAPI.onUpdaterStatus((data) => {
+      const statusEl = document.getElementById('updateStatus');
+      const downloadBtn = document.getElementById('downloadUpdateBtn');
+      const installBtn = document.getElementById('installUpdateBtn');
+      const checkBtn = document.getElementById('checkUpdateBtn');
+      const progressEl = document.getElementById('updateProgress');
+      const progressBar = document.getElementById('updateProgressBar');
+      const progressLabel = document.getElementById('updateProgressLabel');
+
+      switch (data.status) {
+        case 'checking':
+          statusEl.textContent = 'Verificando...';
+          statusEl.className = 'sub';
+          checkBtn.disabled = true;
+          checkBtn.innerHTML = '<span class="spinner"></span> Verificando...';
+          downloadBtn.style.display = 'none';
+          installBtn.style.display = 'none';
+          progressEl.style.display = 'none';
+          break;
+        case 'available':
+          statusEl.textContent = `Nova versão disponível: v${data.version}`;
+          statusEl.className = 'sub success-msg';
+          checkBtn.disabled = false;
+          checkBtn.textContent = 'Verificar atualização';
+          downloadBtn.style.display = '';
+          downloadBtn.textContent = `Baixar v${data.version}`;
+          installBtn.style.display = 'none';
+          progressEl.style.display = 'none';
+          break;
+        case 'downloading':
+          statusEl.textContent = 'Baixando atualização...';
+          statusEl.className = 'sub';
+          checkBtn.disabled = true;
+          checkBtn.textContent = 'Verificar atualização';
+          downloadBtn.style.display = 'none';
+          installBtn.style.display = 'none';
+          progressEl.style.display = '';
+          progressBar.style.width = (data.percent || 0) + '%';
+          progressLabel.textContent = (data.percent || 0) + '%';
+          break;
+        case 'downloaded':
+          statusEl.textContent = `v${data.version} pronta para instalar.`;
+          statusEl.className = 'sub success-msg';
+          checkBtn.disabled = false;
+          checkBtn.textContent = 'Verificar atualização';
+          downloadBtn.style.display = 'none';
+          installBtn.style.display = '';
+          progressEl.style.display = 'none';
+          break;
+        case 'error':
+          statusEl.textContent = `Erro: ${data.message || 'Falha na atualização'}`;
+          statusEl.className = 'sub error-msg';
+          checkBtn.disabled = false;
+          checkBtn.textContent = 'Verificar atualização';
+          downloadBtn.style.display = 'none';
+          installBtn.style.display = 'none';
+          progressEl.style.display = 'none';
+          break;
+        default: // idle
+          if (data.lastCheck) {
+            statusEl.textContent = `Nenhuma atualização disponível. Última verificação: ${new Date(data.lastCheck).toLocaleString('pt-BR')}`;
+          }
+          statusEl.className = 'sub';
+          checkBtn.disabled = false;
+          checkBtn.textContent = 'Verificar atualização';
+          downloadBtn.style.display = 'none';
+          installBtn.style.display = 'none';
+          progressEl.style.display = 'none';
+          break;
+      }
+    });
+  }
+
+  async function handleCheckUpdate() {
+    const btn = document.getElementById('checkUpdateBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Verificando...';
+    try {
+      await window.serverAPI.checkForUpdate();
+    } catch (e) {
+      document.getElementById('updateStatus').textContent = 'Erro ao verificar: ' + e.message;
+      document.getElementById('updateStatus').className = 'sub error-msg';
+      btn.disabled = false;
+      btn.textContent = 'Verificar atualização';
+    }
+  }
+
+  async function handleDownloadUpdate() {
+    const btn = document.getElementById('downloadUpdateBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Baixando...';
+    try {
+      await window.serverAPI.downloadUpdate();
+    } catch (e) {
+      document.getElementById('updateStatus').textContent = 'Erro ao baixar: ' + e.message;
+      document.getElementById('updateStatus').className = 'sub error-msg';
+      btn.disabled = false;
+      btn.textContent = 'Baixar atualização';
+    }
+  }
+
+  function handleInstallUpdate() {
+    if (!confirm('O servidor será reiniciado para aplicar a atualização. Deseja continuar?')) return;
+    window.serverAPI.installUpdate();
+  }
+
   document.getElementById('tokenInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') handleConnect();
   });
 
+  // Set version label
+  document.getElementById('currentVersion').textContent = document.getElementById('versionLabel').textContent;
+
+  setupUpdaterListener();
   init();
 </script>
 
