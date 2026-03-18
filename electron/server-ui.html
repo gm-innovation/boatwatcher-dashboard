@@ -525,7 +525,14 @@
       }
 
       // Devices
-      renderDevices(devices || []);
+      const deviceList = devices || [];
+      renderDevices(deviceList);
+
+      // Auto-test devices on first load
+      if (!initialTestDone && deviceList.length > 0) {
+        initialTestDone = true;
+        autoTestAllDevices(deviceList).then(() => renderDevices(deviceList));
+      }
 
       // Logs
       document.getElementById('logContent').textContent = logs || 'Sem logs disponíveis.';
