@@ -20,16 +20,8 @@
       align-items: center;
       gap: 12px;
     }
-    .header h1 {
-      font-size: 18px;
-      font-weight: 600;
-      color: #fafafa;
-    }
-    .header .version {
-      font-size: 12px;
-      color: #71717a;
-      margin-left: auto;
-    }
+    .header h1 { font-size: 18px; font-weight: 600; color: #fafafa; }
+    .header .version { font-size: 12px; color: #71717a; margin-left: auto; }
     .container { padding: 24px; max-width: 900px; margin: 0 auto; }
 
     /* Setup screen */
@@ -44,21 +36,23 @@
     .setup-screen .logo { font-size: 48px; }
     .setup-screen h2 { font-size: 22px; color: #fafafa; }
     .setup-screen p { color: #a1a1aa; text-align: center; max-width: 400px; line-height: 1.5; }
-    .token-input {
+
+    .input-field {
       width: 100%;
-      max-width: 420px;
-      padding: 12px 16px;
+      padding: 10px 14px;
       background: #18181b;
       border: 1px solid #3f3f46;
       border-radius: 8px;
       color: #fafafa;
       font-size: 14px;
-      font-family: monospace;
       outline: none;
       transition: border-color 0.2s;
     }
-    .token-input:focus { border-color: #3b82f6; }
-    .token-input::placeholder { color: #52525b; }
+    .input-field:focus { border-color: #3b82f6; }
+    .input-field::placeholder { color: #52525b; }
+    .input-field.mono { font-family: monospace; }
+
+    .token-input { max-width: 420px; }
 
     .btn {
       padding: 10px 24px;
@@ -77,9 +71,12 @@
     .btn-primary:disabled { background: #1e3a5f; color: #64748b; cursor: not-allowed; }
     .btn-danger { background: #dc2626; color: #fff; }
     .btn-danger:hover { background: #b91c1c; }
+    .btn-success { background: #16a34a; color: #fff; }
+    .btn-success:hover { background: #15803d; }
     .btn-sm { padding: 6px 14px; font-size: 12px; }
     .btn-ghost { background: transparent; color: #a1a1aa; border: 1px solid #3f3f46; }
     .btn-ghost:hover { background: #27272a; }
+    .btn-icon { padding: 6px 8px; font-size: 14px; }
 
     .error-msg { color: #f87171; font-size: 13px; margin-top: -8px; }
     .success-msg { color: #4ade80; font-size: 13px; }
@@ -101,97 +98,85 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
       margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
-    .card .value {
-      font-size: 24px;
-      font-weight: 700;
-      color: #fafafa;
-    }
+    .card .value { font-size: 24px; font-weight: 700; color: #fafafa; }
     .card .sub { font-size: 13px; color: #71717a; margin-top: 4px; }
 
     .status-dot {
       display: inline-block;
-      width: 8px;
-      height: 8px;
+      width: 8px; height: 8px;
       border-radius: 50%;
       margin-right: 6px;
     }
     .status-online { background: #4ade80; }
     .status-offline { background: #f87171; }
-    .status-syncing { background: #facc15; }
 
     /* Devices table */
-    .devices-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
+    .devices-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .devices-table th {
-      text-align: left;
-      padding: 8px 12px;
-      color: #71717a;
-      font-weight: 500;
-      border-bottom: 1px solid #27272a;
+      text-align: left; padding: 8px 12px; color: #71717a;
+      font-weight: 500; border-bottom: 1px solid #27272a;
     }
     .devices-table td {
-      padding: 10px 12px;
-      border-bottom: 1px solid #1e1e23;
-      vertical-align: middle;
+      padding: 10px 12px; border-bottom: 1px solid #1e1e23; vertical-align: middle;
     }
     .devices-table tr:hover td { background: #1c1c22; }
 
     .conn-status {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 500;
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500;
     }
     .conn-ok { background: #052e16; color: #4ade80; }
     .conn-fail { background: #450a0a; color: #f87171; }
     .conn-pending { background: #1c1917; color: #a1a1aa; }
 
-    /* Logs */
-    .log-area {
-      background: #09090b;
+    /* Add device form */
+    .add-device-form {
+      background: #1c1c22;
       border: 1px solid #27272a;
       border-radius: 8px;
-      padding: 12px;
-      font-family: monospace;
-      font-size: 12px;
-      color: #a1a1aa;
-      max-height: 200px;
-      overflow-y: auto;
-      white-space: pre-wrap;
-      word-break: break-all;
+      padding: 16px;
+      margin-top: 16px;
+    }
+    .add-device-form h4 {
+      font-size: 14px; font-weight: 600; color: #fafafa; margin-bottom: 12px;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-group label { font-size: 12px; color: #a1a1aa; font-weight: 500; }
+    .form-group.full-width { grid-column: 1 / -1; }
+    .form-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 4px;
     }
 
-    .actions-bar {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 24px;
-      flex-wrap: wrap;
+    /* Logs */
+    .log-area {
+      background: #09090b; border: 1px solid #27272a; border-radius: 8px;
+      padding: 12px; font-family: monospace; font-size: 12px; color: #a1a1aa;
+      max-height: 200px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
     }
+
+    .actions-bar { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
 
     .spinner {
-      display: inline-block;
-      width: 14px;
-      height: 14px;
-      border: 2px solid #3f3f46;
-      border-top-color: #3b82f6;
-      border-radius: 50%;
-      animation: spin 0.6s linear infinite;
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid #3f3f46; border-top-color: #3b82f6;
+      border-radius: 50%; animation: spin 0.6s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .empty-state {
-      text-align: center;
-      padding: 24px;
-      color: #52525b;
-      font-size: 13px;
-    }
+    .empty-state { text-align: center; padding: 24px; color: #52525b; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -207,12 +192,10 @@
   <div class="setup-screen">
     <div class="logo">🔗</div>
     <h2>Conectar ao Sistema</h2>
-    <p>Cole o token do agente gerado na interface web para vincular este servidor local ao projeto e dispositivos correspondentes.</p>
-    <input type="text" class="token-input" id="tokenInput" placeholder="Cole o token do agente aqui..." autocomplete="off" spellcheck="false">
+    <p>Cole o token do agente gerado na interface web para vincular este servidor local ao projeto.</p>
+    <input type="text" class="input-field mono token-input" id="tokenInput" placeholder="Cole o token do agente aqui..." autocomplete="off" spellcheck="false">
     <div id="setupError" class="error-msg" style="display:none;"></div>
-    <button class="btn btn-primary" id="connectBtn" onclick="handleConnect()">
-      Conectar
-    </button>
+    <button class="btn btn-primary" id="connectBtn" onclick="handleConnect()">Conectar</button>
   </div>
 </div>
 
@@ -229,26 +212,19 @@
   <div class="cards">
     <div class="card">
       <h3>Servidor</h3>
-      <div class="value" id="serverStatus">
-        <span class="status-dot status-offline"></span>Offline
-      </div>
+      <div class="value" id="serverStatus"><span class="status-dot status-offline"></span>Offline</div>
       <div class="sub" id="serverInfo">—</div>
     </div>
-
     <div class="card">
       <h3>Agente / Projeto</h3>
       <div class="value" id="agentName">—</div>
       <div class="sub" id="projectName">—</div>
     </div>
-
     <div class="card">
       <h3>Sincronização</h3>
-      <div class="value" id="syncStatus">
-        <span class="status-dot status-offline"></span>Não configurado
-      </div>
+      <div class="value" id="syncStatus"><span class="status-dot status-offline"></span>Não configurado</div>
       <div class="sub" id="syncInfo">—</div>
     </div>
-
     <div class="card">
       <h3>Token</h3>
       <div class="value" style="font-size:14px; font-family:monospace; word-break:break-all;" id="tokenDisplay">—</div>
@@ -256,9 +232,48 @@
 
     <!-- Devices -->
     <div class="card card-full">
-      <h3>Dispositivos ControlID</h3>
+      <h3>
+        Dispositivos ControlID
+        <button class="btn btn-success btn-sm" onclick="toggleAddDeviceForm()">+ Adicionar Dispositivo</button>
+      </h3>
       <div id="devicesContainer">
-        <div class="empty-state">Nenhum dispositivo vinculado.</div>
+        <div class="empty-state">Nenhum dispositivo configurado. Adicione um dispositivo abaixo.</div>
+      </div>
+
+      <!-- Add Device Form (hidden by default) -->
+      <div class="add-device-form" id="addDeviceForm" style="display:none;">
+        <h4>Novo Dispositivo</h4>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>IP do Dispositivo *</label>
+            <input type="text" class="input-field mono" id="devIp" placeholder="192.168.1.100">
+          </div>
+          <div class="form-group">
+            <label>Device ID (UUID da nuvem) *</label>
+            <input type="text" class="input-field mono" id="devId" placeholder="UUID do dispositivo">
+          </div>
+          <div class="form-group">
+            <label>Nome *</label>
+            <input type="text" class="input-field" id="devName" placeholder="Leitor Portaria">
+          </div>
+          <div class="form-group">
+            <label>Serial (opcional)</label>
+            <input type="text" class="input-field mono" id="devSerial" placeholder="Número de série">
+          </div>
+          <div class="form-group">
+            <label>Usuário</label>
+            <input type="text" class="input-field" id="devUser" placeholder="admin" value="admin">
+          </div>
+          <div class="form-group">
+            <label>Senha</label>
+            <input type="password" class="input-field" id="devPassword" placeholder="admin" value="admin">
+          </div>
+          <div id="addDeviceError" class="error-msg full-width" style="display:none;"></div>
+          <div class="form-actions">
+            <button class="btn btn-ghost btn-sm" onclick="toggleAddDeviceForm()">Cancelar</button>
+            <button class="btn btn-success btn-sm" id="addDeviceBtn" onclick="handleAddDevice()">Adicionar</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -284,6 +299,7 @@
         showSetup();
       }
     } catch (e) {
+      console.error('init error:', e);
       showSetup();
     }
   }
@@ -302,13 +318,11 @@
   async function handleConnect() {
     const token = document.getElementById('tokenInput').value.trim();
     if (!token) return;
-
     const btn = document.getElementById('connectBtn');
     const errEl = document.getElementById('setupError');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Validando...';
     errEl.style.display = 'none';
-
     try {
       const result = await window.serverAPI.setAgentToken(token);
       if (result && result.error) {
@@ -330,21 +344,76 @@
 
   async function handleDisconnect() {
     if (!confirm('Desconectar este servidor do agente? O servidor continuará rodando, mas sem sincronização.')) return;
-    try {
-      await window.serverAPI.removeAgentToken();
-    } catch (_) {}
+    try { await window.serverAPI.removeAgentToken(); } catch (_) {}
     showSetup();
   }
 
   async function handleForceSync() {
-    try {
-      await window.serverAPI.triggerSync();
-      setTimeout(refreshDashboard, 2000);
-    } catch (_) {}
+    try { await window.serverAPI.triggerSync(); setTimeout(refreshDashboard, 2000); } catch (_) {}
   }
 
-  async function handleOpenFolder(type) {
-    try { await window.serverAPI.openFolder(type); } catch (_) {}
+  function handleOpenFolder(type) {
+    try { window.serverAPI.openFolder(type); } catch (_) {}
+  }
+
+  // --- Add Device ---
+  function toggleAddDeviceForm() {
+    const form = document.getElementById('addDeviceForm');
+    form.style.display = form.style.display === 'none' ? '' : 'none';
+    document.getElementById('addDeviceError').style.display = 'none';
+  }
+
+  async function handleAddDevice() {
+    const ip = document.getElementById('devIp').value.trim();
+    const deviceId = document.getElementById('devId').value.trim();
+    const name = document.getElementById('devName').value.trim();
+    const serial = document.getElementById('devSerial').value.trim();
+    const user = document.getElementById('devUser').value.trim() || 'admin';
+    const password = document.getElementById('devPassword').value || 'admin';
+    const errEl = document.getElementById('addDeviceError');
+
+    if (!ip || !deviceId || !name) {
+      errEl.textContent = 'IP, Device ID e Nome são obrigatórios.';
+      errEl.style.display = '';
+      return;
+    }
+
+    const btn = document.getElementById('addDeviceBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+    errEl.style.display = 'none';
+
+    try {
+      const result = await window.serverAPI.addDevice({ ip, device_id: deviceId, name, serial, user, password });
+      if (result && result.error) {
+        errEl.textContent = result.error;
+        errEl.style.display = '';
+      } else {
+        // Clear form & hide
+        document.getElementById('devIp').value = '';
+        document.getElementById('devId').value = '';
+        document.getElementById('devName').value = '';
+        document.getElementById('devSerial').value = '';
+        document.getElementById('devUser').value = 'admin';
+        document.getElementById('devPassword').value = 'admin';
+        toggleAddDeviceForm();
+        refreshDashboard();
+      }
+    } catch (e) {
+      errEl.textContent = e.message || 'Erro ao adicionar dispositivo';
+      errEl.style.display = '';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Adicionar';
+    }
+  }
+
+  async function handleRemoveDevice(id) {
+    if (!confirm('Remover este dispositivo da configuração local?')) return;
+    try {
+      await window.serverAPI.removeDevice(id);
+      refreshDashboard();
+    } catch (_) {}
   }
 
   async function handleTestDevice(ip, btnEl) {
@@ -387,12 +456,9 @@
         document.getElementById('agentName').textContent = config.agentName || 'Agente local';
         document.getElementById('projectName').textContent = config.projectName ? `Projeto: ${config.projectName}` : 'Projeto não vinculado';
         document.getElementById('tokenDisplay').textContent = config.tokenMasked || '—';
-
-        // Sync
-        const syncDot = config.syncOnline ? 'status-online' : (config.syncConfigured ? 'status-offline' : 'status-offline');
+        const syncDot = config.syncOnline ? 'status-online' : 'status-offline';
         const syncLabel = config.syncOnline ? 'Online' : (config.syncConfigured ? 'Offline' : 'Não configurado');
-        document.getElementById('syncStatus').innerHTML =
-          `<span class="status-dot ${syncDot}"></span>${syncLabel}`;
+        document.getElementById('syncStatus').innerHTML = `<span class="status-dot ${syncDot}"></span>${syncLabel}`;
         document.getElementById('syncInfo').textContent =
           config.lastSync ? `Último sync: ${new Date(config.lastSync).toLocaleString('pt-BR')}` : 'Nenhuma sincronização realizada';
       }
@@ -402,7 +468,6 @@
 
       // Logs
       document.getElementById('logContent').textContent = logs || 'Sem logs disponíveis.';
-
     } catch (e) {
       console.error('Refresh error:', e);
     }
@@ -411,31 +476,28 @@
   function renderDevices(devices) {
     const container = document.getElementById('devicesContainer');
     if (!devices.length) {
-      container.innerHTML = '<div class="empty-state">Nenhum dispositivo vinculado a este agente.</div>';
+      container.innerHTML = '<div class="empty-state">Nenhum dispositivo configurado. Clique em "+ Adicionar Dispositivo" para registrar um leitor ControlID.</div>';
       return;
     }
 
     let html = `<table class="devices-table">
-      <thead>
-        <tr>
-          <th>Nome</th>
-          <th>IP</th>
-          <th>Serial</th>
-          <th>Localização</th>
-          <th>Conectividade</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>`;
+      <thead><tr>
+        <th>Nome</th><th>IP</th><th>Serial</th><th>Credenciais</th><th>Conectividade</th><th></th>
+      </tr></thead><tbody>`;
 
     for (const d of devices) {
+      const creds = d.api_credentials || {};
+      const credLabel = creds.user ? `${esc(creds.user)}:***` : '—';
       html += `<tr>
         <td>${esc(d.name)}</td>
         <td style="font-family:monospace;">${esc(d.controlid_ip_address || '—')}</td>
         <td style="font-family:monospace;">${esc(d.controlid_serial_number || '—')}</td>
-        <td>${esc(d.location || '—')}</td>
+        <td>${credLabel}</td>
         <td class="device-conn-status"><span class="conn-status conn-pending">● Não testado</span></td>
-        <td><button class="btn btn-ghost btn-sm" onclick="handleTestDevice('${esc(d.controlid_ip_address)}', this)">Testar</button></td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-ghost btn-sm" onclick="handleTestDevice('${esc(d.controlid_ip_address)}', this)">Testar</button>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="handleRemoveDevice('${esc(d.id)}')" title="Remover">✕</button>
+        </td>
       </tr>`;
     }
 
@@ -457,7 +519,6 @@
     return div.innerHTML;
   }
 
-  // Enter key on token input
   document.getElementById('tokenInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') handleConnect();
   });

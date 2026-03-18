@@ -211,6 +211,42 @@ function registerIpcHandlers() {
     return serverRuntime.db.getDevices?.() || [];
   });
 
+  ipcMain.handle('server:add-device', (_event, data) => {
+    if (!serverRuntime?.db) return { error: 'Servidor não inicializado.' };
+    try {
+      const { ip, device_id, name, serial, user, password } = data;
+      if (!ip || !device_id || !name) return { error: 'IP, Device ID e Nome são obrigatórios.' };
+      serverRuntime.db.upsertDeviceFromCloud({
+        id: device_id,
+        name,
+        controlid_ip_address: ip,
+        controlid_serial_number: serial || null,
+        api_credentials: { user: user || 'admin', password: password || 'admin' },
+        type: 'facial_reader',
+        status: 'offline',
+      });
+      serverRuntime.agentController?.reloadDevices?.();
+      logToFile(`Device added manually: ${name} (${ip})`);
+      return { success: true };
+    } catch (err) {
+      logToFile(`add-device error: ${err.message}`);
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('server:remove-device', (_event, id) => {
+    if (!serverRuntime?.db) return { error: 'Servidor não inicializado.' };
+    try {
+      serverRuntime.db.deleteDevice(id);
+      serverRuntime.agentController?.reloadDevices?.();
+      logToFile(`Device removed: ${id}`);
+      return { success: true };
+    } catch (err) {
+      logToFile(`remove-device error: ${err.message}`);
+      return { error: err.message };
+    }
+  });
+
   ipcMain.handle('server:test-device-connection', async (_event, ip) => {
     if (!ip) return { ok: false };
     return new Promise((resolve) => {
