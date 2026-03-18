@@ -367,7 +367,33 @@
   }
 
   async function handleForceSync() {
-    try { await window.serverAPI.triggerSync(); setTimeout(refreshDashboard, 2000); } catch (_) {}
+    const btn = document.querySelector('.actions-bar .btn-primary');
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Sincronizando...';
+    try {
+      await window.serverAPI.triggerSync();
+      btn.innerHTML = '✓ Sync concluído';
+      btn.classList.remove('btn-primary');
+      btn.classList.add('btn-success');
+      setTimeout(() => {
+        btn.innerHTML = originalHTML;
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-primary');
+        btn.disabled = false;
+      }, 2500);
+      setTimeout(refreshDashboard, 1500);
+    } catch (e) {
+      btn.innerHTML = '✕ Erro no sync';
+      btn.classList.remove('btn-primary');
+      btn.classList.add('btn-danger');
+      setTimeout(() => {
+        btn.innerHTML = originalHTML;
+        btn.classList.remove('btn-danger');
+        btn.classList.add('btn-primary');
+        btn.disabled = false;
+      }, 3000);
+    }
   }
 
   function handleOpenFolder(type) {
