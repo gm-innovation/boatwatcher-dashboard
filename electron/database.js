@@ -19,6 +19,12 @@ function safeParseJson(value, fallback) {
   }
 }
 
+function resolveLocalEntityId(tableName, cloudId) {
+  if (!cloudId || !db) return null;
+  const row = db.prepare(`SELECT id FROM ${tableName} WHERE cloud_id = ? OR id = ?`).get(cloudId, cloudId);
+  return row ? row.id : null;
+}
+
 function normalizeCompanyRow(row) {
   if (!row) return null;
   return {
@@ -218,6 +224,14 @@ function initDatabase(userDataPath) {
       operation TEXT NOT NULL,
       payload TEXT,
       created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_info (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      project_ids TEXT DEFAULT '[]',
+      status TEXT DEFAULT 'active',
+      last_sync TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_access_logs_timestamp ON access_logs(timestamp);
@@ -1440,6 +1454,52 @@ function createDatabaseAPI(db, startCode) {
       }
     },
 
+    getUnsyncedWorkers() {
+      return db.prepare('SELECT * FROM workers WHERE synced = 0').all().map(normalizeWorkerRow);
+    },
+
+    getUnsyncedLogs() {
+      return db.prepare('SELECT * FROM access_logs WHERE synced = 0 LIMIT 100').all();
+    },
+
+    getPendingSyncOperations() {
+      return db.prepare('SELECT * FROM sync_queue ORDER BY created_at ASC').all();
+    },
+
+    removeSyncQueueEntry(queueId) {
+      db.prepare('DELETE FROM sync_queue WHERE id = ?').run(queueId);
+    },
+
+    markSyncEntitySynced(entityType, entityId, cloudId) {
+      const validTables = ['companies', 'projects', 'workers', 'worker_documents', 'company_documents', 'user_companies'];
+      const targetTable = entityType.endsWith('s') ? entityType : entityType + 's';
+      if (validTables.includes(targetTable)) {
+        db.prepare(`UPDATE ${targetTable} SET synced = 1, cloud_id = ?, updated_at = datetime('now') WHERE id = ?`).run(cloudId, entityId);
+      }
+    },
+
+    markLogsSynced(logIds) {
+      if (!logIds || logIds.length === 0) return;
+      const placeholders = logIds.map(() => '?').join(',');
+      db.prepare(`UPDATE access_logs SET synced = 1 WHERE id IN (${placeholders})`).run(...logIds);
+    },
+
+    markWorkerSynced(localId, cloudId) {
+      db.prepare("UPDATE workers SET synced = 1, cloud_id = ?, updated_at = datetime('now') WHERE id = ?").run(cloudId, localId);
+    },
+
+    getPendingSyncCount() {
+      const workers = db.prepare('SELECT COUNT(*) as count FROM workers WHERE synced = 0').get()?.count || 0;
+      const logs = db.prepare('SELECT COUNT(*) as count FROM access_logs WHERE synced = 0').get()?.count || 0;
+      const queue = db.prepare('SELECT COUNT(*) as count FROM sync_queue').get()?.count || 0;
+      return workers + logs + queue;
+    },
+
+    getDeviceById(deviceId) {
+      const row = db.prepare('SELECT * FROM devices WHERE id = ?').get(deviceId);
+      return normalizeDeviceRow(row);
+    },
+
     getSyncMeta(key) {
       const row = db.prepare('SELECT value FROM sync_meta WHERE key = ?').get(key);
       return row ? row.value : null;
@@ -1447,6 +1507,30 @@ function createDatabaseAPI(db, startCode) {
 
     setSyncMeta(key, value) {
       db.prepare("INSERT OR REPLACE INTO sync_meta (key, value, updated_at) VALUES (?, ?, datetime('now'))").run(key, value);
+    },
+
+    getAgentInfo() {
+      const row = db.prepare('SELECT * FROM agent_info LIMIT 1').get();
+      if (!row) return null;
+      return {
+        ...row,
+        project_ids: safeParseJson(row.project_ids, [])
+      };
+    },
+
+    updateAgentInfo(data) {
+      const existing = this.getAgentInfo();
+      const id = data.id || (existing ? existing.id : uuidv4());
+      const name = data.name || (existing ? existing.name : 'Local Dashboard');
+      const project_ids = data.project_ids ? JSON.stringify(data.project_ids) : (existing ? JSON.stringify(existing.project_ids) : '[]');
+      const status = data.status || (existing ? existing.status : 'active');
+      const last_sync = data.last_sync || new Date().toISOString();
+
+      db.prepare(`
+        INSERT OR REPLACE INTO agent_info (id, name, project_ids, status, last_sync)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(id, name, project_ids, status, last_sync);
+      return this.getAgentInfo();
     },
 
     getRawDb() {
