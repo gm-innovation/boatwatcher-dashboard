@@ -205,6 +205,30 @@ function registerIpcHandlers() {
         return { error: `Token inválido: ${heartbeatResult.error}` };
       }
 
+      // Download companies first (projects depend on them via FK)
+      const companiesResult = await callCloudFunction(
+        syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
+        'agent-sync/download-companies?since=1970-01-01T00:00:00Z', 'GET', null
+      );
+      if (Array.isArray(companiesResult.companies)) {
+        for (const company of companiesResult.companies) {
+          serverRuntime.db.upsertCompanyFromCloud?.(company);
+        }
+        logToFile(`Pre-synced ${companiesResult.companies.length} companies`);
+      }
+
+      // Download projects (devices depend on them via FK)
+      const projectsResult = await callCloudFunction(
+        syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
+        'agent-sync/download-projects?since=1970-01-01T00:00:00Z', 'GET', null
+      );
+      if (Array.isArray(projectsResult.projects)) {
+        for (const project of projectsResult.projects) {
+          serverRuntime.db.upsertProjectFromCloud?.(project);
+        }
+        logToFile(`Pre-synced ${projectsResult.projects.length} projects`);
+      }
+
       // Download devices assigned to this agent
       const devicesResult = await callCloudFunction(
         syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
