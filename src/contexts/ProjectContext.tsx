@@ -90,6 +90,11 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
+      // Wait for role to be resolved before fetching projects
+      if (role === null) {
+        return;
+      }
+
       setLoading(true);
 
       try {

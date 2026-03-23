@@ -197,6 +197,19 @@ serve(async (req) => {
         existingAgent = userMatch
       }
 
+      // 4. Fallback: find any agent for same project_id (catches manually-created agents with created_by=NULL)
+      if (!existingAgent && projectId) {
+        const { data: projectOnlyMatch, error: projectOnlyError } = await supabase
+          .from('local_agents')
+          .select('id, token')
+          .eq('project_id', projectId)
+          .order('last_seen_at', { ascending: false, nullsFirst: false })
+          .limit(1)
+          .maybeSingle()
+        if (projectOnlyError) throw projectOnlyError
+        existingAgent = projectOnlyMatch
+      }
+
       const rebindDevices = async (agentId: string, pId: string | null) => {
         if (!pId) return
         await supabase.from('devices').update({ agent_id: agentId }).eq('project_id', pId)
@@ -208,6 +221,7 @@ serve(async (req) => {
           .update({
             name: stationName,
             project_id: projectId,
+            created_by: user.id,
             status: 'online',
             sync_status: 'configuring',
             last_seen_at: new Date().toISOString(),
@@ -686,6 +700,19 @@ serve(async (req) => {
         .gte('updated_at', since)
       if (error) throw error
       return new Response(JSON.stringify({ worker_documents: workerDocuments || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // POST /rebind-devices
+    if (req.method === 'POST' && action === 'rebind-devices') {
+      if (!agent.project_id) {
+        return new Response(JSON.stringify({ error: 'Agent has no project_id' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+      const { error: rebindError, count } = await supabase
+        .from('devices')
+        .update({ agent_id: agent.id })
+        .eq('project_id', agent.project_id)
+      if (rebindError) throw rebindError
+      return new Response(JSON.stringify({ success: true, rebound: count ?? 0, agent_id: agent.id, project_id: agent.project_id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
