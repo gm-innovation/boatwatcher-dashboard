@@ -30,7 +30,6 @@ asarUnpack:
 npmRebuild: true
 
 channel: server
-generateUpdatesFilesForAllChannels: true
 
 win:
   target:

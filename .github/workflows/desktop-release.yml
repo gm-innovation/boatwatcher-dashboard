@@ -37,8 +37,8 @@ jobs:
           copy public\favicon-512.png build\icon.png
         shell: cmd
 
-      - name: Build and publish Desktop release
-        run: npm run build:electron:publish
-
       - name: Build and publish Local Server release
         run: npm run build:local-server:publish
+
+      - name: Build and publish Desktop release
+        run: npm run build:electron:publish
