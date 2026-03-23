@@ -200,10 +200,15 @@
 
 <!-- Dashboard Screen -->
 <div class="container" id="dashboardScreen" style="display:none;">
+  <div style="background:#1c1917; border:1px solid #422006; border-radius:8px; padding:10px 16px; margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+    <span style="font-size:16px;">ℹ️</span>
+    <span style="font-size:12px; color:#fbbf24;">Fechar esta janela <strong>não</strong> encerra o serviço. Ele continua rodando na bandeja do sistema. Use "Reiniciar Serviço" para aplicar novas configurações.</span>
+  </div>
   <div class="actions-bar">
     <button class="btn btn-primary btn-sm" onclick="handleForceSync()">⟳ Forçar Sync</button>
+    <button class="btn btn-ghost btn-sm" onclick="handleResetAndFullSync()">🔄 Sync Completo</button>
+    <button class="btn btn-ghost btn-sm" onclick="handleRestartService()">🔁 Reiniciar Serviço</button>
     <button class="btn btn-ghost btn-sm" onclick="handleOpenFolder('data')">📂 Dados</button>
-    <button class="btn btn-ghost btn-sm" onclick="handleOpenFolder('backups')">📂 Backups</button>
     <button class="btn btn-ghost btn-sm" onclick="handleOpenFolder('logs')">📂 Logs</button>
     <button class="btn btn-danger btn-sm" style="margin-left:auto;" onclick="handleDisconnect()">Desconectar</button>
   </div>
@@ -418,6 +423,54 @@
 
   function handleOpenFolder(type) {
     try { window.serverAPI.openFolder(type); } catch (_) {}
+  }
+
+  async function handleResetAndFullSync() {
+    const btn = document.querySelector('.actions-bar .btn-ghost');
+    if (!btn) return;
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Sincronizando...';
+    try {
+      const result = await window.serverAPI.resetAndFullSync();
+      if (result && result.error) {
+        btn.innerHTML = '✕ Erro';
+        btn.classList.add('btn-danger');
+        setTimeout(() => { btn.innerHTML = originalHTML; btn.classList.remove('btn-danger'); btn.disabled = false; }, 3000);
+      } else {
+        btn.innerHTML = '✓ Concluído';
+        btn.classList.add('btn-success');
+        setTimeout(() => { btn.innerHTML = originalHTML; btn.classList.remove('btn-success'); btn.disabled = false; }, 2500);
+        setTimeout(refreshDashboard, 1500);
+      }
+    } catch (e) {
+      btn.innerHTML = '✕ Erro';
+      setTimeout(() => { btn.innerHTML = originalHTML; btn.disabled = false; }, 3000);
+    }
+  }
+
+  async function handleRestartService() {
+    if (!confirm('Reiniciar o serviço local? Isso interrompe brevemente a comunicação com dispositivos.')) return;
+    const btn = Array.from(document.querySelectorAll('.actions-bar .btn-ghost')).find(b => b.textContent.includes('Reiniciar'));
+    if (!btn) return;
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Reiniciando...';
+    try {
+      const result = await window.serverAPI.restartService();
+      if (result && result.error) {
+        btn.innerHTML = '✕ Erro';
+        setTimeout(() => { btn.innerHTML = originalHTML; btn.disabled = false; }, 3000);
+      } else {
+        btn.innerHTML = '✓ Reiniciado';
+        btn.classList.add('btn-success');
+        setTimeout(() => { btn.innerHTML = originalHTML; btn.classList.remove('btn-success'); btn.disabled = false; }, 2500);
+        setTimeout(refreshDashboard, 2000);
+      }
+    } catch (e) {
+      btn.innerHTML = '✕ Erro';
+      setTimeout(() => { btn.innerHTML = originalHTML; btn.disabled = false; }, 3000);
+    }
   }
 
   // --- Add Device ---

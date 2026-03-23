@@ -94,6 +94,7 @@ function createLocalServer(options = {}) {
   syncEngine.start();
 
   const agentController = new AgentController(db);
+  syncEngine.setAgentController(agentController);
   const backupManager = new BackupManager(dataDir, backupDir);
   backupManager.start();
 

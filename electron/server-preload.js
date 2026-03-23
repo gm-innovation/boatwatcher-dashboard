@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('serverAPI', {
   removeDevice: (id) => ipcRenderer.invoke('server:remove-device', id),
   testDeviceConnection: (ip) => ipcRenderer.invoke('server:test-device-connection', ip),
   triggerSync: () => ipcRenderer.invoke('server:trigger-sync'),
+  resetAndFullSync: () => ipcRenderer.invoke('server:reset-and-full-sync'),
+  restartService: () => ipcRenderer.invoke('server:restart-service'),
   getLogContent: () => ipcRenderer.invoke('server:get-log-content'),
   openFolder: (type) => ipcRenderer.invoke('server:open-folder', type),
 

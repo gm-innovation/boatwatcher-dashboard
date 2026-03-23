@@ -325,6 +325,28 @@ function registerIpcHandlers() {
     }
   });
 
+  ipcMain.handle('server:reset-and-full-sync', async () => {
+    try {
+      const status = await serverRuntime?.syncEngine?.resetAndFullSync?.();
+      return { success: true, status };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('server:restart-service', async () => {
+    try {
+      logToFile('Restart requested via UI');
+      serverRuntime?.stop?.();
+      await bootLocalServer();
+      logToFile('Service restarted successfully');
+      return { success: true };
+    } catch (err) {
+      logToFile(`Restart error: ${err.message}`);
+      return { error: err.message };
+    }
+  });
+
   ipcMain.handle('server:get-log-content', () => {
     try {
       const content = fs.readFileSync(LOG_PATH, 'utf-8');
