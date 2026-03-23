@@ -1,28 +1,38 @@
 
 
-## Diagnóstico: Por que os builds falharam
+## Correções para o Build do GitHub Actions
 
-Sim, o auto-updater **existe e funciona** — você não precisa reinstalar manualmente. O problema é que os **dois builds falharam** no GitHub Actions (ícone vermelho), então nenhum instalador novo foi publicado.
+### Problema 1: Versão não foi bumpada
+O `package.json` ainda está com `"version": "0.0.0"`. Preciso alterar para `"1.1.0"`.
 
-### Causas prováveis da falha (31 segundos é muito rápido)
+### Problema 2: Possível falha no `npm ci`
+O projeto usa `bun` como gerenciador principal, mas o workflow usa `npm ci`. Se o `package-lock.json` estiver dessincronizado, o `npm ci` falha instantaneamente — explicando os 28-42 segundos de execução.
 
-1. **Versão não foi bumpada** — O `package.json` no repositório ainda está com `"version": "0.0.0"`. Minha edição anterior não foi salva corretamente. Preciso bumpar para `1.1.0`.
+### Correções
 
-2. **Possível problema no `npm ci`** — Se o `package-lock.json` estiver desatualizado em relação ao `package.json`, o `npm ci` falha imediatamente. O projeto tem tanto `bun.lock` quanto `package-lock.json`, o que pode causar conflito.
+**1. `package.json`** — Bumpar versão para `1.1.0`
+```json
+"version": "1.1.0"
+```
 
-### Plano de correção
+**2. `.github/workflows/desktop-release.yml`** — Trocar `npm ci` por `npm install` para tolerância a lockfile desatualizado, ou regenerar o lockfile antes:
+```yaml
+- name: Install dependencies
+  run: |
+    npm install --package-lock-only
+    npm ci
+```
 
-| Passo | Ação |
-|---|---|
-| 1 | Bumpar `package.json` de `"0.0.0"` para `"1.1.0"` (desta vez corretamente) |
-| 2 | Verificar se o `package-lock.json` está sincronizado |
-| 3 | Após o commit ser pushado ao GitHub, você deleta a tag antiga e cria uma nova `v1.1.0` apontando para o commit atualizado |
-| 4 | O workflow roda novamente, gera o instalador, e o auto-updater do seu app detecta a v1.1.0 |
+### Após o commit
+Você precisará re-criar a tag:
+```powershell
+git pull
+git tag -d v1.1.0
+git push origin :refs/tags/v1.1.0
+git tag v1.1.0
+git push origin v1.1.0
+```
 
-### Depois que o build funcionar
-- O app instalado (v1.0.0) vai detectar a atualização automaticamente via "Verificar atualização"
-- **Não precisa baixar e instalar manualmente** — o updater faz isso sozinho
-
-### Para investigar o erro exato
-- Se puder, clique em um dos workflow runs que falharam e me envie um screenshot dos logs de erro — assim posso identificar exatamente o que quebrou
+### Diagnóstico pendente
+Se possível, envie o screenshot dos logs do workflow falho — pode haver outro erro (ex: dependência nativa `better-sqlite3` falhando no build do Windows).
 
