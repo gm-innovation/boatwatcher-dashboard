@@ -86,7 +86,17 @@ autoUpdater.on('update-downloaded', (info) => {
 
 autoUpdater.on('error', (err) => {
   logToFile(`Auto-updater error: ${err.message}`);
-  sendUpdaterStatus({ status: 'error', message: err.message });
+  const msg = err.message || '';
+  // Detect 404 errors (server.yml not found in release)
+  if (msg.includes('404') || msg.includes('Not Found') || msg.includes('HttpError') || msg.includes('net::ERR')) {
+    sendUpdaterStatus({
+      status: 'error',
+      message: 'Nenhuma atualização disponível para o Servidor Local nesta versão. Baixe manualmente em github.com.',
+      is404: true,
+    });
+  } else {
+    sendUpdaterStatus({ status: 'error', message: msg });
+  }
 });
 
 let tray = null;

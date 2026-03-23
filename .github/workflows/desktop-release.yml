@@ -40,5 +40,17 @@ jobs:
       - name: Build and publish Local Server release
         run: npm run build:local-server:publish
 
+      - name: Verify Local Server update artifacts
+        run: |
+          echo "Checking for server.yml in local-server-dist..."
+          if exist local-server-dist\server.yml (
+            echo "server.yml found"
+            type local-server-dist\server.yml
+          ) else (
+            echo "WARNING: server.yml NOT found in local-server-dist"
+            dir local-server-dist\*.yml 2>nul || echo "No .yml files found"
+          )
+        shell: cmd
+
       - name: Build and publish Desktop release
         run: npm run build:electron:publish

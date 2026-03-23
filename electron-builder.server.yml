@@ -28,6 +28,7 @@ asarUnpack:
   - '**/*.node'
 
 npmRebuild: true
+generateUpdatesFilesForAllChannels: false
 
 win:
   target:
