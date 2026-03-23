@@ -197,6 +197,19 @@ serve(async (req) => {
         existingAgent = userMatch
       }
 
+      // 4. Fallback: find any agent for same project_id (catches manually-created agents with created_by=NULL)
+      if (!existingAgent && projectId) {
+        const { data: projectOnlyMatch, error: projectOnlyError } = await supabase
+          .from('local_agents')
+          .select('id, token')
+          .eq('project_id', projectId)
+          .order('last_seen_at', { ascending: false, nullsFirst: false })
+          .limit(1)
+          .maybeSingle()
+        if (projectOnlyError) throw projectOnlyError
+        existingAgent = projectOnlyMatch
+      }
+
       const rebindDevices = async (agentId: string, pId: string | null) => {
         if (!pId) return
         await supabase.from('devices').update({ agent_id: agentId }).eq('project_id', pId)
