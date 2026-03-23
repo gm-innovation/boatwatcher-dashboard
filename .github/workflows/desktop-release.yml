@@ -37,6 +37,9 @@ jobs:
           copy public\favicon-512.png build\icon.png
         shell: cmd
 
+      - name: Build and publish Desktop release
+        run: npm run build:electron:publish
+
       - name: Build and publish Local Server release
         run: npm run build:local-server:publish
 
@@ -51,6 +54,3 @@ jobs:
             dir local-server-dist\*.yml 2>nul || echo "No .yml files found"
           )
         shell: cmd
-
-      - name: Build and publish Desktop release
-        run: npm run build:electron:publish
