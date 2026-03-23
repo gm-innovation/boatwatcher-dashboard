@@ -29,8 +29,6 @@ asarUnpack:
 
 npmRebuild: true
 
-channel: server
-
 win:
   target:
     - target: nsis
@@ -47,4 +45,5 @@ nsis:
   deleteAppDataOnUninstall: true
   uninstallDisplayName: Dock Check Local Server
   runAfterFinish: true
+  channel: server
 
