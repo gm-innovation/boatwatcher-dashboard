@@ -48,11 +48,3 @@ nsis:
   uninstallDisplayName: Dock Check Local Server
   runAfterFinish: true
 
-publish:
-  provider: github
-  owner: gm-innovation
-  repo: boatwatcher-dashboard
-
-  releaseType: release
-  vPrefixedTagName: true
-

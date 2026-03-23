@@ -1,8 +1,8 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "dock-check-desktop",
   "repository": "gm-innovation/boatwatcher-dashboard",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Dock Check Desktop and web dashboard for workforce, access, and device operations.",
   "author": "Dock Check",
   "type": "module",
