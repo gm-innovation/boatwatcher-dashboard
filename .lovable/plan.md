@@ -2,32 +2,28 @@
 
 ## Problema
 
-O workflow falhou no step "Verify Local Server update artifacts" — não no build em si. O electron-builder com `--publish always` faz upload do `server.yml` diretamente para o GitHub Release, sem necessariamente manter uma cópia local em `local-server-dist/`. O comando `dir ... 2>nul` retorna exit code 1, causando a falha.
+O `package.json` declara `"version": "1.2.2"`, mas a tag Git é `v1.2.4`. O `electron-builder --publish always` publica os artefatos no GitHub Release correspondente à versão do `package.json` (v1.2.2), não à tag atual (v1.2.4). Por isso o release v1.2.4 fica apenas com source code.
 
 ## Correção
 
-### Arquivo: `.github/workflows/desktop-release.yml`
+### 1. Atualizar a versão no `package.json`
 
-Tornar o step de verificação não-bloqueante, usando `continue-on-error: true` ou adicionando `exit /b 0` ao final. A verificação continua útil como log, mas não deve impedir o release.
+Alterar `"version": "1.2.2"` para `"version": "1.2.5"` (próxima versão, já que v1.2.3 e v1.2.4 foram releases quebrados).
 
-```yaml
-      - name: Verify Local Server update artifacts
-        continue-on-error: true
-        run: |
-          echo "Checking for server.yml in local-server-dist..."
-          if exist local-server-dist\server.yml (
-            echo "server.yml found"
-            type local-server-dist\server.yml
-          ) else (
-            echo "INFO: server.yml not in local-server-dist (uploaded directly to GitHub Release)"
-            dir local-server-dist\*.yml 2>nul || echo "No local .yml files (expected with --publish always)"
-          )
-        shell: cmd
+### 2. Após o commit
+
+1. Deletar os releases v1.2.3 e v1.2.4 no GitHub (e suas tags, se desejar)
+2. Criar nova tag `v1.2.5` e fazer push
+3. O workflow vai buildar e publicar os artefatos no release v1.2.5 corretamente
+
+### Dica para o futuro
+
+Sempre bumpar a versão no `package.json` antes de criar uma nova tag. Idealmente, adicionar um step no workflow que valide `package.json version == tag version`.
+
+## Mudança técnica
+
+**Arquivo:** `package.json` linha 5
 ```
-
-### Após a correção
-
-1. Deletar o release v1.2.3 no GitHub
-2. Criar nova tag v1.2.4 para disparar o workflow corrigido
-3. Verificar nos Assets do release que `server.yml` referencia `DockCheck-Local-Server-Setup-1.2.4.exe`
+"version": "1.2.2"  →  "version": "1.2.5"
+```
 
