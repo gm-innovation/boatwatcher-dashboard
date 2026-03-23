@@ -1,91 +1,65 @@
 
 
-## Plano Completo de Correções — v1.2.0
+## Problema: Local Server v1.0.0 instala o Desktop ao atualizar
 
-Peço desculpa por ter descartado os outros pontos. Aqui está o plano consolidado com todas as correções pendentes.
+### Causa Raiz
 
----
+Ambos os builds (Desktop e Local Server) publicam para o mesmo GitHub Release. O Desktop gera `latest.yml` apontando para `DockCheck-Desktop-Setup-1.2.0.exe`. O Local Server com `channel: server` gera `server.yml`, mas o `generateUpdatesFilesForAllChannels: true` não está sobrescrevendo o `latest.yml` do Desktop como esperado.
 
-### 1. Renomear package name
-**Arquivo: `package.json`**
-- `"name"` → `"dock-check-desktop"`
-- `"version"` → `"1.2.0"`
+O Local Server v1.0.0 **não tem** `autoUpdater.channel = 'server'` (essa linha só existe no código v1.2.0). Então ele busca `latest.yml` → encontra o Desktop → instala o Desktop.
 
-### 2. Preparar ícone no workflow
-**Arquivo: `.github/workflows/desktop-release.yml`**
-- Adicionar step antes dos builds para copiar `public/favicon-512.png` → `build/icon.png`
+### Problema Irreversível na v1.0.0
 
-```yaml
-- name: Prepare build assets
-  run: |
-    mkdir build
-    copy public\favicon-512.png build\icon.png
-  shell: cmd
-```
+Não é possível corrigir o auto-updater da v1.0.0 retroativamente. O código da v1.0.0 sempre vai buscar `latest.yml`. A solução exige duas partes:
 
-### 3. Corrigir publish do Local Server
+### Parte 1: Separar os canais de atualização definitivamente
 
-**Problema:** O `electron-builder.server.yml` tem `publish` hardcoded apontando para `gm-innovation/boatwatcher-dashboard`. Quando o build roda com `--config electron-builder.server.yml --config electron-builder.release.yml`, o segundo config sobrescreve o `publish` do primeiro com `${env.GH_OWNER}` e `${env.GH_REPO}`. Isso está correto **se** as env vars estiverem definidas no workflow — e elas estão (`GH_OWNER` e `GH_REPO` são definidas no job).
+| Arquivo | Mudança |
+|---|---|
+| `electron-builder.yml` (Desktop) | Remover `generateUpdatesFilesForAllChannels` |
+| `electron-builder.server.yml` (Local Server) | Remover `generateUpdatesFilesForAllChannels` |
+| `.github/workflows/desktop-release.yml` | Inverter a ordem: **Local Server primeiro**, **Desktop por último** |
 
-Porém, o `electron-builder.server.yml` tem um `publish` redundante que pode causar confusão. Vou removê-lo para que apenas o `electron-builder.release.yml` controle a publicação (mesmo comportamento do Desktop).
+Com isso:
+- Local Server gera apenas `server.yml` → para v1.2.0+
+- Desktop gera apenas `latest.yml` → para Desktop
+- Sem colisão de arquivos
 
-**Arquivo: `electron-builder.server.yml`**
-- Remover o bloco `publish:` (linhas 51-57), pois já é fornecido pelo `electron-builder.release.yml`
+### Parte 2: Transição da v1.0.0
 
-### 4. Garantir que ambos os artifacts apareçam no mesmo Release
+Como a v1.0.0 do Local Server **sempre** vai buscar `latest.yml` (que agora apontará para Desktop), **não há como fazer auto-update da v1.0.0 para v1.2.0 automaticamente**.
 
-O Desktop gera `Dock Check Desktop Setup X.Y.Z.exe` + `latest.yml`. O Local Server gera `DockCheck-Local-Server-Setup-X.Y.Z.exe` + `latest.yml`. Ambos publicam `latest.yml` — o segundo sobrescreve o primeiro.
+**Solução:** O usuário precisa **instalar manualmente** o `DockCheck-Local-Server-Setup-1.2.0.exe` da página de releases do GitHub. Após essa instalação manual, o auto-updater da v1.2.0 usará `server.yml` e futuras atualizações funcionarão normalmente.
 
-**Correção:** O Local Server precisa de um `artifactName` diferenciado para o `latest.yml`. O `electron-builder` já gera arquivos `latest.yml` separados por `appId` quando os `artifactName` são distintos. O Local Server já tem `artifactName` customizado no `.exe`, mas o `latest.yml` precisa ser verificado.
+### Parte 3: Limpar atalhos antigos
 
-Na verdade, o `electron-builder` gera um `latest.yml` por build. Como ambos os builds rodam sequencialmente no mesmo job e publicam para o mesmo Release, o segundo `latest.yml` sobrescreve o primeiro. Isso significa que o auto-updater do Desktop ou do Local Server vai apontar para o artifact errado.
+O atalho "vite_react_s..." e o "dock-check-..." na área de trabalho são resquícios das instalações anteriores do Desktop. Precisam ser deletados manualmente.
 
-**Correção definitiva:** Separar os `latest.yml` usando `artifactName` no `electron-builder.server.yml` para gerar um arquivo de metadados com nome diferente. Porém, o `electron-updater` por padrão busca `latest.yml` — não suporta nomes customizados sem configuração adicional.
+### Versão
 
-**Solução mais simples:** Adicionar `updaterCacheDirName` diferente em cada config para que não colidam, e usar `artifactName` no Desktop também para diferenciá-los. Entretanto, o `latest.yml` é sempre `latest.yml`.
-
-**Solução prática:** O `electron-builder` suporta um `channel` que muda o nome do arquivo de update de `latest.yml` para `{channel}.yml`. Vou configurar:
-- Desktop: channel `stable` (gera `stable.yml`) — não, o padrão é `latest.yml`
-- Local Server: Não alterar — ambos vão gerar `latest.yml` mas com conteúdo diferente
-
-Melhor abordagem: como o segundo build (`Local Server`) sobrescreve o `latest.yml` do Desktop, vou **inverter a ordem** no workflow para que o Desktop rode por último, ou melhor, configurar um `artifactName` no `win` do Desktop que inclua o nome do produto, e usar `publishAutoUpdate: true` separadamente.
-
-**Decisão final:** A forma mais limpa é não mexer nisso agora — o `electron-updater` usa o `appId` e o `artifactName` para identificar o artifact correto dentro do `latest.yml`. Se ambos publicam para o mesmo Release, o `latest.yml` final contém apenas o último build. Isso **é** o problema.
-
-**Correção:** Adicionar `artifactName` no Desktop e usar nomes diferentes de `yml` via a opção `channel` do `electron-builder`:
-
-**Arquivo: `electron-builder.yml`** — Adicionar:
-```yaml
-win:
-  artifactName: DockCheck-Desktop-Setup-${version}.${ext}
-```
-
-**Arquivo: `electron-builder.server.yml`** — Já tem `artifactName` customizado.
-
-Para o `latest.yml`, vou configurar os builds para rodar em **jobs separados** para que cada um crie seu próprio Release asset sem sobrescrever. Na verdade, o `--publish always` com `electron-builder` faz upload incremental — ele adiciona assets ao Release existente. O problema é que ambos geram um arquivo chamado `latest.yml`.
-
-**Solução definitiva:** Usar a propriedade `channel` do nsis:
-- Desktop: sem channel (padrão = `latest.yml`)  
-- Local Server: `channel: server` → gera `server.yml`
-
-Mas o `electron-updater` no Local Server precisa ser configurado para buscar `server.yml` em vez de `latest.yml`. Isso requer `autoUpdater.channel = 'server'` no código.
-
----
+Bumpar para `1.2.1` no `package.json` para gerar um release limpo com os canais separados.
 
 ### Resumo das alterações
 
 | Arquivo | Mudança |
 |---|---|
-| `package.json` | `name` → `dock-check-desktop`, `version` → `1.2.0` |
-| `.github/workflows/desktop-release.yml` | Adicionar step "Prepare build assets" para copiar ícone |
-| `electron-builder.yml` | Adicionar `artifactName` no `win` |
-| `electron-builder.server.yml` | Remover bloco `publish` redundante; adicionar `channel: server` no `nsis` |
-| `electron/local-server-main.js` | Adicionar `autoUpdater.channel = 'server'` para buscar `server.yml` |
+| `package.json` | `version` → `1.2.1` |
+| `electron-builder.yml` | Remover `generateUpdatesFilesForAllChannels: true` |
+| `electron-builder.server.yml` | Remover `generateUpdatesFilesForAllChannels: true` |
+| `.github/workflows/desktop-release.yml` | Inverter ordem: Local Server primeiro, Desktop por último |
 
 ### Após o commit
 ```powershell
 git pull
-git tag v1.2.0
-git push origin v1.2.0
+# Instalar manualmente o Local Server v1.2.0 atual da página de releases
+# Depois, criar nova tag para o release limpo:
+git tag v1.2.1
+git push origin v1.2.1
 ```
+
+### Ação manual necessária
+1. Baixar `DockCheck-Local-Server-Setup-1.2.0.exe` diretamente da página de releases do GitHub
+2. Instalar por cima da v1.0.0
+3. Deletar os atalhos antigos ("vite_react_s..." e "dock-check-...") da área de trabalho
+4. Após a instalação da v1.2.0+, futuras atualizações do Local Server serão automáticas via `server.yml`
 
