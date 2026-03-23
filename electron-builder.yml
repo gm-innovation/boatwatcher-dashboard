@@ -43,3 +43,6 @@ mac:
 
 # Electron main process entry
 extends: null
+
+extraMetadata:
+  type: commonjs
