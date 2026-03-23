@@ -1410,6 +1410,11 @@ function createDatabaseAPI(db, startCode) {
     upsertUserCompanyFromCloud(data) {
       const existing = db.prepare('SELECT id FROM user_companies WHERE cloud_id = ? OR user_id = ?').get(data.id, data.user_id);
       const localCompanyId = resolveLocalEntityId('companies', data.company_id) || null;
+      // Skip if parent company doesn't exist locally (FK would fail)
+      if (!localCompanyId) {
+        console.warn(`[db] upsertUserCompanyFromCloud: skipping — company ${data.company_id} not found locally`);
+        return;
+      }
       if (existing) {
         db.prepare(`
           UPDATE user_companies
