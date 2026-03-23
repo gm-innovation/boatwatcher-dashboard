@@ -221,6 +221,7 @@ serve(async (req) => {
           .update({
             name: stationName,
             project_id: projectId,
+            created_by: user.id,
             status: 'online',
             sync_status: 'configuring',
             last_seen_at: new Date().toISOString(),
