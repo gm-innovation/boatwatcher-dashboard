@@ -547,40 +547,17 @@ serve(async (req) => {
     if (req.method === 'GET' && action === 'download-workers') {
       const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'
 
-      // Build OR filter: workers explicitly assigned to this project OR
-      // workers belonging to the project's client company (armador/crew)
-      const orConditions: string[] = []
-
-      if (agent.project_id) {
-        orConditions.push(`allowed_project_ids.cs.{${agent.project_id}}`)
-
-        // Find the project's client_id to include workers from the armador company
-        const { data: agentProject } = await supabase
-          .from('projects')
-          .select('client_id')
-          .eq('id', agent.project_id)
-          .maybeSingle()
-
-        if (agentProject?.client_id) {
-          orConditions.push(`company_id.eq.${agentProject.client_id}`)
-        }
-      }
-
-      let query = supabase
+      // In docking operations, all active workers (client staff, subcontractors, crew)
+      // need to be available locally — no project/company filter applied
+      const { data: workers, error } = await supabase
         .from('workers')
         .select('id, name, code, document_number, photo_url, status, company_id, role, allowed_project_ids, updated_at')
         .gte('updated_at', since)
         .eq('status', 'active')
 
-      if (orConditions.length > 0) {
-        query = query.or(orConditions.join(','))
-      }
-
-      const { data: workers, error } = await query
-
       if (error) throw error
 
-      console.log(`[agent-sync/download-workers] agent=${agent.id} project=${agent.project_id} filter=${orConditions.join(',')} found=${(workers || []).length}`)
+      console.log(`[agent-sync/download-workers] agent=${agent.id} project=${agent.project_id} filter=all-active found=${(workers || []).length}`)
 
       const workersWithPhotos = await Promise.all((workers || []).map((worker) => attachWorkerPhotoSignedUrl(supabase, worker)))
       return new Response(JSON.stringify({ workers: workersWithPhotos, timestamp: new Date().toISOString() }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
