@@ -1,36 +1,39 @@
 
 
-## Problema confirmado nos dados
+## Situação
 
-| Campo | Valor |
-|-------|-------|
-| Worker company_id | `80a706ef...` (Googlemarine - terceirizada) |
-| Project client_id | `19f70dad...` (armador) |
-| Worker allowed_project_ids | `[]` (vazio) |
+O código corrigido (pipeline CI/CD, fallback de erro, canal `server`) já está no branch `main` do GitHub (commit `0e14ff9`), mas o release mais recente ainda é o **v1.2.1**, que foi criado **antes** dessas correções. Portanto o `server.yml` não existe nesse release.
 
-A query atual usa `OR(allowed_project_ids contains project, company_id = client_id)`. Nenhuma condição é atendida para trabalhadores de empresas terceirizadas sem projeto atribuido.
+## O que precisa ser feito (fora do Lovable)
 
-## Correção
+### Passo 1 — Criar uma nova tag no GitHub
 
-Modificar o filtro de download de workers no `supabase/functions/agent-sync/index.ts` para remover a restrição por empresa/projeto. No modelo de docagem, o numero de trabalhadores ativos é limitado e todos precisam ser sincronizados com o agente local independentemente da empresa.
+No terminal local ou via GitHub CLI:
 
-### Arquivo: `supabase/functions/agent-sync/index.ts` (linhas 549-577)
-
-Substituir a logica de filtro OR por uma query simples que baixa **todos os trabalhadores ativos** sem filtrar por projeto ou empresa:
-
-```typescript
-let query = supabase
-  .from('workers')
-  .select('id, name, code, document_number, photo_url, status, company_id, role, allowed_project_ids, updated_at')
-  .gte('updated_at', since)
-  .eq('status', 'active')
-
-// No project/company filter — in docking operations, all active workers
-// (client staff, subcontractors, crew) need to be available locally
-const { data: workers, error } = await query
+```text
+git pull origin main
+git tag v1.2.2
+git push origin v1.2.2
 ```
 
-Remover as linhas 550-577 que constroem e aplicam o `orConditions`. Atualizar o log para refletir a mudança.
+Ou via GitHub UI: **Releases → Draft a new release → Tag: v1.2.2 → Target: main → Publish**.
 
-Essa é a unica alteração necessaria. O deploy automatico da edge function fará o fix entrar em vigor imediatamente. Depois basta clicar "Sync Completo" novamente no desktop.
+Isso dispara o workflow `desktop-release.yml` que agora inclui a verificação do `server.yml`.
+
+### Passo 2 — Verificar os artefatos do release v1.2.2
+
+Após o workflow concluir (~5-10 min), confirmar que o release v1.2.2 contém:
+- `DockCheck-Local-Server-Setup-1.2.2.exe`
+- `server.yml`
+- `latest.yml` (Desktop)
+
+### Passo 3 — Instalação manual única
+
+Baixar e instalar o `DockCheck-Local-Server-Setup-1.2.2.exe` manualmente na máquina. A v1.0.0 não consegue atualizar automaticamente porque não conhece o canal `server`.
+
+A partir da v1.2.2, as próximas atualizações serão automáticas.
+
+### Nenhuma alteração de código necessária
+
+Todas as correções já estão no `main`. O único passo é gerar o release.
 
