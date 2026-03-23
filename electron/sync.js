@@ -258,7 +258,11 @@ class SyncEngine {
       const userCompaniesRes = await this.callEdgeFunction(`agent-sync/download-user-companies?since=${since}`, 'GET');
       if (userCompaniesRes.user_companies) {
         for (const association of userCompaniesRes.user_companies) {
-          this.db.upsertUserCompanyFromCloud(association);
+          try {
+            this.db.upsertUserCompanyFromCloud(association);
+          } catch (err) {
+            console.error(`[sync] user_company upsert failed for ${association.id}:`, err.message);
+          }
         }
         console.log(`[sync] Downloaded ${userCompaniesRes.user_companies.length} user_companies`);
       }
