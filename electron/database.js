@@ -260,20 +260,27 @@ function initDatabase(userDataPath) {
     db.exec("ALTER TABLE devices ADD COLUMN api_credentials TEXT DEFAULT '{}'");
   }
 
-  const userCompanyColumns = new Set(db.prepare("PRAGMA table_info(user_companies)").all().map((column) => column.name));
-  if (!userCompanyColumns.has('updated_at')) db.exec("ALTER TABLE user_companies ADD COLUMN updated_at TEXT");
-  if (!userCompanyColumns.has('synced')) db.exec("ALTER TABLE user_companies ADD COLUMN synced INTEGER DEFAULT 0");
-  if (!userCompanyColumns.has('cloud_id')) db.exec("ALTER TABLE user_companies ADD COLUMN cloud_id TEXT");
+  // Ensure cloud_id columns exist on all sync-capable tables (handles older installs)
+  const ensureCloudIdColumns = [
+    { table: 'companies', extras: [] },
+    { table: 'projects', extras: [] },
+    { table: 'workers', extras: [] },
+    { table: 'user_companies', extras: ['updated_at TEXT', 'synced INTEGER DEFAULT 0'] },
+    { table: 'company_documents', extras: ['updated_at TEXT', 'synced INTEGER DEFAULT 0'] },
+    { table: 'worker_documents', extras: ['updated_at TEXT', 'synced INTEGER DEFAULT 0'] },
+  ];
 
-  const companyDocumentColumns = new Set(db.prepare("PRAGMA table_info(company_documents)").all().map((column) => column.name));
-  if (!companyDocumentColumns.has('updated_at')) db.exec("ALTER TABLE company_documents ADD COLUMN updated_at TEXT");
-  if (!companyDocumentColumns.has('synced')) db.exec("ALTER TABLE company_documents ADD COLUMN synced INTEGER DEFAULT 0");
-  if (!companyDocumentColumns.has('cloud_id')) db.exec("ALTER TABLE company_documents ADD COLUMN cloud_id TEXT");
-
-  const workerDocumentColumns = new Set(db.prepare("PRAGMA table_info(worker_documents)").all().map((column) => column.name));
-  if (!workerDocumentColumns.has('updated_at')) db.exec("ALTER TABLE worker_documents ADD COLUMN updated_at TEXT");
-  if (!workerDocumentColumns.has('synced')) db.exec("ALTER TABLE worker_documents ADD COLUMN synced INTEGER DEFAULT 0");
-  if (!workerDocumentColumns.has('cloud_id')) db.exec("ALTER TABLE worker_documents ADD COLUMN cloud_id TEXT");
+  for (const { table, extras } of ensureCloudIdColumns) {
+    const cols = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
+    for (const extraDef of extras) {
+      const colName = extraDef.split(' ')[0];
+      if (!cols.has(colName)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${extraDef}`);
+    }
+    if (!cols.has('cloud_id')) db.exec(`ALTER TABLE ${table} ADD COLUMN cloud_id TEXT`);
+    if (!cols.has('synced') && !extras.some((e) => e.startsWith('synced'))) {
+      if (!cols.has('synced')) db.exec(`ALTER TABLE ${table} ADD COLUMN synced INTEGER DEFAULT 0`);
+    }
+  }
 
   db.exec("UPDATE user_companies SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
   db.exec("UPDATE company_documents SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
