@@ -200,10 +200,15 @@
 
 <!-- Dashboard Screen -->
 <div class="container" id="dashboardScreen" style="display:none;">
+  <div style="background:#1c1917; border:1px solid #422006; border-radius:8px; padding:10px 16px; margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+    <span style="font-size:16px;">ℹ️</span>
+    <span style="font-size:12px; color:#fbbf24;">Fechar esta janela <strong>não</strong> encerra o serviço. Ele continua rodando na bandeja do sistema. Use "Reiniciar Serviço" para aplicar novas configurações.</span>
+  </div>
   <div class="actions-bar">
     <button class="btn btn-primary btn-sm" onclick="handleForceSync()">⟳ Forçar Sync</button>
+    <button class="btn btn-ghost btn-sm" onclick="handleResetAndFullSync()">🔄 Sync Completo</button>
+    <button class="btn btn-ghost btn-sm" onclick="handleRestartService()">🔁 Reiniciar Serviço</button>
     <button class="btn btn-ghost btn-sm" onclick="handleOpenFolder('data')">📂 Dados</button>
-    <button class="btn btn-ghost btn-sm" onclick="handleOpenFolder('backups')">📂 Backups</button>
     <button class="btn btn-ghost btn-sm" onclick="handleOpenFolder('logs')">📂 Logs</button>
     <button class="btn btn-danger btn-sm" style="margin-left:auto;" onclick="handleDisconnect()">Desconectar</button>
   </div>
