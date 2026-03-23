@@ -1,40 +1,28 @@
 
 
-## Problema: As mudanças não chegaram ao app instalado
+## Diagnóstico: Por que os builds falharam
 
-O aplicativo "Dock Check Local Server" instalado na sua máquina é a **v1.0.0** — uma versão compilada e instalada via setup. As mudanças que fizemos (botões "Reiniciar Serviço", "Sync Completo", lógica de download de devices no sync) existem no **código-fonte**, mas precisam de uma **nova build** para chegar ao app instalado.
+Sim, o auto-updater **existe e funciona** — você não precisa reinstalar manualmente. O problema é que os **dois builds falharam** no GitHub Actions (ícone vermelho), então nenhum instalador novo foi publicado.
 
-Fechar e abrir a janela não reinicia o serviço — ele continua rodando na bandeja do sistema. E o "Verificar atualização" não encontrou nada porque **nenhuma nova versão foi publicada** no GitHub Releases.
+### Causas prováveis da falha (31 segundos é muito rápido)
 
-### O que precisa ser feito
+1. **Versão não foi bumpada** — O `package.json` no repositório ainda está com `"version": "0.0.0"`. Minha edição anterior não foi salva corretamente. Preciso bumpar para `1.1.0`.
 
-#### 1. Bumpar a versão para v1.1.0
-**Arquivo:** `package.json`
-- Alterar `"version": "0.0.0"` para `"version": "1.1.0"`
-- Isso é necessário para que o electron-builder gere um instalador com versão superior à v1.0.0 atual
+2. **Possível problema no `npm ci`** — Se o `package-lock.json` estiver desatualizado em relação ao `package.json`, o `npm ci` falha imediatamente. O projeto tem tanto `bun.lock` quanto `package-lock.json`, o que pode causar conflito.
 
-#### 2. Publicar nova release via GitHub Actions
-- O workflow `.github/workflows/desktop-release.yml` é acionado por tags `v*` ou `workflow_dispatch`
-- Ao criar uma tag `v1.1.0` no repositório, o CI automaticamente:
-  - Compila o Local Server com as mudanças
-  - Publica no GitHub Releases
-  - O auto-updater no app v1.0.0 detecta e oferece a atualização
-
-#### 3. Alternativa imediata (sem esperar build)
-- Enquanto a nova build não é publicada, posso adicionar os **endpoints REST** no servidor local para que você consiga executar reinício e sync completo via linha de comando ou navegador:
-  - `POST http://localhost:3001/sync/reset-and-full-sync` — limpa checkpoints e força download completo
-  - `POST http://localhost:3001/sync/trigger` — força sincronização normal
-  - Esses endpoints já existem no código do servidor (server/routes/sync.js)
-
-### Plano de ação
+### Plano de correção
 
 | Passo | Ação |
 |---|---|
-| 1 | Bumpar versão para 1.1.0 no `package.json` |
-| 2 | Você publica a tag `v1.1.0` no GitHub para acionar o workflow de release |
-| 3 | O app instalado detecta a atualização automaticamente |
-| 4 | Enquanto isso, testar via `curl -X POST http://localhost:3001/sync/reset-and-full-sync` no terminal para forçar sync completo |
+| 1 | Bumpar `package.json` de `"0.0.0"` para `"1.1.0"` (desta vez corretamente) |
+| 2 | Verificar se o `package-lock.json` está sincronizado |
+| 3 | Após o commit ser pushado ao GitHub, você deleta a tag antiga e cria uma nova `v1.1.0` apontando para o commit atualizado |
+| 4 | O workflow roda novamente, gera o instalador, e o auto-updater do seu app detecta a v1.1.0 |
 
-### Sobre o lado web (nuvem)
-As correções da Edge Function (`agent-sync`) e do `ProjectContext.tsx` **já estão ativas** na versão web. Se você acessar pelo navegador no endereço do preview, os projetos devem carregar corretamente. O problema de "0 projetos" no Desktop depende do sync local funcionar — que é exatamente o que o reset via curl ou a nova build resolve.
+### Depois que o build funcionar
+- O app instalado (v1.0.0) vai detectar a atualização automaticamente via "Verificar atualização"
+- **Não precisa baixar e instalar manualmente** — o updater faz isso sozinho
+
+### Para investigar o erro exato
+- Se puder, clique em um dos workflow runs que falharam e me envie um screenshot dos logs de erro — assim posso identificar exatamente o que quebrou
 
