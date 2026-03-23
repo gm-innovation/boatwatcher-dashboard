@@ -1,45 +1,47 @@
-Diagnóstico confirmado (com base no código atual e nos prints)
-- O problema principal é real e está no repositório agora: `package.json` ainda está com `"version": "1.2.2"`.
-- O pipeline publica com `electron-builder --publish always`, que usa **sempre** a versão do `package.json` como destino do release.
-- Resultado: mesmo apagando o release/tag antigo, ao rodar novo build ele recria/publica em `v1.2.2`.
-- O “erro” que aparece no Actions apesar de job “Success” é ruído do step de verificação (`continue-on-error: true`) que ainda gera annotation com `exit code 1`.
 
-Plano de correção (definitivo)
-1) Corrigir fonte da verdade de versão
-- Arquivo: `package.json`
-- Atualizar `version` de `1.2.2` para a próxima versão limpa (recomendado: `1.2.7`, já que `1.2.6` ficou inconsistente no release).
 
-2) Bloquear mismatch tag x versão no CI (fail-fast)
-- Arquivo: `.github/workflows/desktop-release.yml`
-- Adicionar step antes do build para validar:
-  - `github.ref_name` (ex.: `v1.2.7`)
-  - `package.json version` (ex.: `1.2.7`)
-- Se não bater, falhar imediatamente com mensagem clara (sem gerar release errado).
+## Diagnóstico dos 2 Problemas
 
-3) Evitar publicação acidental via `workflow_dispatch`
-- Arquivo: `.github/workflows/desktop-release.yml`
-- Restringir steps de publish para rodarem somente em tag (`refs/tags/v*`) ou transformar `workflow_dispatch` em modo sem publish.
-- Isso impede recriação “do nada” de release antigo por execução manual.
+### Problema 1: Dispositivos desapareceram do Servidor Local
+O dashboard mostra sync online e o agente conectado, mas "Nenhum dispositivo configurado". A nuvem tem o dispositivo com `agent_id` correto. Causas prováveis:
+- O Servidor Local está rodando **v1.0.0** (visível no print de atualização), ou seja, o código atualizado com as correções de FK e sync resiliente **nunca chegou** ao servidor em produção.
+- Se houve reset do banco SQLite local (reinstalação, limpeza de dados), os dispositivos se perderam e a versão antiga do sync pode não estar re-baixando corretamente.
+- Mesmo que o sync rode, se o `upsertDeviceFromCloud` da versão antiga falhar silenciosamente (ex: FK de `project_id`), o dispositivo não persiste.
 
-4) Remover falso-positivo de erro nas annotations
-- Arquivo: `.github/workflows/desktop-release.yml`
-- Ajustar step “Verify Local Server update artifacts” para terminar explicitamente com sucesso (`exit /b 0`) quando ausência local de `.yml` for esperada.
-- Mantém diagnóstico informativo sem “error badge” enganoso.
+### Problema 2: sha512 checksum mismatch na atualização
+O `server.yml` publicado no GitHub Release contém um hash sha512, mas o `.exe` baixado pelo auto-updater tem hash diferente. Isso acontece quando:
+- O pipeline foi executado múltiplas vezes e os artefatos ficaram "cruzados" (`.yml` de um build + `.exe` de outro).
+- Releases antigos com artefatos parciais poluíram o release target.
 
-5) Higienização final de releases/tags quebradas
-- Após merge das correções:
-  - remover releases/tags inconsistentes (`v1.2.2` recriado indevidamente e `v1.2.6` incompleto, se necessário),
-  - criar tag nova alinhada com `package.json` (`v1.2.7`),
-  - publicar novamente.
+---
 
-Validação (fim a fim)
-1. Workflow inicia por tag `v1.2.7`.
-2. Step de validação confirma `tag == package.json version`.
-3. Job conclui sem annotation de erro falso.
-4. Release `v1.2.7` contém artefatos esperados (Desktop + Local Server + metadados).
-5. `v1.2.2` não volta a aparecer após novas execuções.
+## Plano de Correção
 
-Detalhes técnicos (arquivos impactados)
-- `package.json` (bump de versão)
-- `.github/workflows/desktop-release.yml` (guard de versão, proteção de publish manual e ajuste do step de verificação)
-- Nenhuma mudança necessária na migration SQL mostrada no diff (ela é independente desse problema de versionamento).
+### 1) Forçar rebuild limpo do release (corrige checksum)
+- **Ação manual no GitHub**: Deletar completamente o release `v1.2.7` (incluindo a tag).
+- **Puxar o código atualizado** e criar tag nova:
+```bash
+git pull origin main
+git tag v1.2.7
+git push origin v1.2.7
+```
+- O pipeline vai rodar do zero, gerando Desktop `.exe` + `latest.yml` e Local Server `.exe` + `server.yml` **do mesmo build**, garantindo que os checksums alinhem.
+
+### 2) Adicionar verificação de integridade no CI
+Arquivo: `.github/workflows/desktop-release.yml`
+- Após a publicação do Local Server, adicionar step que lê o `server.yml` gerado, extrai o sha512, e compara com o sha512 real do `.exe` local. Se não bater, falhar o build antes de o release ficar público com dados corrompidos.
+
+### 3) Garantir que o sync baixe dispositivos mesmo em v1.0.0 (fallback)
+O Servidor Local instalado está em v1.0.0 e não consegue atualizar. Até a atualização funcionar, o operador pode adicionar manualmente o dispositivo pelo botão "+ Adicionar Dispositivo" no dashboard. Porém, a correção definitiva é garantir que a atualização automática funcione (item 1 acima).
+
+### 4) Adicionar fallback de atualização manual com URL direta
+Arquivo: `electron/server-ui.html`
+- Na seção de ATUALIZAÇÃO, quando houver erro de checksum ou 404, exibir link direto para download da versão no GitHub Releases (ex: `https://github.com/{owner}/{repo}/releases/latest`), para que o operador possa baixar e reinstalar manualmente enquanto o auto-update não funciona.
+
+---
+
+## Resumo de arquivos
+- `.github/workflows/desktop-release.yml` — step de verificação de integridade sha512
+- `electron/server-ui.html` — link de fallback para download manual na seção de atualização
+- GitHub: deletar release `v1.2.7` e recriar tag para build limpo
+
