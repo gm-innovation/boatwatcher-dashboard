@@ -1370,7 +1370,14 @@ function createDatabaseAPI(db, startCode) {
     },
 
     upsertProjectFromCloud(data) {
-      const localClientId = data.client_id ? (resolveLocalEntityId('companies', data.client_id) || data.client_id) : null;
+      // CRITICAL: resolve cloud client_id to local company id; use null if not found (never pass cloud UUID as FK)
+      let localClientId = null;
+      if (data.client_id) {
+        localClientId = resolveLocalEntityId('companies', data.client_id);
+        if (!localClientId) {
+          console.warn(`[db] upsertProjectFromCloud: company not found locally for cloud client_id=${data.client_id}, setting client_id=null for project ${data.id}`);
+        }
+      }
       const existing = db.prepare('SELECT id FROM projects WHERE id = ?').get(data.id);
       if (existing) {
         db.prepare(`UPDATE projects SET name = ?, client_id = ?, status = ?, location = ?, crew_size = ?, commander = ?, chief_engineer = ?, project_type = ?, armador = ?, start_date = ?, updated_at = datetime('now'), synced = 1 WHERE id = ?`)
