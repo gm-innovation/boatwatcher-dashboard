@@ -45,6 +45,7 @@ try {
 // --- Auto-updater setup ---
 let updaterReady = false;
 try {
+  autoUpdater.channel = 'server';
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
   updaterReady = true;

@@ -29,6 +29,7 @@ asarUnpack:
 
 npmRebuild: true
 
+channel: server
 generateUpdatesFilesForAllChannels: true
 
 win:
@@ -47,12 +48,4 @@ nsis:
   deleteAppDataOnUninstall: true
   uninstallDisplayName: Dock Check Local Server
   runAfterFinish: true
-
-publish:
-  provider: github
-  owner: gm-innovation
-  repo: boatwatcher-dashboard
-
-  releaseType: release
-  vPrefixedTagName: true
 

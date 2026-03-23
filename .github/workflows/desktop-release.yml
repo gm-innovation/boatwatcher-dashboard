@@ -31,6 +31,12 @@ jobs:
           npm install --package-lock-only
           npm ci
 
+      - name: Prepare build assets
+        run: |
+          mkdir build
+          copy public\favicon-512.png build\icon.png
+        shell: cmd
+
       - name: Build and publish Desktop release
         run: npm run build:electron:publish
 
