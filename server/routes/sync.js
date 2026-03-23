@@ -33,6 +33,16 @@ router.post('/trigger', async (req, res) => {
   }
 });
 
+// Reset all checkpoints and do a full re-sync
+router.post('/reset-and-full-sync', async (req, res) => {
+  try {
+    const status = await req.syncEngine.resetAndFullSync();
+    res.json({ success: true, status });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Agent control
 router.get('/agent/status', (req, res) => {
   try {

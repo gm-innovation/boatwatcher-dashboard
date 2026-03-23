@@ -425,6 +425,54 @@
     try { window.serverAPI.openFolder(type); } catch (_) {}
   }
 
+  async function handleResetAndFullSync() {
+    const btn = document.querySelector('.actions-bar .btn-ghost');
+    if (!btn) return;
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Sincronizando...';
+    try {
+      const result = await window.serverAPI.resetAndFullSync();
+      if (result && result.error) {
+        btn.innerHTML = '✕ Erro';
+        btn.classList.add('btn-danger');
+        setTimeout(() => { btn.innerHTML = originalHTML; btn.classList.remove('btn-danger'); btn.disabled = false; }, 3000);
+      } else {
+        btn.innerHTML = '✓ Concluído';
+        btn.classList.add('btn-success');
+        setTimeout(() => { btn.innerHTML = originalHTML; btn.classList.remove('btn-success'); btn.disabled = false; }, 2500);
+        setTimeout(refreshDashboard, 1500);
+      }
+    } catch (e) {
+      btn.innerHTML = '✕ Erro';
+      setTimeout(() => { btn.innerHTML = originalHTML; btn.disabled = false; }, 3000);
+    }
+  }
+
+  async function handleRestartService() {
+    if (!confirm('Reiniciar o serviço local? Isso interrompe brevemente a comunicação com dispositivos.')) return;
+    const btn = Array.from(document.querySelectorAll('.actions-bar .btn-ghost')).find(b => b.textContent.includes('Reiniciar'));
+    if (!btn) return;
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Reiniciando...';
+    try {
+      const result = await window.serverAPI.restartService();
+      if (result && result.error) {
+        btn.innerHTML = '✕ Erro';
+        setTimeout(() => { btn.innerHTML = originalHTML; btn.disabled = false; }, 3000);
+      } else {
+        btn.innerHTML = '✓ Reiniciado';
+        btn.classList.add('btn-success');
+        setTimeout(() => { btn.innerHTML = originalHTML; btn.classList.remove('btn-success'); btn.disabled = false; }, 2500);
+        setTimeout(refreshDashboard, 2000);
+      }
+    } catch (e) {
+      btn.innerHTML = '✕ Erro';
+      setTimeout(() => { btn.innerHTML = originalHTML; btn.disabled = false; }, 3000);
+    }
+  }
+
   // --- Add Device ---
   function toggleAddDeviceForm() {
     const form = document.getElementById('addDeviceForm');

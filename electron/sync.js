@@ -7,6 +7,7 @@ class SyncEngine {
     this.interval = null;
     this.listeners = [];
     this.syncIntervalMs = 60000;
+    this.agentController = null;
     this.status = {
       online: false,
       lastSync: null,
@@ -34,6 +35,10 @@ class SyncEngine {
 
   isConfigured() {
     return Boolean(this.cloudUrl && this.cloudAnonKey && this.agentToken);
+  }
+
+  setAgentController(controller) {
+    this.agentController = controller;
   }
 
   onStatusChange(callback) {
@@ -165,6 +170,21 @@ class SyncEngine {
     }
   }
 
+  async resetAndFullSync() {
+    // Reset all download checkpoints to epoch
+    const checkpoints = [
+      'last_download', 'last_download_companies', 'last_download_projects',
+      'last_download_devices', 'last_download_workers', 'last_download_user_companies',
+      'last_download_company_documents', 'last_download_worker_documents',
+    ];
+    for (const key of checkpoints) {
+      this.db.setSyncMeta?.(key, '1970-01-01T00:00:00Z');
+    }
+    console.log('[sync] All checkpoints reset to epoch. Starting full sync...');
+    await this.triggerSync();
+    return this.getStatus();
+  }
+
   async uploadQueuedOperations(entityTypes = null) {
     let operations = this.db.getPendingSyncOperations?.() || [];
     if (Array.isArray(entityTypes) && entityTypes.length > 0) {
@@ -213,46 +233,99 @@ class SyncEngine {
   }
 
   async downloadUpdates() {
-    const lastSync = this.db.getSyncMeta('last_download') || '1970-01-01T00:00:00Z';
+    // Use per-stage checkpoints for resilience — if one stage fails, others aren't skipped
+    let allSucceeded = true;
 
+    // Companies
     try {
-      const companiesRes = await this.callEdgeFunction(`agent-sync/download-companies?since=${lastSync}`, 'GET');
+      const since = this.db.getSyncMeta('last_download_companies') || this.db.getSyncMeta('last_download') || '1970-01-01T00:00:00Z';
+      const companiesRes = await this.callEdgeFunction(`agent-sync/download-companies?since=${since}`, 'GET');
       if (companiesRes.companies) {
         for (const company of companiesRes.companies) {
           this.db.upsertCompanyFromCloud(company);
         }
+        console.log(`[sync] Downloaded ${companiesRes.companies.length} companies`);
       }
-    } catch (e) { console.error('Download companies error:', e.message); }
+      this.db.setSyncMeta('last_download_companies', new Date().toISOString());
+    } catch (e) {
+      console.error('[sync] Download companies error:', e.message);
+      allSucceeded = false;
+    }
 
+    // User Companies
     try {
-      const userCompaniesRes = await this.callEdgeFunction(`agent-sync/download-user-companies?since=${lastSync}`, 'GET');
+      const since = this.db.getSyncMeta('last_download_user_companies') || this.db.getSyncMeta('last_download') || '1970-01-01T00:00:00Z';
+      const userCompaniesRes = await this.callEdgeFunction(`agent-sync/download-user-companies?since=${since}`, 'GET');
       if (userCompaniesRes.user_companies) {
         for (const association of userCompaniesRes.user_companies) {
           this.db.upsertUserCompanyFromCloud(association);
         }
+        console.log(`[sync] Downloaded ${userCompaniesRes.user_companies.length} user_companies`);
       }
-    } catch (e) { console.error('Download user_companies error:', e.message); }
+      this.db.setSyncMeta('last_download_user_companies', new Date().toISOString());
+    } catch (e) {
+      console.error('[sync] Download user_companies error:', e.message);
+      allSucceeded = false;
+    }
 
+    // Company Documents
     try {
-      const companyDocumentsRes = await this.callEdgeFunction(`agent-sync/download-company-documents?since=${lastSync}`, 'GET');
+      const since = this.db.getSyncMeta('last_download_company_documents') || this.db.getSyncMeta('last_download') || '1970-01-01T00:00:00Z';
+      const companyDocumentsRes = await this.callEdgeFunction(`agent-sync/download-company-documents?since=${since}`, 'GET');
       if (companyDocumentsRes.company_documents) {
         for (const document of companyDocumentsRes.company_documents) {
           this.db.upsertCompanyDocumentFromCloud(document);
         }
+        console.log(`[sync] Downloaded ${companyDocumentsRes.company_documents.length} company_documents`);
       }
-    } catch (e) { console.error('Download company_documents error:', e.message); }
+      this.db.setSyncMeta('last_download_company_documents', new Date().toISOString());
+    } catch (e) {
+      console.error('[sync] Download company_documents error:', e.message);
+      allSucceeded = false;
+    }
 
+    // Projects
     try {
-      const projectsRes = await this.callEdgeFunction(`agent-sync/download-projects?since=${lastSync}`, 'GET');
+      const since = this.db.getSyncMeta('last_download_projects') || this.db.getSyncMeta('last_download') || '1970-01-01T00:00:00Z';
+      const projectsRes = await this.callEdgeFunction(`agent-sync/download-projects?since=${since}`, 'GET');
       if (projectsRes.projects) {
         for (const project of projectsRes.projects) {
           this.db.upsertProjectFromCloud(project);
         }
+        console.log(`[sync] Downloaded ${projectsRes.projects.length} projects`);
       }
-    } catch (e) { console.error('Download projects error:', e.message); }
+      this.db.setSyncMeta('last_download_projects', new Date().toISOString());
+    } catch (e) {
+      console.error('[sync] Download projects error:', e.message);
+      allSucceeded = false;
+    }
 
+    // Devices — NEW: download devices in every sync cycle
     try {
-      const workersRes = await this.callEdgeFunction(`agent-sync/download-workers?since=${lastSync}`, 'GET');
+      const devicesRes = await this.callEdgeFunction('agent-sync/download-devices', 'GET');
+      if (devicesRes.devices) {
+        for (const device of devicesRes.devices) {
+          this.db.upsertDeviceFromCloud?.(device);
+        }
+        console.log(`[sync] Downloaded ${devicesRes.devices.length} devices`);
+        // Reload agent controller to pick up new/changed devices
+        this.agentController?.reloadDevices?.();
+      }
+      // Save agent/project info if available
+      if (devicesRes.agent) {
+        this.db.setSyncMeta?.('agent_name', devicesRes.agent.name || '');
+        this.db.setSyncMeta?.('project_name', devicesRes.agent.project_name || '');
+      }
+      this.db.setSyncMeta('last_download_devices', new Date().toISOString());
+    } catch (e) {
+      console.error('[sync] Download devices error:', e.message);
+      allSucceeded = false;
+    }
+
+    // Workers
+    try {
+      const since = this.db.getSyncMeta('last_download_workers') || this.db.getSyncMeta('last_download') || '1970-01-01T00:00:00Z';
+      const workersRes = await this.callEdgeFunction(`agent-sync/download-workers?since=${since}`, 'GET');
       if (workersRes.workers) {
         for (const worker of workersRes.workers) {
           this.db.upsertWorkerFromCloud(worker);
@@ -260,19 +333,36 @@ class SyncEngine {
             await this.autoEnrollWorkerPhoto(worker);
           }
         }
+        console.log(`[sync] Downloaded ${workersRes.workers.length} workers`);
       }
-    } catch (e) { console.error('Download workers error:', e.message); }
+      this.db.setSyncMeta('last_download_workers', new Date().toISOString());
+    } catch (e) {
+      console.error('[sync] Download workers error:', e.message);
+      allSucceeded = false;
+    }
 
+    // Worker Documents
     try {
-      const workerDocumentsRes = await this.callEdgeFunction(`agent-sync/download-worker-documents?since=${lastSync}`, 'GET');
+      const since = this.db.getSyncMeta('last_download_worker_documents') || this.db.getSyncMeta('last_download') || '1970-01-01T00:00:00Z';
+      const workerDocumentsRes = await this.callEdgeFunction(`agent-sync/download-worker-documents?since=${since}`, 'GET');
       if (workerDocumentsRes.worker_documents) {
         for (const document of workerDocumentsRes.worker_documents) {
           this.db.upsertWorkerDocumentFromCloud(document);
         }
+        console.log(`[sync] Downloaded ${workerDocumentsRes.worker_documents.length} worker_documents`);
       }
-    } catch (e) { console.error('Download worker_documents error:', e.message); }
+      this.db.setSyncMeta('last_download_worker_documents', new Date().toISOString());
+    } catch (e) {
+      console.error('[sync] Download worker_documents error:', e.message);
+      allSucceeded = false;
+    }
 
-    this.db.setSyncMeta('last_download', new Date().toISOString());
+    // Only update the global checkpoint if all stages succeeded
+    if (allSucceeded) {
+      this.db.setSyncMeta('last_download', new Date().toISOString());
+    } else {
+      console.warn('[sync] Some download stages failed — global checkpoint NOT advanced');
+    }
   }
 
   async sendHeartbeat() {
