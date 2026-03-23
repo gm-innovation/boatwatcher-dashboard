@@ -1172,6 +1172,15 @@ function createDatabaseAPI(db, startCode) {
 
     upsertDeviceFromCloud(data) {
       if (!data.id) return;
+      // Validate project_id FK: if project doesn't exist locally, use null to avoid FK constraint failure
+      let safeProjectId = data.project_id || null;
+      if (safeProjectId) {
+        const projectExists = db.prepare('SELECT id FROM projects WHERE id = ?').get(safeProjectId);
+        if (!projectExists) {
+          console.warn(`[db] upsertDeviceFromCloud: project ${safeProjectId} not found locally, setting project_id=null for device ${data.id}`);
+          safeProjectId = null;
+        }
+      }
       const existing = db.prepare('SELECT id FROM devices WHERE id = ?').get(data.id);
       if (existing) {
         db.prepare(`
@@ -1182,7 +1191,7 @@ function createDatabaseAPI(db, startCode) {
         `).run(
           data.name, data.controlid_serial_number || null, data.controlid_ip_address || null,
           data.type || 'facial_reader', data.status || 'offline', data.location || null,
-          data.project_id || null, data.agent_id || null,
+          safeProjectId, data.agent_id || null,
           JSON.stringify(data.api_credentials || {}), JSON.stringify(data.configuration || {}),
           data.id
         );
@@ -1193,7 +1202,7 @@ function createDatabaseAPI(db, startCode) {
         `).run(
           data.id, data.name, data.controlid_serial_number || null, data.controlid_ip_address || null,
           data.type || 'facial_reader', data.status || 'offline', data.location || null,
-          data.project_id || null, data.agent_id || null,
+          safeProjectId, data.agent_id || null,
           JSON.stringify(data.api_credentials || {}), JSON.stringify(data.configuration || {})
         );
       }
