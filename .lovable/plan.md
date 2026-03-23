@@ -1,39 +1,47 @@
 
 
-## Situação
+## Problema
 
-O código corrigido (pipeline CI/CD, fallback de erro, canal `server`) já está no branch `main` do GitHub (commit `0e14ff9`), mas o release mais recente ainda é o **v1.2.1**, que foi criado **antes** dessas correções. Portanto o `server.yml` não existe nesse release.
+O `server.yml` gerado no release v1.2.2 aponta para `dock-check-desktop-Setup-1.2.2.exe` em vez de `DockCheck-Local-Server-Setup-1.2.2.exe`. O build do Desktop, executado por último no workflow, sobrescreve o `server.yml` criado pelo build do Local Server.
 
-## O que precisa ser feito (fora do Lovable)
+## Correção
 
-### Passo 1 — Criar uma nova tag no GitHub
+### 1. Inverter a ordem dos builds no workflow
 
-No terminal local ou via GitHub CLI:
+No arquivo `.github/workflows/desktop-release.yml`, trocar a ordem: **Desktop primeiro, Local Server por último**. Assim o `server.yml` final será o correto (gerado pelo Local Server), e o `latest.yml` do Desktop também ficará correto (não é sobrescrito pelo Local Server).
 
 ```text
-git pull origin main
-git tag v1.2.2
-git push origin v1.2.2
+Ordem atual (com bug):
+  1. Build Local Server  → gera server.yml ✓
+  2. Build Desktop       → sobrescreve server.yml ✗
+
+Ordem corrigida:
+  1. Build Desktop       → gera latest.yml ✓
+  2. Build Local Server  → gera server.yml ✓
 ```
 
-Ou via GitHub UI: **Releases → Draft a new release → Tag: v1.2.2 → Target: main → Publish**.
+### 2. Alteração no arquivo
 
-Isso dispara o workflow `desktop-release.yml` que agora inclui a verificação do `server.yml`.
+**`.github/workflows/desktop-release.yml`** — mover os steps de "Build and publish Desktop" para ANTES dos steps de "Build and publish Local Server":
 
-### Passo 2 — Verificar os artefatos do release v1.2.2
+```yaml
+steps:
+  # ... checkout, node, install, prepare assets ...
+  
+  - name: Build and publish Desktop release
+    run: npm run build:electron:publish
 
-Após o workflow concluir (~5-10 min), confirmar que o release v1.2.2 contém:
-- `DockCheck-Local-Server-Setup-1.2.2.exe`
-- `server.yml`
-- `latest.yml` (Desktop)
+  - name: Build and publish Local Server release
+    run: npm run build:local-server:publish
 
-### Passo 3 — Instalação manual única
+  - name: Verify Local Server update artifacts
+    # ... verificação existente ...
+```
 
-Baixar e instalar o `DockCheck-Local-Server-Setup-1.2.2.exe` manualmente na máquina. A v1.0.0 não consegue atualizar automaticamente porque não conhece o canal `server`.
+### 3. Após a correção
 
-A partir da v1.2.2, as próximas atualizações serão automáticas.
-
-### Nenhuma alteração de código necessária
-
-Todas as correções já estão no `main`. O único passo é gerar o release.
+- Deletar o release v1.2.2 no GitHub
+- Criar nova tag v1.2.3 para disparar o workflow corrigido
+- Verificar que `server.yml` agora referencia `DockCheck-Local-Server-Setup-1.2.3.exe`
+- Instalar manualmente o `.exe` correto na máquina
 
