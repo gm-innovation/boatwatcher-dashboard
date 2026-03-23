@@ -161,19 +161,52 @@ serve(async (req) => {
       const projectId = await resolveBootstrapProjectId(supabase, user.id)
       const ipAddress = req.headers.get('x-forwarded-for') || 'unknown'
 
-      const { data: existingAgent, error: existingError } = await supabase
+      // 1. Try exact match by created_by + name
+      let existingAgent: { id: string; token: string } | null = null
+      const { data: exactMatch, error: exactError } = await supabase
         .from('local_agents')
         .select('id, token')
         .eq('created_by', user.id)
         .eq('name', stationName)
         .maybeSingle()
+      if (exactError) throw exactError
+      existingAgent = exactMatch
 
-      if (existingError) throw existingError
+      // 2. Fallback: find any agent by same user + same project (dedup)
+      if (!existingAgent && projectId) {
+        const { data: projectMatch, error: projectError } = await supabase
+          .from('local_agents')
+          .select('id, token')
+          .eq('created_by', user.id)
+          .eq('project_id', projectId)
+          .maybeSingle()
+        if (projectError) throw projectError
+        existingAgent = projectMatch
+      }
+
+      // 3. Fallback: find any agent by same user (avoid orphans)
+      if (!existingAgent) {
+        const { data: userMatch, error: userError } = await supabase
+          .from('local_agents')
+          .select('id, token')
+          .eq('created_by', user.id)
+          .order('last_seen_at', { ascending: false, nullsFirst: false })
+          .limit(1)
+          .maybeSingle()
+        if (userError) throw userError
+        existingAgent = userMatch
+      }
+
+      const rebindDevices = async (agentId: string, pId: string | null) => {
+        if (!pId) return
+        await supabase.from('devices').update({ agent_id: agentId }).eq('project_id', pId)
+      }
 
       if (existingAgent) {
         const { error: updateError } = await supabase
           .from('local_agents')
           .update({
+            name: stationName,
             project_id: projectId,
             status: 'online',
             sync_status: 'configuring',
@@ -184,6 +217,8 @@ serve(async (req) => {
           .eq('id', existingAgent.id)
 
         if (updateError) throw updateError
+
+        await rebindDevices(existingAgent.id, projectId)
 
         return new Response(JSON.stringify({ success: true, token: existingAgent.token, agentId: existingAgent.id, projectId }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -208,6 +243,8 @@ serve(async (req) => {
         .single()
 
       if (insertError) throw insertError
+
+      await rebindDevices(createdAgent.id, projectId)
 
       return new Response(JSON.stringify({ success: true, token: createdAgent.token, agentId: createdAgent.id, projectId }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -607,13 +644,35 @@ serve(async (req) => {
       return new Response(JSON.stringify({ companies: companies || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // GET /download-projects
+    // GET /download-projects (filtered by agent's project_id and client_id)
     if (req.method === 'GET' && action === 'download-projects') {
       const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'
-      const { data: projects, error } = await supabase
+
+      // First get the agent's project to find client_id
+      let filterConditions: string[] = []
+      if (agent.project_id) {
+        filterConditions.push(`id.eq.${agent.project_id}`)
+        // Also get client_id of this project to fetch sibling projects
+        const { data: agentProject } = await supabase
+          .from('projects')
+          .select('client_id')
+          .eq('id', agent.project_id)
+          .maybeSingle()
+        if (agentProject?.client_id) {
+          filterConditions.push(`client_id.eq.${agentProject.client_id}`)
+        }
+      }
+
+      let query = supabase
         .from('projects')
-        .select('id, name, client_id, status, location, crew_size')
+        .select('id, name, client_id, status, location, crew_size, commander, chief_engineer, project_type, armador, start_date')
         .gte('updated_at', since)
+
+      if (filterConditions.length > 0) {
+        query = query.or(filterConditions.join(','))
+      }
+
+      const { data: projects, error } = await query
       if (error) throw error
       return new Response(JSON.stringify({ projects: projects || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }

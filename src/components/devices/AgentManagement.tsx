@@ -302,6 +302,12 @@ export function AgentManagement() {
                   <CardContent>
                     <div className="space-y-3">
                       <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                        {agent.project_id && (
+                          <span className="flex items-center gap-1">
+                            <Server className="h-3 w-3" />
+                            Projeto: {agent.project_id.slice(0, 8)}…
+                          </span>
+                        )}
                         {agent.version && (
                           <span>Versão: {agent.version}</span>
                         )}
