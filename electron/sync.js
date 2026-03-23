@@ -72,6 +72,19 @@ class SyncEngine {
       throw new Error('Sincronização em nuvem indisponível nesta instalação.');
     }
 
+    // Skip bootstrap if agent_token already exists (configured via Server Local UI)
+    const existingToken = this.db.getSyncMeta?.('agent_token');
+    if (existingToken) {
+      console.log('Bootstrap skipped: agent_token already configured.');
+      process.env.AGENT_TOKEN = existingToken;
+      this.status.configured = true;
+      this.status.mode = 'cloud-sync';
+      this.status.message = 'Sincronização já configurada. Usando token existente.';
+      this.notifyListeners();
+      await this.triggerSync();
+      return this.getStatus();
+    }
+
     const response = await this.callAuthenticatedEdgeFunction('agent-sync/bootstrap', 'POST', {
       stationName: os.hostname(),
       platform: process.platform,

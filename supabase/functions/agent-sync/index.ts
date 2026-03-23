@@ -644,13 +644,35 @@ serve(async (req) => {
       return new Response(JSON.stringify({ companies: companies || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // GET /download-projects
+    // GET /download-projects (filtered by agent's project_id and client_id)
     if (req.method === 'GET' && action === 'download-projects') {
       const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'
-      const { data: projects, error } = await supabase
+
+      // First get the agent's project to find client_id
+      let filterConditions: string[] = []
+      if (agent.project_id) {
+        filterConditions.push(`id.eq.${agent.project_id}`)
+        // Also get client_id of this project to fetch sibling projects
+        const { data: agentProject } = await supabase
+          .from('projects')
+          .select('client_id')
+          .eq('id', agent.project_id)
+          .maybeSingle()
+        if (agentProject?.client_id) {
+          filterConditions.push(`client_id.eq.${agentProject.client_id}`)
+        }
+      }
+
+      let query = supabase
         .from('projects')
-        .select('id, name, client_id, status, location, crew_size')
+        .select('id, name, client_id, status, location, crew_size, commander, chief_engineer, project_type, armador, start_date')
         .gte('updated_at', since)
+
+      if (filterConditions.length > 0) {
+        query = query.or(filterConditions.join(','))
+      }
+
+      const { data: projects, error } = await query
       if (error) throw error
       return new Response(JSON.stringify({ projects: projects || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
