@@ -720,8 +720,13 @@
           progressEl.style.display = 'none';
           break;
         case 'error':
-          statusEl.textContent = `Erro: ${data.message || 'Falha na atualização'}`;
-          statusEl.className = 'sub error-msg';
+          if (data.is404) {
+            statusEl.textContent = data.message || 'Nenhuma atualização disponível para esta versão.';
+            statusEl.className = 'sub';
+          } else {
+            statusEl.textContent = `Erro: ${data.message || 'Falha na atualização'}`;
+            statusEl.className = 'sub error-msg';
+          }
           checkBtn.disabled = false;
           checkBtn.textContent = 'Verificar atualização';
           downloadBtn.style.display = 'none';
