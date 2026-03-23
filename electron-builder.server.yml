@@ -45,4 +45,5 @@ nsis:
   deleteAppDataOnUninstall: true
   uninstallDisplayName: Dock Check Local Server
   runAfterFinish: true
+  channel: server
 
