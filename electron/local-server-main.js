@@ -205,15 +205,23 @@ function registerIpcHandlers() {
         return { error: 'Configuração de nuvem indisponível.' };
       }
 
-      // First validate via heartbeat
-      const heartbeatResult = await callCloudFunction(
+      // Validate token via read-only endpoint (download-devices) instead of write (status)
+      // This avoids FK constraint failures on the agent record blocking the connection
+      const validateResult = await callCloudFunction(
         syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
-        'agent-sync/status', 'POST', { version: '1.0.0' }
+        'agent-sync/download-devices', 'GET', null
       );
 
-      if (heartbeatResult.error) {
-        return { error: `Token inválido: ${heartbeatResult.error}` };
+      if (validateResult.error) {
+        // Only block on real auth errors (invalid token), not operational failures
+        return { error: `Token inválido: ${validateResult.error}` };
       }
+
+      // Send heartbeat as best-effort (non-blocking) — don't let FK errors block connection
+      callCloudFunction(
+        syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
+        'agent-sync/status', 'POST', { version: '1.0.0' }
+      ).catch((err) => logToFile(`Heartbeat best-effort failed (non-blocking): ${err.message}`));
 
       // Download companies first (projects depend on them via FK)
       try {

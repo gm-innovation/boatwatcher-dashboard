@@ -359,7 +359,11 @@ class SyncEngine {
       const workerDocumentsRes = await this.callEdgeFunction(`agent-sync/download-worker-documents?since=${since}`, 'GET');
       if (workerDocumentsRes.worker_documents) {
         for (const document of workerDocumentsRes.worker_documents) {
-          this.db.upsertWorkerDocumentFromCloud(document);
+          try {
+            this.db.upsertWorkerDocumentFromCloud(document);
+          } catch (err) {
+            console.error(`[sync] worker_document upsert failed for ${document.id}:`, err.message);
+          }
         }
         console.log(`[sync] Downloaded ${workerDocumentsRes.worker_documents.length} worker_documents`);
       }

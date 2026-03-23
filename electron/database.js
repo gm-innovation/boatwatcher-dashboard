@@ -1454,6 +1454,11 @@ function createDatabaseAPI(db, startCode) {
     upsertWorkerDocumentFromCloud(data) {
       const existing = db.prepare('SELECT id FROM worker_documents WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
       const localWorkerId = resolveLocalEntityId('workers', data.worker_id) || null;
+      // Skip if parent worker doesn't exist locally (FK would fail)
+      if (!localWorkerId) {
+        console.warn(`[db] upsertWorkerDocumentFromCloud: skipping — worker ${data.worker_id} not found locally`);
+        return;
+      }
       if (existing) {
         db.prepare(`
           UPDATE worker_documents

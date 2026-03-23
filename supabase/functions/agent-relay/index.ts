@@ -49,15 +49,26 @@ serve(async (req) => {
     
     const previousStatus = agent.status
 
-    await supabase
+    const agentUpdatePayload = { 
+      status: 'online',
+      last_seen_at: new Date().toISOString(),
+      ip_address: clientIp,
+      version: agentVersion
+    }
+
+    const { error: agentUpdateError } = await supabase
       .from('local_agents')
-      .update({ 
-        status: 'online',
-        last_seen_at: new Date().toISOString(),
-        ip_address: clientIp,
-        version: agentVersion
-      })
+      .update(agentUpdatePayload)
       .eq('id', agent.id)
+
+    // Auto-heal: if FK error, null out broken references and retry
+    if (agentUpdateError) {
+      console.warn(`[agent-relay] Update failed for agent ${agent.id}: ${agentUpdateError.message}. Auto-healing...`)
+      await supabase
+        .from('local_agents')
+        .update({ ...agentUpdatePayload, project_id: null, created_by: null })
+        .eq('id', agent.id)
+    }
 
     const url = new URL(req.url)
     const action = url.pathname.split('/').pop() || 'poll'
