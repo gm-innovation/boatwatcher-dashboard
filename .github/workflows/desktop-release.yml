@@ -44,13 +44,14 @@ jobs:
         run: npm run build:local-server:publish
 
       - name: Verify Local Server update artifacts
+        continue-on-error: true
         run: |
           echo "Checking for server.yml in local-server-dist..."
           if exist local-server-dist\server.yml (
             echo "server.yml found"
             type local-server-dist\server.yml
           ) else (
-            echo "WARNING: server.yml NOT found in local-server-dist"
-            dir local-server-dist\*.yml 2>nul || echo "No .yml files found"
+            echo "INFO: server.yml not in local-server-dist (uploaded directly to GitHub Release)"
+            dir local-server-dist\*.yml 2>nul || echo "No local .yml files (expected with --publish always)"
           )
         shell: cmd
