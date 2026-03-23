@@ -1,79 +1,85 @@
 
 
-## Revisão da Integração Desktop ↔ Nuvem ↔ Servidor Local
+## Correção da Integração Desktop — Projetos, Agentes e Dispositivos
 
-### Problemas Identificados
+### Problemas Identificados (dados reais do banco)
 
-**1. Desktop não puxa projetos (0 projetos)**
-- O `download-projects` na Edge Function (linha 611-618) baixa TODOS os projetos sem filtro por `agent.project_id` — mas o agente do bootstrap só tem UM `project_id`.
-- No Desktop, o `ProjectContext` (linha 97-103) filtra por `companyAccess.company_id`, mas o `client_id` dos projetos baixados pode não corresponder ao ID local das companies (mismatch UUID local vs cloud).
-- O `upsertProjectFromCloud` usa o `data.id` (cloud UUID) diretamente como PK, mas o `client_id` aponta para o UUID da nuvem da company, enquanto no SQLite local a company pode ter sido inserida com ID local diferente (via `upsertCompanyFromCloud` que também usa `data.id` direto como PK — isso está OK, mas a `user_companies` usa `resolveLocalEntityId` que pode falhar).
+**1. Três agentes existem, causando confusão:**
+- "Engenharia01" (1ff56fcb) — `created_by` = user_id, recriado pelo bootstrap do Desktop
+- "Engenharia" (b7a3fd5d) — `created_by` = NULL, criado manualmente via UI do Servidor Local
+- "Engenharia" antigo (e49cea39) — `created_by` = NULL, sem project_id, órfão
 
-**2. Dois agentes: "Engenharia01" (Online) e "Engenharia" (Offline)**
-- O bootstrap (agent-sync, linha 160-169) busca agente existente por `created_by + name` (hostname da máquina).
-- O Servidor Local standalone usa o bootstrap manual via token (UI do painel) — não passa pelo fluxo de bootstrap automático do Desktop.
-- Resultado: Desktop criou "Engenharia01" (hostname) via `bootstrapFromAccessToken`, Servidor Local standalone registrou "Engenharia" manualmente via token.
-- São DOIS agentes independentes apontando para o mesmo projeto, com tokens diferentes.
+**2. Dispositivo "Engenharia" está vinculado ao agente ERRADO:**
+- `devices.agent_id` = 1ff56fcb ("Engenharia01")
+- O Servidor Local usa o token do agente "Engenharia" (b7a3fd5d)
+- `download-devices` filtra por `agent_id`, então retorna 0 dispositivos para o Servidor Local
 
-**3. Servidor Local mostra "Online" mas o agente "Engenharia" está "Offline" na web**
-- O Servidor Local standalone envia heartbeat com o token do agente "Engenharia" (ativo localmente).
-- Mas o agente no banco é "Engenharia" com token `d32133d8...a929`, que está ativo e enviando heartbeat.
-- O painel web mostra "Engenharia" como Offline provavelmente porque o heartbeat está atualizando o agente correto mas o front-end cache não está refreshing, OU porque o `last_seen_at` está stale (o status lógico no banco pode ter sido sobreescrito por algo).
+**3. Bootstrap do Desktop sempre cria novo agente:**
+- O dedup busca por `created_by = user_id`, mas "Engenharia" tem `created_by = NULL`
+- O skip por token existente funciona apenas se `sync_meta` já tiver o token — mas no Desktop app (não o Servidor Local), o SQLite pode estar vazio
 
-**4. Dispositivo vinculado ao agente errado**
-- O dispositivo "Engenharia" (0f240d85) tem `agent_id` apontando para um dos dois agentes. Se está vinculado ao "Engenharia" (offline no web), os comandos/downloads não fluem corretamente.
+**4. Projetos não aparecem no Desktop:**
+- O `ProjectContext` depende de `role` ser carregado antes de buscar projetos
+- Se `role` ainda for `null` durante o primeiro fetch, o caminho não-admin é usado, que depende de `user_companies` (vazio para este user)
+- Race condition: `checkUserRole` é assíncrono e `useEffect` de projetos pode executar antes do role ser definido
 
 ### Plano de Correção
 
-#### 1. Edge Function `agent-sync`: Filtrar projetos pelo agente
+#### 1. Corrigir dedup do bootstrap para encontrar agentes com `created_by = NULL`
 **Arquivo:** `supabase/functions/agent-sync/index.ts`
-- `download-projects`: Em vez de baixar todos os projetos, filtrar por `agent.project_id` — retornar apenas o projeto vinculado ao agente E projetos do mesmo `client_id`.
-- Isso garante que o servidor local só receba os projetos relevantes.
 
-#### 2. Edge Function `agent-sync`: Rebind de dispositivos no bootstrap
+Adicionar um 4º fallback no bootstrap: buscar qualquer agente do mesmo `project_id` (independente de `created_by`). Isso encontra o agente "Engenharia" criado manualmente.
+
+```
+Ordem de busca:
+1. created_by + name (exato)
+2. created_by + project_id
+3. created_by (qualquer)
+4. NOVO: project_id (sem created_by) — encontra agentes manuais
+```
+
+Quando reutilizar um agente manual, definir `created_by` para o usuário atual.
+
+#### 2. Rebind automático de dispositivos no bootstrap
 **Arquivo:** `supabase/functions/agent-sync/index.ts`
-- No fluxo de `bootstrap`, após criar/atualizar o agente, atualizar automaticamente todos os dispositivos do `project_id` para apontar para o novo `agent_id`.
-- Isso resolve dispositivos "órfãos" vinculados a agentes antigos.
-- Adicionar endpoint `rebind-devices` que o servidor local pode chamar para vincular dispositivos do projeto ao agente atual.
 
-#### 3. Evitar criação de agentes duplicados
-**Arquivo:** `supabase/functions/agent-sync/index.ts`
-- No bootstrap, buscar agente existente por `created_by` (sem filtro por `name`) como fallback. Se o usuário já tem um agente para o mesmo `project_id`, reutilizar em vez de criar novo.
-- Adicionar lógica: se existe agente do mesmo `created_by` com mesmo `project_id`, atualizar nome e retornar token existente.
+A função `rebindDevices` já existe mas precisa ser verificada. O problema é que o bootstrap retorna o agente existente sem atualizar o `agent_id` dos dispositivos se o agente já existia com o mesmo ID. Verificar que o rebind realmente executa.
 
-#### 4. Corrigir mapeamento de `client_id` nos projetos baixados
-**Arquivo:** `electron/database.js`
-- No `upsertProjectFromCloud`, o `client_id` vem como UUID da nuvem. O `companies` no SQLite local usa o mesmo UUID (inserido via `upsertCompanyFromCloud` com `data.id`), então o JOIN funciona.
-- Problema real: a ordem de download importa. Companies precisam ser baixadas ANTES de projects. Verificar que o `downloadUpdates` em `electron/sync.js` baixa companies antes de projects (já está correto na ordem).
-- Verificar se o `fetchCurrentCompanyByUserId` no Desktop resolve corretamente para associar `user_companies` ao `company_id` local.
+#### 3. Corrigir race condition de projetos no Desktop
+**Arquivo:** `src/contexts/ProjectContext.tsx`
 
-#### 5. Corrigir `download-projects` para incluir `client` join
-**Arquivo:** `supabase/functions/agent-sync/index.ts`
-- O `download-projects` retorna apenas campos básicos sem o join de `companies`. O `getProjects()` local faz JOIN com companies mas precisa que a company esteja no SQLite.
-- Garantir que a company correspondente ao `client_id` do projeto está sendo baixada (pode não estar se foi criada antes do `since` do incremental sync).
+O `useEffect` que busca projetos depende de `role`, mas `role` começa como `null`. Quando `role` muda de `null` para `'admin'`, o effect re-executa — **isso já funciona** porque `role` está na dependency array. 
 
-#### 6. Desktop: melhorar o bootstrap para reutilizar agente do servidor local
-**Arquivo:** `src/hooks/useAuth.tsx`, `electron/sync.js`
-- Se o servidor local já tem um token configurado (via UI do painel), o Desktop não deve criar um novo agente via bootstrap. Verificar se `agent_token` já existe em `sync_meta` antes de chamar bootstrap.
-- No `bootstrapFromAccessToken`, checar se já há token configurado e pular se existir.
+O problema real: o `loading` é setado como `false` antes do `role` ser definido, causando um render com "Selecione um projeto" vazio. Adicionar guarda: se `role === null` e `loading` do auth ainda é `true`, não buscar projetos ainda.
 
-#### 7. Adicionar diagnóstico de agente no painel web
-**Arquivo:** `src/components/devices/AgentManagement.tsx`
-- Mostrar a qual `project_id` cada agente está vinculado.
-- Indicar quantos dispositivos estão vinculados a cada agente.
-- Botão "Vincular dispositivos deste projeto" para rebind manual.
+#### 4. Limpar agentes órfãos via migração
+**Arquivo:** Migração SQL
 
-### Detalhes Técnicos
+Deletar o agente órfão antigo (e49cea39) que não tem `project_id`. Opcionalmente, consolidar "Engenharia" e "Engenharia01" em um único agente.
 
-**Ordem de prioridade:**
-1. Filtrar projetos por agente (resolve "0 projetos")
-2. Evitar agentes duplicados (resolve confusão "Engenharia" vs "Engenharia01")
-3. Rebind de dispositivos (resolve dispositivos órfãos)
-4. Bootstrap inteligente (evita recriar agente quando servidor local já tem token)
+#### 5. Garantir que o Servidor Local rebind dispositivos ao configurar token
+**Arquivo:** `electron/local-server-main.js`
 
-**Arquivos impactados:**
-- `supabase/functions/agent-sync/index.ts` — filtro de projetos, rebind, dedup de agentes
-- `electron/sync.js` — verificar token existente antes de bootstrap
-- `src/hooks/useAuth.tsx` — bootstrap condicional
-- `src/components/devices/AgentManagement.tsx` — diagnóstico visual
+Após o `set-agent-token` salvar o token, chamar o endpoint `agent-sync/rebind-devices` ou atualizar diretamente no banco via `download-devices` (que já filtra por `agent_id`). O rebind precisa acontecer no CLOUD — atualizar `devices.agent_id` para o agente cujo token foi configurado.
+
+Adicionar novo action `rebind-devices` na Edge Function:
+```
+POST agent-sync/rebind-devices
+```
+Atualiza todos os dispositivos do `project_id` do agente para apontar para o `agent_id` atual.
+
+### Arquivos Impactados
+
+| Arquivo | Mudança |
+|---|---|
+| `supabase/functions/agent-sync/index.ts` | Fallback dedup por project_id sem created_by; novo action rebind-devices |
+| `src/contexts/ProjectContext.tsx` | Aguardar role ser definido antes de buscar projetos |
+| `electron/local-server-main.js` | Chamar rebind-devices após set-agent-token |
+| Migração SQL | Limpar agente órfão e49cea39 |
+
+### Resultado Esperado
+- Servidor Local com token "Engenharia" terá dispositivos vinculados corretamente
+- Desktop mostrará projetos após o role admin ser detectado
+- Bootstrap não criará agentes duplicados (encontra "Engenharia" mesmo com `created_by=NULL`)
+- Dispositivo aparecerá como conectado ao agente no dashboard de conectividade
 
