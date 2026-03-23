@@ -1410,6 +1410,11 @@ function createDatabaseAPI(db, startCode) {
     upsertUserCompanyFromCloud(data) {
       const existing = db.prepare('SELECT id FROM user_companies WHERE cloud_id = ? OR user_id = ?').get(data.id, data.user_id);
       const localCompanyId = resolveLocalEntityId('companies', data.company_id) || null;
+      // Skip if parent company doesn't exist locally (FK would fail)
+      if (!localCompanyId) {
+        console.warn(`[db] upsertUserCompanyFromCloud: skipping — company ${data.company_id} not found locally`);
+        return;
+      }
       if (existing) {
         db.prepare(`
           UPDATE user_companies
@@ -1427,6 +1432,11 @@ function createDatabaseAPI(db, startCode) {
     upsertCompanyDocumentFromCloud(data) {
       const existing = db.prepare('SELECT id FROM company_documents WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
       const localCompanyId = resolveLocalEntityId('companies', data.company_id) || null;
+      // Skip if parent company doesn't exist locally (FK would fail)
+      if (!localCompanyId) {
+        console.warn(`[db] upsertCompanyDocumentFromCloud: skipping — company ${data.company_id} not found locally`);
+        return;
+      }
       if (existing) {
         db.prepare(`
           UPDATE company_documents
@@ -1444,6 +1454,11 @@ function createDatabaseAPI(db, startCode) {
     upsertWorkerDocumentFromCloud(data) {
       const existing = db.prepare('SELECT id FROM worker_documents WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
       const localWorkerId = resolveLocalEntityId('workers', data.worker_id) || null;
+      // Skip if parent worker doesn't exist locally (FK would fail)
+      if (!localWorkerId) {
+        console.warn(`[db] upsertWorkerDocumentFromCloud: skipping — worker ${data.worker_id} not found locally`);
+        return;
+      }
       if (existing) {
         db.prepare(`
           UPDATE worker_documents

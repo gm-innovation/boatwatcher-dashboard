@@ -258,7 +258,11 @@ class SyncEngine {
       const userCompaniesRes = await this.callEdgeFunction(`agent-sync/download-user-companies?since=${since}`, 'GET');
       if (userCompaniesRes.user_companies) {
         for (const association of userCompaniesRes.user_companies) {
-          this.db.upsertUserCompanyFromCloud(association);
+          try {
+            this.db.upsertUserCompanyFromCloud(association);
+          } catch (err) {
+            console.error(`[sync] user_company upsert failed for ${association.id}:`, err.message);
+          }
         }
         console.log(`[sync] Downloaded ${userCompaniesRes.user_companies.length} user_companies`);
       }
@@ -274,7 +278,11 @@ class SyncEngine {
       const companyDocumentsRes = await this.callEdgeFunction(`agent-sync/download-company-documents?since=${since}`, 'GET');
       if (companyDocumentsRes.company_documents) {
         for (const document of companyDocumentsRes.company_documents) {
-          this.db.upsertCompanyDocumentFromCloud(document);
+          try {
+            this.db.upsertCompanyDocumentFromCloud(document);
+          } catch (err) {
+            console.error(`[sync] company_document upsert failed for ${document.id}:`, err.message);
+          }
         }
         console.log(`[sync] Downloaded ${companyDocumentsRes.company_documents.length} company_documents`);
       }
@@ -351,7 +359,11 @@ class SyncEngine {
       const workerDocumentsRes = await this.callEdgeFunction(`agent-sync/download-worker-documents?since=${since}`, 'GET');
       if (workerDocumentsRes.worker_documents) {
         for (const document of workerDocumentsRes.worker_documents) {
-          this.db.upsertWorkerDocumentFromCloud(document);
+          try {
+            this.db.upsertWorkerDocumentFromCloud(document);
+          } catch (err) {
+            console.error(`[sync] worker_document upsert failed for ${document.id}:`, err.message);
+          }
         }
         console.log(`[sync] Downloaded ${workerDocumentsRes.worker_documents.length} worker_documents`);
       }

@@ -563,17 +563,34 @@ serve(async (req) => {
       return new Response(JSON.stringify({ workers: workersWithPhotos, timestamp: new Date().toISOString() }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // POST /status (heartbeat)
+    // POST /status (heartbeat) — with auto-heal for broken FK references
     if (req.method === 'POST' && action === 'status') {
       const body = await req.json().catch(() => ({}))
-      await supabase.from('local_agents').update({
+      const updatePayload: Record<string, unknown> = {
         status: 'online',
         last_seen_at: new Date().toISOString(),
         ip_address: req.headers.get('x-forwarded-for') || 'unknown',
         version: body.version || null,
         sync_status: body.sync_status || 'idle',
         pending_sync_count: body.pending_count ?? 0,
-      }).eq('id', agent.id)
+      }
+
+      const { error: updateError } = await supabase.from('local_agents').update(updatePayload).eq('id', agent.id)
+
+      // Auto-heal: if FK error on project_id or created_by, null them out and retry
+      if (updateError) {
+        console.warn(`[agent-sync/status] Update failed for agent ${agent.id}: ${updateError.message}. Attempting auto-heal...`)
+        const { error: healError } = await supabase.from('local_agents').update({
+          ...updatePayload,
+          project_id: null,
+          created_by: null,
+        }).eq('id', agent.id)
+        if (healError) {
+          console.error(`[agent-sync/status] Auto-heal also failed: ${healError.message}`)
+          throw healError
+        }
+        console.log(`[agent-sync/status] Auto-healed agent ${agent.id} (cleared broken FK refs)`)
+      }
 
       return new Response(JSON.stringify({ success: true, agent_id: agent.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
