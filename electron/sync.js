@@ -328,9 +328,13 @@ class SyncEngine {
       const workersRes = await this.callEdgeFunction(`agent-sync/download-workers?since=${since}`, 'GET');
       if (workersRes.workers) {
         for (const worker of workersRes.workers) {
-          this.db.upsertWorkerFromCloud(worker);
-          if (worker.photo_signed_url) {
-            await this.autoEnrollWorkerPhoto(worker);
+          try {
+            this.db.upsertWorkerFromCloud(worker);
+            if (worker.photo_signed_url) {
+              await this.autoEnrollWorkerPhoto(worker);
+            }
+          } catch (workerErr) {
+            console.error(`[sync] Worker upsert failed for ${worker.id}:`, workerErr.message);
           }
         }
         console.log(`[sync] Downloaded ${workersRes.workers.length} workers`);

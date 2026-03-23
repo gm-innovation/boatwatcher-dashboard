@@ -1311,7 +1311,10 @@ function createDatabaseAPI(db, startCode) {
 
     upsertWorkerFromCloud(data) {
       const existing = db.prepare('SELECT id FROM workers WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
-      const localCompanyId = resolveLocalEntityId('companies', data.company_id) || data.company_id;
+      const localCompanyId = data.company_id ? (resolveLocalEntityId('companies', data.company_id) || null) : null;
+      if (data.company_id && !localCompanyId) {
+        console.warn(`[db] upsertWorkerFromCloud: company not found locally for cloud company_id=${data.company_id}, setting null`);
+      }
       if (existing) {
         db.prepare(`
           UPDATE workers SET name = ?, company_id = ?, role = ?, status = ?, document_number = ?, 
