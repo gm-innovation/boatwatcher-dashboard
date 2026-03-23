@@ -702,6 +702,19 @@ serve(async (req) => {
       return new Response(JSON.stringify({ worker_documents: workerDocuments || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    // POST /rebind-devices
+    if (req.method === 'POST' && action === 'rebind-devices') {
+      if (!agent.project_id) {
+        return new Response(JSON.stringify({ error: 'Agent has no project_id' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+      const { error: rebindError, count } = await supabase
+        .from('devices')
+        .update({ agent_id: agent.id })
+        .eq('project_id', agent.project_id)
+      if (rebindError) throw rebindError
+      return new Response(JSON.stringify({ success: true, rebound: count ?? 0, agent_id: agent.id, project_id: agent.project_id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (e) {
     console.error('agent-sync error:', e)

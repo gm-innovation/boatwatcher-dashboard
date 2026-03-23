@@ -234,6 +234,17 @@ function registerIpcHandlers() {
       // Reset sync timestamp so full download happens
       serverRuntime.db.setSyncMeta?.('last_download', '1970-01-01T00:00:00Z');
 
+      // Rebind devices in cloud to this agent
+      try {
+        await callCloudFunction(
+          syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
+          'agent-sync/rebind-devices', 'POST', {}
+        );
+        logToFile('Devices rebound to agent in cloud');
+      } catch (rebindErr) {
+        logToFile(`rebind-devices warning: ${rebindErr.message}`);
+      }
+
       // Trigger sync
       serverRuntime.syncEngine?.triggerSync?.();
 
