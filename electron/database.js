@@ -1433,7 +1433,7 @@ function createDatabaseAPI(db, startCode) {
 
     upsertWorkerDocumentFromCloud(data) {
       const existing = db.prepare('SELECT id FROM worker_documents WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
-      const localWorkerId = resolveLocalEntityId('workers', data.worker_id) || data.worker_id;
+      const localWorkerId = resolveLocalEntityId('workers', data.worker_id) || null;
       if (existing) {
         db.prepare(`
           UPDATE worker_documents
