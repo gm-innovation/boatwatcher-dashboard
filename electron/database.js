@@ -1416,7 +1416,7 @@ function createDatabaseAPI(db, startCode) {
 
     upsertCompanyDocumentFromCloud(data) {
       const existing = db.prepare('SELECT id FROM company_documents WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
-      const localCompanyId = resolveLocalEntityId('companies', data.company_id) || data.company_id;
+      const localCompanyId = resolveLocalEntityId('companies', data.company_id) || null;
       if (existing) {
         db.prepare(`
           UPDATE company_documents
