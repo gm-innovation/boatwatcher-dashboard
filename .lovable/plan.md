@@ -1,56 +1,56 @@
 
-Objetivo: corrigir o erro de build (`unknown property 'channel'`) sem perder a separação de canais de update entre Desktop e Local Server.
 
-Diagnóstico rápido
-- O erro atual confirma que `channel` está em posição inválida no `electron-builder`.
-- `channel` não deve ficar no nível raiz nem em `nsis` para este caso.
-- Para o Local Server, o canal deve ser definido no bloco `publish` (gerando `server.yml`) e o app já está correto ao usar `autoUpdater.channel = 'server'`.
+## Diagnóstico
 
-Plano de implementação (revisado e completo)
-1) Corrigir configuração inválida do Local Server
-- Arquivo: `electron-builder.server.yml`
-- Ação: remover `channel: server` do bloco `nsis`.
+O erro "FOREIGN KEY constraint failed" ocorre durante o fluxo de `set-agent-token` (linha 226 de `local-server-main.js`). O problema:
 
-2) Manter canal de update separado de forma válida
-- Criar arquivo novo: `electron-builder.release.server.yml`
-- Conteúdo: mesmo `publish` do release atual + `channel: server`.
-- Exemplo esperado:
-  - provider: github
-  - owner/repo via env
-  - releaseType: release
-  - vPrefixedTagName: true
-  - channel: server
+1. Ao conectar com o token, o servidor baixa os **dispositivos** da nuvem (`download-devices`)
+2. Cada dispositivo tem um `project_id` (ex: `8685513e-...`)
+3. A tabela `devices` no SQLite tem `FOREIGN KEY (project_id) REFERENCES projects(id)`
+4. Mas a tabela `projects` local ainda está **vazia** -- os projetos só são baixados depois, durante o `triggerSync`
+5. Resultado: SQLite rejeita o INSERT do device porque o `project_id` referenciado não existe
 
-3) Ajustar script de publish do Local Server
-- Arquivo: `package.json`
-- Script `build:local-server:publish` passa a usar:
-  - `electron-builder.server.yml` + `electron-builder.release.server.yml`
-- Desktop continua com `electron-builder.release.yml` (canal padrão `latest`).
+## Plano de correção
 
-4) Preservar lógica de updater no app Local Server
-- Arquivo: `electron/local-server-main.js`
-- Manter `autoUpdater.channel = 'server'` (já está correto, sem mudança adicional).
+**Arquivo: `electron/local-server-main.js`** (handler `server:set-agent-token`)
 
-5) Garantir pipeline sem regressão
-- Arquivo: `.github/workflows/desktop-release.yml`
-- Validar que a ordem permanece:
-  1. Local Server publish
-  2. Desktop publish
-- Sem mudança estrutural adicional, apenas confirmar consistência com os novos scripts.
+Antes de salvar os dispositivos no SQLite, baixar primeiro os projetos e empresas (respeitando a ordem relacional):
 
-6) Publicar versão limpa
-- Arquivo: `package.json`
-- Bump de versão para `1.2.2` (evita reaproveitar artefatos de versão com config quebrada).
+1. Após validar o token (heartbeat OK), baixar empresas via `agent-sync/download-companies`
+2. Baixar projetos via `agent-sync/download-projects`
+3. Upsert empresas e projetos no SQLite local
+4. Só então baixar e salvar os dispositivos (fluxo atual)
+5. Continuar com o resto do fluxo (rebind, sync)
 
-Validação após aplicar
-- Local (sem publicar): `npm run build:local-server` deve finalizar sem erro de schema.
-- CI release: assets esperados no GitHub Release da nova tag:
-  - `server.yml` (Local Server)
-  - `latest.yml` (Desktop)
-  - instaladores de ambos.
-- Teste funcional:
-  - Local Server v1.2.2 deve consultar `server.yml`.
-  - Desktop deve consultar `latest.yml`.
+Isso garante que quando o device é inserido com `project_id = X`, o projeto `X` já existe na tabela `projects` local.
 
-Observação importante de transição
-- Quem ainda está na v1.0.0 do Local Server precisa instalar manualmente a primeira versão corrigida (v1.2.2). Depois disso, o auto-update do Local Server passa a funcionar pelo canal `server`.
+## Detalhes da implementação
+
+No bloco entre a validação do heartbeat (linha ~206) e o download de devices (linha ~209), adicionar:
+
+```javascript
+// Download companies first (projects depend on them)
+const companiesResult = await callCloudFunction(
+  syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
+  'agent-sync/download-companies?since=1970-01-01T00:00:00Z', 'GET', null
+);
+if (Array.isArray(companiesResult.companies)) {
+  for (const company of companiesResult.companies) {
+    serverRuntime.db.upsertCompanyFromCloud(company);
+  }
+}
+
+// Download projects (devices depend on them via FK)
+const projectsResult = await callCloudFunction(
+  syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
+  'agent-sync/download-projects?since=1970-01-01T00:00:00Z', 'GET', null
+);
+if (Array.isArray(projectsResult.projects)) {
+  for (const project of projectsResult.projects) {
+    serverRuntime.db.upsertProjectFromCloud(project);
+  }
+}
+```
+
+Nenhuma alteração de schema ou tabela necessaria. A correção respeita a ordem relacional ja documentada na arquitetura: Empresas -> Projetos -> Dispositivos.
+
