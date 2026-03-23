@@ -6,8 +6,6 @@ directories:
   output: electron-dist
   buildResources: build
 
-generateUpdatesFilesForAllChannels: true
-
 files:
   - dist/**/*
   - electron/**/*
