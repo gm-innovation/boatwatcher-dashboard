@@ -1,56 +1,62 @@
 
 
-## Diagnóstico
+## Diagnóstico completo
 
-O erro "FOREIGN KEY constraint failed" ocorre durante o fluxo de `set-agent-token` (linha 226 de `local-server-main.js`). O problema:
+Existem **dois problemas** causando o erro `FOREIGN KEY constraint failed`:
 
-1. Ao conectar com o token, o servidor baixa os **dispositivos** da nuvem (`download-devices`)
-2. Cada dispositivo tem um `project_id` (ex: `8685513e-...`)
-3. A tabela `devices` no SQLite tem `FOREIGN KEY (project_id) REFERENCES projects(id)`
-4. Mas a tabela `projects` local ainda está **vazia** -- os projetos só são baixados depois, durante o `triggerSync`
-5. Resultado: SQLite rejeita o INSERT do device porque o `project_id` referenciado não existe
+### Problema 1: `upsertProjectFromCloud` usa `client_id` da nuvem diretamente
+
+Na linha 1375-1379 de `database.js`, `upsertProjectFromCloud` grava `data.client_id` (UUID da nuvem) diretamente na coluna `projects.client_id`. Porém essa coluna tem FK para `companies.id` (ID local). 
+
+A empresa é inserida com `id = uuidv4()` (local) e `cloud_id = data.id` (nuvem). Então quando o projeto tenta referenciar `client_id = UUID-da-nuvem`, esse ID não existe na coluna `companies.id` -- está em `companies.cloud_id`.
+
+Outras funções como `upsertUserCompanyFromCloud` e `upsertCompanyDocumentFromCloud` já fazem essa resolução corretamente (ex: `resolveLocalEntityId('companies', data.company_id)`), mas `upsertProjectFromCloud` não faz.
+
+### Problema 2: `upsertDeviceFromCloud` usa `project_id` da nuvem diretamente
+
+Na linha 1185, `data.project_id` da nuvem é gravado direto em `devices.project_id`, que tem FK para `projects.id`. Como o projeto é inserido com o ID da nuvem como `projects.id` (não gera UUID local como companies), isso **funciona** -- desde que o projeto já exista. Esse problema já foi resolvido na correção anterior (pré-sync de projetos).
+
+Porém, existe um caso edge: se `upsertProjectFromCloud` falhar por causa do Problema 1, os projetos nunca são inseridos, e os devices continuam falhando.
+
+### Resumo da cadeia de falha
+
+```text
+Companies inseridas com id=LOCAL, cloud_id=CLOUD_UUID
+    ↓
+Projects tentam INSERT com client_id=CLOUD_UUID → FK FAIL (companies.id não tem CLOUD_UUID)
+    ↓
+Projects nunca são inseridos
+    ↓
+Devices tentam INSERT com project_id=PROJECT_UUID → FK FAIL (projects.id não existe)
+```
 
 ## Plano de correção
 
-**Arquivo: `electron/local-server-main.js`** (handler `server:set-agent-token`)
+### Correção 1 — `upsertProjectFromCloud` em `electron/database.js`
 
-Antes de salvar os dispositivos no SQLite, baixar primeiro os projetos e empresas (respeitando a ordem relacional):
-
-1. Após validar o token (heartbeat OK), baixar empresas via `agent-sync/download-companies`
-2. Baixar projetos via `agent-sync/download-projects`
-3. Upsert empresas e projetos no SQLite local
-4. Só então baixar e salvar os dispositivos (fluxo atual)
-5. Continuar com o resto do fluxo (rebind, sync)
-
-Isso garante que quando o device é inserido com `project_id = X`, o projeto `X` já existe na tabela `projects` local.
-
-## Detalhes da implementação
-
-No bloco entre a validação do heartbeat (linha ~206) e o download de devices (linha ~209), adicionar:
+Resolver `client_id` para o ID local da empresa antes de gravar:
 
 ```javascript
-// Download companies first (projects depend on them)
-const companiesResult = await callCloudFunction(
-  syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
-  'agent-sync/download-companies?since=1970-01-01T00:00:00Z', 'GET', null
-);
-if (Array.isArray(companiesResult.companies)) {
-  for (const company of companiesResult.companies) {
-    serverRuntime.db.upsertCompanyFromCloud(company);
+upsertProjectFromCloud(data) {
+  const localClientId = resolveLocalEntityId('companies', data.client_id) || data.client_id;
+  const existing = db.prepare('SELECT id FROM projects WHERE id = ?').get(data.id);
+  if (existing) {
+    db.prepare(`UPDATE projects SET name = ?, client_id = ?, status = ?, location = ?, crew_size = ?, commander = ?, chief_engineer = ?, project_type = ?, armador = ?, start_date = ?, updated_at = datetime('now'), synced = 1 WHERE id = ?`)
+      .run(data.name, localClientId, data.status, data.location, data.crew_size, data.commander || null, data.chief_engineer || null, data.project_type || null, data.armador || null, data.start_date || null, data.id);
+  } else {
+    db.prepare(`INSERT INTO projects (id, name, client_id, status, location, crew_size, commander, chief_engineer, project_type, armador, start_date, synced) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
+      .run(data.id, data.name, localClientId, data.status, data.location, data.crew_size, data.commander || null, data.chief_engineer || null, data.project_type || null, data.armador || null, data.start_date || null);
   }
-}
-
-// Download projects (devices depend on them via FK)
-const projectsResult = await callCloudFunction(
-  syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
-  'agent-sync/download-projects?since=1970-01-01T00:00:00Z', 'GET', null
-);
-if (Array.isArray(projectsResult.projects)) {
-  for (const project of projectsResult.projects) {
-    serverRuntime.db.upsertProjectFromCloud(project);
-  }
-}
+},
 ```
 
-Nenhuma alteração de schema ou tabela necessaria. A correção respeita a ordem relacional ja documentada na arquitetura: Empresas -> Projetos -> Dispositivos.
+Isso é consistente com o padrão já usado em `upsertUserCompanyFromCloud` (linha 1385) e `upsertCompanyDocumentFromCloud` (linha 1402).
+
+### Correção 2 — Adicionar logs de erro no fluxo de token
+
+Em `electron/local-server-main.js`, envolver cada etapa de pré-sync com try/catch individual e logs detalhados, para que falhas futuras sejam diagnosticáveis sem ambiguidade.
+
+### Nenhuma alteração de schema necessária
+
+A correção é puramente lógica no mapeamento de IDs.
 
