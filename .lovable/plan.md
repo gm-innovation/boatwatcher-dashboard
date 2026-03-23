@@ -1,30 +1,23 @@
 
 
-## Correções para o Build do GitHub Actions
+## Correção: Tela Branca no Dock Check Desktop
 
-### Problema 1: Versão não foi bumpada
-O `package.json` ainda está com `"version": "0.0.0"`. Preciso alterar para `"1.1.0"`.
+### Causa Raiz
+O `package.json` declara `"type": "module"`, mas o `electron/main.js` usa `require()` (CommonJS). Quando o Electron empacotado tenta executar o processo principal, ele falha porque o Node.js interpreta o arquivo como ES Module — resultando na janela em branco.
 
-### Problema 2: Possível falha no `npm ci`
-O projeto usa `bun` como gerenciador principal, mas o workflow usa `npm ci`. Se o `package-lock.json` estiver dessincronizado, o `npm ci` falha instantaneamente — explicando os 28-42 segundos de execução.
+O build do **Local Server** funciona porque o `electron-builder.server.yml` já contém `extraMetadata: { type: commonjs }`. O build do **Desktop** (`electron-builder.yml`) não tem essa configuração.
 
-### Correções
+### Correção
 
-**1. `package.json`** — Bumpar versão para `1.1.0`
-```json
-"version": "1.1.0"
-```
+**Arquivo: `electron-builder.yml`** — Adicionar `extraMetadata` para injetar `type: commonjs` no `package.json` empacotado:
 
-**2. `.github/workflows/desktop-release.yml`** — Trocar `npm ci` por `npm install` para tolerância a lockfile desatualizado, ou regenerar o lockfile antes:
 ```yaml
-- name: Install dependencies
-  run: |
-    npm install --package-lock-only
-    npm ci
+extraMetadata:
+  type: commonjs
 ```
 
 ### Após o commit
-Você precisará re-criar a tag:
+Recriar a tag para disparar o build:
 ```powershell
 git pull
 git tag -d v1.1.0
@@ -33,6 +26,5 @@ git tag v1.1.0
 git push origin v1.1.0
 ```
 
-### Diagnóstico pendente
-Se possível, envie o screenshot dos logs do workflow falho — pode haver outro erro (ex: dependência nativa `better-sqlite3` falhando no build do Windows).
+O auto-updater do Desktop detectará a nova versão automaticamente.
 
