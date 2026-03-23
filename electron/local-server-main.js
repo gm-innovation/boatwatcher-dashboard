@@ -246,10 +246,16 @@ function registerIpcHandlers() {
       }
 
       // Download devices assigned to this agent
-      const devicesResult = await callCloudFunction(
-        syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
-        'agent-sync/download-devices', 'GET', null
-      );
+      let devicesResult;
+      try {
+        devicesResult = await callCloudFunction(
+          syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
+          'agent-sync/download-devices', 'GET', null
+        );
+      } catch (err) {
+        logToFile(`download-devices failed: ${err.message}`);
+        devicesResult = { devices: [] };
+      }
 
       // Save token
       serverRuntime.db.setSyncMeta?.('agent_token', token);
@@ -261,12 +267,20 @@ function registerIpcHandlers() {
         serverRuntime.db.setSyncMeta?.('project_name', devicesResult.agent.project_name || '');
       }
 
-      // Save devices to local SQLite
+      // Save devices to local SQLite with per-record error handling
+      let devicesSaved = 0;
+      let devicesFailed = 0;
       if (Array.isArray(devicesResult.devices)) {
         for (const device of devicesResult.devices) {
-          serverRuntime.db.upsertDeviceFromCloud?.(device);
+          try {
+            serverRuntime.db.upsertDeviceFromCloud?.(device);
+            devicesSaved++;
+          } catch (devErr) {
+            devicesFailed++;
+            logToFile(`Failed to upsert device ${device.id} (${device.name}, project_id=${device.project_id}): ${devErr.message}`);
+          }
         }
-        logToFile(`Saved ${devicesResult.devices.length} devices from cloud`);
+        logToFile(`Devices: ${devicesSaved} saved, ${devicesFailed} failed out of ${devicesResult.devices.length}`);
       }
 
       // Reload agent controller devices
@@ -289,9 +303,9 @@ function registerIpcHandlers() {
       // Trigger sync
       serverRuntime.syncEngine?.triggerSync?.();
 
-      return { success: true, devicesCount: devicesResult.devices?.length || 0 };
+      return { success: true, devicesCount: devicesSaved };
     } catch (err) {
-      logToFile(`set-agent-token error: ${err.message}`);
+      logToFile(`set-agent-token error: ${err.stack || err.message}`);
       return { error: err.message };
     }
   });

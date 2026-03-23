@@ -260,20 +260,27 @@ function initDatabase(userDataPath) {
     db.exec("ALTER TABLE devices ADD COLUMN api_credentials TEXT DEFAULT '{}'");
   }
 
-  const userCompanyColumns = new Set(db.prepare("PRAGMA table_info(user_companies)").all().map((column) => column.name));
-  if (!userCompanyColumns.has('updated_at')) db.exec("ALTER TABLE user_companies ADD COLUMN updated_at TEXT");
-  if (!userCompanyColumns.has('synced')) db.exec("ALTER TABLE user_companies ADD COLUMN synced INTEGER DEFAULT 0");
-  if (!userCompanyColumns.has('cloud_id')) db.exec("ALTER TABLE user_companies ADD COLUMN cloud_id TEXT");
+  // Ensure cloud_id columns exist on all sync-capable tables (handles older installs)
+  const ensureCloudIdColumns = [
+    { table: 'companies', extras: [] },
+    { table: 'projects', extras: [] },
+    { table: 'workers', extras: [] },
+    { table: 'user_companies', extras: ['updated_at TEXT', 'synced INTEGER DEFAULT 0'] },
+    { table: 'company_documents', extras: ['updated_at TEXT', 'synced INTEGER DEFAULT 0'] },
+    { table: 'worker_documents', extras: ['updated_at TEXT', 'synced INTEGER DEFAULT 0'] },
+  ];
 
-  const companyDocumentColumns = new Set(db.prepare("PRAGMA table_info(company_documents)").all().map((column) => column.name));
-  if (!companyDocumentColumns.has('updated_at')) db.exec("ALTER TABLE company_documents ADD COLUMN updated_at TEXT");
-  if (!companyDocumentColumns.has('synced')) db.exec("ALTER TABLE company_documents ADD COLUMN synced INTEGER DEFAULT 0");
-  if (!companyDocumentColumns.has('cloud_id')) db.exec("ALTER TABLE company_documents ADD COLUMN cloud_id TEXT");
-
-  const workerDocumentColumns = new Set(db.prepare("PRAGMA table_info(worker_documents)").all().map((column) => column.name));
-  if (!workerDocumentColumns.has('updated_at')) db.exec("ALTER TABLE worker_documents ADD COLUMN updated_at TEXT");
-  if (!workerDocumentColumns.has('synced')) db.exec("ALTER TABLE worker_documents ADD COLUMN synced INTEGER DEFAULT 0");
-  if (!workerDocumentColumns.has('cloud_id')) db.exec("ALTER TABLE worker_documents ADD COLUMN cloud_id TEXT");
+  for (const { table, extras } of ensureCloudIdColumns) {
+    const cols = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
+    for (const extraDef of extras) {
+      const colName = extraDef.split(' ')[0];
+      if (!cols.has(colName)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${extraDef}`);
+    }
+    if (!cols.has('cloud_id')) db.exec(`ALTER TABLE ${table} ADD COLUMN cloud_id TEXT`);
+    if (!cols.has('synced') && !extras.some((e) => e.startsWith('synced'))) {
+      if (!cols.has('synced')) db.exec(`ALTER TABLE ${table} ADD COLUMN synced INTEGER DEFAULT 0`);
+    }
+  }
 
   db.exec("UPDATE user_companies SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
   db.exec("UPDATE company_documents SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
@@ -1172,6 +1179,15 @@ function createDatabaseAPI(db, startCode) {
 
     upsertDeviceFromCloud(data) {
       if (!data.id) return;
+      // Validate project_id FK: if project doesn't exist locally, use null to avoid FK constraint failure
+      let safeProjectId = data.project_id || null;
+      if (safeProjectId) {
+        const projectExists = db.prepare('SELECT id FROM projects WHERE id = ?').get(safeProjectId);
+        if (!projectExists) {
+          console.warn(`[db] upsertDeviceFromCloud: project ${safeProjectId} not found locally, setting project_id=null for device ${data.id}`);
+          safeProjectId = null;
+        }
+      }
       const existing = db.prepare('SELECT id FROM devices WHERE id = ?').get(data.id);
       if (existing) {
         db.prepare(`
@@ -1182,7 +1198,7 @@ function createDatabaseAPI(db, startCode) {
         `).run(
           data.name, data.controlid_serial_number || null, data.controlid_ip_address || null,
           data.type || 'facial_reader', data.status || 'offline', data.location || null,
-          data.project_id || null, data.agent_id || null,
+          safeProjectId, data.agent_id || null,
           JSON.stringify(data.api_credentials || {}), JSON.stringify(data.configuration || {}),
           data.id
         );
@@ -1193,7 +1209,7 @@ function createDatabaseAPI(db, startCode) {
         `).run(
           data.id, data.name, data.controlid_serial_number || null, data.controlid_ip_address || null,
           data.type || 'facial_reader', data.status || 'offline', data.location || null,
-          data.project_id || null, data.agent_id || null,
+          safeProjectId, data.agent_id || null,
           JSON.stringify(data.api_credentials || {}), JSON.stringify(data.configuration || {})
         );
       }
@@ -1370,7 +1386,14 @@ function createDatabaseAPI(db, startCode) {
     },
 
     upsertProjectFromCloud(data) {
-      const localClientId = data.client_id ? (resolveLocalEntityId('companies', data.client_id) || data.client_id) : null;
+      // CRITICAL: resolve cloud client_id to local company id; use null if not found (never pass cloud UUID as FK)
+      let localClientId = null;
+      if (data.client_id) {
+        localClientId = resolveLocalEntityId('companies', data.client_id);
+        if (!localClientId) {
+          console.warn(`[db] upsertProjectFromCloud: company not found locally for cloud client_id=${data.client_id}, setting client_id=null for project ${data.id}`);
+        }
+      }
       const existing = db.prepare('SELECT id FROM projects WHERE id = ?').get(data.id);
       if (existing) {
         db.prepare(`UPDATE projects SET name = ?, client_id = ?, status = ?, location = ?, crew_size = ?, commander = ?, chief_engineer = ?, project_type = ?, armador = ?, start_date = ?, updated_at = datetime('now'), synced = 1 WHERE id = ?`)
@@ -1383,7 +1406,7 @@ function createDatabaseAPI(db, startCode) {
 
     upsertUserCompanyFromCloud(data) {
       const existing = db.prepare('SELECT id FROM user_companies WHERE cloud_id = ? OR user_id = ?').get(data.id, data.user_id);
-      const localCompanyId = resolveLocalEntityId('companies', data.company_id) || data.company_id;
+      const localCompanyId = resolveLocalEntityId('companies', data.company_id) || null;
       if (existing) {
         db.prepare(`
           UPDATE user_companies
@@ -1400,7 +1423,7 @@ function createDatabaseAPI(db, startCode) {
 
     upsertCompanyDocumentFromCloud(data) {
       const existing = db.prepare('SELECT id FROM company_documents WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
-      const localCompanyId = resolveLocalEntityId('companies', data.company_id) || data.company_id;
+      const localCompanyId = resolveLocalEntityId('companies', data.company_id) || null;
       if (existing) {
         db.prepare(`
           UPDATE company_documents
@@ -1417,7 +1440,7 @@ function createDatabaseAPI(db, startCode) {
 
     upsertWorkerDocumentFromCloud(data) {
       const existing = db.prepare('SELECT id FROM worker_documents WHERE cloud_id = ? OR id = ?').get(data.id, data.id);
-      const localWorkerId = resolveLocalEntityId('workers', data.worker_id) || data.worker_id;
+      const localWorkerId = resolveLocalEntityId('workers', data.worker_id) || null;
       if (existing) {
         db.prepare(`
           UPDATE worker_documents
