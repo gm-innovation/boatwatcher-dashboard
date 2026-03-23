@@ -161,19 +161,52 @@ serve(async (req) => {
       const projectId = await resolveBootstrapProjectId(supabase, user.id)
       const ipAddress = req.headers.get('x-forwarded-for') || 'unknown'
 
-      const { data: existingAgent, error: existingError } = await supabase
+      // 1. Try exact match by created_by + name
+      let existingAgent: { id: string; token: string } | null = null
+      const { data: exactMatch, error: exactError } = await supabase
         .from('local_agents')
         .select('id, token')
         .eq('created_by', user.id)
         .eq('name', stationName)
         .maybeSingle()
+      if (exactError) throw exactError
+      existingAgent = exactMatch
 
-      if (existingError) throw existingError
+      // 2. Fallback: find any agent by same user + same project (dedup)
+      if (!existingAgent && projectId) {
+        const { data: projectMatch, error: projectError } = await supabase
+          .from('local_agents')
+          .select('id, token')
+          .eq('created_by', user.id)
+          .eq('project_id', projectId)
+          .maybeSingle()
+        if (projectError) throw projectError
+        existingAgent = projectMatch
+      }
+
+      // 3. Fallback: find any agent by same user (avoid orphans)
+      if (!existingAgent) {
+        const { data: userMatch, error: userError } = await supabase
+          .from('local_agents')
+          .select('id, token')
+          .eq('created_by', user.id)
+          .order('last_seen_at', { ascending: false, nullsFirst: false })
+          .limit(1)
+          .maybeSingle()
+        if (userError) throw userError
+        existingAgent = userMatch
+      }
+
+      const rebindDevices = async (agentId: string, pId: string | null) => {
+        if (!pId) return
+        await supabase.from('devices').update({ agent_id: agentId }).eq('project_id', pId)
+      }
 
       if (existingAgent) {
         const { error: updateError } = await supabase
           .from('local_agents')
           .update({
+            name: stationName,
             project_id: projectId,
             status: 'online',
             sync_status: 'configuring',
@@ -184,6 +217,8 @@ serve(async (req) => {
           .eq('id', existingAgent.id)
 
         if (updateError) throw updateError
+
+        await rebindDevices(existingAgent.id, projectId)
 
         return new Response(JSON.stringify({ success: true, token: existingAgent.token, agentId: existingAgent.id, projectId }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -208,6 +243,8 @@ serve(async (req) => {
         .single()
 
       if (insertError) throw insertError
+
+      await rebindDevices(createdAgent.id, projectId)
 
       return new Response(JSON.stringify({ success: true, token: createdAgent.token, agentId: createdAgent.id, projectId }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
