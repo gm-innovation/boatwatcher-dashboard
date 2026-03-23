@@ -29,8 +29,6 @@ asarUnpack:
 
 npmRebuild: true
 
-channel: server
-
 win:
   target:
     - target: nsis
