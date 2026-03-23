@@ -73,14 +73,47 @@ jobs:
 
       - name: Verify Local Server update artifacts
         if: startsWith(github.ref, 'refs/tags/v')
-        shell: cmd
+        shell: bash
         run: |
-          echo Checking for server.yml in local-server-dist...
-          if exist local-server-dist\server.yml (
-            echo server.yml found
-            type local-server-dist\server.yml
-          ) else (
-            echo INFO: server.yml not in local-server-dist (uploaded directly to GitHub Release)
-            dir local-server-dist\*.yml 2>nul || echo No local .yml files (expected with --publish always)
-          )
-          exit /b 0
+          echo "--- Checking server.yml integrity ---"
+          # electron-builder uploads directly to GitHub Release, so server.yml may not be local
+          SERVER_YML=""
+          if [ -f "local-server-dist/server.yml" ]; then
+            SERVER_YML="local-server-dist/server.yml"
+          fi
+
+          if [ -z "$SERVER_YML" ]; then
+            echo "INFO: server.yml not found locally (uploaded directly to GitHub Release — expected with --publish always)"
+            echo "Skipping local integrity check."
+            exit 0
+          fi
+
+          echo "server.yml found at $SERVER_YML:"
+          cat "$SERVER_YML"
+
+          # Extract sha512 from server.yml
+          YML_SHA=$(grep -oP 'sha512:\s*\K\S+' "$SERVER_YML" | head -1)
+          if [ -z "$YML_SHA" ]; then
+            echo "WARNING: Could not extract sha512 from server.yml"
+            exit 0
+          fi
+
+          # Find the .exe referenced in server.yml
+          EXE_NAME=$(grep -oP 'url:\s*\K\S+' "$SERVER_YML" | head -1)
+          EXE_PATH="local-server-dist/$EXE_NAME"
+          if [ ! -f "$EXE_PATH" ]; then
+            echo "INFO: $EXE_NAME not found locally (uploaded directly). Skipping hash check."
+            exit 0
+          fi
+
+          # Compute actual sha512 of the .exe (base64-encoded, matching electron-updater format)
+          ACTUAL_SHA=$(openssl dgst -sha512 -binary "$EXE_PATH" | openssl base64 -A)
+          echo "server.yml sha512: $YML_SHA"
+          echo "Actual .exe sha512: $ACTUAL_SHA"
+
+          if [ "$YML_SHA" != "$ACTUAL_SHA" ]; then
+            echo "::error::SHA512 MISMATCH! server.yml hash does not match the .exe binary. Release artifacts may be corrupted."
+            exit 1
+          fi
+
+          echo "✅ SHA512 integrity check passed."
