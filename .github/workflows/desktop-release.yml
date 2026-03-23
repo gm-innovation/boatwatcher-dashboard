@@ -26,6 +26,24 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Validate version alignment
+        shell: bash
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "package.json version: $PKG_VERSION"
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG_NAME="${{ github.ref_name }}"
+            EXPECTED_TAG="v${PKG_VERSION}"
+            echo "Git tag: $TAG_NAME | Expected: $EXPECTED_TAG"
+            if [[ "$TAG_NAME" != "$EXPECTED_TAG" ]]; then
+              echo "::error::Version mismatch! Tag '$TAG_NAME' does not match package.json version '$PKG_VERSION'. Update package.json before tagging."
+              exit 1
+            fi
+            echo "✅ Tag and package.json version are aligned."
+          else
+            echo "⚠️ Not a tag push (trigger: ${{ github.event_name }}). Publish steps will be skipped."
+          fi
+
       - name: Install dependencies
         run: |
           npm install --package-lock-only
@@ -38,20 +56,31 @@ jobs:
         shell: cmd
 
       - name: Build and publish Desktop release
+        if: startsWith(github.ref, 'refs/tags/v')
         run: npm run build:electron:publish
 
+      - name: Build Desktop (dry-run, no publish)
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        run: npm run build:electron
+
       - name: Build and publish Local Server release
+        if: startsWith(github.ref, 'refs/tags/v')
         run: npm run build:local-server:publish
 
+      - name: Build Local Server (dry-run, no publish)
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        run: npm run build:local-server
+
       - name: Verify Local Server update artifacts
-        continue-on-error: true
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: cmd
         run: |
-          echo "Checking for server.yml in local-server-dist..."
+          echo Checking for server.yml in local-server-dist...
           if exist local-server-dist\server.yml (
-            echo "server.yml found"
+            echo server.yml found
             type local-server-dist\server.yml
           ) else (
-            echo "INFO: server.yml not in local-server-dist (uploaded directly to GitHub Release)"
-            dir local-server-dist\*.yml 2>nul || echo "No local .yml files (expected with --publish always)"
+            echo INFO: server.yml not in local-server-dist (uploaded directly to GitHub Release)
+            dir local-server-dist\*.yml 2>nul || echo No local .yml files (expected with --publish always)
           )
-        shell: cmd
+          exit /b 0
