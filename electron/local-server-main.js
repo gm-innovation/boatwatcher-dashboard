@@ -206,27 +206,43 @@ function registerIpcHandlers() {
       }
 
       // Download companies first (projects depend on them via FK)
-      const companiesResult = await callCloudFunction(
-        syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
-        'agent-sync/download-companies?since=1970-01-01T00:00:00Z', 'GET', null
-      );
-      if (Array.isArray(companiesResult.companies)) {
-        for (const company of companiesResult.companies) {
-          serverRuntime.db.upsertCompanyFromCloud?.(company);
+      try {
+        const companiesResult = await callCloudFunction(
+          syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
+          'agent-sync/download-companies?since=1970-01-01T00:00:00Z', 'GET', null
+        );
+        if (Array.isArray(companiesResult.companies)) {
+          for (const company of companiesResult.companies) {
+            try {
+              serverRuntime.db.upsertCompanyFromCloud?.(company);
+            } catch (compErr) {
+              logToFile(`Failed to upsert company ${company.id} (${company.name}): ${compErr.message}`);
+            }
+          }
+          logToFile(`Pre-synced ${companiesResult.companies.length} companies`);
         }
-        logToFile(`Pre-synced ${companiesResult.companies.length} companies`);
+      } catch (err) {
+        logToFile(`download-companies failed: ${err.message}`);
       }
 
       // Download projects (devices depend on them via FK)
-      const projectsResult = await callCloudFunction(
-        syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
-        'agent-sync/download-projects?since=1970-01-01T00:00:00Z', 'GET', null
-      );
-      if (Array.isArray(projectsResult.projects)) {
-        for (const project of projectsResult.projects) {
-          serverRuntime.db.upsertProjectFromCloud?.(project);
+      try {
+        const projectsResult = await callCloudFunction(
+          syncEngine.cloudUrl, syncEngine.cloudAnonKey, token,
+          'agent-sync/download-projects?since=1970-01-01T00:00:00Z', 'GET', null
+        );
+        if (Array.isArray(projectsResult.projects)) {
+          for (const project of projectsResult.projects) {
+            try {
+              serverRuntime.db.upsertProjectFromCloud?.(project);
+            } catch (projErr) {
+              logToFile(`Failed to upsert project ${project.id} (${project.name}, client_id=${project.client_id}): ${projErr.message}`);
+            }
+          }
+          logToFile(`Pre-synced ${projectsResult.projects.length} projects`);
         }
-        logToFile(`Pre-synced ${projectsResult.projects.length} projects`);
+      } catch (err) {
+        logToFile(`download-projects failed: ${err.message}`);
       }
 
       // Download devices assigned to this agent

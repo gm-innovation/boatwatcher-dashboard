@@ -1370,13 +1370,14 @@ function createDatabaseAPI(db, startCode) {
     },
 
     upsertProjectFromCloud(data) {
+      const localClientId = data.client_id ? (resolveLocalEntityId('companies', data.client_id) || data.client_id) : null;
       const existing = db.prepare('SELECT id FROM projects WHERE id = ?').get(data.id);
       if (existing) {
-        db.prepare(`UPDATE projects SET name = ?, client_id = ?, status = ?, location = ?, crew_size = ?, updated_at = datetime('now'), synced = 1 WHERE id = ?`)
-          .run(data.name, data.client_id, data.status, data.location, data.crew_size, data.id);
+        db.prepare(`UPDATE projects SET name = ?, client_id = ?, status = ?, location = ?, crew_size = ?, commander = ?, chief_engineer = ?, project_type = ?, armador = ?, start_date = ?, updated_at = datetime('now'), synced = 1 WHERE id = ?`)
+          .run(data.name, localClientId, data.status, data.location, data.crew_size, data.commander || null, data.chief_engineer || null, data.project_type || null, data.armador || null, data.start_date || null, data.id);
       } else {
-        db.prepare(`INSERT INTO projects (id, name, client_id, status, location, crew_size, synced) VALUES (?, ?, ?, ?, ?, ?, 1)`)
-          .run(data.id, data.name, data.client_id, data.status, data.location, data.crew_size);
+        db.prepare(`INSERT INTO projects (id, name, client_id, status, location, crew_size, commander, chief_engineer, project_type, armador, start_date, synced) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
+          .run(data.id, data.name, localClientId, data.status, data.location, data.crew_size, data.commander || null, data.chief_engineer || null, data.project_type || null, data.armador || null, data.start_date || null);
       }
     },
 
