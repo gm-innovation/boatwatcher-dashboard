@@ -1,47 +1,61 @@
 
 
-## Diagnóstico dos 2 Problemas
+## Diagnóstico: Local Server .exe ausente do release
 
-### Problema 1: Dispositivos desapareceram do Servidor Local
-O dashboard mostra sync online e o agente conectado, mas "Nenhum dispositivo configurado". A nuvem tem o dispositivo com `agent_id` correto. Causas prováveis:
-- O Servidor Local está rodando **v1.0.0** (visível no print de atualização), ou seja, o código atualizado com as correções de FK e sync resiliente **nunca chegou** ao servidor em produção.
-- Se houve reset do banco SQLite local (reinstalação, limpeza de dados), os dispositivos se perderam e a versão antiga do sync pode não estar re-baixando corretamente.
-- Mesmo que o sync rode, se o `upsertDeviceFromCloud` da versão antiga falhar silenciosamente (ex: FK de `project_id`), o dispositivo não persiste.
+O release v1.2.7 contém:
+- Desktop exe (109 MB) -- OK
+- latest.yml -- OK  
+- server.yml (365 bytes) -- metadata uploaded
+- **DockCheck-Local-Server-Setup-1.2.7.exe -- AUSENTE**
 
-### Problema 2: sha512 checksum mismatch na atualização
-O `server.yml` publicado no GitHub Release contém um hash sha512, mas o `.exe` baixado pelo auto-updater tem hash diferente. Isso acontece quando:
-- O pipeline foi executado múltiplas vezes e os artefatos ficaram "cruzados" (`.yml` de um build + `.exe` de outro).
-- Releases antigos com artefatos parciais poluíram o release target.
+O `server.yml` foi carregado, mas o `.exe` não. Isso significa que o electron-builder iniciou o processo de publish (criou o yml), mas o empacotamento NSIS do Local Server falhou silenciosamente ou o upload do arquivo grande expirou. O CI mostra "Success" porque o step não retornou exit code != 0.
 
----
+## Causa raiz provável
 
-## Plano de Correção
+O Local Server depende de `better-sqlite3` (módulo nativo C++). O `npmRebuild: true` no `electron-builder.server.yml` tenta recompilar esse módulo para Electron, mas pode falhar silenciosamente no Windows se as ferramentas de compilação (Visual Studio Build Tools, Python) não estiverem configuradas corretamente no runner.
 
-### 1) Forçar rebuild limpo do release (corrige checksum)
-- **Ação manual no GitHub**: Deletar completamente o release `v1.2.7` (incluindo a tag).
-- **Puxar o código atualizado** e criar tag nova:
-```bash
-git pull origin main
-git tag v1.2.7
-git push origin v1.2.7
-```
-- O pipeline vai rodar do zero, gerando Desktop `.exe` + `latest.yml` e Local Server `.exe` + `server.yml` **do mesmo build**, garantindo que os checksums alinhem.
+## Plano de correção
 
-### 2) Adicionar verificação de integridade no CI
+### 1) Adicionar verificação obrigatória pós-build do Local Server
 Arquivo: `.github/workflows/desktop-release.yml`
-- Após a publicação do Local Server, adicionar step que lê o `server.yml` gerado, extrai o sha512, e compara com o sha512 real do `.exe` local. Se não bater, falhar o build antes de o release ficar público com dados corrompidos.
 
-### 3) Garantir que o sync baixe dispositivos mesmo em v1.0.0 (fallback)
-O Servidor Local instalado está em v1.0.0 e não consegue atualizar. Até a atualização funcionar, o operador pode adicionar manualmente o dispositivo pelo botão "+ Adicionar Dispositivo" no dashboard. Porém, a correção definitiva é garantir que a atualização automática funcione (item 1 acima).
+Após o step "Build and publish Local Server release", adicionar um step **obrigatório** (sem `continue-on-error`) que:
+- Verifica se `local-server-dist/DockCheck-Local-Server-Setup-*.exe` existe fisicamente
+- Se não existir, falha o build com mensagem clara
+- Isso impede releases incompletos (com `server.yml` mas sem `.exe`)
 
-### 4) Adicionar fallback de atualização manual com URL direta
-Arquivo: `electron/server-ui.html`
-- Na seção de ATUALIZAÇÃO, quando houver erro de checksum ou 404, exibir link direto para download da versão no GitHub Releases (ex: `https://github.com/{owner}/{repo}/releases/latest`), para que o operador possa baixar e reinstalar manualmente enquanto o auto-update não funciona.
+### 2) Instalar ferramentas de compilação nativa no CI
+Arquivo: `.github/workflows/desktop-release.yml`
 
----
+Antes do `npm ci`, adicionar step para garantir Visual Studio Build Tools via `npm config set msvs_version` ou usar `windows-latest` que já vem com ferramentas. Alternativamente, adicionar:
+```yaml
+- name: Setup native build tools
+  run: npm install -g node-gyp windows-build-tools
+```
+Ou forçar rebuild do `better-sqlite3` antes do electron-builder:
+```yaml
+- name: Rebuild native modules for Electron
+  run: npx electron-rebuild -m . -w better-sqlite3
+```
 
-## Resumo de arquivos
-- `.github/workflows/desktop-release.yml` — step de verificação de integridade sha512
-- `electron/server-ui.html` — link de fallback para download manual na seção de atualização
-- GitHub: deletar release `v1.2.7` e recriar tag para build limpo
+### 3) Separar build e upload para diagnóstico
+Em vez de `--publish always` (que mistura build + upload), separar em dois passos:
+- Build: `npm run build:local-server` (sem publish, gera .exe local)
+- Verificar: confirmar que `.exe` existe e tem tamanho razoável (>10MB)
+- Upload: fazer upload do `.exe` manualmente via `gh release upload` ou via `actions/upload-release-asset`
+
+Isso dá visibilidade sobre onde exatamente a falha ocorre (build vs upload).
+
+### 4) Corrigir artifactName inconsistente
+O Desktop gera `dock-check-desktop-Setup-...` em vez de `DockCheck-Desktop-Setup-...`. Verificar se electron-builder está usando o `name` do `package.json` em vez do `artifactName`. Ajustar para consistência.
+
+## Ação imediata recomendada
+
+Antes de implementar as correções no CI, o operador pode instalar manualmente:
+1. Ir ao Actions > build #13 > step "Build and publish Local Server release"
+2. Verificar nos logs se o `.exe` foi realmente gerado ou se houve erro de compilação do `better-sqlite3`
+3. Se o `.exe` existe no output, o problema é no upload e pode ser resolvido com re-run
+
+## Arquivos afetados
+- `.github/workflows/desktop-release.yml` (verificação pós-build, rebuild nativo, separação build/upload)
 
