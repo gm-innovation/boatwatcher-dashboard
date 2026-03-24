@@ -1,52 +1,64 @@
 
 
-## Correção: conflito entre `gh` CLI e `electron-builder` na variável `GH_REPO`
+## Testes de Comunicação Inter-Camadas no DiagnosticsPanel
 
-### Problema identificado
+### Objetivo
+Adicionar uma nova seção ao DiagnosticsPanel que valide a cadeia completa: **Web/Desktop → Cloud → Local Server**, permitindo identificar exatamente onde a comunicação falha.
 
-Na v1.2.11, corrigimos o `gh` CLI mudando `GH_REPO` de `github.event.repository.name` para `github.repository`. Isso resolveu o `gh` mas **quebrou o electron-builder**.
+### Fase 1: Comunicação entre sistemas (Web ↔ Cloud ↔ Local Server)
 
-O `gh` CLI espera `OWNER/REPO` (ex: `gm-innovation/boatwatcher-dashboard`).
-O electron-builder espera apenas o nome do repo (ex: `boatwatcher-dashboard`).
+Nova seção "Conectividade Inter-Camadas" no DiagnosticsPanel com 4 testes:
 
-Ambos leem a mesma env var `GH_REPO`, e os formatos são incompatíveis.
+**1. Agent Heartbeat (Cloud → Local Server)**
+- Consulta `local_agents` para verificar `last_seen_at` do agente mais recente do projeto
+- Verde: < 2 min | Amarelo: < 10 min | Vermelho: > 10 min ou inexistente
+- Confirma que o Local Server está reportando heartbeats à nuvem
 
-Os arquivos `electron-builder.release.yml` e `electron-builder.release.server.yml` usam `${env.GH_REPO}` no campo `repo:`, que agora recebe `gm-innovation/boatwatcher-dashboard` — valor inválido para electron-builder.
+**2. Agent Sync Endpoint (Cloud responde ao Local Server)**
+- Invoca `agent-sync/download-devices` via `supabase.functions.invoke` com o token do agente ativo (lido de `local_agents`)
+- Valida que a cloud consegue servir dados ao servidor local
+- Mostra quantidade de dispositivos retornados
 
-### Correção
+**3. Local Server Health (Desktop only)**
+- Chama `localHealth.check()` + `localSync.getStatus()`
+- Mostra: modo (cloud-sync/local-only), online/offline, último sync, pendências, configurado/não configurado
 
-Criar uma variável separada para cada ferramenta:
+**4. Roundtrip Completo (Web → Cloud → DB)**
+- Já existe parcialmente (DB check + auth). Será agrupado visualmente nesta seção
 
-**`.github/workflows/desktop-release.yml`** — adicionar nova env var:
-```yaml
-env:
-  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  GH_OWNER: ${{ github.repository_owner }}
-  GH_REPO: ${{ github.repository }}                    # OWNER/REPO → para gh CLI
-  GH_REPO_NAME: ${{ github.event.repository.name }}    # só nome → para electron-builder
-  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+### Alterações técnicas
+
+**Arquivo:** `src/components/admin/DiagnosticsPanel.tsx`
+
+- Adicionar novo card entre o card de Edge Functions e o Summary Cards (linha ~831)
+- 4 testes com estado individual (`useState` para cada resultado)
+- Botão "Testar Tudo" que executa todos os testes em sequência
+- Cada teste tem botão individual e mostra resultado em Badge (OK/Atenção/Erro) com detalhes
+
+Lógica principal:
+```text
+// Teste 1: Agent Heartbeat
+const { data: agents } = await supabase
+  .from('local_agents')
+  .select('id, name, token, last_seen_at, status, sync_status')
+  .eq('project_id', selectedProjectId)
+  .order('last_seen_at', { ascending: false })
+  .limit(1)
+
+// Teste 2: Agent Sync Endpoint
+const { data, error } = await supabase.functions.invoke('agent-sync', {
+  body: {},
+  headers: { 'x-agent-token': agent.token }
+})
+// Invoca o path /download-devices com o token do agente
+
+// Teste 3: Local Server (Desktop only)
+const health = await localHealth.check()
+const syncStatus = await localSync.getStatus()
 ```
 
-**`electron-builder.release.yml`** — usar a nova variável:
-```yaml
-publish:
-  provider: github
-  owner: ${env.GH_OWNER}
-  repo: ${env.GH_REPO_NAME}    # era GH_REPO
-```
-
-**`electron-builder.release.server.yml`** — mesma alteração:
-```yaml
-publish:
-  provider: github
-  owner: ${env.GH_OWNER}
-  repo: ${env.GH_REPO_NAME}    # era GH_REPO
-```
-
-**`package.json`** — bump para `1.2.13` para ciclo limpo.
-
-### Resultado esperado
-- `electron-builder --publish always` usa `GH_REPO_NAME` (só o nome) → publica Desktop corretamente
-- `gh release upload` usa `GH_REPO` (OWNER/REPO) → faz upload do Local Server corretamente
-- Todos os artefatos (Desktop + Local Server) publicados na release `v1.2.13`
+### O que NÃO muda
+- Testes existentes (DB, auth, storage, edge functions) permanecem inalterados
+- ConnectivityDashboard permanece como está (foco em status de dispositivos/agentes)
+- Nenhuma alteração em edge functions ou tabelas
 
