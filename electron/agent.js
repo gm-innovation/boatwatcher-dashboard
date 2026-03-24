@@ -37,6 +37,15 @@ class AgentController {
     };
   }
 
+  getDeviceConnectivityReport() {
+    return this.devices
+      .filter(d => d.controlid_serial_number)
+      .map(d => ({
+        serial_number: d.controlid_serial_number,
+        online: this.deviceConnectivity.get(d.controlid_serial_number)?.online ?? false,
+      }));
+  }
+
   async start() {
     if (this.running) return;
     this.running = true;
