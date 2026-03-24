@@ -1,7 +1,7 @@
 publish:
   provider: github
   owner: ${env.GH_OWNER}
-  repo: ${env.GH_REPO}
+  repo: ${env.GH_REPO_NAME}
   releaseType: release
   vPrefixedTagName: true
   channel: server
