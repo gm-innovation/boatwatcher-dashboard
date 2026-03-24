@@ -830,6 +830,14 @@ export const DiagnosticsPanel = () => {
         </CardContent>
       </Card>
 
+      {/* Inter-Layer Connectivity Tests */}
+      <InterLayerConnectivityCard
+        isLocalRuntime={isLocalRuntime}
+        isDesktopFallback={isDesktopFallback}
+        runtimeProfile={runtimeProfile}
+        getStatusBadge={getStatusBadge}
+      />
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
