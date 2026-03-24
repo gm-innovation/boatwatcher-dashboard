@@ -275,7 +275,7 @@ export const InterLayerConnectivityCard = ({
       id: 'heartbeat',
       label: 'Cloud → Agent Heartbeat',
       description: 'Verifica se o Local Server reportou heartbeat recente',
-      icon: <Heartbeat className="h-4 w-4" />,
+      icon: <Activity className="h-4 w-4" />,
       result: heartbeatResult,
       action: testHeartbeat,
     },
