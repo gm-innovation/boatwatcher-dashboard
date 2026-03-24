@@ -49,12 +49,26 @@ jobs:
           npm install --package-lock-only
           npm ci
 
+      - name: Setup native build tools
+        shell: cmd
+        run: |
+          npm config set msvs_version 2022
+          npx node-gyp install
+
+      - name: Rebuild better-sqlite3 for Electron
+        shell: bash
+        run: |
+          ELECTRON_VER=$(node -p "require('electron/package.json').version")
+          echo "Rebuilding better-sqlite3 for Electron $ELECTRON_VER"
+          npx electron-rebuild -f -w better-sqlite3 -v "$ELECTRON_VER"
+
       - name: Prepare build assets
         run: |
           mkdir build
           copy public\favicon-512.png build\icon.png
         shell: cmd
 
+      # ── Desktop ──────────────────────────────────────────────
       - name: Build and publish Desktop release
         if: startsWith(github.ref, 'refs/tags/v')
         run: npm run build:electron:publish
@@ -63,20 +77,39 @@ jobs:
         if: "!startsWith(github.ref, 'refs/tags/v')"
         run: npm run build:electron
 
-      - name: Build and publish Local Server release
+      # ── Local Server ─────────────────────────────────────────
+      - name: Build Local Server (package only)
+        run: npm run build:local-server
+
+      - name: Verify Local Server executable exists
+        shell: bash
+        run: |
+          echo "--- Checking for Local Server installer ---"
+          EXE=$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | head -1)
+          if [ -z "$EXE" ]; then
+            echo "::error::Local Server .exe was NOT generated! The NSIS packaging likely failed."
+            echo "Contents of local-server-dist/:"
+            ls -la local-server-dist/ 2>/dev/null || echo "(directory does not exist)"
+            exit 1
+          fi
+          SIZE=$(stat --printf='%s' "$EXE" 2>/dev/null || stat -f%z "$EXE" 2>/dev/null || echo "0")
+          SIZE_MB=$((SIZE / 1048576))
+          echo "✅ Found: $EXE ($SIZE_MB MB)"
+          if [ "$SIZE_MB" -lt 10 ]; then
+            echo "::error::Local Server .exe is suspiciously small ($SIZE_MB MB). Build may be incomplete."
+            exit 1
+          fi
+          echo "✅ Size check passed."
+
+      - name: Publish Local Server to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         run: npm run build:local-server:publish
-
-      - name: Build Local Server (dry-run, no publish)
-        if: "!startsWith(github.ref, 'refs/tags/v')"
-        run: npm run build:local-server
 
       - name: Verify Local Server update artifacts
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: |
           echo "--- Checking server.yml integrity ---"
-          # electron-builder uploads directly to GitHub Release, so server.yml may not be local
           SERVER_YML=""
           if [ -f "local-server-dist/server.yml" ]; then
             SERVER_YML="local-server-dist/server.yml"
@@ -91,14 +124,12 @@ jobs:
           echo "server.yml found at $SERVER_YML:"
           cat "$SERVER_YML"
 
-          # Extract sha512 from server.yml
           YML_SHA=$(grep -oP 'sha512:\s*\K\S+' "$SERVER_YML" | head -1)
           if [ -z "$YML_SHA" ]; then
             echo "WARNING: Could not extract sha512 from server.yml"
             exit 0
           fi
 
-          # Find the .exe referenced in server.yml
           EXE_NAME=$(grep -oP 'url:\s*\K\S+' "$SERVER_YML" | head -1)
           EXE_PATH="local-server-dist/$EXE_NAME"
           if [ ! -f "$EXE_PATH" ]; then
@@ -106,13 +137,12 @@ jobs:
             exit 0
           fi
 
-          # Compute actual sha512 of the .exe (base64-encoded, matching electron-updater format)
           ACTUAL_SHA=$(openssl dgst -sha512 -binary "$EXE_PATH" | openssl base64 -A)
           echo "server.yml sha512: $YML_SHA"
           echo "Actual .exe sha512: $ACTUAL_SHA"
 
           if [ "$YML_SHA" != "$ACTUAL_SHA" ]; then
-            echo "::error::SHA512 MISMATCH! server.yml hash does not match the .exe binary. Release artifacts may be corrupted."
+            echo "::error::SHA512 MISMATCH! server.yml hash does not match the .exe binary."
             exit 1
           fi
 

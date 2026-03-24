@@ -28,6 +28,7 @@
     "local-server:uninstall": "powershell -ExecutionPolicy Bypass -File scripts/uninstall-local-server.ps1"
   },
   "dependencies": {
+    "@electron/rebuild": "^4.0.3",
     "@hookform/resolvers": "^3.9.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-alert-dialog": "^1.1.1",
