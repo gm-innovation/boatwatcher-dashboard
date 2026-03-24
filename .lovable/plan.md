@@ -1,61 +1,52 @@
 
+Objetivo: parar de reaproveitar um release “antigo” e tornar o pipeline à prova de artefato faltando para o Local Server.
 
-## Diagnóstico: Local Server .exe ausente do release
+1) Diagnóstico consolidado (o que está acontecendo)
+- Você está certa: o que apareceu é o release antigo da `v1.2.7` (mesma tag), não um ciclo limpo com novo conteúdo.
+- Recriar release com a mesma tag gera confusão de estado (tag/release/artefatos), e pode não refletir o commit esperado.
+- Hoje o CI ainda empacota o Local Server duas vezes (uma para validar, outra para publicar), então ainda existe janela para publicar metadado sem `.exe`.
+- O link de fallback de “Baixar manualmente” está hardcoded para repositório errado (`nickdfrancis/...`), o que piora a recuperação.
 
-O release v1.2.7 contém:
-- Desktop exe (109 MB) -- OK
-- latest.yml -- OK  
-- server.yml (365 bytes) -- metadata uploaded
-- **DockCheck-Local-Server-Setup-1.2.7.exe -- AUSENTE**
+2) Implementação proposta (código)
+- `.github/workflows/desktop-release.yml`
+  - Trocar fluxo do Local Server para **build único + upload manual**:
+    - Build local server com config de canal `server`, mas sem publish.
+    - Verificar obrigatoriamente:
+      - `.exe` existe
+      - tamanho mínimo (>10MB)
+      - `server.yml` existe
+      - `sha512` do `server.yml` bate com o `.exe`
+    - Upload explícito para a release da tag via `gh release upload --clobber`:
+      - `DockCheck-Local-Server-Setup-*.exe`
+      - `.exe.blockmap` (se existir)
+      - `server.yml`
+  - Manter falha bloqueante se qualquer validação falhar.
 
-O `server.yml` foi carregado, mas o `.exe` não. Isso significa que o electron-builder iniciou o processo de publish (criou o yml), mas o empacotamento NSIS do Local Server falhou silenciosamente ou o upload do arquivo grande expirou. O CI mostra "Success" porque o step não retornou exit code != 0.
+- `package.json`
+  - Adicionar script de CI para build único do Local Server com channel config e sem publicar (ex.: `build:local-server:ci`).
+  - Workflow passa a usar esse script, não `build:local-server:publish`.
 
-## Causa raiz provável
+- `electron/local-server-main.js` + `electron/server-ui.html`
+  - Remover URL hardcoded de download manual.
+  - Enviar/usar `manualDownloadUrl` dinâmico (derivado do repositório configurado), para abrir o release correto em erro 404/checksum.
 
-O Local Server depende de `better-sqlite3` (módulo nativo C++). O `npmRebuild: true` no `electron-builder.server.yml` tenta recompilar esse módulo para Electron, mas pode falhar silenciosamente no Windows se as ferramentas de compilação (Visual Studio Build Tools, Python) não estiverem configuradas corretamente no runner.
+3) Estratégia de release (operacional, para encerrar o loop)
+- Não reaproveitar mais `v1.2.7`.
+- Publicar **`v1.2.8`** (version bump + tag nova), para garantir trilha limpa e evitar colisão com artefatos antigos.
+- Critério de pronto da release:
+  - Desktop: `.exe`, `.blockmap`, `latest.yml`
+  - Local Server: `.exe`, `server.yml` (e `.blockmap` se gerado)
 
-## Plano de correção
+4) Validação final (fim-a-fim)
+- CI deve falhar se Local Server `.exe` não for publicado/consistente.
+- No GitHub Release `v1.2.8`, confirmar presença dos artefatos.
+- Em máquina com Local Server antigo, testar:
+  - “Verificar atualização”
+  - fallback “Baixar manualmente” abrindo o repo correto
+  - instalação manual atualizando para a versão nova
+  - dispositivos voltando após sync.
 
-### 1) Adicionar verificação obrigatória pós-build do Local Server
-Arquivo: `.github/workflows/desktop-release.yml`
-
-Após o step "Build and publish Local Server release", adicionar um step **obrigatório** (sem `continue-on-error`) que:
-- Verifica se `local-server-dist/DockCheck-Local-Server-Setup-*.exe` existe fisicamente
-- Se não existir, falha o build com mensagem clara
-- Isso impede releases incompletos (com `server.yml` mas sem `.exe`)
-
-### 2) Instalar ferramentas de compilação nativa no CI
-Arquivo: `.github/workflows/desktop-release.yml`
-
-Antes do `npm ci`, adicionar step para garantir Visual Studio Build Tools via `npm config set msvs_version` ou usar `windows-latest` que já vem com ferramentas. Alternativamente, adicionar:
-```yaml
-- name: Setup native build tools
-  run: npm install -g node-gyp windows-build-tools
-```
-Ou forçar rebuild do `better-sqlite3` antes do electron-builder:
-```yaml
-- name: Rebuild native modules for Electron
-  run: npx electron-rebuild -m . -w better-sqlite3
-```
-
-### 3) Separar build e upload para diagnóstico
-Em vez de `--publish always` (que mistura build + upload), separar em dois passos:
-- Build: `npm run build:local-server` (sem publish, gera .exe local)
-- Verificar: confirmar que `.exe` existe e tem tamanho razoável (>10MB)
-- Upload: fazer upload do `.exe` manualmente via `gh release upload` ou via `actions/upload-release-asset`
-
-Isso dá visibilidade sobre onde exatamente a falha ocorre (build vs upload).
-
-### 4) Corrigir artifactName inconsistente
-O Desktop gera `dock-check-desktop-Setup-...` em vez de `DockCheck-Desktop-Setup-...`. Verificar se electron-builder está usando o `name` do `package.json` em vez do `artifactName`. Ajustar para consistência.
-
-## Ação imediata recomendada
-
-Antes de implementar as correções no CI, o operador pode instalar manualmente:
-1. Ir ao Actions > build #13 > step "Build and publish Local Server release"
-2. Verificar nos logs se o `.exe` foi realmente gerado ou se houve erro de compilação do `better-sqlite3`
-3. Se o `.exe` existe no output, o problema é no upload e pode ser resolvido com re-run
-
-## Arquivos afetados
-- `.github/workflows/desktop-release.yml` (verificação pós-build, rebuild nativo, separação build/upload)
-
+Detalhes técnicos (resumo)
+- Raiz do problema: reutilização da mesma tag + fluxo de publish que recompila.
+- Correção estrutural: “build once, verify once, upload those exact artifacts”.
+- Benefício: elimina mismatch entre `server.yml` e binário, e evita release “verde” sem `.exe`.
