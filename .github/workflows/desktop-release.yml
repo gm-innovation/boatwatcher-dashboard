@@ -20,6 +20,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Diagnostic - Verify workflow version
+        shell: bash
+        run: |
+          echo "=== CI Fingerprint ==="
+          echo "SHA: ${{ github.sha }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Run attempt: ${{ github.run_attempt }}"
+          echo "--- Setup native build tools content ---"
+          grep -A 3 "Setup native build tools" .github/workflows/desktop-release.yml || echo "Step not found"
+          echo "--- Checking for deprecated msvs_version ---"
+          if grep -q "msvs_version" .github/workflows/desktop-release.yml; then
+            echo "::error::STALE WORKFLOW! msvs_version still present. This run is using an old snapshot."
+            exit 1
+          fi
+          echo "✅ Workflow is up-to-date (no msvs_version found)."
+
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
