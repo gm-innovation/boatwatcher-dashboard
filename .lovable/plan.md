@@ -1,63 +1,34 @@
+## ✅ Implementado: Enrollment ControlID via Agent Commands
 
-Correção proposta (foco: dispositivos seguem offline no Web/Desktop)
+### Problema resolvido
+A Edge Function `worker-enrollment` tentava fazer HTTP direto para IPs locais (ex: `192.168.0.129`) dos leitores ControlID. Isso nunca funciona pela web porque a nuvem não alcança a rede local.
 
-Diagnóstico confirmado
-- O agente local está mandando heartbeat (o agente aparece online no backend), mas os dispositivos não são atualizados: `devices.updated_at` está parado.
-- Isso indica que o heartbeat de status está chegando sem `devices` útil (array vazio ou sem seriais válidos), então a atualização de dispositivos não roda.
-- Há um ponto crítico no runtime local: o `AgentController` só começa polling quando `start()` é chamado, e hoje isso depende de chamada manual. Se ele não estiver rodando, a telemetria de conectividade não sobe para o backend.
-- A UI do Local Server mostra “online” via teste direto de IP, mas isso não é a mesma fonte usada pelo heartbeat do sistema.
+### Solução implementada
+Enrollment cloud agora usa sistema de **fila de comandos** via tabela `agent_commands`:
 
-Plano de implementação
+```text
+WEB → worker-enrollment EF → INSERT agent_commands (pending)
+                                        ↓
+Local Server (poll) → GET download-commands → executa no dispositivo → POST upload-command-result
+```
 
-1) Garantir polling do agente sempre ativo no Local Server
-- Arquivo: `server/index.js`
-- Iniciar `agentController.start()` automaticamente no boot do servidor local (com tratamento de erro e log, sem derrubar o serviço).
-- Motivo: elimina dependência de botão/manual e garante geração contínua de conectividade para heartbeat.
+### Arquivos alterados
+1. **`supabase/functions/worker-enrollment/index.ts`** — Removida lógica HTTP direta; agora insere comandos na fila
+2. **`supabase/functions/agent-sync/index.ts`** — Adicionados endpoints `download-commands` e `upload-command-result`
+3. **`electron/sync.js`** — Adicionado `downloadAndExecuteCommands()` ao ciclo de sync
+4. **`src/hooks/useControlID.ts`** — Toast diferenciado para comandos enfileirados vs execução direta
 
-2) Persistir conectividade no SQLite local a cada ciclo de polling
-- Arquivo: `electron/agent.js`
-- No `pollDevices()`, além de atualizar `deviceConnectivity` em memória, atualizar também `devices.status` no SQLite para `online/offline`.
-- Manter `last_event_timestamp` apenas para evento real (não sobrescrever sem evento), mas registrar “status de conectividade” localmente.
-- Motivo: o Desktop (modo local) lê status do banco local; sem isso, ele continua offline mesmo quando o leitor está acessível.
+## ✅ Implementado: Sync de Status de Dispositivos (Online/Offline) — v2
 
-3) Blindar payload de heartbeat para nunca subir vazio quando há dispositivos
-- Arquivo: `electron/sync.js`
-- Antes de enviar heartbeat, forçar `reloadDevices()` se o relatório vier vazio e houver dispositivos no banco local.
-- Normalizar serial (`trim`) ao montar `devices`.
-- Logar no runtime local quantos dispositivos foram enviados no heartbeat (ex.: `devices_sent=2`).
-- Motivo: evita falso “agente online / dispositivos offline” por falha de carregamento em memória.
+### Problema resolvido (v2)
+Mesmo após a v1, dispositivos continuavam offline porque:
+1. `AgentController.start()` não era chamado automaticamente no boot do Local Server
+2. `getDeviceConnectivityReport()` retornava array vazio (dispositivos não carregados em memória)
+3. Status não era persistido no SQLite local (Desktop via modo local sempre lia "offline")
+4. Edge function não normalizava seriais e não retornava métricas de update
 
-4) Robustez no endpoint de status do backend
-- Arquivo: `supabase/functions/agent-sync/index.ts`
-- Normalizar `serial_number` recebido (`trim`) antes do `update`.
-- Contabilizar quantos dispositivos foram recebidos e quantos updates efetivamente aplicados; retornar isso na resposta do endpoint.
-- Adicionar log de diagnóstico quando `body.devices` vier vazio.
-- Motivo: facilita diagnosticar rapidamente se o problema está no envio local ou no match por serial/agent.
-
-5) Observabilidade na interface de diagnóstico
-- Arquivos: `src/components/admin/DiagnosticsPanel.tsx` e/ou `src/components/devices/ConnectivityDashboard.tsx`
-- Mostrar 2 indicadores novos:
-  - “Dispositivos enviados no último heartbeat”
-  - “Última atualização de status dos dispositivos”
-- Motivo: deixa explícito quando o agente está online mas sem telemetria de dispositivos.
-
-Validação (fim-a-fim)
-1. Reiniciar o serviço local.
-2. Confirmar que o polling do agente está “running”.
-3. Em até 60–90s:
-   - `devices.updated_at` deve avançar no backend.
-   - status dos dois dispositivos deve mudar para `online` no Web.
-   - no Desktop (modo local), status também deve refletir `online`.
-4. Desligar temporariamente um leitor e confirmar transição para `offline` em ambos (Web/Desktop).
-
-Detalhes técnicos (resumo por arquivo)
-- `server/index.js`: auto-start do `AgentController`.
-- `electron/agent.js`: persistência de `status` local por ciclo + normalização de serial no relatório.
-- `electron/sync.js`: heartbeat resiliente (reload fallback + logs de envio).
-- `supabase/functions/agent-sync/index.ts`: parsing/normalização robusta + métricas de aplicação de update.
-- `src/components/...`: diagnóstico visual para evitar nova zona cega operacional.
-
-Risco e compatibilidade
-- Sem migração de banco.
-- Sem quebra de fluxo existente de sync/enrollment.
-- Mudança backward-compatible; melhora consistência entre Local Server, Web e Desktop.
+### Correções aplicadas
+1. **`server/index.js`** — `agentController.start()` chamado automaticamente no boot
+2. **`electron/agent.js`** — `persistDeviceStatus()` grava online/offline no SQLite a cada ciclo de polling
+3. **`electron/sync.js`** — Heartbeat resiliente: força `reloadDevices()` se report vazio, normaliza seriais, loga `devices_sent`
+4. **`supabase/functions/agent-sync/index.ts`** — Normaliza serial com `trim()`, atualiza `updated_at` (não `last_event_timestamp`), retorna `devices_received`/`devices_updated`, loga warnings

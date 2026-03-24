@@ -386,7 +386,24 @@ class SyncEngine {
 
   async sendHeartbeat() {
     try {
-      const devices = this.agentController?.getDeviceConnectivityReport?.() || [];
+      let devices = this.agentController?.getDeviceConnectivityReport?.() || [];
+
+      // If report is empty but agent has devices, force reload and retry
+      if (devices.length === 0 && this.agentController) {
+        const reloaded = this.agentController.reloadDevices?.() || [];
+        if (reloaded.length > 0) {
+          devices = this.agentController.getDeviceConnectivityReport?.() || [];
+        }
+      }
+
+      // Normalize serial numbers
+      devices = devices.map(d => ({
+        ...d,
+        serial_number: (d.serial_number || '').trim(),
+      })).filter(d => d.serial_number);
+
+      console.log(`[sync] Heartbeat: devices_sent=${devices.length}`);
+
       await this.callEdgeFunction('agent-sync/status', 'POST', {
         version: process.env.npm_package_version || '1.0.0',
         sync_status: this.status.syncing ? 'syncing' : 'idle',

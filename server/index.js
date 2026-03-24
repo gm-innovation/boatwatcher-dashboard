@@ -95,6 +95,12 @@ function createLocalServer(options = {}) {
 
   const agentController = new AgentController(db);
   syncEngine.setAgentController(agentController);
+
+  // Auto-start agent polling so device connectivity is tracked from boot
+  agentController.start().catch(err => {
+    console.error('[Dock Check Server] AgentController auto-start failed:', err.message);
+  });
+
   const backupManager = new BackupManager(dataDir, backupDir);
   backupManager.start();
 
