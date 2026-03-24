@@ -130,12 +130,10 @@ export const InterLayerConnectivityCard = ({
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
       const response = await fetch(`${supabaseUrl}/functions/v1/agent-sync/download-devices`, {
-        method: 'POST',
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
           'x-agent-token': agent.token,
         },
-        body: JSON.stringify({}),
       });
 
       const duration = Date.now() - start;
