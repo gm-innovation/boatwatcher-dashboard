@@ -29,12 +29,12 @@ jobs:
           echo "Run attempt: ${{ github.run_attempt }}"
           echo "--- Setup native build tools content ---"
           grep -A 3 "Setup native build tools" .github/workflows/desktop-release.yml || echo "Step not found"
-          echo "--- Checking for deprecated msvs_version ---"
-          if grep -q "msvs_version" .github/workflows/desktop-release.yml; then
-            echo "::error::STALE WORKFLOW! msvs_version still present. This run is using an old snapshot."
+          echo "--- Verifying step uses npx node-gyp install ---"
+          if ! grep -A 3 "Setup native build tools" .github/workflows/desktop-release.yml | grep -q "npx node-gyp install"; then
+            echo "::error::Step 'Setup native build tools' does not contain 'npx node-gyp install'. Workflow may be stale."
             exit 1
           fi
-          echo "✅ Workflow is up-to-date (no msvs_version found)."
+          echo "✅ Workflow is up-to-date (Setup native build tools uses npx node-gyp install)."
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
