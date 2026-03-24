@@ -6,7 +6,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   RefreshCw,
   Layers,
-  Heartbeat,
+  Activity,
   ArrowDownUp,
   Server,
   Globe,

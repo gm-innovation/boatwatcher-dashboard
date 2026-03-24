@@ -27,6 +27,7 @@ import {
   Cloud,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { InterLayerConnectivityCard } from './InterLayerConnectivityCard';
 import { getSessionDiagnostics, forceLogout } from '@/utils/ensureValidSession';
 import { toast } from '@/hooks/use-toast';
 import { localAgent, localHealth, localSync } from '@/lib/localServerProvider';
