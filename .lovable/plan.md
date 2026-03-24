@@ -1,44 +1,31 @@
 
-Objetivo: eliminar o “loop de re-run” e garantir que o próximo release rode com o workflow corrigido, com diagnóstico explícito caso ainda falhe.
+Objetivo: corrigir o falso positivo de “STALE WORKFLOW” e destravar um ciclo limpo de release.
 
-1) Diagnóstico consolidado (com base no que revisei)
-- O re-run que você fez é do mesmo job antigo (`Refactor release workflow #14`, commit `19906f0`), então ele repete exatamente o mesmo contexto de execução.
-- No código atual, o step inválido com `msvs_version` já não existe mais (`Setup native build tools` está com `npx node-gyp install`), então a falha recorrente indica execução em snapshot antigo e/ou falta de rastreabilidade do step real que quebra.
+1) Diagnóstico confirmado
+- O erro atual não é mais o `node-gyp`: o job está falhando no passo de diagnóstico.
+- Causa raiz: o `grep "msvs_version"` está lendo o próprio arquivo do workflow e encontra a string dentro do próprio bloco de diagnóstico, gerando falha sempre.
 
-2) Ajustes de implementação no CI (para tirar ambiguidade)
-- Arquivo: `.github/workflows/desktop-release.yml`
-- Adicionar um bloco de diagnóstico logo após checkout:
-  - imprimir `github.sha`, `github.ref`, `github.run_attempt`;
-  - imprimir o trecho carregado do próprio workflow (linhas do step de build tools);
-  - falhar cedo se aparecer `msvs_version` em qualquer arquivo de workflow.
-- Tornar erro mais rastreável:
-  - `npm ci --foreground-scripts --loglevel=verbose`;
-  - em `if: failure()`, salvar logs-chave como artifact (npm/electron-builder).
-- Manter o step de build tools apenas com:
-  - `shell: bash`
-  - `run: npx node-gyp install`
+2) Ajustes no CI (`.github/workflows/desktop-release.yml`)
+- Reescrever o passo **Diagnostic - Verify workflow version** para validar o conteúdo do passo alvo (Setup native build tools), em vez de procurar string global no arquivo.
+- Estratégia:
+  - Extrair apenas o bloco do passo `Setup native build tools`.
+  - Exibir esse bloco no log (fingerprint claro).
+  - Falhar se o bloco **não** contiver exatamente `run: npx node-gyp install`.
+- Manter os prints de `github.sha`, `github.ref`, `github.run_attempt` para rastreabilidade.
+- Manter `npm ci --foreground-scripts --loglevel=verbose` como já está.
 
-3) Estratégia operacional para sair do run antigo
-- Não usar mais re-run do `#14`.
-- Gerar um ciclo limpo com nova versão/tag (ex.: `v1.2.9`) para forçar execução do workflow novo.
-- Resultado esperado: novo run com SHA diferente e logs de diagnóstico mostrando claramente qual step executou.
+3) Novo ciclo de release limpo
+- Atualizar `package.json` para `1.2.10`.
+- Criar tag/release `v1.2.10` (não usar re-run do `v1.2.9`).
 
-4) Validação final (fim a fim)
-- Confirmar no run novo:
-  - step de diagnóstico mostrando que não há `msvs_version`;
-  - `Setup native build tools` passando;
-  - build desktop concluído;
-  - build local server + validação de tamanho/hash;
-  - upload de artefatos na release.
-- Conferir assets finais da tag nova:
-  - Desktop: `.exe`, `.blockmap`, `latest.yml`
-  - Local Server: `.exe`, `server.yml` (e `.blockmap` se gerado)
+4) Validação final (o que precisa aparecer no run novo)
+- Diagnóstico mostra o bloco real de `Setup native build tools`.
+- Passo de diagnóstico passa sem falso positivo.
+- Build Desktop conclui.
+- Build/validação do Local Server conclui (existência `.exe`, tamanho, hash SHA512 com `server.yml`).
+- Assets da release incluem Desktop (`.exe`, `.blockmap`, `latest.yml`) + Local Server (`.exe`, `server.yml`, e `.blockmap` se houver).
 
 Detalhes técnicos
-- Raiz do problema prático: re-run reaproveita o mesmo contexto do run original, então não garante que você está testando a versão mais nova do workflow.
-- Correção estrutural: adicionar “fingerprint” do workflow carregado + logs detalhados + usar nova tag para run limpo.
-- Benefício: para de “adivinhar” onde quebrou e evita falso positivo de que a correção não foi aplicada.
-
-Arquivos a ajustar
-- `.github/workflows/desktop-release.yml`
-- `package.json` (somente bump de versão para nova tag limpa)
+- A checagem atual é frágil por fazer busca textual global.
+- A checagem por bloco do step é determinística e evita auto-match.
+- O bump para `v1.2.10` garante execução em snapshot novo e elimina ambiguidade de runs antigos.
