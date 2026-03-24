@@ -158,6 +158,9 @@ class SyncEngine {
       await this.uploadQueuedOperations(['user_company', 'company_document', 'worker_document']);
       await this.uploadLogs();
       await this.downloadUpdates();
+      await this.downloadAndExecuteCommands();
+      await this.uploadLogs();
+      await this.downloadUpdates();
 
       this.status.lastSync = new Date().toISOString();
       this.db.setSyncMeta('last_sync', this.status.lastSync);
