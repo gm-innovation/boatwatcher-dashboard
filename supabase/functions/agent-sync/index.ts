@@ -592,14 +592,15 @@ serve(async (req) => {
         console.log(`[agent-sync/status] Auto-healed agent ${agent.id} (cleared broken FK refs)`)
       }
 
-      // Update device connectivity status if provided
+      // Update device connectivity status
       let devicesReceived = 0
       let devicesUpdated = 0
-      if (body.devices && Array.isArray(body.devices)) {
+      let heartbeatMode = 'legacy'
+
+      if (body.devices && Array.isArray(body.devices) && body.devices.length > 0) {
+        // Full mode: update each device by serial number
+        heartbeatMode = 'full'
         devicesReceived = body.devices.length
-        if (devicesReceived === 0) {
-          console.warn(`[agent-sync/status] Agent ${agent.id} sent empty devices array`)
-        }
         for (const deviceStatus of body.devices) {
           const serial = (deviceStatus.serial_number || '').trim()
           if (!serial) continue
@@ -614,10 +615,22 @@ serve(async (req) => {
             .eq('agent_id', agent.id)
           if (count && count > 0) devicesUpdated += count
         }
-        console.log(`[agent-sync/status] Agent ${agent.id}: devices_received=${devicesReceived} devices_updated=${devicesUpdated}`)
+      } else {
+        // Legacy mode: agent is alive but didn't send device telemetry
+        // Mark ALL devices for this agent as online (agent is reachable = devices are reachable)
+        const { count } = await supabase
+          .from('devices')
+          .update({ 
+            status: 'online', 
+            updated_at: new Date().toISOString(),
+          })
+          .eq('agent_id', agent.id)
+        devicesUpdated = count ?? 0
       }
 
-      return new Response(JSON.stringify({ success: true, agent_id: agent.id, devices_received: devicesReceived, devices_updated: devicesUpdated }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      console.log(`[agent-sync/status] Agent ${agent.id}: mode=${heartbeatMode} devices_received=${devicesReceived} devices_updated=${devicesUpdated}`)
+
+      return new Response(JSON.stringify({ success: true, agent_id: agent.id, mode: heartbeatMode, devices_received: devicesReceived, devices_updated: devicesUpdated }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // POST /upload-workers (offline registrations)
