@@ -15,6 +15,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_OWNER: ${{ github.repository_owner }}
       GH_REPO: ${{ github.repository }}
+      GH_REPO_NAME: ${{ github.event.repository.name }}
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - name: Checkout repository
