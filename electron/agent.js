@@ -82,7 +82,7 @@ class AgentController {
   pollDevice(device) {
     return new Promise((resolve, reject) => {
       const ip = device.controlid_ip_address;
-      if (!ip) return resolve();
+      if (!ip) return reject(new Error('No IP'));
 
       const url = `http://${ip}/api/access/last`;
 
@@ -100,8 +100,8 @@ class AgentController {
         });
       });
 
-      req.on('error', () => resolve());
-      req.on('timeout', () => { req.destroy(); resolve(); });
+      req.on('error', (err) => reject(err));
+      req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
     });
   }
 
