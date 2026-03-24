@@ -723,6 +723,92 @@ serve(async (req) => {
       return new Response(JSON.stringify({ worker_documents: workerDocuments || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    // GET /download-commands — pending commands for this agent
+    if (req.method === 'GET' && action === 'download-commands') {
+      const { data: commands, error } = await supabase
+        .from('agent_commands')
+        .select('id, device_id, command, payload, status, created_at')
+        .eq('agent_id', agent.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true })
+        .limit(50)
+
+      if (error) throw error
+
+      return new Response(JSON.stringify({ commands: commands || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // POST /upload-command-result — agent reports command execution result
+    if (req.method === 'POST' && action === 'upload-command-result') {
+      const { command_id, status: cmdStatus, result, error_message } = await req.json()
+
+      if (!command_id || !cmdStatus) {
+        return new Response(JSON.stringify({ error: 'command_id and status required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      // Verify command belongs to this agent
+      const { data: cmd, error: cmdError } = await supabase
+        .from('agent_commands')
+        .select('id, agent_id, device_id, command, payload')
+        .eq('id', command_id)
+        .eq('agent_id', agent.id)
+        .single()
+
+      if (cmdError || !cmd) {
+        return new Response(JSON.stringify({ error: 'Command not found or not owned by this agent' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      // Update command status
+      await supabase
+        .from('agent_commands')
+        .update({
+          status: cmdStatus,
+          result: result || null,
+          error_message: error_message || null,
+          executed_at: new Date().toISOString(),
+        })
+        .eq('id', command_id)
+
+      // If enrollment succeeded, update workers.devices_enrolled
+      const payload = cmd.payload as Record<string, any> || {}
+      if (cmdStatus === 'completed' && cmd.command === 'enroll_worker' && payload.worker_id) {
+        const { data: worker } = await supabase
+          .from('workers')
+          .select('devices_enrolled')
+          .eq('id', payload.worker_id)
+          .single()
+
+        if (worker) {
+          const enrolled = Array.isArray(worker.devices_enrolled) ? worker.devices_enrolled : []
+          if (!enrolled.includes(cmd.device_id)) {
+            await supabase
+              .from('workers')
+              .update({ devices_enrolled: [...enrolled, cmd.device_id] })
+              .eq('id', payload.worker_id)
+          }
+        }
+      }
+
+      // If removal succeeded, remove device from workers.devices_enrolled
+      if (cmdStatus === 'completed' && cmd.command === 'remove_worker' && payload.worker_id) {
+        const { data: worker } = await supabase
+          .from('workers')
+          .select('devices_enrolled')
+          .eq('id', payload.worker_id)
+          .single()
+
+        if (worker) {
+          const enrolled = Array.isArray(worker.devices_enrolled) ? worker.devices_enrolled : []
+          await supabase
+            .from('workers')
+            .update({ devices_enrolled: enrolled.filter((id: string) => id !== cmd.device_id) })
+            .eq('id', payload.worker_id)
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     // POST /rebind-devices
     if (req.method === 'POST' && action === 'rebind-devices') {
       if (!agent.project_id) {
