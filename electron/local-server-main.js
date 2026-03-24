@@ -87,15 +87,18 @@ autoUpdater.on('update-downloaded', (info) => {
 autoUpdater.on('error', (err) => {
   logToFile(`Auto-updater error: ${err.message}`);
   const msg = err.message || '';
+  const repo = require('../package.json').repository || 'gm-innovation/boatwatcher-dashboard';
+  const manualDownloadUrl = `https://github.com/${repo}/releases/latest`;
   // Detect 404 errors (server.yml not found in release)
   if (msg.includes('404') || msg.includes('Not Found') || msg.includes('HttpError') || msg.includes('net::ERR')) {
     sendUpdaterStatus({
       status: 'error',
       message: 'Nenhuma atualização disponível para o Servidor Local nesta versão. Baixe manualmente em github.com.',
       is404: true,
+      manualDownloadUrl,
     });
   } else {
-    sendUpdaterStatus({ status: 'error', message: msg });
+    sendUpdaterStatus({ status: 'error', message: msg, manualDownloadUrl });
   }
 });
 
