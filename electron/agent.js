@@ -13,6 +13,7 @@ class AgentController {
     this.devices = [];
     this.listeners = [];
     this.pollIntervalMs = 5000; // 5 seconds
+    this.deviceConnectivity = new Map(); // serial_number -> { online: boolean }
   }
 
   onNewEvent(callback) {
@@ -34,6 +35,15 @@ class AgentController {
       running: this.running,
       devicesCount: this.devices.length,
     };
+  }
+
+  getDeviceConnectivityReport() {
+    return this.devices
+      .filter(d => d.controlid_serial_number)
+      .map(d => ({
+        serial_number: d.controlid_serial_number,
+        online: this.deviceConnectivity.get(d.controlid_serial_number)?.online ?? false,
+      }));
   }
 
   async start() {
@@ -58,8 +68,13 @@ class AgentController {
     for (const device of this.devices) {
       try {
         await this.pollDevice(device);
+        if (device.controlid_serial_number) {
+          this.deviceConnectivity.set(device.controlid_serial_number, { online: true });
+        }
       } catch (err) {
-        // Device offline or unreachable — silently continue
+        if (device.controlid_serial_number) {
+          this.deviceConnectivity.set(device.controlid_serial_number, { online: false });
+        }
       }
     }
   }
@@ -67,7 +82,7 @@ class AgentController {
   pollDevice(device) {
     return new Promise((resolve, reject) => {
       const ip = device.controlid_ip_address;
-      if (!ip) return resolve();
+      if (!ip) return reject(new Error('No IP'));
 
       const url = `http://${ip}/api/access/last`;
 
@@ -85,8 +100,8 @@ class AgentController {
         });
       });
 
-      req.on('error', () => resolve());
-      req.on('timeout', () => { req.destroy(); resolve(); });
+      req.on('error', (err) => reject(err));
+      req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
     });
   }
 

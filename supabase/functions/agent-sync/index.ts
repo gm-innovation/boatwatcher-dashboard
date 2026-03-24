@@ -592,6 +592,22 @@ serve(async (req) => {
         console.log(`[agent-sync/status] Auto-healed agent ${agent.id} (cleared broken FK refs)`)
       }
 
+      // Update device connectivity status if provided
+      if (body.devices && Array.isArray(body.devices)) {
+        for (const deviceStatus of body.devices) {
+          if (!deviceStatus.serial_number) continue
+          const newStatus = deviceStatus.online ? 'online' : 'offline'
+          await supabase
+            .from('devices')
+            .update({ 
+              status: newStatus, 
+              last_event_timestamp: new Date().toISOString() 
+            })
+            .eq('controlid_serial_number', deviceStatus.serial_number)
+            .eq('agent_id', agent.id)
+        }
+      }
+
       return new Response(JSON.stringify({ success: true, agent_id: agent.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 

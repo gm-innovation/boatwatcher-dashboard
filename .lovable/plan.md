@@ -1,47 +1,43 @@
 
 
-## Problema: Dispositivos sempre "offline" na Web/Desktop
 
-### Causa raiz
+## ✅ Implementado: Enrollment ControlID via Agent Commands
 
-O Local Server (via `AgentController` em `electron/agent.js`) faz polling dos dispositivos na rede local e atualiza o status para "online" **apenas no SQLite local**. O heartbeat enviado à nuvem (`electron/sync.js` → `agent-sync/status`) **não inclui informação de conectividade dos dispositivos**. Por isso, a coluna `devices.status` no banco cloud permanece "offline" para sempre.
+### Problema resolvido
+A Edge Function `worker-enrollment` tentava fazer HTTP direto para IPs locais (ex: `192.168.0.129`) dos leitores ControlID. Isso nunca funciona pela web porque a nuvem não alcança a rede local.
 
-A infraestrutura para resolver isso **já existe**:
-- `agent-relay/heartbeat` aceita um array `devices` com `{ serial_number, online }` e atualiza `devices.status` na cloud
-- `agent-sync/status` (o heartbeat usado pelo sync engine) **não** propaga device status
+### Solução implementada
+Enrollment cloud agora usa sistema de **fila de comandos** via tabela `agent_commands`:
 
-### Solução
-
-Incluir o status de conectividade dos dispositivos no heartbeat que o `SyncEngine` já envia periodicamente (~60s).
-
-### Alterações
-
-**1. `electron/agent.js`** -- Rastrear conectividade por dispositivo
-
-- Adicionar um `Map` interno `deviceConnectivity` que registra `{ online: boolean }` para cada device
-- Em `pollDevice()`: marcar como `online` se a resposta HTTP foi bem-sucedida, `offline` se timeout/erro
-- Expor método `getDeviceConnectivityReport()` que retorna array `[{ serial_number, online }]`
-
-**2. `electron/sync.js`** -- Enviar device status no heartbeat
-
-- Em `sendHeartbeat()`, obter `agentController.getDeviceConnectivityReport()` e incluir no payload:
-```javascript
-await this.callEdgeFunction('agent-sync/status', 'POST', {
-  version: ...,
-  sync_status: ...,
-  pending_count: ...,
-  devices: this.agentController?.getDeviceConnectivityReport?.() || [],
-});
+```text
+WEB → worker-enrollment EF → INSERT agent_commands (pending)
+                                        ↓
+Local Server (poll) → GET download-commands → executa no dispositivo → POST upload-command-result
 ```
 
-**3. `supabase/functions/agent-sync/index.ts`** -- Processar device status no endpoint `/status`
+### Arquivos alterados
+1. **`supabase/functions/worker-enrollment/index.ts`** — Removida lógica HTTP direta; agora insere comandos na fila
+2. **`supabase/functions/agent-sync/index.ts`** — Adicionados endpoints `download-commands` e `upload-command-result`
+3. **`electron/sync.js`** — Adicionado `downloadAndExecuteCommands()` ao ciclo de sync
+4. **`src/hooks/useControlID.ts`** — Toast diferenciado para comandos enfileirados vs execução direta
 
-- Após atualizar `local_agents`, verificar se `body.devices` existe
-- Para cada device, fazer `UPDATE devices SET status = 'online'/'offline', last_event_timestamp = now() WHERE controlid_serial_number = ? AND agent_id = ?`
-- Reutilizar a mesma lógica já presente em `agent-relay/heartbeat`
+## ✅ Implementado: Sync de Status de Dispositivos (Online/Offline)
 
-### O que NAO muda
-- `agent-relay/heartbeat` permanece como está (endpoint alternativo)
-- Web app e Dashboard continuam lendo `devices.status` da cloud -- agora será atualizado corretamente
-- Polling local do `AgentController` continua funcionando igual
+### Problema resolvido
+O Local Server detectava dispositivos online via polling local, mas nunca reportava esse status para a nuvem. Por isso, dispositivos apareciam sempre "offline" na Web/Desktop.
 
+### Solução implementada
+O heartbeat periódico (~60s) do `SyncEngine` agora inclui o status de conectividade de cada dispositivo.
+
+```text
+AgentController (polling local) → deviceConnectivity Map
+                                        ↓
+SyncEngine.sendHeartbeat() → agent-sync/status (com array devices)
+                                        ↓
+Edge Function → UPDATE devices SET status WHERE serial_number + agent_id
+```
+
+### Arquivos alterados
+1. **`electron/agent.js`** — Adicionado `deviceConnectivity` Map e método `getDeviceConnectivityReport()`
+2. **`electron/sync.js`** — Heartbeat agora inclui `devices` no payload
+3. **`supabase/functions/agent-sync/index.ts`** — Endpoint `/status` agora processa array `devices` e atualiza `devices.status` na cloud
