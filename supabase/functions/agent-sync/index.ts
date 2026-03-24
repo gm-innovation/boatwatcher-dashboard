@@ -593,22 +593,31 @@ serve(async (req) => {
       }
 
       // Update device connectivity status if provided
+      let devicesReceived = 0
+      let devicesUpdated = 0
       if (body.devices && Array.isArray(body.devices)) {
+        devicesReceived = body.devices.length
+        if (devicesReceived === 0) {
+          console.warn(`[agent-sync/status] Agent ${agent.id} sent empty devices array`)
+        }
         for (const deviceStatus of body.devices) {
-          if (!deviceStatus.serial_number) continue
+          const serial = (deviceStatus.serial_number || '').trim()
+          if (!serial) continue
           const newStatus = deviceStatus.online ? 'online' : 'offline'
-          await supabase
+          const { count } = await supabase
             .from('devices')
             .update({ 
               status: newStatus, 
-              last_event_timestamp: new Date().toISOString() 
+              updated_at: new Date().toISOString(),
             })
-            .eq('controlid_serial_number', deviceStatus.serial_number)
+            .eq('controlid_serial_number', serial)
             .eq('agent_id', agent.id)
+          if (count && count > 0) devicesUpdated += count
         }
+        console.log(`[agent-sync/status] Agent ${agent.id}: devices_received=${devicesReceived} devices_updated=${devicesUpdated}`)
       }
 
-      return new Response(JSON.stringify({ success: true, agent_id: agent.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ success: true, agent_id: agent.id, devices_received: devicesReceived, devices_updated: devicesUpdated }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // POST /upload-workers (offline registrations)

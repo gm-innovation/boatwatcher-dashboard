@@ -71,12 +71,24 @@ class AgentController {
         if (device.controlid_serial_number) {
           this.deviceConnectivity.set(device.controlid_serial_number, { online: true });
         }
+        // Persist status to local SQLite
+        this.persistDeviceStatus(device, 'online');
       } catch (err) {
         if (device.controlid_serial_number) {
           this.deviceConnectivity.set(device.controlid_serial_number, { online: false });
         }
+        this.persistDeviceStatus(device, 'offline');
       }
     }
+  }
+
+  persistDeviceStatus(device, status) {
+    try {
+      const rawDb = this.db.getRawDb?.();
+      if (rawDb) {
+        rawDb.prepare('UPDATE devices SET status = ? WHERE id = ?').run(status, device.id);
+      }
+    } catch { /* ignore */ }
   }
 
   pollDevice(device) {
