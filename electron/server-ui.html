@@ -721,13 +721,15 @@
           break;
         case 'error':
           if (data.is404) {
+            const manualUrl = data.manualDownloadUrl || 'https://github.com/gm-innovation/boatwatcher-dashboard/releases/latest';
             statusEl.innerHTML = (data.message || 'Nenhuma atualização disponível para esta versão.') +
-              ' <a href="https://github.com/nickdfrancis/dock-check/releases/latest" target="_blank" style="color:#3b82f6; text-decoration:underline; margin-left:8px;">Baixar manualmente ↗</a>';
+              ` <a href="${manualUrl}" target="_blank" style="color:#3b82f6; text-decoration:underline; margin-left:8px;">Baixar manualmente ↗</a>`;
             statusEl.className = 'sub';
           } else {
             const isChecksumError = (data.message || '').toLowerCase().includes('sha512');
+            const manualUrl = data.manualDownloadUrl || 'https://github.com/gm-innovation/boatwatcher-dashboard/releases/latest';
             statusEl.innerHTML = `Erro: ${data.message || 'Falha na atualização'}` +
-              (isChecksumError ? ' <a href="https://github.com/nickdfrancis/dock-check/releases/latest" target="_blank" style="color:#3b82f6; text-decoration:underline; margin-left:8px;">Baixar manualmente ↗</a>' : '');
+              (isChecksumError ? ` <a href="${manualUrl}" target="_blank" style="color:#3b82f6; text-decoration:underline; margin-left:8px;">Baixar manualmente ↗</a>` : '');
             statusEl.className = 'sub error-msg';
           }
           checkBtn.disabled = false;
