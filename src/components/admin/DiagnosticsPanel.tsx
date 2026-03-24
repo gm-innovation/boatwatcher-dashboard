@@ -27,6 +27,7 @@ import {
   Cloud,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { InterLayerConnectivityCard } from './InterLayerConnectivityCard';
 import { getSessionDiagnostics, forceLogout } from '@/utils/ensureValidSession';
 import { toast } from '@/hooks/use-toast';
 import { localAgent, localHealth, localSync } from '@/lib/localServerProvider';
@@ -829,6 +830,14 @@ export const DiagnosticsPanel = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Inter-Layer Connectivity Tests */}
+      <InterLayerConnectivityCard
+        isLocalRuntime={isLocalRuntime}
+        isDesktopFallback={isDesktopFallback}
+        runtimeProfile={runtimeProfile}
+        getStatusBadge={getStatusBadge}
+      />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
