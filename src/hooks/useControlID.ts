@@ -150,10 +150,18 @@ export const useWorkerEnrollment = () => {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["workers"] });
       queryClient.invalidateQueries({ queryKey: ["devices"] });
-      toast({
-        title: "Operação concluída",
-        description: data.message,
-      });
+      
+      if (data?.queued) {
+        toast({
+          title: "Comando enfileirado",
+          description: data.message || "Aguardando execução pelo agente local.",
+        });
+      } else {
+        toast({
+          title: "Operação concluída",
+          description: data.message,
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
