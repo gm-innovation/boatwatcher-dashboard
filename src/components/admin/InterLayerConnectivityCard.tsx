@@ -127,18 +127,24 @@ export const InterLayerConnectivityCard = ({
 
       const agent = agents[0];
       const start = Date.now();
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
-      const { data, error } = await supabase.functions.invoke('agent-sync', {
-        body: { action: 'download-devices' },
-        headers: { 'x-agent-token': agent.token },
+      const response = await fetch(`${supabaseUrl}/functions/v1/agent-sync/download-devices`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-agent-token': agent.token,
+        },
+        body: JSON.stringify({}),
       });
 
       const duration = Date.now() - start;
+      const data = await response.json().catch(() => null);
 
-      if (error) {
+      if (!response.ok) {
         setSyncEndpointResult({
           status: 'error',
-          message: `Edge Function agent-sync retornou erro: ${error.message}`,
+          message: `Edge Function agent-sync retornou ${response.status}: ${data?.error || response.statusText}`,
           details: `Agente: ${agent.name} | Duração: ${duration}ms`,
           timestamp: new Date(),
         });
