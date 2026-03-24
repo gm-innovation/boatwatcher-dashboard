@@ -1,36 +1,32 @@
 
 
-## Correção: "Verify server.yml integrity" falhando no Windows
+## Correção: "Upload Local Server artifacts" falhando com formato inválido
 
 ### Problema
-O build passou por **todos** os steps até falhar em "Verify server.yml integrity" com:
+O `gh release upload` falha com:
 ```
-grep: -P supports only unibyte and UTF-8 locales
+expected the "[HOST/]OWNER/REPO" format, got "boatwatcher-dashboard"
 ```
 
-A flag `grep -oP` (Perl regex) não funciona corretamente no Git Bash do Windows. A linha problemática é a **154**:
-```bash
-YML_SHA=$(grep -oP 'sha512:\s*\K\S+' "$SERVER_YML" | head -1)
-```
+A variável `GH_REPO` (linha 17) contém apenas o nome do repositorio (`boatwatcher-dashboard`), mas o `gh` CLI espera o formato `OWNER/REPO`. O `gh` usa a env var `GH_REPO` internamente para resolver o repositorio, e quando recebe apenas o nome sem owner, falha.
 
 ### Correção
-Substituir o `grep -oP` por uma alternativa compatível com Windows (usando `sed` ou `awk`):
+**Arquivo:** `.github/workflows/desktop-release.yml`, linha 17
 
-**Arquivo:** `.github/workflows/desktop-release.yml`, linha 154
-
-De:
-```bash
-YML_SHA=$(grep -oP 'sha512:\s*\K\S+' "$SERVER_YML" | head -1)
+Mudar de:
+```yaml
+GH_REPO: ${{ github.event.repository.name }}
 ```
-
 Para:
-```bash
-YML_SHA=$(grep 'sha512:' "$SERVER_YML" | head -1 | sed 's/.*sha512:\s*//' | tr -d '[:space:]')
+```yaml
+GH_REPO: ${{ github.repository }}
 ```
+
+`github.repository` retorna `OWNER/REPO` (ex: `seu-usuario/boatwatcher-dashboard`), que é o formato esperado pelo `gh` CLI.
 
 ### Versão
-Bump `package.json` para **1.2.11** e criar tag `v1.2.11` para um run limpo.
+Bump `package.json` para **1.2.12** e criar tag `v1.2.12`.
 
 ### Resultado esperado
-Todos os steps passam, incluindo a verificação de integridade SHA512, e os artefatos Desktop + Local Server são publicados na release.
+Todos os steps passam, incluindo upload dos artefatos Local Server e verificação final dos assets na release.
 
