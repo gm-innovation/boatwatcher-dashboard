@@ -386,10 +386,12 @@ class SyncEngine {
 
   async sendHeartbeat() {
     try {
+      const devices = this.agentController?.getDeviceConnectivityReport?.() || [];
       await this.callEdgeFunction('agent-sync/status', 'POST', {
         version: process.env.npm_package_version || '1.0.0',
         sync_status: this.status.syncing ? 'syncing' : 'idle',
         pending_count: this.status.pendingCount,
+        devices,
       });
     } catch (err) {
       console.error('Heartbeat error:', err.message);
