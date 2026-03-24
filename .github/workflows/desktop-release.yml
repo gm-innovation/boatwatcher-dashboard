@@ -50,10 +50,8 @@ jobs:
           npm ci
 
       - name: Setup native build tools
-        shell: cmd
-        run: |
-          npm config set msvs_version 2022
-          npx node-gyp install
+        shell: bash
+        run: npx node-gyp install
 
       - name: Rebuild better-sqlite3 for Electron
         shell: bash
