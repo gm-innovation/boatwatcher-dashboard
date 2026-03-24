@@ -13,6 +13,7 @@ class AgentController {
     this.devices = [];
     this.listeners = [];
     this.pollIntervalMs = 5000; // 5 seconds
+    this.deviceConnectivity = new Map(); // serial_number -> { online: boolean }
   }
 
   onNewEvent(callback) {
