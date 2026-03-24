@@ -68,8 +68,13 @@ class AgentController {
     for (const device of this.devices) {
       try {
         await this.pollDevice(device);
+        if (device.controlid_serial_number) {
+          this.deviceConnectivity.set(device.controlid_serial_number, { online: true });
+        }
       } catch (err) {
-        // Device offline or unreachable — silently continue
+        if (device.controlid_serial_number) {
+          this.deviceConnectivity.set(device.controlid_serial_number, { online: false });
+        }
       }
     }
   }
