@@ -1,17 +1,30 @@
 
 
-## Bump para v1.2.16
+## Corrigir falha de CI: package-lock.json desatualizado
 
-O `package.json` ainda mostra `"version": "1.2.13"` — as edições anteriores (1.2.14 e 1.2.15) não foram salvas corretamente no repositório.
+### Problema
+
+O `package-lock.json` no repositório está obsoleto (ainda referencia o nome `vite_react_shadcn_ts` v0.0.0). Quando o CI executa `npm install --package-lock-only`, o npm tenta resolver todas as dependências do zero e encontra um conflito de peer dependencies com `react-dom` nos pacotes `@radix-ui/*`.
+
+### Solução
+
+Adicionar `--legacy-peer-deps` aos dois comandos npm no workflow do CI para ignorar conflitos de peer dependencies (comportamento padrão do bun, que é o gerenciador usado localmente).
 
 ### Alteração
 
-**`package.json` linha 5**: `"version": "1.2.13"` → `"1.2.16"`
+**`.github/workflows/desktop-release.yml` linhas 64-67**:
+
+```yaml
+      - name: Install dependencies
+        run: |
+          npm install --package-lock-only --legacy-peer-deps
+          npm ci --foreground-scripts --loglevel=verbose --legacy-peer-deps
+```
 
 ### Após o commit
 
-1. Aguardar o commit do Lovable aparecer no GitHub (verificar na lista de commits)
-2. Criar a tag `v1.2.16` **a partir desse commit** (não antes)
-3. O CI gera `DockCheck-Local-Server-Setup-1.2.16.exe` com todas as correções
-4. Instalar por cima no operador — a partir daí, auto-update funciona
+1. Deletar a tag `v1.2.16` e o release no GitHub
+2. Aguardar o commit aparecer no GitHub
+3. Recriar a tag `v1.2.16` a partir do novo commit
+4. O CI deve passar e gerar o instalador
 
