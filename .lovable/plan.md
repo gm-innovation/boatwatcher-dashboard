@@ -1,29 +1,33 @@
 
 
-## Editar Direção de Passagem pelo Front-End
+## Correção: Campo de direção no agente local
 
-### O que muda
-Adicionar um seletor clicável de direção (Entrada / Saída) diretamente no card do dispositivo, permitindo alterar sem abrir formulário separado.
+### Problema confirmado
+Em `electron/agent.js` linha 217, o código usa `device.configuration?.direction` mas o front-end salva como `passage_direction`. Resultado: o fallback de direção nunca funciona no agente local.
 
-### Implementação
+### Esclarecimento sobre ControlID e catracas
+Você tem razão — quando o dispositivo ControlID está conectado a uma catraca, o firmware **consegue sim** distinguir entrada de saída pelo sentido de giro. Nesse caso o campo `event.direction` virá preenchido no payload do evento. A nossa lógica já trata isso corretamente: `event.direction` tem prioridade, e o `passage_direction` configurado no front só entra como **fallback** quando o hardware não informa. Portanto:
+- Com catraca → o dispositivo informa a direção → sistema usa direto
+- Sem catraca (leitor facial standalone) → sistema usa `passage_direction` do config
 
-**Arquivo: `src/components/devices/DeviceManagement.tsx`**
+### Correção necessária
 
-1. No `DeviceCard`, tornar o badge de direção clicável (ou adicionar um `Select` inline ao lado dele) que alterna entre `entry`, `exit` e "Não definido".
+**Arquivo: `electron/agent.js` (linha 216-218)**
 
-2. Ao selecionar, fazer update no campo `configuration` do dispositivo:
-   - Cloud: `supabase.from('devices').update({ configuration: { ...device.configuration, passage_direction: value } }).eq('id', device.id)`
-   - Local: `localDevices.update(device.id, { configuration: { ...device.configuration, passage_direction: value } })`
+Trocar:
+```javascript
+const direction = event.direction || 
+  (device.configuration?.direction) || 
+  'unknown';
+```
 
-3. Invalidar query `['devices']` e chamar `onRefresh()` após sucesso.
-
-4. Exibir toast de confirmacao: "Direção atualizada para Entrada/Saída".
-
-### UX
-- O badge atual de direção vira um pequeno `Select` inline (compacto) no header do card, ao lado do badge de status.
-- Opções: "↙ Entrada", "↗ Saída", "Sem direção".
-- Feedback instantaneo via toast.
+Por:
+```javascript
+const direction = event.direction || 
+  (device.configuration?.passage_direction) || 
+  'unknown';
+```
 
 ### Arquivos alterados
-- `src/components/devices/DeviceManagement.tsx` (unico arquivo)
+- `electron/agent.js` — única alteração, uma linha
 
