@@ -45,11 +45,17 @@ export const CompanyForm = () => {
         setCompanyName(company.name);
         setProjectManagers(company.project_managers?.join('\n') || '');
         setVessels(company.vessels?.join('\n') || '');
+        setResponsibleName((company as any).responsible_name || '');
+        setPhone((company as any).phone || '');
+        setAddress((company as any).address || '');
       }
     } else {
       setCompanyName("");
       setProjectManagers("");
       setVessels("");
+      setResponsibleName("");
+      setPhone("");
+      setAddress("");
     }
   }, [selectedCompanyId, companies]);
 
