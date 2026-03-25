@@ -790,8 +790,16 @@
     if (e.key === 'Enter') handleConnect();
   });
 
-  // Set version label
-  document.getElementById('currentVersion').textContent = document.getElementById('versionLabel').textContent;
+  // Set version label dynamically from Electron app.getVersion()
+  if (window.serverAPI?.getVersion) {
+    window.serverAPI.getVersion().then(v => {
+      const label = `v${v}`;
+      document.getElementById('versionLabel').textContent = label;
+      document.getElementById('currentVersion').textContent = label;
+    }).catch(() => {});
+  } else {
+    document.getElementById('currentVersion').textContent = document.getElementById('versionLabel').textContent;
+  }
 
   setupUpdaterListener();
   init();

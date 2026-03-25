@@ -469,6 +469,8 @@ function registerIpcHandlers() {
   ipcMain.handle('server:get-update-status', () => {
     return updateStatus;
   });
+
+  ipcMain.handle('server:get-version', () => app.getVersion());
 }
 
 // --- Cloud HTTP helper ---

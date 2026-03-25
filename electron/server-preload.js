@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld('serverAPI', {
   getLogContent: () => ipcRenderer.invoke('server:get-log-content'),
   openFolder: (type) => ipcRenderer.invoke('server:open-folder', type),
 
+  // App info
+  getVersion: () => ipcRenderer.invoke('server:get-version'),
+
   // Auto-updater
   checkForUpdate: () => ipcRenderer.invoke('server:check-update'),
   downloadUpdate: () => ipcRenderer.invoke('server:download-update'),
