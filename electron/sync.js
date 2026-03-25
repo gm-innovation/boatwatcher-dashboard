@@ -162,7 +162,10 @@ class SyncEngine {
     const pendingLogs = this.db.getUnsyncedLogs?.() || [];
     const pendingOperations = this.db.getPendingSyncOperations?.() || [];
 
-    if (pendingWorkers.length > 0 || pendingLogs.length > 0 || pendingOperations.length > 0 || wasOffline) {
+    // Force sync if never synced before (last_sync_at is null)
+    const neverSynced = !this.status.lastSync && !this.db.getSyncMeta?.('last_sync');
+
+    if (pendingWorkers.length > 0 || pendingLogs.length > 0 || pendingOperations.length > 0 || wasOffline || neverSynced) {
       await this.triggerSync();
     }
 

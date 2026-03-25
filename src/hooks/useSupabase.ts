@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchCompanies, fetchWorkers, fetchProjects, fetchProjectById, fetchWorkersOnBoard as fetchProjectWorkersOnBoard } from '@/hooks/useDataProvider';
 import { supabase } from '@/integrations/supabase/client';
 import type { Company, Worker, Project } from '@/types/supabase';
-import { format, startOfDay } from 'date-fns';
+import { format, startOfDay, subDays } from 'date-fns';
 import { usesLocalServer } from '@/lib/runtimeProfile';
 
 export const useCompanies = () => {
@@ -68,17 +68,26 @@ export const useCompanyLogo = (companyId: string | null) => {
   });
 };
 
-export const useWorkersOnBoard = (projectId: string | null) => {
-  const today = format(startOfDay(new Date()), 'yyyy-MM-dd');
+export type DateFilter = 'today' | '7days' | '30days';
+
+export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilter = 'today') => {
+  const startDate = dateFilter === 'today'
+    ? format(startOfDay(new Date()), 'yyyy-MM-dd')
+    : dateFilter === '7days'
+      ? format(startOfDay(subDays(new Date(), 7)), 'yyyy-MM-dd')
+      : format(startOfDay(subDays(new Date(), 30)), 'yyyy-MM-dd');
 
   return useQuery({
-    queryKey: ['workers-on-board', projectId, today],
+    queryKey: ['workers-on-board', projectId, startDate],
     queryFn: async () => {
       if (!projectId) return [];
 
-      const localWorkersOnBoard = await fetchProjectWorkersOnBoard(projectId);
-      if (localWorkersOnBoard !== null) {
-        return localWorkersOnBoard;
+      // Local server mode only works for today
+      if (dateFilter === 'today') {
+        const localWorkersOnBoard = await fetchProjectWorkersOnBoard(projectId);
+        if (localWorkersOnBoard !== null) {
+          return localWorkersOnBoard;
+        }
       }
 
       const { data: entryLogs, error: entryError } = await supabase
@@ -86,7 +95,7 @@ export const useWorkersOnBoard = (projectId: string | null) => {
         .select('worker_id, worker_name, device_name, timestamp')
         .eq('direction', 'entry')
         .eq('access_status', 'granted')
-        .gte('timestamp', `${today}T00:00:00`)
+        .gte('timestamp', `${startDate}T00:00:00`)
         .order('timestamp', { ascending: false });
 
       if (entryError) throw entryError;
@@ -95,7 +104,7 @@ export const useWorkersOnBoard = (projectId: string | null) => {
         .from('access_logs')
         .select('worker_id, timestamp')
         .eq('direction', 'exit')
-        .gte('timestamp', `${today}T00:00:00`);
+        .gte('timestamp', `${startDate}T00:00:00`);
 
       if (exitError) throw exitError;
 
@@ -141,6 +150,23 @@ export const useWorkersOnBoard = (projectId: string | null) => {
     },
     enabled: !!projectId,
     refetchInterval: 30000,
+  });
+};
+
+export const useLastAccessLog = (projectId: string | null) => {
+  return useQuery({
+    queryKey: ['last-access-log', projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('access_logs')
+        .select('timestamp')
+        .order('timestamp', { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+      return data?.[0]?.timestamp || null;
+    },
+    enabled: !!projectId,
   });
 };
 
