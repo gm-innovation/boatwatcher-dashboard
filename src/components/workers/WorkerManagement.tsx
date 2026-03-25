@@ -54,12 +54,6 @@ type WorkerFormData = z.infer<typeof workerSchema>;
 
 interface WorkerFormProps {
   worker?: Worker | null;
-  onSuccess: () => void;
-  onCancel: () => void;
-}
-
-interface WorkerFormProps {
-  worker?: Worker | null;
   onSuccess: (autoEnrollResult?: { workerId: string; workerName: string; commandIds: string[] }) => void;
   onCancel: () => void;
 }
