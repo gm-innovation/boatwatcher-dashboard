@@ -191,10 +191,17 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
                 <p className="text-sm text-muted-foreground">{device.controlid_ip_address}</p>
               </div>
             </div>
-            <Badge variant="outline" className={getStatusColor(device.status)}>
-              {device.status === 'online' ? <Wifi className="h-3 w-3 mr-1" /> : <WifiOff className="h-3 w-3 mr-1" />}
-              {device.status}
-            </Badge>
+            <div className="flex flex-col items-end gap-1">
+              <Badge variant="outline" className={getStatusColor(device.status)}>
+                {device.status === 'online' ? <Wifi className="h-3 w-3 mr-1" /> : <WifiOff className="h-3 w-3 mr-1" />}
+                {device.status}
+              </Badge>
+              {(device.configuration as any)?.passage_direction && (
+                <Badge variant="secondary" className="text-xs">
+                  {(device.configuration as any).passage_direction === 'entry' ? '↙ Entrada' : '↗ Saída'}
+                </Badge>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
