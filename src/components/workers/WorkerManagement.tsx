@@ -278,7 +278,7 @@ const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
   );
 };
 
-// Componente de Enrollment
+// Componente de Enrollment com tracking de status
 interface EnrollmentDialogProps {
   worker: Worker;
   onClose: () => void;
@@ -287,22 +287,81 @@ interface EnrollmentDialogProps {
 const EnrollmentDialog = ({ worker, onClose }: EnrollmentDialogProps) => {
   const { data: devices = [] } = useDevices();
   const { enroll, remove, isLoading } = useWorkerEnrollment();
+  const queryClient = useQueryClient();
   const [selectedDevices, setSelectedDevices] = useState<string[]>(worker.devices_enrolled || []);
+  const [trackedCommandIds, setTrackedCommandIds] = useState<string[]>([]);
+  const [phase, setPhase] = useState<'select' | 'tracking'>('select');
+
+  // Poll command statuses when tracking
+  const { data: commandStatuses = [] } = useQuery({
+    queryKey: ['enrollment-commands', trackedCommandIds],
+    queryFn: async () => {
+      if (trackedCommandIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from('agent_commands')
+        .select('id, device_id, status, error_message, command, executed_at')
+        .in('id', trackedCommandIds);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: trackedCommandIds.length > 0 && phase === 'tracking',
+    refetchInterval: trackedCommandIds.length > 0 ? 3000 : false,
+  });
+
+  // Stop polling when all commands are done
+  const allDone = commandStatuses.length > 0 && 
+    commandStatuses.every(c => c.status === 'completed' || c.status === 'failed');
+
+  useEffect(() => {
+    if (allDone) {
+      queryClient.invalidateQueries({ queryKey: ['workers'] });
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+    }
+  }, [allDone, queryClient]);
 
   const handleEnroll = async () => {
     const toEnroll = selectedDevices.filter(id => !worker.devices_enrolled?.includes(id));
     const toRemove = (worker.devices_enrolled || []).filter(id => !selectedDevices.includes(id));
 
     try {
+      const allCommandIds: string[] = [];
+
       if (toEnroll.length > 0) {
-        await enroll(worker.id, toEnroll);
+        const result = await enroll(worker.id, toEnroll);
+        if (result?.commandIds) allCommandIds.push(...result.commandIds);
       }
       if (toRemove.length > 0) {
-        await remove(worker.id, toRemove);
+        const result = await remove(worker.id, toRemove);
+        if (result?.commandIds) allCommandIds.push(...result.commandIds);
       }
-      onClose();
+
+      if (allCommandIds.length > 0) {
+        setTrackedCommandIds(allCommandIds);
+        setPhase('tracking');
+      } else {
+        onClose();
+      }
     } catch (error) {
       console.error('Enrollment error:', error);
+    }
+  };
+
+  const handleRetry = async (commandId: string) => {
+    const cmd = commandStatuses.find(c => c.id === commandId);
+    if (!cmd) return;
+
+    try {
+      const action = cmd.command === 'remove_worker' ? 'remove' : 'enroll';
+      const fn = action === 'remove' ? remove : enroll;
+      const result = await fn(worker.id, [cmd.device_id]);
+      if (result?.commandIds) {
+        setTrackedCommandIds(prev => [
+          ...prev.filter(id => id !== commandId),
+          ...result.commandIds,
+        ]);
+      }
+    } catch (error) {
+      console.error('Retry error:', error);
     }
   };
 
@@ -312,6 +371,28 @@ const EnrollmentDialog = ({ worker, onClose }: EnrollmentDialogProps) => {
         ? prev.filter(id => id !== deviceId)
         : [...prev, deviceId]
     );
+  };
+
+  const getDeviceName = (deviceId: string) => {
+    return devices.find(d => d.id === deviceId)?.name || deviceId.slice(0, 8);
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed': return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case 'failed': return <XCircle className="h-4 w-4 text-destructive" />;
+      case 'in_progress': return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
+      default: return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'completed': return 'Concluído';
+      case 'failed': return 'Falhou';
+      case 'in_progress': return 'Executando...';
+      default: return 'Aguardando agente...';
+    }
   };
 
   return (
@@ -329,52 +410,100 @@ const EnrollmentDialog = ({ worker, onClose }: EnrollmentDialogProps) => {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label>Dispositivos para Enrollment</Label>
-        <ScrollArea className="h-60 border rounded-md p-3">
-          {devices.map(device => {
-            const isEnrolled = worker.devices_enrolled?.includes(device.id);
-            const isSelected = selectedDevices.includes(device.id);
-            
-            return (
-              <div 
-                key={device.id} 
-                className={`flex items-center justify-between p-3 rounded-md mb-2 cursor-pointer transition-colors ${
-                  isSelected ? 'bg-primary/10 border border-primary' : 'bg-muted/50 hover:bg-muted'
-                }`}
-                onClick={() => toggleDevice(device.id)}
-              >
-                <div className="flex items-center gap-3">
-                  <Checkbox checked={isSelected} />
-                  <div>
-                    <p className="font-medium text-sm">{device.name}</p>
-                    <p className="text-xs text-muted-foreground">{device.controlid_ip_address}</p>
+      {phase === 'select' ? (
+        <>
+          <div className="space-y-2">
+            <Label>Dispositivos para Enrollment</Label>
+            <ScrollArea className="h-60 border rounded-md p-3">
+              {devices.map(device => {
+                const isEnrolled = worker.devices_enrolled?.includes(device.id);
+                const isSelected = selectedDevices.includes(device.id);
+                
+                return (
+                  <div 
+                    key={device.id} 
+                    className={`flex items-center justify-between p-3 rounded-md mb-2 cursor-pointer transition-colors ${
+                      isSelected ? 'bg-primary/10 border border-primary' : 'bg-muted/50 hover:bg-muted'
+                    }`}
+                    onClick={() => toggleDevice(device.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Checkbox checked={isSelected} />
+                      <div>
+                        <p className="font-medium text-sm">{device.name}</p>
+                        <p className="text-xs text-muted-foreground">{device.controlid_ip_address}</p>
+                      </div>
+                    </div>
+                    {isEnrolled && (
+                      <Badge variant="outline" className="bg-green-500/10 text-green-500">
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Cadastrado
+                      </Badge>
+                    )}
                   </div>
-                </div>
-                {isEnrolled && (
-                  <Badge variant="outline" className="bg-green-500/10 text-green-500">
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Cadastrado
-                  </Badge>
-                )}
-              </div>
-            );
-          })}
-          {devices.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Nenhum dispositivo cadastrado
-            </p>
-          )}
-        </ScrollArea>
-      </div>
+                );
+              })}
+              {devices.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Nenhum dispositivo cadastrado
+                </p>
+              )}
+            </ScrollArea>
+          </div>
 
-      <div className="flex justify-end gap-2 pt-4 border-t">
-        <Button variant="outline" onClick={onClose}>Cancelar</Button>
-        <Button onClick={handleEnroll} disabled={isLoading}>
-          <Fingerprint className="h-4 w-4 mr-2" />
-          {isLoading ? 'Processando...' : 'Sincronizar Biometria'}
-        </Button>
-      </div>
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button onClick={handleEnroll} disabled={isLoading}>
+              <Fingerprint className="h-4 w-4 mr-2" />
+              {isLoading ? 'Processando...' : 'Sincronizar Biometria'}
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              {allDone ? (
+                <CheckCircle className="h-4 w-4 text-green-500" />
+              ) : (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              {allDone ? 'Enrollment finalizado' : 'Aguardando execução pelo agente local...'}
+            </Label>
+            <div className="border rounded-md divide-y">
+              {commandStatuses.map(cmd => (
+                <div key={cmd.id} className="flex items-center justify-between p-3">
+                  <div className="flex items-center gap-3">
+                    {getStatusIcon(cmd.status)}
+                    <div>
+                      <p className="text-sm font-medium">{getDeviceName(cmd.device_id)}</p>
+                      <p className="text-xs text-muted-foreground">{getStatusLabel(cmd.status)}</p>
+                      {cmd.error_message && (
+                        <p className="text-xs text-destructive flex items-center gap-1 mt-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {cmd.error_message}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {cmd.status === 'failed' && (
+                    <Button size="sm" variant="outline" onClick={() => handleRetry(cmd.id)}>
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                      Reenviar
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-4 border-t">
+            <Button onClick={onClose}>
+              {allDone ? 'Fechar' : 'Fechar (continua em background)'}
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 };
