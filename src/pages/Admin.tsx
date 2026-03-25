@@ -44,6 +44,7 @@ const Admin = () => {
     { value: 'documents', label: 'Documentos', icon: FileWarning, content: <DocumentExpirationCheck /> },
     { value: 'agents', label: 'Agentes', icon: Bot, content: <AgentManagement /> },
     { value: 'connectivity', label: 'Conectividade', icon: Wifi, content: <ConnectivityDashboard /> },
+    ...(isDesktop ? [{ value: 'desktop-update', label: 'Atualização', icon: MonitorDown, content: <DesktopUpdater /> } as AdminTab] : []),
   ];
 
   const getDefaultTab = () => {
