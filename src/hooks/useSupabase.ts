@@ -90,11 +90,23 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
         }
       }
 
+      // First, get device IDs for this project
+      const { data: projectDevices, error: devicesError } = await supabase
+        .from('devices')
+        .select('id')
+        .eq('project_id', projectId);
+
+      if (devicesError) throw devicesError;
+
+      const deviceIds = (projectDevices || []).map(d => d.id);
+      if (deviceIds.length === 0) return [];
+
       const { data: entryLogs, error: entryError } = await supabase
         .from('access_logs')
         .select('worker_id, worker_name, device_name, timestamp')
         .eq('direction', 'entry')
         .eq('access_status', 'granted')
+        .in('device_id', deviceIds)
         .gte('timestamp', `${startDate}T00:00:00`)
         .order('timestamp', { ascending: false });
 
@@ -104,6 +116,7 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
         .from('access_logs')
         .select('worker_id, timestamp')
         .eq('direction', 'exit')
+        .in('device_id', deviceIds)
         .gte('timestamp', `${startDate}T00:00:00`);
 
       if (exitError) throw exitError;
