@@ -14,6 +14,8 @@ class AgentController {
     this.listeners = [];
     this.pollIntervalMs = 5000; // 5 seconds
     this.deviceConnectivity = new Map(); // serial_number -> { online: boolean }
+    this.sessionCache = new Map(); // ip:port -> { session, expiry }
+    this.SESSION_TTL_MS = 10 * 60 * 1000; // 10 minutes
   }
 
   onNewEvent(callback) {
@@ -44,6 +46,71 @@ class AgentController {
         serial_number: d.controlid_serial_number,
         online: this.deviceConnectivity.get(d.controlid_serial_number)?.online ?? false,
       }));
+  }
+
+  parseApiCredentials(apiCredentials) {
+    if (!apiCredentials) return {};
+    if (typeof apiCredentials === 'string') {
+      try { return JSON.parse(apiCredentials); } catch { return {}; }
+    }
+    return apiCredentials;
+  }
+
+  getDeviceKey(device) {
+    const creds = this.parseApiCredentials(device.api_credentials);
+    const port = creds.port || 80;
+    return `${device.controlid_ip_address}:${port}`;
+  }
+
+  async loginToDevice(device) {
+    const key = this.getDeviceKey(device);
+    const cached = this.sessionCache.get(key);
+    if (cached && cached.expiry > Date.now()) return cached.session;
+
+    const creds = this.parseApiCredentials(device.api_credentials);
+    const login = creds.username || creds.user || 'admin';
+    const password = creds.password || 'admin';
+    const port = creds.port || 80;
+    const ip = device.controlid_ip_address;
+
+    return new Promise((resolve, reject) => {
+      const postData = JSON.stringify({ login, password });
+      const req = http.request({
+        hostname: ip,
+        port,
+        path: '/login.fcgi',
+        method: 'POST',
+        timeout: 5000,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.session) {
+              this.sessionCache.set(key, { session: parsed.session, expiry: Date.now() + this.SESSION_TTL_MS });
+              resolve(parsed.session);
+            } else {
+              reject(new Error('Login failed: no session returned'));
+            }
+          } catch {
+            reject(new Error('Login failed: invalid response'));
+          }
+        });
+      });
+      req.on('error', reject);
+      req.on('timeout', () => { req.destroy(); reject(new Error('Login timeout')); });
+      req.write(postData);
+      req.end();
+    });
+  }
+
+  invalidateSession(device) {
+    this.sessionCache.delete(this.getDeviceKey(device));
   }
 
   async start() {
@@ -91,14 +158,34 @@ class AgentController {
     } catch { /* ignore */ }
   }
 
-  pollDevice(device) {
+  async pollDevice(device, _retried = false) {
+    const ip = device.controlid_ip_address;
+    if (!ip) throw new Error('No IP');
+
+    let session;
+    try {
+      session = await this.loginToDevice(device);
+    } catch (err) {
+      throw new Error(`Login failed: ${err.message}`);
+    }
+
+    const creds = this.parseApiCredentials(device.api_credentials);
+    const port = creds.port || 80;
+
     return new Promise((resolve, reject) => {
-      const ip = device.controlid_ip_address;
-      if (!ip) return reject(new Error('No IP'));
+      const req = http.get({
+        hostname: ip,
+        port,
+        path: `/api/access/last?session=${session}`,
+        timeout: 3000,
+      }, (res) => {
+        // Retry once on 401
+        if (res.statusCode === 401 && !_retried) {
+          this.invalidateSession(device);
+          this.pollDevice(device, true).then(resolve).catch(reject);
+          return;
+        }
 
-      const url = `http://${ip}/api/access/last`;
-
-      const req = http.get(url, { timeout: 3000 }, (res) => {
         let data = '';
         res.on('data', (chunk) => data += chunk);
         res.on('end', () => {
