@@ -248,6 +248,7 @@ class SyncEngine {
       'last_download', 'last_download_companies', 'last_download_projects',
       'last_download_devices', 'last_download_workers', 'last_download_user_companies',
       'last_download_company_documents', 'last_download_worker_documents',
+      'last_download_access_logs',
     ];
     for (const key of checkpoints) {
       this.db.setSyncMeta?.(key, '1970-01-01T00:00:00Z');
