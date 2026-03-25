@@ -102,11 +102,13 @@ serve(async (req) => {
       )
     }
 
-    // Look up worker
+    // Look up worker — ControlID sends integer `code`, not UUID
+    const userIdStr = String(event.user_id)
+    const isUuid = /^[0-9a-f]{8}-/.test(userIdStr)
     const { data: worker, error: workerError } = await supabase
       .from('workers')
       .select('id, name, status, document_number, allowed_project_ids')
-      .eq('id', event.user_id)
+      .eq(isUuid ? 'id' : 'code', isUuid ? event.user_id : Number(event.user_id))
       .single()
 
     let accessGranted = false
