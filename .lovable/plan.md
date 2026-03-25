@@ -1,55 +1,46 @@
 
 
-## Correções: Atualizador Desktop e Sincronização do Código do Trabalhador
+## Bug: Acesso negado para trabalhador reconhecido
 
-### Problema 1: Botão "Verificar atualizações" não faz nada
+### Causa raiz
 
-O painel mostra "Atualizador não configurado" porque a `updateFeedUrl` está vazia. Ao clicar no botão, `checkForUpdates()` retorna `{ ok: false, reason: 'not_configured' }` silenciosamente — o componente não trata esse retorno.
+O dispositivo ControlID identifica usuários pelo campo inteiro `code` (ex: `42`). Quando o enrollment é feito, o sistema envia `worker_code` como o ID do usuário no dispositivo. Quando o dispositivo reporta um evento de acesso, ele envia esse mesmo inteiro como `event.user_id`.
 
-**Correção no `DesktopUpdater.tsx`:**
-- Tratar o retorno de `checkForUpdates()`: se `reason === 'not_configured'`, exibir toast informando que a URL precisa ser configurada
-- Adicionar um campo de input para configurar a URL de atualização diretamente no painel (usando `electronAPI.setUpdateUrl()` já exposto no preload)
-- Mostrar a URL atual (via `electronAPI.getUpdateUrl()`) para o operador saber se está configurada
-- Após salvar a URL, atualizar o status automaticamente
+Porém, o webhook (`controlid-webhook/index.ts` linha 109) faz:
+```typescript
+.eq('id', event.user_id)  // ← procura pelo UUID!
+```
 
-### Problema 2: Código do trabalhador não sincronizado
+O `id` é um UUID (ex: `a1b2c3d4-...`), mas o dispositivo envia o `code` inteiro (ex: `42`). A query não encontra o trabalhador → `worker_not_found` → **acesso negado**.
 
-O campo `code` é um `serial` no Postgres (auto-incremento). O `Worker` type em `src/types/supabase.ts` **não inclui** o campo `code`, embora ele exista no banco e seja retornado nas queries. No contexto da sincronização com o local server:
+O mesmo problema existe no `electron/agent.js` linha 184: `worker_id: event.user_id` — grava o código inteiro no campo `worker_id` que espera UUID.
 
-- A edge function `download-workers` já inclui `code` no select
-- O `upsertWorkerFromCloud` já persiste `code` no SQLite local
-- O local server já usa `worker.code` no enrollment
+### Correção
 
-O problema provável é que ao **criar** um trabalhador via Desktop (que usa `localWorkers.create()`), o código não é gerado porque o SQLite local não tem a sequence serial do Postgres. O `code` só será preenchido quando o sync baixar o worker da nuvem.
+#### 1. `supabase/functions/controlid-webhook/index.ts`
 
-**Correção:**
-- Adicionar `code` ao tipo `Worker` em `src/types/supabase.ts`
-- No `createWorker` via cloud, garantir que o `code` retornado é refletido na UI imediatamente (já funciona via `.select().single()`)
-- Para criação local: após salvar no local server, disparar sync ou buscar o `code` do cloud após o insert
+Alterar a busca do trabalhador para detectar se `event.user_id` é um UUID ou inteiro:
+- Se for UUID → buscar por `id`
+- Se for inteiro → buscar por `code`
+
+```typescript
+const isUuid = /^[0-9a-f]{8}-/.test(String(event.user_id));
+const { data: worker, error: workerError } = await supabase
+  .from('workers')
+  .select('id, name, status, document_number, allowed_project_ids')
+  .eq(isUuid ? 'id' : 'code', isUuid ? event.user_id : Number(event.user_id))
+  .single()
+```
+
+Também corrigir o insert do access_log para usar `worker.id` (UUID) em vez de `event.user_id`.
+
+#### 2. `electron/agent.js` — método `processEvent`
+
+Mesma correção: o `event.user_id` vindo do dispositivo é o `code` inteiro. Precisa resolver para o UUID do trabalhador antes de gravar no access_log:
+- Buscar o trabalhador pelo `code` no SQLite local
+- Usar o `id` (UUID) resultante no `worker_id` do access_log
 
 ### Arquivos afetados
-- `src/components/desktop/DesktopUpdater.tsx` — adicionar config de URL + feedback no botão
-- `src/types/supabase.ts` — adicionar `code: number` ao `Worker`
-
-### Detalhes técnicos
-
-**DesktopUpdater — nova seção de configuração:**
-```
-[URL de atualização: _________________ ] [Salvar]
-```
-- Usa `api.getUpdateUrl()` para ler o valor atual
-- Usa `api.setUpdateUrl(url)` para salvar
-- Após salvar, chama `handleCheck()` automaticamente
-
-**handleCheck — tratamento do retorno:**
-```typescript
-const result = await api.updater.checkForUpdates();
-if (!result.ok) {
-  if (result.reason === 'not_configured') {
-    toast({ title: 'URL não configurada', description: '...' });
-  } else if (result.reason === 'not_packaged') {
-    toast({ title: 'Modo desenvolvimento', description: '...' });
-  }
-}
-```
+- `supabase/functions/controlid-webhook/index.ts` — buscar worker por `code` quando `user_id` é inteiro
+- `electron/agent.js` — resolver `code` → UUID no `processEvent`
 
