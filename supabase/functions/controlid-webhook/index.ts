@@ -36,7 +36,7 @@ serve(async (req) => {
     const deviceIdentifier = event.serial_number || event.device_id
     const { data: device, error: deviceError } = await supabase
       .from('devices')
-      .select('id, name, project_id')
+      .select('id, name, project_id, configuration')
       .eq('controlid_serial_number', deviceIdentifier)
       .single()
 
