@@ -125,6 +125,33 @@ const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
           allowed_project_ids: data.allowed_project_ids,
           photo_url: photoUrl,
         });
+
+        // Auto-enrollment: if worker has devices_enrolled, re-sync automatically
+        const enrolledDevices = worker.devices_enrolled || [];
+        if (enrolledDevices.length > 0) {
+          try {
+            const { data: enrollResult, error: enrollError } = await supabase.functions.invoke("worker-enrollment", {
+              body: { action: 'enroll', workerId: worker.id, deviceIds: enrolledDevices }
+            });
+            if (!enrollError && enrollResult?.commandIds?.length > 0) {
+              toast({ 
+                title: 'Dados atualizados',
+                description: `Re-sincronizando biometria em ${enrolledDevices.length} dispositivo(s)...`,
+              });
+              queryClient.invalidateQueries({ queryKey: ['workers'] });
+              onSuccess({ workerId: worker.id, workerName: worker.name, commandIds: enrollResult.commandIds });
+              return;
+            }
+          } catch (enrollErr) {
+            console.error('Auto-enrollment failed:', enrollErr);
+            toast({ 
+              title: 'Trabalhador atualizado', 
+              description: 'Não foi possível re-sincronizar a biometria automaticamente. Use o botão de Enrollment manualmente.',
+              variant: 'destructive',
+            });
+          }
+        }
+
         toast({ title: 'Trabalhador atualizado com sucesso' });
       } else {
         const newWorker = await createWorker({
