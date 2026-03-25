@@ -17,6 +17,7 @@ export interface Company {
 export interface Worker {
   id: string;
   name: string;
+  code: number;
   company_id: string | null;
   company?: string;
   role: string | null;
