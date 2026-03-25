@@ -246,13 +246,36 @@ export const DiagnosticsPanel = () => {
 
       try {
         const syncStatus = await localSync.getStatus();
+        const details: string[] = [];
+        if (syncStatus.online) {
+          details.push('Online');
+        } else {
+          details.push('Offline');
+        }
+        details.push(`${syncStatus.pendingCount || 0} pendências`);
+        if (syncStatus.unsyncedLogsCount !== undefined) {
+          details.push(`${syncStatus.unsyncedLogsCount} logs aguardando upload`);
+        }
+        if (syncStatus.uploadLogsCount) {
+          details.push(`${syncStatus.uploadLogsCount} logs enviados`);
+        }
+        if (syncStatus.downloadLogsCount) {
+          details.push(`${syncStatus.downloadLogsCount} logs baixados`);
+        }
+        if (syncStatus.lastUploadLogsError) {
+          details.push(`Último erro upload: ${syncStatus.lastUploadLogsError}`);
+        }
+        if (syncStatus.lastDownloadLogsError) {
+          details.push(`Último erro download: ${syncStatus.lastDownloadLogsError}`);
+        }
+
         results.push({
           id: 'auth',
           name: 'Sincronização Local',
-          status: syncStatus.online ? 'ok' : 'warning',
-          message: syncStatus.online
-            ? `Online • ${syncStatus.pendingCount || 0} pendências na fila`
-            : `Offline • ${syncStatus.pendingCount || 0} pendências aguardando envio`,
+          status: syncStatus.online
+            ? (syncStatus.lastUploadLogsError || syncStatus.lastDownloadLogsError ? 'warning' : 'ok')
+            : 'warning',
+          message: details.join(' • '),
           lastCheck: new Date()
         });
       } catch (e: any) {
