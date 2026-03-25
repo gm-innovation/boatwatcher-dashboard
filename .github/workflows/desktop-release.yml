@@ -63,8 +63,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm install --package-lock-only
-          npm ci --foreground-scripts --loglevel=verbose
+          npm install --package-lock-only --legacy-peer-deps
+          npm ci --foreground-scripts --loglevel=verbose --legacy-peer-deps
 
       - name: Setup native build tools
         shell: bash
