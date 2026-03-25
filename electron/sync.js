@@ -490,9 +490,10 @@ class SyncEngine {
             };
 
             let photoBase64 = null;
-            if (payload.photo_url) {
+            const photoUrl = payload.photo_signed_url || payload.photo_url;
+            if (photoUrl) {
               try {
-                photoBase64 = await loadPhotoAsBase64(payload.photo_url);
+                photoBase64 = await loadPhotoAsBase64(photoUrl);
               } catch (photoErr) {
                 console.warn(`[commands] Photo download failed for worker ${payload.worker_id}:`, photoErr.message);
               }

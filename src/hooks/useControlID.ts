@@ -145,6 +145,7 @@ export const useWorkerEnrollment = () => {
       });
 
       if (error) throw error;
+      // Return data including commandIds for UI tracking
       return data;
     },
     onSuccess: (data) => {
