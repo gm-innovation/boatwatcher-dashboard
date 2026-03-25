@@ -1,35 +1,55 @@
 
 
-## Adicionar painel de atualização ao Desktop
+## Correções: Atualizador Desktop e Sincronização do Código do Trabalhador
 
-### Situação atual
+### Problema 1: Botão "Verificar atualizações" não faz nada
 
-O Desktop já possui toda a infraestrutura de auto-update no backend Electron:
-- `electron/main.js`: handlers IPC (`updater:getStatus`, `updater:checkForUpdates`, `updater:installDownloadedUpdate`)
-- `electron/preload.js`: bridge exposta (`electronAPI.updater.*`, `onUpdaterStatusChange`)
-- `src/lib/dataProvider.ts`: tipos TypeScript (`UpdaterStatus`)
+O painel mostra "Atualizador não configurado" porque a `updateFeedUrl` está vazia. Ao clicar no botão, `checkForUpdates()` retorna `{ ok: false, reason: 'not_configured' }` silenciosamente — o componente não trata esse retorno.
 
-O que falta é **apenas a UI React** para exibir o status e permitir ações de atualização. No Local Server isso existe no `server-ui.html`, mas no Desktop não há nenhum componente consumindo essas APIs.
+**Correção no `DesktopUpdater.tsx`:**
+- Tratar o retorno de `checkForUpdates()`: se `reason === 'not_configured'`, exibir toast informando que a URL precisa ser configurada
+- Adicionar um campo de input para configurar a URL de atualização diretamente no painel (usando `electronAPI.setUpdateUrl()` já exposto no preload)
+- Mostrar a URL atual (via `electronAPI.getUpdateUrl()`) para o operador saber se está configurada
+- Após salvar a URL, atualizar o status automaticamente
 
-### Plano
+### Problema 2: Código do trabalhador não sincronizado
 
-#### 1. Criar componente `DesktopUpdater` (`src/components/desktop/DesktopUpdater.tsx`)
+O campo `code` é um `serial` no Postgres (auto-incremento). O `Worker` type em `src/types/supabase.ts` **não inclui** o campo `code`, embora ele exista no banco e seja retornado nas queries. No contexto da sincronização com o local server:
 
-Componente que:
-- Chama `electronAPI.updater.getStatus()` ao montar para obter o estado inicial
-- Escuta `electronAPI.onUpdaterStatusChange()` para atualizações em tempo real
-- Exibe um card compacto com:
-  - **Versão atual** (via `app.getVersion()` — já exposto como `getVersion` no preload? verificar, senão usar o status)
-  - **Status**: idle / checking / downloading (com %) / downloaded / error
-  - **Botão "Verificar atualizações"**: chama `electronAPI.updater.checkForUpdates()`
-  - **Botão "Instalar e reiniciar"** (quando `downloaded = true`): chama `electronAPI.updater.installDownloadedUpdate()`
-  - **Mensagem de erro** com link para download manual quando falha
+- A edge function `download-workers` já inclui `code` no select
+- O `upsertWorkerFromCloud` já persiste `code` no SQLite local
+- O local server já usa `worker.code` no enrollment
 
-#### 2. Integrar o componente na página de Administração (`src/pages/Admin.tsx`)
+O problema provável é que ao **criar** um trabalhador via Desktop (que usa `localWorkers.create()`), o código não é gerado porque o SQLite local não tem a sequence serial do Postgres. O `code` só será preenchido quando o sync baixar o worker da nuvem.
 
-Adicionar uma nova aba ou seção "Atualização do Desktop" visível apenas quando `isElectron() === true`, renderizando o `DesktopUpdater`.
+**Correção:**
+- Adicionar `code` ao tipo `Worker` em `src/types/supabase.ts`
+- No `createWorker` via cloud, garantir que o `code` retornado é refletido na UI imediatamente (já funciona via `.select().single()`)
+- Para criação local: após salvar no local server, disparar sync ou buscar o `code` do cloud após o insert
 
 ### Arquivos afetados
-- `src/components/desktop/DesktopUpdater.tsx` (novo)
-- `src/pages/Admin.tsx` (adicionar aba/seção condicional)
+- `src/components/desktop/DesktopUpdater.tsx` — adicionar config de URL + feedback no botão
+- `src/types/supabase.ts` — adicionar `code: number` ao `Worker`
+
+### Detalhes técnicos
+
+**DesktopUpdater — nova seção de configuração:**
+```
+[URL de atualização: _________________ ] [Salvar]
+```
+- Usa `api.getUpdateUrl()` para ler o valor atual
+- Usa `api.setUpdateUrl(url)` para salvar
+- Após salvar, chama `handleCheck()` automaticamente
+
+**handleCheck — tratamento do retorno:**
+```typescript
+const result = await api.updater.checkForUpdates();
+if (!result.ok) {
+  if (result.reason === 'not_configured') {
+    toast({ title: 'URL não configurada', description: '...' });
+  } else if (result.reason === 'not_packaged') {
+    toast({ title: 'Modo desenvolvimento', description: '...' });
+  }
+}
+```
 
