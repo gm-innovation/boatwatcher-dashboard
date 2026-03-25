@@ -1,86 +1,61 @@
 
+Objetivo: corrigir o falso indicativo de credenciais no Servidor Local e eliminar o 401 persistente no enrollment com diagnóstico preciso por etapa.
 
-## Corrigir autenticação ControlID: Session-based em vez de Basic Auth
+1) Confirmar e corrigir a causa visível do print (UI do Servidor Local)
+- Arquivo: `electron/server-ui.html`
+- Hoje a coluna “Credenciais” só lê `api_credentials.user`, mas os dispositivos sincronizados da nuvem estão vindo como `api_credentials.username`.
+- Ajustar exibição para fallback: `username || user || login`.
+- Resultado esperado: o painel deixa de mostrar “—” quando a credencial existe.
 
-### Problema raiz
+2) Tornar o “Teste Manual” um teste real de autenticação
+- Arquivos: `electron/server-ui.html`, `electron/server-preload.js`, `electron/local-server-main.js`
+- Hoje o botão “Testar” valida apenas conectividade de IP (`/api/status`), não login/sessão.
+- Trocar para teste autenticado usando o mesmo fluxo do enrollment (login em `/login.fcgi` + chamada autenticada ao dispositivo).
+- Resultado esperado: “Online” só aparece quando credencial + sessão estiverem válidas.
 
-Os dispositivos ControlID **não usam HTTP Basic Auth**. A API deles exige:
+3) Normalizar credenciais em um único formato no runtime local
+- Arquivo: `server/lib/controlid.js` (e ponto de leitura no dashboard local)
+- Criar normalização central para aceitar variações: `username`, `user`, `login` + `password` + `port`.
+- Usar sempre esse normalizador em `loginToDevice`, requests e exibição.
+- Resultado esperado: eliminar inconsistências entre credencial salva e credencial usada.
 
-1. POST para `/login.fcgi` com `{ login, password }` no body JSON
-2. Receber um token de sessão na resposta: `{ "session": "abc123" }`
-3. Usar essa sessão como query parameter em todas as requisições: `?session=abc123`
+4) Melhorar compatibilidade de autenticação para firmware variado
+- Arquivo: `server/lib/controlid.js`
+- No login, enviar payload com fallback compatível (mantendo `login` principal, com suporte a aliases).
+- Em chamadas autenticadas, manter `session` na query e aplicar fallback de sessão também no body JSON quando aplicável.
+- Resultado esperado: reduzir 401 em firmwares que exigem formato mais estrito.
 
-O código atual envia `Authorization: Basic base64(user:pass)`, que o dispositivo ignora completamente, retornando 401.
+5) Instrumentar erro por fase para parar o “HTTP 401 genérico”
+- Arquivos: `server/lib/controlid.js`, `electron/sync.js`
+- Padronizar erros com contexto:
+  - `phase=login.fcgi`
+  - `phase=create_objects.fcgi`
+  - `phase=user_set_image.fcgi`
+  - status HTTP + trecho de resposta do dispositivo.
+- Propagar esse erro completo para `agent_commands.error_message`.
+- Resultado esperado: identificar em qual etapa o 401 acontece sem tentativa-cega.
 
-### Alterações necessárias
+6) Validação E2E após ajuste
+- No painel local: confirmar coluna “Credenciais” preenchida para os 2 dispositivos.
+- Clicar “Testar” em ambos e validar autenticação real.
+- Rodar novo enrollment de 1 trabalhador.
+- Confirmar em `agent_commands`: `pending → in_progress → completed` (ou erro com fase explícita, se ainda houver bloqueio no firmware).
 
-**3 arquivos** precisam ser corrigidos — todos usam o mesmo padrão errado:
-
-#### 1. `server/lib/controlid.js` (servidor local / Electron)
-
-- Criar função `loginToDevice(device)` que faz POST para `/login.fcgi` com `{ login, password }`
-- Cachear sessões por IP (com TTL de ~10 min) para evitar login a cada request
-- Alterar `buildDeviceUrl()` para incluir `?session=TOKEN` em vez de header Basic Auth
-- Remover `buildAuthHeaders()` (não é mais necessário)
-- Em caso de 401 em qualquer request, invalidar cache e tentar login novamente (retry automático)
-
+Detalhes técnicos (resumo)
 ```text
-Fluxo atual (ERRADO):
-  Request → Header: Authorization: Basic xxx → 401
+Fluxo atual (enganoso no painel):
+  Testar = ping IP (/api/status)  -> pode mostrar Online sem login válido
 
-Fluxo correto:
-  POST /login.fcgi { login, password } → { session: "abc" }
-  Request /create_objects.fcgi?session=abc → 200
+Fluxo corrigido:
+  Testar = POST /login.fcgi + chamada autenticada
+  Enrollment = login/sessão normalizada + fallback compatível + erro por fase
 ```
 
-#### 2. `supabase/functions/controlid-api/index.ts` (Edge Function)
+Escopo de arquivos
+- `electron/server-ui.html`
+- `electron/server-preload.js`
+- `electron/local-server-main.js`
+- `server/lib/controlid.js`
+- `electron/sync.js`
 
-- Mesma correção: adicionar `loginToDevice()` antes de qualquer operação
-- Passar sessão como query param em vez de Basic Auth header
-- Nota: Edge Functions não atingem IPs locais (192.168.x.x), então essa função só é usada quando o dispositivo tem IP público. Mesmo assim, a autenticação precisa ser corrigida.
-
-#### 3. `electron/agent.js` (polling de eventos)
-
-- Atualmente faz GET para `/api/access/last` sem autenticação
-- Adicionar login + sessão ao polling também, caso os dispositivos exijam autenticação para esse endpoint
-
-### Detalhes técnicos
-
-**Cache de sessão** (em `server/lib/controlid.js`):
-```javascript
-const sessionCache = new Map(); // ip -> { session, expiry }
-
-async function getSession(device) {
-  const key = device.controlid_ip_address;
-  const cached = sessionCache.get(key);
-  if (cached && cached.expiry > Date.now()) return cached.session;
-  
-  const creds = parseApiCredentials(device.api_credentials);
-  const response = await fetch(`http://${key}:${creds.port || 80}/login.fcgi`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ login: creds.username || 'admin', password: creds.password || 'admin' }),
-  });
-  
-  const data = await response.json();
-  if (!data.session) throw new Error('Login falhou no dispositivo');
-  
-  sessionCache.set(key, { session: data.session, expiry: Date.now() + 10 * 60 * 1000 });
-  return data.session;
-}
-```
-
-**Uso da sessão**: Todas as URLs passam a incluir `?session=TOKEN` como query parameter, conforme documentação oficial da ControlID.
-
-**Retry em 401**: Se uma request retornar 401, limpar cache da sessão, fazer novo login e repetir a request uma vez.
-
-### Campo `api_credentials` no banco
-
-O formato atual `{ username, password }` continua válido — apenas o campo `username` será usado como `login` no POST para `/login.fcgi`. Nenhuma alteração no banco de dados é necessária.
-
-### Impacto
-
-- Corrige o erro 401 em enrollment, remoção, liberação de acesso e polling
-- Compatível com todos os firmwares ControlID (iDAccess, iDFace)
-- Sem breaking changes na interface — a mudança é transparente
-
+Sem mudanças de banco/migração nesta etapa.
