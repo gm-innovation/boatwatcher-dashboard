@@ -489,73 +489,97 @@ class SyncEngine {
       const commands = response?.commands || [];
       if (commands.length === 0) return;
 
-      console.log(`[sync] Found ${commands.length} pending command(s)`);
+      console.log(`[commands] Claimed ${commands.length} command(s) (remaining: ${response.remainingPending ?? '?'})`);
       const { enrollUserOnDevice, removeUserFromDevice, loadPhotoAsBase64 } = require('../server/lib/controlid');
 
+      // Group commands by device for parallel-per-device, serial-within-device execution
+      const deviceGroups = new Map();
       for (const cmd of commands) {
-        const resultPayload = { command_id: cmd.id, status: 'completed', result: null, error_message: null };
-
-        try {
-          const device = this.db.getDeviceById?.(cmd.device_id);
-          if (!device || !device.controlid_ip_address) {
-            throw new Error(`Dispositivo ${cmd.device_id} não encontrado ou sem IP.`);
-          }
-
-          const payload = cmd.payload || {};
-
-          if (cmd.command === 'enroll_worker') {
-            // Build worker-like object for enrollUserOnDevice
-            const workerObj = {
-              id: payload.worker_id,
-              code: payload.worker_code,
-              name: payload.worker_name,
-              document_number: payload.document_number,
-            };
-
-            let photoBase64 = null;
-            const photoUrl = payload.photo_signed_url || payload.photo_url;
-            if (photoUrl) {
-              try {
-                photoBase64 = await loadPhotoAsBase64(photoUrl);
-              } catch (photoErr) {
-                console.warn(`[commands] Photo download failed for worker ${payload.worker_id}:`, photoErr.message);
-              }
-            }
-
-            const enrollResult = await enrollUserOnDevice(device, workerObj, photoBase64);
-            if (!enrollResult.success) {
-              throw new Error(enrollResult.error || 'Enrollment failed');
-            }
-            resultPayload.result = enrollResult;
-            console.log(`[commands] Enrolled worker ${payload.worker_name} on device ${device.name}`);
-
-          } else if (cmd.command === 'remove_worker') {
-            const removeResult = await removeUserFromDevice(device, payload.worker_id, payload.worker_code);
-            if (!removeResult.success) {
-              throw new Error(removeResult.error || 'Removal failed');
-            }
-            resultPayload.result = removeResult;
-            console.log(`[commands] Removed worker ${payload.worker_name} from device ${device.name}`);
-
-          } else {
-            throw new Error(`Comando desconhecido: ${cmd.command}`);
-          }
-
-        } catch (execErr) {
-          console.error(`[commands] Command ${cmd.id} failed:`, execErr.message);
-          resultPayload.status = 'failed';
-          resultPayload.error_message = execErr.message;
-        }
-
-        // Report result back to cloud
-        try {
-          await this.callEdgeFunction('agent-sync/upload-command-result', 'POST', resultPayload);
-        } catch (uploadErr) {
-          console.error(`[commands] Failed to upload result for ${cmd.id}:`, uploadErr.message);
-        }
+        const group = deviceGroups.get(cmd.device_id) || [];
+        group.push(cmd);
+        deviceGroups.set(cmd.device_id, group);
       }
+
+      // Photo cache: avoid downloading the same photo multiple times in a batch
+      const photoCache = new Map();
+
+      const processDeviceCommands = async (deviceCmds) => {
+        for (const cmd of deviceCmds) {
+          const resultPayload = { command_id: cmd.id, status: 'completed', result: null, error_message: null };
+
+          try {
+            const device = this.db.getDeviceById?.(cmd.device_id);
+            if (!device || !device.controlid_ip_address) {
+              throw new Error(`Dispositivo ${cmd.device_id} não encontrado ou sem IP.`);
+            }
+
+            const payload = cmd.payload || {};
+
+            if (cmd.command === 'enroll_worker') {
+              const workerObj = {
+                id: payload.worker_id,
+                code: payload.worker_code,
+                name: payload.worker_name,
+                document_number: payload.document_number,
+              };
+
+              let photoBase64 = null;
+              const photoUrl = payload.photo_signed_url || payload.photo_url;
+              if (photoUrl) {
+                // Use cache to avoid re-downloading same photo across devices
+                const cacheKey = payload.worker_id || photoUrl;
+                if (photoCache.has(cacheKey)) {
+                  photoBase64 = photoCache.get(cacheKey);
+                } else {
+                  try {
+                    photoBase64 = await loadPhotoAsBase64(photoUrl);
+                    photoCache.set(cacheKey, photoBase64);
+                  } catch (photoErr) {
+                    console.warn(`[commands] Photo download failed for worker ${payload.worker_id}:`, photoErr.message);
+                  }
+                }
+              }
+
+              const enrollResult = await enrollUserOnDevice(device, workerObj, photoBase64);
+              if (!enrollResult.success) {
+                throw new Error(enrollResult.error || 'Enrollment failed');
+              }
+              resultPayload.result = enrollResult;
+              console.log(`[commands] Enrolled worker ${payload.worker_name} on device ${device.name}`);
+
+            } else if (cmd.command === 'remove_worker') {
+              const removeResult = await removeUserFromDevice(device, payload.worker_id, payload.worker_code);
+              if (!removeResult.success) {
+                throw new Error(removeResult.error || 'Removal failed');
+              }
+              resultPayload.result = removeResult;
+              console.log(`[commands] Removed worker ${payload.worker_name} from device ${device.name}`);
+
+            } else {
+              throw new Error(`Comando desconhecido: ${cmd.command}`);
+            }
+
+          } catch (execErr) {
+            console.error(`[commands] Command ${cmd.id} failed:`, execErr.message);
+            resultPayload.status = 'failed';
+            resultPayload.error_message = execErr.message;
+          }
+
+          // Report result back to cloud
+          try {
+            await this.callEdgeFunction('agent-sync/upload-command-result', 'POST', resultPayload);
+          } catch (uploadErr) {
+            console.error(`[commands] Failed to upload result for ${cmd.id}:`, uploadErr.message);
+          }
+        }
+      };
+
+      // Execute all device groups in parallel
+      await Promise.all(
+        Array.from(deviceGroups.values()).map(deviceCmds => processDeviceCommands(deviceCmds))
+      );
     } catch (err) {
-      console.error('[sync] Download commands error:', err.message);
+      console.error('[commands] Download commands error:', err.message);
     }
   }
 
