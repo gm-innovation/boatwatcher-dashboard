@@ -281,8 +281,29 @@ serve(async (req) => {
       if (!Array.isArray(logs) || logs.length === 0) {
         return new Response(JSON.stringify({ error: 'Empty logs' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
-      const { error } = await supabase.from('access_logs').insert(logs)
-      if (error) throw error
+
+      // Sanitize: keep only columns that exist in the cloud access_logs table
+      const sanitizedLogs = logs.map((l: Record<string, unknown>) => ({
+        worker_id: l.worker_id || null,
+        device_id: l.device_id || null,
+        timestamp: l.timestamp,
+        access_status: l.access_status,
+        direction: l.direction || 'unknown',
+        reason: l.reason || null,
+        score: l.score != null ? l.score : null,
+        worker_name: l.worker_name || null,
+        worker_document: l.worker_document || null,
+        device_name: l.device_name || null,
+        photo_capture_url: l.photo_capture_url || null,
+      }))
+
+      console.log(`[agent-sync/upload-logs] Agent ${agent.id}: uploading ${sanitizedLogs.length} sanitized logs`)
+
+      const { error } = await supabase.from('access_logs').insert(sanitizedLogs)
+      if (error) {
+        console.error(`[agent-sync/upload-logs] Insert error:`, error)
+        throw error
+      }
 
       await supabase.from('local_agents').update({ last_sync_at: new Date().toISOString(), pending_sync_count: 0, sync_status: 'synced' }).eq('id', agent.id)
 
