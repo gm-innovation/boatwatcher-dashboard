@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchCompanies, fetchWorkers, fetchProjects, fetchProjectById, fetchWorkersOnBoard as fetchProjectWorkersOnBoard } from '@/hooks/useDataProvider';
 import { supabase } from '@/integrations/supabase/client';
 import type { Company, Worker, Project } from '@/types/supabase';
-import { format, startOfDay } from 'date-fns';
+import { format, startOfDay, subDays } from 'date-fns';
 import { usesLocalServer } from '@/lib/runtimeProfile';
 
 export const useCompanies = () => {
