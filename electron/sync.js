@@ -48,6 +48,33 @@ class SyncEngine {
     this.agentController = controller;
   }
 
+  /**
+   * Fast-lane: called when the agent captures a new access event.
+   * Debounces to avoid flooding, then uploads logs immediately.
+   */
+  triggerFastLaneSync() {
+    if (!this.isConfigured()) return;
+
+    const now = Date.now();
+    const elapsed = now - this._lastFastLane;
+
+    if (this._fastLaneTimer) clearTimeout(this._fastLaneTimer);
+
+    const delay = elapsed >= this._fastLaneThrottleMs ? 500 : this._fastLaneThrottleMs - elapsed + 100;
+
+    this._fastLaneTimer = setTimeout(async () => {
+      this._lastFastLane = Date.now();
+      try {
+        const online = await this.checkConnectivity();
+        if (!online) return;
+        await this.uploadLogs();
+        console.log('[sync] Fast-lane upload completed');
+      } catch (err) {
+        console.error('[sync] Fast-lane error:', err.message);
+      }
+    }, delay);
+  }
+
   onStatusChange(callback) {
     this.listeners.push(callback);
   }
