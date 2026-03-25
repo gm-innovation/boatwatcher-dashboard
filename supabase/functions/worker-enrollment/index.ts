@@ -56,114 +56,121 @@ serve(async (req) => {
   )
 
   try {
-    const { action, workerId, deviceIds: providedDeviceIds } = await req.json()
+    const body = await req.json()
+    const { action, workerId, workerIds: providedWorkerIds, deviceIds: providedDeviceIds } = body
     const userId = claimsData.claims.sub
-    console.log('Worker Enrollment Request:', { action, workerId, providedDeviceIds, userId })
 
-    // Fetch worker
-    const { data: worker, error: workerError } = await supabase
-      .from('workers')
-      .select('id, name, code, photo_url, devices_enrolled, document_number, allowed_project_ids, company_id')
-      .eq('id', workerId)
-      .single()
+    // --- BULK MODE: process multiple workers in one call ---
+    const bulkWorkerIds: string[] = providedWorkerIds && providedWorkerIds.length > 0
+      ? providedWorkerIds
+      : workerId ? [workerId] : [];
 
-    if (workerError || !worker) {
-      throw new Error(`Worker not found: ${workerId}`)
+    if (bulkWorkerIds.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'workerId ou workerIds é obrigatório' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    // --- Resolve deviceIds automatically if not provided ---
-    let deviceIds: string[] = providedDeviceIds && providedDeviceIds.length > 0
+    console.log('Worker Enrollment Request:', { action, bulkWorkerIds: bulkWorkerIds.length, providedDeviceIds, userId })
+
+    // Fetch all workers in one query
+    const { data: allWorkers, error: allWorkersError } = await supabase
+      .from('workers')
+      .select('id, name, code, photo_url, devices_enrolled, document_number, allowed_project_ids, company_id')
+      .in('id', bulkWorkerIds)
+
+    if (allWorkersError) throw allWorkersError
+    if (!allWorkers || allWorkers.length === 0) {
+      throw new Error(`Nenhum trabalhador encontrado`)
+    }
+
+    // Collect all unique project IDs across all workers
+    const allProjectIds = [...new Set(allWorkers.flatMap(w => w.allowed_project_ids || []))]
+
+    // Resolve device IDs once for all workers if not provided
+    let resolvedDeviceIds: string[] = providedDeviceIds && providedDeviceIds.length > 0
       ? providedDeviceIds
       : [];
 
-    if (deviceIds.length === 0) {
-      const projectIds = worker.allowed_project_ids || [];
-      if (projectIds.length === 0) {
-        console.log('Worker has no allowed_project_ids, no devices to resolve');
-        return new Response(
-          JSON.stringify({
-            success: true,
-            queued: false,
-            message: 'Trabalhador não tem projetos permitidos. Nenhum dispositivo para sincronizar.',
-            commandIds: [],
-            resolvedDeviceCount: 0,
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      // Resolve devices from allowed_project_ids
-      const { data: devices, error: devicesResolveError } = await supabase
+    if (resolvedDeviceIds.length === 0 && allProjectIds.length > 0) {
+      const { data: resolvedDevices, error: devicesResolveError } = await supabase
         .from('devices')
-        .select('id')
-        .in('project_id', projectIds)
-        .not('agent_id', 'is', null);
+        .select('id, project_id')
+        .in('project_id', allProjectIds)
+        .not('agent_id', 'is', null)
 
-      if (devicesResolveError) {
-        console.error('Error resolving devices:', devicesResolveError);
-        throw new Error('Falha ao resolver dispositivos dos projetos');
-      }
-
-      deviceIds = (devices || []).map(d => d.id);
-      console.log(`Resolved ${deviceIds.length} devices from ${projectIds.length} projects`);
-
-      if (deviceIds.length === 0) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            queued: false,
-            message: 'Nenhum dispositivo com agente local encontrado nos projetos do trabalhador.',
-            commandIds: [],
-            resolvedDeviceCount: 0,
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
+      if (devicesResolveError) throw devicesResolveError
+      resolvedDeviceIds = (resolvedDevices || []).map(d => d.id)
     }
 
-    const workerCode = Number(worker.code)
-
-    // --- Generate signed URL for the worker photo ---
-    let photoSignedUrl: string | null = null;
-    const storageRef = parseStorageRef(worker.photo_url);
-    if (storageRef) {
-      const { data: signedData, error: signedError } = await supabase.storage
-        .from(storageRef.bucket)
-        .createSignedUrl(storageRef.path, 3600); // 1 hour
-
-      if (signedError) {
-        console.warn('Failed to create signed URL for photo:', signedError.message);
-      } else {
-        photoSignedUrl = signedData.signedUrl;
-      }
-    } else if (worker.photo_url && worker.photo_url.startsWith('http')) {
-      // Already a full URL (legacy), pass through
-      photoSignedUrl = worker.photo_url;
+    if (resolvedDeviceIds.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          queued: false,
+          message: 'Nenhum dispositivo com agente local encontrado nos projetos.',
+          commandIds: [],
+          workerCount: bulkWorkerIds.length,
+          resolvedDeviceCount: 0,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    // Fetch devices with agent_id
+    // Fetch all target devices with agent info
     const { data: devices, error: devicesError } = await supabase
       .from('devices')
-      .select('id, controlid_ip_address, api_credentials, name, agent_id')
-      .in('id', deviceIds)
+      .select('id, controlid_ip_address, api_credentials, name, agent_id, project_id')
+      .in('id', resolvedDeviceIds)
 
     if (devicesError || !devices || devices.length === 0) {
       throw new Error('No valid devices found')
     }
 
+    // Generate signed URLs for all unique photos in parallel
+    const photoSignedUrls = new Map<string, string | null>()
+    await Promise.all(allWorkers.map(async (worker) => {
+      if (!worker.photo_url) {
+        photoSignedUrls.set(worker.id, null)
+        return
+      }
+      const storageRef = parseStorageRef(worker.photo_url)
+      if (storageRef) {
+        const { data: signedData, error: signedError } = await supabase.storage
+          .from(storageRef.bucket)
+          .createSignedUrl(storageRef.path, 3600)
+        photoSignedUrls.set(worker.id, signedError ? null : signedData.signedUrl)
+      } else if (worker.photo_url.startsWith('http')) {
+        photoSignedUrls.set(worker.id, worker.photo_url)
+      } else {
+        photoSignedUrls.set(worker.id, null)
+      }
+    }))
+
     const commandType = action === 'remove' ? 'remove_worker' : 'enroll_worker'
-    const commandIds: string[] = []
+    const allCommandIds: string[] = []
     const errors: Record<string, string> = {}
 
-    for (const device of devices) {
-      if (!device.agent_id) {
-        errors[device.id] = `Dispositivo "${device.name}" não tem agente local vinculado. Vincule um agente antes de fazer enrollment.`
-        continue
-      }
+    // Build all commands to insert in batch
+    const commandsToInsert: any[] = []
+    for (const worker of allWorkers) {
+      const workerCode = Number(worker.code)
+      const photoSignedUrl = photoSignedUrls.get(worker.id) || null
 
-      const { data: cmd, error: cmdError } = await supabase
-        .from('agent_commands')
-        .insert({
+      // Filter devices to only those matching this worker's projects (if not using providedDeviceIds)
+      const workerProjectIds = worker.allowed_project_ids || []
+      const targetDevices = providedDeviceIds && providedDeviceIds.length > 0
+        ? devices
+        : devices.filter(d => workerProjectIds.includes(d.project_id))
+
+      for (const device of targetDevices) {
+        if (!device.agent_id) {
+          errors[`${worker.id}:${device.id}`] = `Dispositivo "${device.name}" sem agente local.`
+          continue
+        }
+
+        commandsToInsert.push({
           agent_id: device.agent_id,
           device_id: device.id,
           command: commandType,
@@ -178,51 +185,61 @@ serve(async (req) => {
           status: 'pending',
           created_by: userId,
         })
-        .select('id')
-        .single()
-
-      if (cmdError) {
-        console.error(`Failed to queue command for device ${device.id}:`, cmdError)
-        errors[device.id] = cmdError.message
-      } else {
-        commandIds.push(cmd.id)
       }
     }
 
-    // Update workers.devices_enrolled with the resolved device IDs
-    if (commandIds.length > 0 && action !== 'remove') {
-      const enrolledDeviceIds = devices
-        .filter(d => d.agent_id && !errors[d.id])
-        .map(d => d.id);
-      
-      // Merge with existing devices_enrolled
-      const existingEnrolled = worker.devices_enrolled || [];
-      const mergedEnrolled = [...new Set([...existingEnrolled, ...enrolledDeviceIds])];
+    // Batch insert all commands
+    if (commandsToInsert.length > 0) {
+      const { data: insertedCmds, error: insertError } = await supabase
+        .from('agent_commands')
+        .insert(commandsToInsert)
+        .select('id')
 
-      await supabase
-        .from('workers')
-        .update({ devices_enrolled: mergedEnrolled })
-        .eq('id', worker.id);
+      if (insertError) {
+        throw new Error(`Falha ao enfileirar comandos: ${insertError.message}`)
+      }
+      allCommandIds.push(...(insertedCmds || []).map(c => c.id))
     }
 
-    const queuedCount = commandIds.length
-    const failedCount = Object.keys(errors).length
+    // Update workers.devices_enrolled for enroll action
+    if (allCommandIds.length > 0 && action !== 'remove') {
+      for (const worker of allWorkers) {
+        const workerProjectIds = worker.allowed_project_ids || []
+        const enrolledDeviceIds = devices
+          .filter(d => d.agent_id && workerProjectIds.includes(d.project_id) && !errors[`${worker.id}:${d.id}`])
+          .map(d => d.id)
+        const existingEnrolled = worker.devices_enrolled || []
+        const mergedEnrolled = [...new Set([...existingEnrolled, ...enrolledDeviceIds])]
+        if (mergedEnrolled.length > existingEnrolled.length) {
+          await supabase.from('workers').update({ devices_enrolled: mergedEnrolled }).eq('id', worker.id)
+        }
+      }
+    }
 
-    console.log('Enrollment queued:', { queuedCount, failedCount, commandIds, photoSignedUrl: !!photoSignedUrl })
+    const failedCount = Object.keys(errors).length
+    console.log('Enrollment queued:', {
+      workerCount: allWorkers.length,
+      commandCount: allCommandIds.length,
+      failedCount,
+      deviceCount: devices.length,
+    })
 
     return new Response(
       JSON.stringify({
-        success: queuedCount > 0,
+        success: allCommandIds.length > 0,
         queued: true,
-        message: queuedCount > 0
-          ? `${queuedCount} comando(s) enfileirado(s) para o agente local executar.${failedCount > 0 ? ` ${failedCount} dispositivo(s) sem agente.` : ''}`
-          : 'Nenhum comando enfileirado. Verifique se os dispositivos têm agente local vinculado.',
-        commandIds,
-        resolvedDeviceCount: deviceIds.length,
+        message: allCommandIds.length > 0
+          ? `${allCommandIds.length} comando(s) enfileirado(s) para ${allWorkers.length} trabalhador(es).${failedCount > 0 ? ` ${failedCount} erro(s).` : ''}`
+          : 'Nenhum comando enfileirado.',
+        commandIds: allCommandIds,
+        workerCount: allWorkers.length,
+        resolvedDeviceCount: devices.length,
         errors: failedCount > 0 ? errors : undefined,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
+
+    // (bulk logic handled above)
 
   } catch (error) {
     console.error('Worker Enrollment Error:', error)

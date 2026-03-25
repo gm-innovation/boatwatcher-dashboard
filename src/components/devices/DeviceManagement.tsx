@@ -332,36 +332,29 @@ export const DeviceManagement = () => {
       queryClient.invalidateQueries({ queryKey: ['devices'] });
       refetch();
 
-      // Bulk enrollment: if the device has a project and agent, enroll all workers for that project
+      // Bulk enrollment: if the device has a project and agent, enroll all workers in one call
       if (data.project_id && data.agent_id && !isLocalRuntime) {
         try {
-          // Find all workers whose allowed_project_ids contains this project
           const { data: workers, error: workersError } = await supabase
             .from('workers')
-            .select('id, name, allowed_project_ids')
+            .select('id')
             .contains('allowed_project_ids', [data.project_id])
             .eq('status', 'active');
 
           if (!workersError && workers && workers.length > 0) {
+            const workerIds = workers.map(w => w.id);
             toast({
               title: 'Sincronização em massa',
-              description: `Enfileirando enrollment de ${workers.length} trabalhador(es) no novo dispositivo...`,
+              description: `Enfileirando ${workerIds.length} trabalhador(es)...`,
             });
 
-            // Enroll each worker (the edge function will resolve devices via allowed_project_ids)
-            for (const w of workers) {
-              try {
-                await supabase.functions.invoke('worker-enrollment', {
-                  body: { action: 'enroll', workerId: w.id },
-                });
-              } catch (err) {
-                console.error(`Bulk enrollment failed for worker ${w.id}:`, err);
-              }
-            }
+            const { data: enrollResult } = await supabase.functions.invoke('worker-enrollment', {
+              body: { action: 'enroll', workerIds },
+            });
 
             toast({
               title: 'Enrollment enfileirado',
-              description: `${workers.length} trabalhador(es) enfileirado(s) para sincronização.`,
+              description: enrollResult?.message || `${workerIds.length} trabalhador(es) enfileirado(s).`,
             });
           }
         } catch (bulkErr) {

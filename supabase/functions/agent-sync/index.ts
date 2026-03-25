@@ -761,7 +761,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ worker_documents: workerDocuments || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // GET /download-commands — pending commands for this agent
+    // GET /download-commands — claim pending commands for this agent
     if (req.method === 'GET' && action === 'download-commands') {
       const { data: commands, error } = await supabase
         .from('agent_commands')
@@ -773,7 +773,29 @@ serve(async (req) => {
 
       if (error) throw error
 
-      return new Response(JSON.stringify({ commands: commands || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      const claimed = commands || []
+
+      // Mark claimed commands as in_progress to prevent duplicate processing
+      if (claimed.length > 0) {
+        const claimedIds = claimed.map(c => c.id)
+        await supabase
+          .from('agent_commands')
+          .update({ status: 'in_progress' })
+          .in('id', claimedIds)
+      }
+
+      // Count remaining pending for diagnostics
+      const { count: remainingPending } = await supabase
+        .from('agent_commands')
+        .select('id', { count: 'exact', head: true })
+        .eq('agent_id', agent.id)
+        .eq('status', 'pending')
+
+      return new Response(JSON.stringify({
+        commands: claimed,
+        claimedCount: claimed.length,
+        remainingPending: remainingPending ?? 0,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // POST /upload-command-result — agent reports command execution result
