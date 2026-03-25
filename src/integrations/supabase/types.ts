@@ -169,6 +169,7 @@ export type Database = {
       }
       companies: {
         Row: {
+          address: string | null
           api_environment: string | null
           api_password: string | null
           cnpj: string | null
@@ -178,12 +179,15 @@ export type Database = {
           logo_url_dark: string | null
           logo_url_light: string | null
           name: string
+          phone: string | null
           project_managers: string[] | null
+          responsible_name: string | null
           status: string | null
           updated_at: string
           vessels: string[] | null
         }
         Insert: {
+          address?: string | null
           api_environment?: string | null
           api_password?: string | null
           cnpj?: string | null
@@ -193,12 +197,15 @@ export type Database = {
           logo_url_dark?: string | null
           logo_url_light?: string | null
           name: string
+          phone?: string | null
           project_managers?: string[] | null
+          responsible_name?: string | null
           status?: string | null
           updated_at?: string
           vessels?: string[] | null
         }
         Update: {
+          address?: string | null
           api_environment?: string | null
           api_password?: string | null
           cnpj?: string | null
@@ -208,7 +215,9 @@ export type Database = {
           logo_url_dark?: string | null
           logo_url_light?: string | null
           name?: string
+          phone?: string | null
           project_managers?: string[] | null
+          responsible_name?: string | null
           status?: string | null
           updated_at?: string
           vessels?: string[] | null
@@ -363,6 +372,71 @@ export type Database = {
           },
         ]
       }
+      document_types: {
+        Row: {
+          created_at: string
+          default_validity_days: number | null
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          default_validity_days?: number | null
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          default_validity_days?: number | null
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      generated_reports: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          data: Json | null
+          file_url: string | null
+          filters: Json | null
+          id: string
+          project_id: string | null
+          report_type: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          data?: Json | null
+          file_url?: string | null
+          filters?: Json | null
+          id?: string
+          project_id?: string | null
+          report_type: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          data?: Json | null
+          file_url?: string | null
+          filters?: Json | null
+          id?: string
+          project_id?: string | null
+          report_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generated_reports_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_functions: {
         Row: {
           created_at: string
@@ -487,6 +561,69 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      pending_workers: {
+        Row: {
+          company_id: string
+          created_at: string
+          document_number: string | null
+          id: string
+          job_function_id: string | null
+          name: string
+          photo_url: string | null
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          role: string | null
+          status: string
+          submitted_by: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          document_number?: string | null
+          id?: string
+          job_function_id?: string | null
+          name: string
+          photo_url?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          role?: string | null
+          status?: string
+          submitted_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          document_number?: string | null
+          id?: string
+          job_function_id?: string | null
+          name?: string
+          photo_url?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          role?: string | null
+          status?: string
+          submitted_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_workers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_workers_job_function_id_fkey"
+            columns: ["job_function_id"]
+            isOneToOne: false
+            referencedRelation: "job_functions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       projects: {
         Row: {
