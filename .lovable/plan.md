@@ -1,54 +1,54 @@
 
+Objetivo: investigar e corrigir a causa raiz da falta de sincronização de eventos (entrada/saída) entre Servidor Local e dashboard.
 
-## Diagnóstico: Por que o dashboard Web não atualiza
+1) Evidências já confirmadas (investigação profunda)
+- O agente está autenticado e vivo: `agent-sync/status` está chegando continuamente (logs da função mostram heartbeat do agente ativo).
+- O upload de logs não está acontecendo: não há logs de `upload-logs` na função, e `local_agents.last_sync_at` permanece `NULL`.
+- O dashboard Web está consultando corretamente `devices` + `access_logs` (requests 200), então o problema principal está antes da camada de visualização.
+- Existem logs no cloud, mas parecem de teste/manual; não há sinal consistente de novos eventos vindos do ciclo local.
 
-### Problemas encontrados
+2) Causas-raiz prováveis (ordem de prioridade)
+- Causa A (alta confiança): `electron/agent.js` parseia evento com contrato frágil (`event.timestamp`, `event.access`, `event.direction`), mas o payload real do ControlID pode vir com outros campos (ex.: `time`, `event` numérico). Resultado: evento é ignorado ou classificado errado.
+- Causa B (alta confiança): direção não é normalizada de forma robusta (`entry|exit|unknown`). Se vier `entrada/saida/in/out/numérico`, pode quebrar lógica “a bordo” e também causar falhas no insert cloud (enum).
+- Causa C (média/alta): deduplicação compara timestamp como string (`event.timestamp <= lastTimestamp`), suscetível a formatos diferentes e descarte indevido de eventos válidos.
+- Causa D (média): endpoint `/api/access/last` pode não refletir todas as mudanças entre polls; sem parser resiliente e fallback, eventos críticos podem não entrar na fila local.
 
-**1. Upload de logs do Desktop → Nuvem envia campo inválido**
-O `getUnsyncedLogs()` faz `SELECT * FROM access_logs WHERE synced = 0`, retornando TODAS as colunas incluindo `synced` (INTEGER). Quando a edge function faz `supabase.from('access_logs').insert(logs)`, o campo `synced` não existe na tabela cloud — causando erro silencioso. O log de upload nunca aparece nos logs da edge function porque o insert falha.
+3) Plano de correção (implementação)
+- Etapa 1 — Hardening de captura no agente local (`electron/agent.js`)
+  - Criar parser canônico de evento com fallback de campos:
+    - timestamp: `event.timestamp || event.time || now`
+    - status: mapear `event.access`/`event.event` para `granted|denied`
+    - direction: mapear `event.direction`/`passage_direction`/códigos para `entry|exit|unknown`
+  - Trocar dedupe para comparação temporal real (`Date.parse`) e fallback seguro.
+  - Adicionar logs internos de decisão (capturado, ignorado por dedupe, ignorado por payload inválido).
 
-**2. O dashboard Web JÁ deveria mostrar dados de teste**
-Os 3 access_logs de teste que inserimos estão na nuvem com device_ids corretos. A query deveria retornar Alexandre Silva como "a bordo" (última entrada às 19:14 sem saída posterior). Se não aparece, pode ser um problema de RLS: a tabela `devices` tem política SELECT apenas para admins. Se o usuário não tiver role admin, a query de devices retorna vazio → 0 workers.
+- Etapa 2 — Blindagem do upload (`supabase/functions/agent-sync/index.ts`)
+  - Normalizar novamente `direction` e `access_status` no servidor (defesa em profundidade).
+  - Inserir em lotes e registrar erro por payload inválido com detalhe (sem falha silenciosa).
+  - Retornar métricas no response (`received`, `accepted`, `rejected`) para diagnóstico.
 
-### Correções
+- Etapa 3 — Observabilidade operacional (`electron/sync.js` + `server/routes/sync.js` + `DiagnosticsPanel.tsx`)
+  - Expor no status:
+    - `capturedEventsCount`
+    - `ignoredEventsCount` (+ motivo)
+    - `lastUploadAttemptAt`
+    - `lastUploadSuccessAt`
+    - `lastUploadError`
+  - Exibir isso no painel de Diagnóstico para identificar exatamente onde o fluxo quebra (captura → fila → upload → cloud).
 
-#### 1. Sanitizar payload no upload-logs (edge function)
-**Arquivo:** `supabase/functions/agent-sync/index.ts`
+- Etapa 4 — Validação de consistência da lógica “a bordo”
+  - Garantir que o cálculo local/cloud só interprete `entry/exit` canônicos.
+  - Validar que evento `exit` remove trabalhador corretamente quando for o último evento do trabalhador no projeto.
 
-Remover campos que não existem na tabela cloud antes do insert:
-```typescript
-const sanitizedLogs = logs.map(l => ({
-  worker_id: l.worker_id || null,
-  device_id: l.device_id || null,
-  timestamp: l.timestamp,
-  access_status: l.access_status,
-  direction: l.direction || 'unknown',
-  reason: l.reason || null,
-  score: l.score || null,
-  worker_name: l.worker_name || null,
-  worker_document: l.worker_document || null,
-  device_name: l.device_name || null,
-}))
-```
-Isso garante que campos como `synced`, `id` (TEXT do SQLite), `created_at` etc. não quebrem o insert no Postgres.
+4) Arquivos a ajustar
+- `electron/agent.js` (parser robusto + normalização + dedupe temporal)
+- `electron/sync.js` (telemetria de upload/captura no status)
+- `server/routes/sync.js` (expor métricas extras)
+- `src/components/admin/DiagnosticsPanel.tsx` (render dos novos indicadores)
+- `supabase/functions/agent-sync/index.ts` (normalização e logging de rejeições no upload)
 
-#### 2. Abrir RLS de `devices` para leitura autenticada
-A política atual `Only admins can view devices` impede que usuários com role `user` ou `company_admin` vejam os devices — e sem devices, o dashboard não consegue filtrar os logs por projeto.
-
-Adicionar política:
-```sql
-CREATE POLICY "Authenticated users can view devices"
-ON devices FOR SELECT TO authenticated USING (true);
-```
-(E remover a política restritiva atual de SELECT.)
-
-#### 3. Não é necessária nenhuma ação manual
-Após estas correções:
-- **Web**: o dashboard passará a mostrar os dados de teste imediatamente
-- **Desktop → Nuvem**: o fast-lane sync enviará logs corretamente quando o dispositivo registrar eventos
-- **Nuvem → Web**: o realtime listener + polling de 10s atualizará o dashboard automaticamente
-
-### Arquivos a alterar
-- `supabase/functions/agent-sync/index.ts` — sanitizar logs no upload
-- **Migração SQL** — ajustar RLS de `devices` para permitir leitura autenticada
-
+5) Critérios de aceite (E2E)
+- Entrada no leitor: aparece no dashboard Web e Desktop em até ~10s.
+- Saída no leitor: trabalhador sai de “a bordo” em até ~10s.
+- Diagnóstico mostra progressão real: capturados > enviados > cloud atualizado.
+- Em caso de payload fora do padrão, erro aparece claramente no diagnóstico (não silencioso).
