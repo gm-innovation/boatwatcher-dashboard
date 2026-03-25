@@ -1,61 +1,47 @@
 
-Objetivo: corrigir o falso indicativo de credenciais no Servidor Local e eliminar o 401 persistente no enrollment com diagnóstico preciso por etapa.
 
-1) Confirmar e corrigir a causa visível do print (UI do Servidor Local)
-- Arquivo: `electron/server-ui.html`
-- Hoje a coluna “Credenciais” só lê `api_credentials.user`, mas os dispositivos sincronizados da nuvem estão vindo como `api_credentials.username`.
-- Ajustar exibição para fallback: `username || user || login`.
-- Resultado esperado: o painel deixa de mostrar “—” quando a credencial existe.
+## Sincronização bidirecional completa de trabalhadores
 
-2) Tornar o “Teste Manual” um teste real de autenticação
-- Arquivos: `electron/server-ui.html`, `electron/server-preload.js`, `electron/local-server-main.js`
-- Hoje o botão “Testar” valida apenas conectividade de IP (`/api/status`), não login/sessão.
-- Trocar para teste autenticado usando o mesmo fluxo do enrollment (login em `/login.fcgi` + chamada autenticada ao dispositivo).
-- Resultado esperado: “Online” só aparece quando credencial + sessão estiverem válidas.
+### Problema
 
-3) Normalizar credenciais em um único formato no runtime local
-- Arquivo: `server/lib/controlid.js` (e ponto de leitura no dashboard local)
-- Criar normalização central para aceitar variações: `username`, `user`, `login` + `password` + `port`.
-- Usar sempre esse normalizador em `loginToDevice`, requests e exibição.
-- Resultado esperado: eliminar inconsistências entre credencial salva e credencial usada.
+A sincronização entre web e desktop está incompleta em ambas as direções:
 
-4) Melhorar compatibilidade de autenticação para firmware variado
-- Arquivo: `server/lib/controlid.js`
-- No login, enviar payload com fallback compatível (mantendo `login` principal, com suporte a aliases).
-- Em chamadas autenticadas, manter `session` na query e aplicar fallback de sessão também no body JSON quando aplicável.
-- Resultado esperado: reduzir 401 em firmwares que exigem formato mais estrito.
+**Cloud → Desktop:** O método `upsertWorkerFromCloud` no UPDATE ignora: `code`, `job_function_id`, `birth_date`, `gender`, `blood_type`, `observations`, `devices_enrolled`.
 
-5) Instrumentar erro por fase para parar o “HTTP 401 genérico”
-- Arquivos: `server/lib/controlid.js`, `electron/sync.js`
-- Padronizar erros com contexto:
-  - `phase=login.fcgi`
-  - `phase=create_objects.fcgi`
-  - `phase=user_set_image.fcgi`
-  - status HTTP + trecho de resposta do dispositivo.
-- Propagar esse erro completo para `agent_commands.error_message`.
-- Resultado esperado: identificar em qual etapa o 401 acontece sem tentativa-cega.
+**Desktop → Cloud:** O endpoint `upload-workers` na Edge Function só envia/recebe campos básicos (`name`, `role`, `company_id`, `status`), ignorando `code`, `photo_url`, `document_number`, `job_function_id`, etc.
 
-6) Validação E2E após ajuste
-- No painel local: confirmar coluna “Credenciais” preenchida para os 2 dispositivos.
-- Clicar “Testar” em ambos e validar autenticação real.
-- Rodar novo enrollment de 1 trabalhador.
-- Confirmar em `agent_commands`: `pending → in_progress → completed` (ou erro com fase explícita, se ainda houver bloqueio no firmware).
+**Query de download:** A Edge Function `download-workers` não seleciona `devices_enrolled`, `job_function_id`, `birth_date`, `gender`, `blood_type`, `observations`.
 
-Detalhes técnicos (resumo)
-```text
-Fluxo atual (enganoso no painel):
-  Testar = ping IP (/api/status)  -> pode mostrar Online sem login válido
+### Correções
 
-Fluxo corrigido:
-  Testar = POST /login.fcgi + chamada autenticada
-  Enrollment = login/sessão normalizada + fallback compatível + erro por fase
+#### 1. Edge Function `agent-sync/index.ts` — download-workers (linha 554)
+
+Adicionar campos faltantes ao SELECT:
+```
+devices_enrolled, job_function_id, birth_date, gender, blood_type, observations
 ```
 
-Escopo de arquivos
-- `electron/server-ui.html`
-- `electron/server-preload.js`
-- `electron/local-server-main.js`
-- `server/lib/controlid.js`
-- `electron/sync.js`
+#### 2. Edge Function `agent-sync/index.ts` — upload-workers (linhas 652-659)
 
-Sem mudanças de banco/migração nesta etapa.
+Incluir todos os campos no update e insert de workers vindos do desktop:
+- `code`, `document_number`, `photo_url`, `job_function_id`, `birth_date`, `gender`, `blood_type`, `observations`, `devices_enrolled`
+
+#### 3. `electron/database.js` — `upsertWorkerFromCloud` (linhas 1318-1350)
+
+**UPDATE:** Adicionar `code`, `job_function_id`, `birth_date`, `gender`, `blood_type`, `observations`, `devices_enrolled` ao SET.
+
+**INSERT:** Adicionar `job_function_id`, `birth_date`, `gender`, `blood_type`, `observations`, `devices_enrolled`.
+
+#### 4. `electron/database.js` — `getUnsyncedWorkers` (linhas 1246-1257)
+
+Garantir que o payload enviado inclui todos os campos necessários (já faz `SELECT *`, então basta confirmar que `normalizeWorkerRow` preserva tudo).
+
+### Arquivos afetados
+
+- `supabase/functions/agent-sync/index.ts`
+- `electron/database.js`
+
+### Sem alterações de banco
+
+As colunas já existem tanto no SQLite local quanto no Postgres na nuvem.
+
