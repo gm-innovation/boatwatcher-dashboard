@@ -217,16 +217,40 @@ class AgentController {
       (device.configuration?.direction) || 
       'unknown';
 
+    // Resolve worker UUID from integer code sent by ControlID device
+    let workerId = null;
+    let workerName = event.user_name || null;
+    let workerDocument = event.user_document || null;
+    if (event.user_id) {
+      const isUuid = /^[0-9a-f]{8}-/.test(String(event.user_id));
+      if (isUuid) {
+        workerId = event.user_id;
+      } else {
+        // Look up worker by integer code in local SQLite
+        try {
+          const rawDb = this.db.getRawDb?.();
+          if (rawDb) {
+            const worker = rawDb.prepare('SELECT id, name, document_number FROM workers WHERE code = ?').get(Number(event.user_id));
+            if (worker) {
+              workerId = worker.id;
+              workerName = workerName || worker.name;
+              workerDocument = workerDocument || worker.document_number;
+            }
+          }
+        } catch { /* ignore lookup errors */ }
+      }
+    }
+
     const accessLog = {
-      worker_id: event.user_id || null,
+      worker_id: workerId,
       device_id: device.id,
       timestamp: event.timestamp,
       access_status: event.access ? 'granted' : 'denied',
       direction,
       reason: event.reason || null,
       score: event.score || null,
-      worker_name: event.user_name || null,
-      worker_document: event.user_document || null,
+      worker_name: workerName,
+      worker_document: workerDocument,
       device_name: device.name,
     };
 
