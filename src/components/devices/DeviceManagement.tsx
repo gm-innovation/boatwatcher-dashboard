@@ -331,6 +331,43 @@ export const DeviceManagement = () => {
       setIsDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ['devices'] });
       refetch();
+
+      // Bulk enrollment: if the device has a project and agent, enroll all workers for that project
+      if (data.project_id && data.agent_id && !isLocalRuntime) {
+        try {
+          // Find all workers whose allowed_project_ids contains this project
+          const { data: workers, error: workersError } = await supabase
+            .from('workers')
+            .select('id, name, allowed_project_ids')
+            .contains('allowed_project_ids', [data.project_id])
+            .eq('status', 'active');
+
+          if (!workersError && workers && workers.length > 0) {
+            toast({
+              title: 'Sincronização em massa',
+              description: `Enfileirando enrollment de ${workers.length} trabalhador(es) no novo dispositivo...`,
+            });
+
+            // Enroll each worker (the edge function will resolve devices via allowed_project_ids)
+            for (const w of workers) {
+              try {
+                await supabase.functions.invoke('worker-enrollment', {
+                  body: { action: 'enroll', workerId: w.id },
+                });
+              } catch (err) {
+                console.error(`Bulk enrollment failed for worker ${w.id}:`, err);
+              }
+            }
+
+            toast({
+              title: 'Enrollment enfileirado',
+              description: `${workers.length} trabalhador(es) enfileirado(s) para sincronização.`,
+            });
+          }
+        } catch (bulkErr) {
+          console.error('Bulk enrollment error:', bulkErr);
+        }
+      }
     }
   };
 

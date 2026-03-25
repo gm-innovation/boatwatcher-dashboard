@@ -56,19 +56,69 @@ serve(async (req) => {
   )
 
   try {
-    const { action, workerId, deviceIds } = await req.json()
+    const { action, workerId, deviceIds: providedDeviceIds } = await req.json()
     const userId = claimsData.claims.sub
-    console.log('Worker Enrollment Request:', { action, workerId, deviceIds, userId })
+    console.log('Worker Enrollment Request:', { action, workerId, providedDeviceIds, userId })
 
     // Fetch worker
     const { data: worker, error: workerError } = await supabase
       .from('workers')
-      .select('id, name, code, photo_url, devices_enrolled, document_number')
+      .select('id, name, code, photo_url, devices_enrolled, document_number, allowed_project_ids, company_id')
       .eq('id', workerId)
       .single()
 
     if (workerError || !worker) {
       throw new Error(`Worker not found: ${workerId}`)
+    }
+
+    // --- Resolve deviceIds automatically if not provided ---
+    let deviceIds: string[] = providedDeviceIds && providedDeviceIds.length > 0
+      ? providedDeviceIds
+      : [];
+
+    if (deviceIds.length === 0) {
+      const projectIds = worker.allowed_project_ids || [];
+      if (projectIds.length === 0) {
+        console.log('Worker has no allowed_project_ids, no devices to resolve');
+        return new Response(
+          JSON.stringify({
+            success: true,
+            queued: false,
+            message: 'Trabalhador não tem projetos permitidos. Nenhum dispositivo para sincronizar.',
+            commandIds: [],
+            resolvedDeviceCount: 0,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Resolve devices from allowed_project_ids
+      const { data: devices, error: devicesResolveError } = await supabase
+        .from('devices')
+        .select('id')
+        .in('project_id', projectIds)
+        .not('agent_id', 'is', null);
+
+      if (devicesResolveError) {
+        console.error('Error resolving devices:', devicesResolveError);
+        throw new Error('Falha ao resolver dispositivos dos projetos');
+      }
+
+      deviceIds = (devices || []).map(d => d.id);
+      console.log(`Resolved ${deviceIds.length} devices from ${projectIds.length} projects`);
+
+      if (deviceIds.length === 0) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            queued: false,
+            message: 'Nenhum dispositivo com agente local encontrado nos projetos do trabalhador.',
+            commandIds: [],
+            resolvedDeviceCount: 0,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
     }
 
     const workerCode = Number(worker.code)
@@ -139,6 +189,22 @@ serve(async (req) => {
       }
     }
 
+    // Update workers.devices_enrolled with the resolved device IDs
+    if (commandIds.length > 0 && action !== 'remove') {
+      const enrolledDeviceIds = devices
+        .filter(d => d.agent_id && !errors[d.id])
+        .map(d => d.id);
+      
+      // Merge with existing devices_enrolled
+      const existingEnrolled = worker.devices_enrolled || [];
+      const mergedEnrolled = [...new Set([...existingEnrolled, ...enrolledDeviceIds])];
+
+      await supabase
+        .from('workers')
+        .update({ devices_enrolled: mergedEnrolled })
+        .eq('id', worker.id);
+    }
+
     const queuedCount = commandIds.length
     const failedCount = Object.keys(errors).length
 
@@ -152,6 +218,7 @@ serve(async (req) => {
           ? `${queuedCount} comando(s) enfileirado(s) para o agente local executar.${failedCount > 0 ? ` ${failedCount} dispositivo(s) sem agente.` : ''}`
           : 'Nenhum comando enfileirado. Verifique se os dispositivos têm agente local vinculado.',
         commandIds,
+        resolvedDeviceCount: deviceIds.length,
         errors: failedCount > 0 ? errors : undefined,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
