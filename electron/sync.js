@@ -8,6 +8,13 @@ class SyncEngine {
     this.listeners = [];
     this.syncIntervalMs = 60000;
     this.agentController = null;
+    this._fastLaneTimer = null;
+    this._fastLaneThrottleMs = 3000; // min 3s between fast-lane syncs
+    this._lastFastLane = 0;
+    this._lastUploadLogsError = null;
+    this._lastDownloadLogsError = null;
+    this._uploadLogsCount = 0;
+    this._downloadLogsCount = 0;
     this.status = {
       online: false,
       lastSync: null,
@@ -39,6 +46,33 @@ class SyncEngine {
 
   setAgentController(controller) {
     this.agentController = controller;
+  }
+
+  /**
+   * Fast-lane: called when the agent captures a new access event.
+   * Debounces to avoid flooding, then uploads logs immediately.
+   */
+  triggerFastLaneSync() {
+    if (!this.isConfigured()) return;
+
+    const now = Date.now();
+    const elapsed = now - this._lastFastLane;
+
+    if (this._fastLaneTimer) clearTimeout(this._fastLaneTimer);
+
+    const delay = elapsed >= this._fastLaneThrottleMs ? 500 : this._fastLaneThrottleMs - elapsed + 100;
+
+    this._fastLaneTimer = setTimeout(async () => {
+      this._lastFastLane = Date.now();
+      try {
+        const online = await this.checkConnectivity();
+        if (!online) return;
+        await this.uploadLogs();
+        console.log('[sync] Fast-lane upload completed');
+      } catch (err) {
+        console.error('[sync] Fast-lane error:', err.message);
+      }
+    }, delay);
   }
 
   onStatusChange(callback) {
@@ -83,16 +117,24 @@ class SyncEngine {
 
   getStatus() {
     const configured = this.isConfigured();
+    const unsyncedLogs = this.db.getUnsyncedLogs?.()?.length || 0;
     this.status.pendingCount =
       (this.db.getUnsyncedWorkers?.()?.length || 0) +
-      (this.db.getUnsyncedLogs?.()?.length || 0) +
+      unsyncedLogs +
       (this.db.getPendingSyncCount?.() || 0);
     this.status.configured = configured;
     this.status.mode = configured ? 'cloud-sync' : 'local-only';
     this.status.message = configured
       ? (this.status.online ? 'Sincronização online.' : 'Sem conexão com a internet.')
       : 'Sincronização não configurada. Operando apenas localmente.';
-    return { ...this.status };
+    return {
+      ...this.status,
+      unsyncedLogsCount: unsyncedLogs,
+      uploadLogsCount: this._uploadLogsCount,
+      downloadLogsCount: this._downloadLogsCount,
+      lastUploadLogsError: this._lastUploadLogsError,
+      lastDownloadLogsError: this._lastDownloadLogsError,
+    };
   }
 
   async bootstrapFromAccessToken(accessToken) {
@@ -184,6 +226,7 @@ class SyncEngine {
       await this.uploadQueuedOperations(['user_company', 'company_document', 'worker_document']);
       await this.uploadLogs();
       await this.downloadUpdates();
+      await this.downloadAccessLogs();
       await this.downloadAndExecuteCommands();
       await this.uploadLogs();
       await this.downloadUpdates();
@@ -205,6 +248,7 @@ class SyncEngine {
       'last_download', 'last_download_companies', 'last_download_projects',
       'last_download_devices', 'last_download_workers', 'last_download_user_companies',
       'last_download_company_documents', 'last_download_worker_documents',
+      'last_download_access_logs',
     ];
     for (const key of checkpoints) {
       this.db.setSyncMeta?.(key, '1970-01-01T00:00:00Z');
@@ -243,9 +287,44 @@ class SyncEngine {
     const logs = this.db.getUnsyncedLogs?.() || [];
     if (logs.length === 0) return;
 
-    const response = await this.callEdgeFunction('agent-sync/upload-logs', 'POST', { logs });
-    if (response.success) {
-      this.db.markLogsSynced(logs.map((l) => l.id));
+    try {
+      const response = await this.callEdgeFunction('agent-sync/upload-logs', 'POST', { logs });
+      if (response.success) {
+        this.db.markLogsSynced(logs.map((l) => l.id));
+        this._uploadLogsCount += logs.length;
+        this._lastUploadLogsError = null;
+        console.log(`[sync] Uploaded ${logs.length} access logs`);
+      }
+    } catch (err) {
+      this._lastUploadLogsError = `${new Date().toISOString()}: ${err.message}`;
+      console.error('[sync] Upload logs error:', err.message);
+    }
+  }
+
+  async downloadAccessLogs() {
+    try {
+      const since = this.db.getSyncMeta('last_download_access_logs') || '1970-01-01T00:00:00Z';
+      const response = await this.callEdgeFunction(`agent-sync/download-access-logs?since=${since}`, 'GET');
+      if (response.access_logs && Array.isArray(response.access_logs)) {
+        let count = 0;
+        for (const log of response.access_logs) {
+          try {
+            this.db.upsertAccessLogFromCloud?.(log);
+            count++;
+          } catch (err) {
+            console.error(`[sync] access_log upsert failed for ${log.id}:`, err.message);
+          }
+        }
+        if (count > 0) {
+          this._downloadLogsCount += count;
+          console.log(`[sync] Downloaded ${count} access logs from cloud`);
+        }
+        this._lastDownloadLogsError = null;
+      }
+      this.db.setSyncMeta('last_download_access_logs', new Date().toISOString());
+    } catch (err) {
+      this._lastDownloadLogsError = `${new Date().toISOString()}: ${err.message}`;
+      console.error('[sync] Download access logs error:', err.message);
     }
   }
 

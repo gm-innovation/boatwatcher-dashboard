@@ -43,6 +43,16 @@ router.post('/reset-and-full-sync', async (req, res) => {
   }
 });
 
+// Fast-lane: trigger immediate log upload
+router.post('/fast-upload-logs', async (req, res) => {
+  try {
+    req.syncEngine.triggerFastLaneSync();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Agent control
 router.get('/agent/status', (req, res) => {
   try {

@@ -899,6 +899,40 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, rebound: count ?? 0, agent_id: agent.id, project_id: agent.project_id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    // GET /download-access-logs — download access logs scoped to agent's project devices
+    if (req.method === 'GET' && action === 'download-access-logs') {
+      const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'
+
+      // Find device IDs for this agent's project
+      let deviceFilter: string[] = []
+      if (agent.project_id) {
+        const { data: devices } = await supabase
+          .from('devices')
+          .select('id')
+          .eq('project_id', agent.project_id)
+        deviceFilter = (devices || []).map(d => d.id)
+      }
+
+      if (deviceFilter.length === 0) {
+        // No devices for this project — return empty
+        return new Response(JSON.stringify({ access_logs: [], timestamp: new Date().toISOString() }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      const { data: logs, error } = await supabase
+        .from('access_logs')
+        .select('id, worker_id, device_id, timestamp, access_status, direction, reason, score, worker_name, worker_document, device_name')
+        .in('device_id', deviceFilter)
+        .gte('created_at', since)
+        .order('created_at', { ascending: true })
+        .limit(500)
+
+      if (error) throw error
+
+      console.log(`[agent-sync/download-access-logs] agent=${agent.id} project=${agent.project_id} since=${since} found=${(logs || []).length}`)
+
+      return new Response(JSON.stringify({ access_logs: logs || [], timestamp: new Date().toISOString() }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (e) {
     console.error('agent-sync error:', e)
