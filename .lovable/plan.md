@@ -1,47 +1,37 @@
 
 
-## ✅ Enrollment automático: Worker → Projetos Permitidos → Dispositivos (Implementado)
+## Problema: Versão hardcoded "v1.0.0" no Local Server
 
-### Cadeia de resolução
+O arquivo `electron/server-ui.html` tem a versão **hardcoded** na linha 186:
+```html
+<span class="version" id="versionLabel">v1.0.0</span>
 ```
-Worker.allowed_project_ids → Projects → Devices (com agent_id) → agent_commands
+
+Não existe nenhum mecanismo para buscar a versão real do `app.getVersion()` (que vem do `package.json`). Por isso, mesmo instalando a v1.2.13, a UI sempre mostra "v1.0.0" — e o auto-updater usa esse label para exibir "Versão atual", causando confusão.
+
+O build do instalador **está correto** (o arquivo se chama `DockCheck-Local-Server-Setup-1.2.13.exe`), mas a UI não reflete.
+
+### Correções
+
+**1. `electron/local-server-main.js`** — Adicionar IPC handler para retornar a versão real:
+```javascript
+ipcMain.handle('server:get-version', () => app.getVersion());
 ```
 
-### Alterações realizadas
+**2. `electron/server-preload.js`** — Expor no bridge:
+```javascript
+getVersion: () => ipcRenderer.invoke('server:get-version'),
+```
 
-1. **Edge Function `worker-enrollment/index.ts`** — Quando `deviceIds` não é fornecido, resolve automaticamente via `allowed_project_ids` → `devices.project_id` → dispositivos com `agent_id`. Atualiza `devices_enrolled` após enfileirar.
+**3. `electron/server-ui.html`** — No `DOMContentLoaded`, buscar versão real e atualizar o label:
+```javascript
+const version = await window.serverAPI.getVersion();
+document.getElementById('versionLabel').textContent = `v${version}`;
+document.getElementById('currentVersion').textContent = `v${version}`;
+```
 
-2. **`WorkerManagement.tsx`** — Dispara enrollment automático em create E update, sem depender de `devices_enrolled`. Abre tracking dialog com commandIds retornados.
+### Arquivos alterados
+- `electron/local-server-main.js` — 1 linha (novo IPC handler)
+- `electron/server-preload.js` — 1 linha (expor getVersion)
+- `electron/server-ui.html` — atualizar init para buscar versão dinâmica
 
-3. **`DeviceManagement.tsx`** — Ao criar dispositivo com projeto + agente, faz bulk enrollment de todos os workers ativos que têm aquele projeto em `allowed_project_ids`.
-
-## ✅ Otimização de performance do agente e enrollment em massa (Implementado)
-
-### Problema
-Comandos de enrollment ficavam `pending` por muitos minutos porque o processamento dependia do ciclo de sync completo (60s) e condições de pendências locais.
-
-### Soluções implementadas
-
-1. **Loop dedicado de comandos a cada 5s** (`electron/sync.js`)
-   - Polling independente do ciclo de sync de 60s
-   - Lock de reentrada (`_isProcessingCommands`) para evitar execução concorrente
-   - Comando sai de `pending` em <5s
-
-2. **Execução paralela por dispositivo** (`electron/sync.js`)
-   - Comandos agrupados por `device_id`
-   - Serial dentro de cada dispositivo (preserva ordem)
-   - Paralelo entre dispositivos (um leitor lento não bloqueia os demais)
-   - Cache de foto por worker para evitar downloads repetidos
-
-3. **Claim de comandos** (`agent-sync/index.ts`)
-   - `download-commands` marca lote como `in_progress` antes de retornar
-   - Previne processamento duplicado por múltiplas instâncias
-   - Retorna métricas (`claimedCount`, `remainingPending`)
-
-4. **Bulk enrollment** (`worker-enrollment/index.ts`)
-   - Aceita `workerIds: string[]` para processar múltiplos workers em uma chamada
-   - Resolve dispositivos uma vez, gera signed URLs em paralelo
-   - Batch insert de todos os comandos
-   - `DeviceManagement.tsx` usa uma única chamada em vez de loop
-
-5. **Índice de banco** — `idx_agent_commands_agent_status_created` para consultas rápidas de fila
