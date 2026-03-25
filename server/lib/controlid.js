@@ -24,14 +24,12 @@ function parseApiCredentials(apiCredentials) {
 
 function getDeviceKey(device) {
   const creds = parseApiCredentials(device.api_credentials);
-  const port = creds.port || 80;
-  return `${device.controlid_ip_address}:${port}`;
+  return `${device.controlid_ip_address}:${creds.port}`;
 }
 
 function getBaseUrl(device) {
   const creds = parseApiCredentials(device.api_credentials);
-  const port = creds.port || 80;
-  return `http://${device.controlid_ip_address}:${port}`;
+  return `http://${device.controlid_ip_address}:${creds.port}`;
 }
 
 async function loginToDevice(device) {
