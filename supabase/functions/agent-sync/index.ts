@@ -282,32 +282,75 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: 'Empty logs' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
-      // Sanitize: keep only columns that exist in the cloud access_logs table
-      const sanitizedLogs = logs.map((l: Record<string, unknown>) => ({
-        worker_id: l.worker_id || null,
-        device_id: l.device_id || null,
-        timestamp: l.timestamp,
-        access_status: l.access_status,
-        direction: l.direction || 'unknown',
-        reason: l.reason || null,
-        score: l.score != null ? l.score : null,
-        worker_name: l.worker_name || null,
-        worker_document: l.worker_document || null,
-        device_name: l.device_name || null,
-        photo_capture_url: l.photo_capture_url || null,
-      }))
+      // Direction normalization map (defense-in-depth, mirrors agent.js)
+      const dirMap: Record<string, string> = {
+        entry: 'entry', entrada: 'entry', in: 'entry', '1': 'entry',
+        exit: 'exit', saida: 'exit', saída: 'exit', out: 'exit', '2': 'exit',
+      }
+      const validStatuses = ['granted', 'denied']
 
-      console.log(`[agent-sync/upload-logs] Agent ${agent.id}: uploading ${sanitizedLogs.length} sanitized logs`)
+      // Sanitize, normalize, and validate each log individually
+      const accepted: Record<string, unknown>[] = []
+      const rejected: { index: number; reason: string }[] = []
 
-      const { error } = await supabase.from('access_logs').insert(sanitizedLogs)
-      if (error) {
-        console.error(`[agent-sync/upload-logs] Insert error:`, error)
-        throw error
+      for (let i = 0; i < logs.length; i++) {
+        const l = logs[i] as Record<string, unknown>
+        try {
+          // Timestamp is required
+          if (!l.timestamp) {
+            rejected.push({ index: i, reason: 'missing timestamp' })
+            continue
+          }
+
+          // Normalize direction
+          const rawDir = String(l.direction || 'unknown').toLowerCase().trim()
+          const direction = dirMap[rawDir] || 'unknown'
+
+          // Normalize access_status
+          let accessStatus = String(l.access_status || '').toLowerCase().trim()
+          if (!validStatuses.includes(accessStatus)) {
+            // Try to infer from boolean-like values
+            if (l.access_status === true || l.access_status === 1) accessStatus = 'granted'
+            else if (l.access_status === false || l.access_status === 0) accessStatus = 'denied'
+            else accessStatus = 'granted' // default
+          }
+
+          accepted.push({
+            worker_id: l.worker_id || null,
+            device_id: l.device_id || null,
+            timestamp: l.timestamp,
+            access_status: accessStatus,
+            direction,
+            reason: l.reason || null,
+            score: l.score != null ? l.score : null,
+            worker_name: l.worker_name || null,
+            worker_document: l.worker_document || null,
+            device_name: l.device_name || null,
+            photo_capture_url: l.photo_capture_url || null,
+          })
+        } catch (e) {
+          rejected.push({ index: i, reason: (e as Error).message })
+        }
+      }
+
+      console.log(`[agent-sync/upload-logs] Agent ${agent.id}: received=${logs.length} accepted=${accepted.length} rejected=${rejected.length}`)
+      if (rejected.length > 0) {
+        console.warn(`[agent-sync/upload-logs] Rejected logs:`, JSON.stringify(rejected.slice(0, 10)))
+      }
+
+      let insertedCount = 0
+      if (accepted.length > 0) {
+        const { error } = await supabase.from('access_logs').insert(accepted)
+        if (error) {
+          console.error(`[agent-sync/upload-logs] Insert error:`, error)
+          throw error
+        }
+        insertedCount = accepted.length
       }
 
       await supabase.from('local_agents').update({ last_sync_at: new Date().toISOString(), pending_sync_count: 0, sync_status: 'synced' }).eq('id', agent.id)
 
-      return new Response(JSON.stringify({ success: true, count: logs.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ success: true, received: logs.length, accepted: insertedCount, rejected: rejected.length, rejectedDetails: rejected.slice(0, 10) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // POST /upload-operations

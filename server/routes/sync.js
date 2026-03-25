@@ -53,7 +53,7 @@ router.post('/fast-upload-logs', async (req, res) => {
   }
 });
 
-// Agent control
+// Agent control (includes telemetry: capturedEventsCount, ignoredDedupeCount, etc.)
 router.get('/agent/status', (req, res) => {
   try {
     res.json(req.agentController.getStatus());

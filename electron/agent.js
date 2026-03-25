@@ -3,8 +3,71 @@ const http = require('http');
 /**
  * ControlID Agent Controller
  * Polls ControlID facial readers on the local network for access events.
- * Replaces the Python agent (controlid_agent.py) when running in Electron.
  */
+
+// ── Canonical normalizers ──────────────────────────────────────────────
+
+const DIRECTION_MAP = {
+  entry: 'entry', entrada: 'entry', in: 'entry', '1': 'entry', 1: 'entry',
+  exit: 'exit', saida: 'exit', saída: 'exit', out: 'exit', '2': 'exit', 2: 'exit',
+};
+
+function normalizeDirection(raw, deviceConfig) {
+  if (raw != null) {
+    const key = String(raw).toLowerCase().trim();
+    if (DIRECTION_MAP[key]) return DIRECTION_MAP[key];
+  }
+  // Fallback to device configuration
+  const passDir = deviceConfig?.passage_direction || deviceConfig?.direction;
+  if (passDir) {
+    const key = String(passDir).toLowerCase().trim();
+    if (DIRECTION_MAP[key]) return DIRECTION_MAP[key];
+  }
+  return 'unknown';
+}
+
+function normalizeAccessStatus(event) {
+  // ControlID may use `event.access` (bool) or `event.event` (int: 7=granted, 3=denied)
+  if (typeof event.access === 'boolean') return event.access ? 'granted' : 'denied';
+  if (event.access === 1 || event.access === '1') return 'granted';
+  if (event.access === 0 || event.access === '0') return 'denied';
+  const evtCode = event.event ?? event.event_type;
+  if (evtCode === 7 || evtCode === '7') return 'granted';
+  if (evtCode === 3 || evtCode === '3') return 'denied';
+  // Default to granted if there's any positive indication
+  return 'granted';
+}
+
+function normalizeTimestamp(event) {
+  // Try multiple field names the ControlID hardware might use
+  const raw = event.timestamp || event.time || event.date || event.datetime;
+  if (!raw) return null;
+  const parsed = typeof raw === 'number' ? raw * 1000 : Date.parse(raw);
+  if (isNaN(parsed)) return null;
+  return new Date(parsed).toISOString();
+}
+
+function parseControlIdEvent(rawEvent, device) {
+  const timestamp = normalizeTimestamp(rawEvent);
+  if (!timestamp) return null; // Cannot process without a valid timestamp
+
+  return {
+    timestamp,
+    access: normalizeAccessStatus(rawEvent),
+    direction: normalizeDirection(
+      rawEvent.direction ?? rawEvent.passage_direction ?? rawEvent.sentido,
+      device.configuration
+    ),
+    user_id: rawEvent.user_id ?? rawEvent.user ?? rawEvent.id_user ?? null,
+    user_name: rawEvent.user_name ?? rawEvent.name ?? null,
+    user_document: rawEvent.user_document ?? rawEvent.document ?? null,
+    reason: rawEvent.reason ?? rawEvent.message ?? null,
+    score: rawEvent.score ?? rawEvent.match_score ?? null,
+  };
+}
+
+// ── Agent Controller ───────────────────────────────────────────────────
+
 class AgentController {
   constructor(db) {
     this.db = db;
@@ -12,10 +75,17 @@ class AgentController {
     this.pollInterval = null;
     this.devices = [];
     this.listeners = [];
-    this.pollIntervalMs = 5000; // 5 seconds
-    this.deviceConnectivity = new Map(); // serial_number -> { online: boolean }
-    this.sessionCache = new Map(); // ip:port -> { session, expiry }
-    this.SESSION_TTL_MS = 10 * 60 * 1000; // 10 minutes
+    this.pollIntervalMs = 5000;
+    this.deviceConnectivity = new Map();
+    this.sessionCache = new Map();
+    this.SESSION_TTL_MS = 10 * 60 * 1000;
+
+    // Telemetry
+    this._capturedCount = 0;
+    this._ignoredDedupeCount = 0;
+    this._ignoredInvalidCount = 0;
+    this._lastCapturedAt = null;
+    this._lastIgnoreReason = null;
   }
 
   onNewEvent(callback) {
@@ -36,6 +106,11 @@ class AgentController {
     return {
       running: this.running,
       devicesCount: this.devices.length,
+      capturedEventsCount: this._capturedCount,
+      ignoredDedupeCount: this._ignoredDedupeCount,
+      ignoredInvalidCount: this._ignoredInvalidCount,
+      lastCapturedAt: this._lastCapturedAt,
+      lastIgnoreReason: this._lastIgnoreReason,
     };
   }
 
@@ -65,8 +140,7 @@ class AgentController {
 
   getDeviceKey(device) {
     const creds = this.parseApiCredentials(device.api_credentials);
-    const port = creds.port || 80;
-    return `${device.controlid_ip_address}:${port}`;
+    return `${device.controlid_ip_address}:${creds.port || 80}`;
   }
 
   async loginToDevice(device) {
@@ -120,11 +194,7 @@ class AgentController {
   async start() {
     if (this.running) return;
     this.running = true;
-
-    // Load devices from local DB
     this.reloadDevices();
-
-    // Start polling loop
     this.pollInterval = setInterval(() => this.pollDevices(), this.pollIntervalMs);
     console.log(`[Agent] Started polling ${this.devices.length} devices`);
   }
@@ -142,7 +212,6 @@ class AgentController {
         if (device.controlid_serial_number) {
           this.deviceConnectivity.set(device.controlid_serial_number, { online: true });
         }
-        // Persist status to local SQLite
         this.persistDeviceStatus(device, 'online');
       } catch (err) {
         if (device.controlid_serial_number) {
@@ -182,7 +251,6 @@ class AgentController {
         path: `/api/access/last?session=${session}`,
         timeout: 3000,
       }, (res) => {
-        // Retry once on 401
         if (res.statusCode === 401 && !_retried) {
           this.invalidateSession(device);
           this.pollDevice(device, true).then(resolve).catch(reject);
@@ -193,9 +261,9 @@ class AgentController {
         res.on('data', (chunk) => data += chunk);
         res.on('end', () => {
           try {
-            const event = JSON.parse(data);
-            if (event && event.timestamp) {
-              this.processEvent(device, event);
+            const rawEvent = JSON.parse(data);
+            if (rawEvent && (rawEvent.timestamp || rawEvent.time || rawEvent.date)) {
+              this.processEvent(device, rawEvent);
             }
           } catch { /* ignore parse errors */ }
           resolve();
@@ -207,15 +275,27 @@ class AgentController {
     });
   }
 
-  processEvent(device, event) {
-    // Check if we already have this event (dedup by timestamp + device)
-    const lastTimestamp = device.last_event_timestamp;
-    if (lastTimestamp && event.timestamp <= lastTimestamp) return;
+  processEvent(device, rawEvent) {
+    // Parse and normalize the raw hardware event
+    const event = parseControlIdEvent(rawEvent, device);
+    if (!event) {
+      this._ignoredInvalidCount++;
+      this._lastIgnoreReason = 'invalid_payload: could not parse timestamp';
+      console.log(`[Agent] Ignored event from ${device.name}: invalid payload (no parseable timestamp)`);
+      return;
+    }
 
-    // Determine direction based on device config or event data
-    const direction = event.direction || 
-      (device.configuration?.passage_direction) || 
-      'unknown';
+    // Temporal deduplication: compare parsed timestamps numerically
+    const eventMs = Date.parse(event.timestamp);
+    const lastTimestamp = device.last_event_timestamp;
+    if (lastTimestamp) {
+      const lastMs = Date.parse(lastTimestamp);
+      if (!isNaN(lastMs) && eventMs <= lastMs) {
+        this._ignoredDedupeCount++;
+        this._lastIgnoreReason = `dedupe: event ${event.timestamp} <= last ${lastTimestamp}`;
+        return; // Already processed
+      }
+    }
 
     // Resolve worker UUID from integer code sent by ControlID device
     let workerId = null;
@@ -226,7 +306,6 @@ class AgentController {
       if (isUuid) {
         workerId = event.user_id;
       } else {
-        // Look up worker by integer code in local SQLite
         try {
           const rawDb = this.db.getRawDb?.();
           if (rawDb) {
@@ -245,8 +324,8 @@ class AgentController {
       worker_id: workerId,
       device_id: device.id,
       timestamp: event.timestamp,
-      access_status: event.access ? 'granted' : 'denied',
-      direction,
+      access_status: event.access,
+      direction: event.direction,
       reason: event.reason || null,
       score: event.score || null,
       worker_name: workerName,
@@ -268,6 +347,11 @@ class AgentController {
 
     // Update in-memory device
     device.last_event_timestamp = event.timestamp;
+
+    // Telemetry
+    this._capturedCount++;
+    this._lastCapturedAt = new Date().toISOString();
+    console.log(`[Agent] Captured event: worker=${workerId || 'unknown'} dir=${event.direction} status=${event.access} device=${device.name}`);
 
     // Notify UI
     this.notifyListeners(inserted);
