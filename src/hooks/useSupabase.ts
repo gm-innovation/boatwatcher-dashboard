@@ -162,7 +162,7 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
       }));
     },
     enabled: !!projectId,
-    refetchInterval: 30000,
+    refetchInterval: 10000,
   });
 };
 
