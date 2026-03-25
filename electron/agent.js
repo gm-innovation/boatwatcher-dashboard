@@ -78,7 +78,7 @@ class AgentController {
     const ip = device.controlid_ip_address;
 
     return new Promise((resolve, reject) => {
-      const postData = JSON.stringify({ login, password });
+      const postData = JSON.stringify({ login: creds.username, password: creds.password });
       const req = http.request({
         hostname: ip,
         port,
