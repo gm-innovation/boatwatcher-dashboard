@@ -75,9 +75,6 @@ class AgentController {
     if (cached && cached.expiry > Date.now()) return cached.session;
 
     const creds = this.parseApiCredentials(device.api_credentials);
-    const login = creds.username || creds.user || 'admin';
-    const password = creds.password || 'admin';
-    const port = creds.port || 80;
     const ip = device.controlid_ip_address;
 
     return new Promise((resolve, reject) => {
