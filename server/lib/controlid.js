@@ -38,14 +38,14 @@ async function loginToDevice(device) {
   if (cached && cached.expiry > Date.now()) return cached.session;
 
   const creds = parseApiCredentials(device.api_credentials);
-  const login = creds.username || creds.user || 'admin';
-  const password = creds.password || 'admin';
   const baseUrl = getBaseUrl(device);
+
+  console.log(`[controlid] Login attempt: ${baseUrl}/login.fcgi (user=${creds.username})`);
 
   const response = await fetch(`${baseUrl}/login.fcgi`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ login, password }),
+    body: JSON.stringify({ login: creds.username, password: creds.password }),
     signal: AbortSignal.timeout(10000),
   });
 
