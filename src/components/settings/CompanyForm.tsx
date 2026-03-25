@@ -33,6 +33,9 @@ export const CompanyForm = () => {
   const [companyName, setCompanyName] = useState("");
   const [projectManagers, setProjectManagers] = useState("");
   const [vessels, setVessels] = useState("");
+  const [responsibleName, setResponsibleName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
