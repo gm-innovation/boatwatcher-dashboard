@@ -8,15 +8,18 @@ const sessionCache = new Map();
 const SESSION_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 function parseApiCredentials(apiCredentials) {
-  if (!apiCredentials) return {};
+  let raw = {};
+  if (!apiCredentials) return { username: 'admin', password: 'admin', port: 80 };
   if (typeof apiCredentials === 'string') {
-    try {
-      return JSON.parse(apiCredentials);
-    } catch {
-      return {};
-    }
+    try { raw = JSON.parse(apiCredentials); } catch { raw = {}; }
+  } else {
+    raw = apiCredentials;
   }
-  return apiCredentials;
+  return {
+    username: raw.username || raw.user || raw.login || 'admin',
+    password: raw.password || 'admin',
+    port: raw.port || 80,
+  };
 }
 
 function getDeviceKey(device) {
