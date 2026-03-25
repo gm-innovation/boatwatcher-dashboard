@@ -12,10 +12,12 @@ import { PendingRegistrations } from "@/components/people/PendingRegistrations";
 import { DocumentExpirationCheck } from "@/components/admin/DocumentExpirationCheck";
 import { AgentManagement } from "@/components/devices/AgentManagement";
 import { ConnectivityDashboard } from "@/components/devices/ConnectivityDashboard";
-import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, UserCheck, FileWarning, Bot, Wifi } from "lucide-react";
+import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, UserCheck, FileWarning, Bot, Wifi, MonitorDown } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { usesLocalServer } from "@/lib/runtimeProfile";
+import { isElectron } from "@/lib/dataProvider";
+import { DesktopUpdater } from "@/components/desktop/DesktopUpdater";
 
 type AdminTab = {
   value: string;
