@@ -196,11 +196,35 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
                 {device.status === 'online' ? <Wifi className="h-3 w-3 mr-1" /> : <WifiOff className="h-3 w-3 mr-1" />}
                 {device.status}
               </Badge>
-              {(device.configuration as any)?.passage_direction && (
-                <Badge variant="secondary" className="text-xs">
-                  {(device.configuration as any).passage_direction === 'entry' ? '↙ Entrada' : '↗ Saída'}
-                </Badge>
-              )}
+              <Select
+                value={(device.configuration as any)?.passage_direction || '__none__'}
+                onValueChange={async (value) => {
+                  const newDirection = value === '__none__' ? null : value;
+                  const newConfig = { ...(device.configuration as any), passage_direction: newDirection };
+                  try {
+                    if (isLocalRuntime) {
+                      await localDevices.update(device.id, { configuration: newConfig });
+                    } else {
+                      const { error } = await supabase.from('devices').update({ configuration: newConfig }).eq('id', device.id);
+                      if (error) throw error;
+                    }
+                    toast({ title: 'Direção atualizada', description: newDirection === 'entry' ? '↙ Entrada' : newDirection === 'exit' ? '↗ Saída' : 'Sem direção' });
+                    queryClient.invalidateQueries({ queryKey: ['devices'] });
+                    onRefresh();
+                  } catch (err: any) {
+                    toast({ title: 'Erro ao atualizar direção', description: err.message, variant: 'destructive' });
+                  }
+                }}
+              >
+                <SelectTrigger className="h-6 w-auto min-w-[100px] text-xs border-border px-2 gap-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Sem direção</SelectItem>
+                  <SelectItem value="entry">↙ Entrada</SelectItem>
+                  <SelectItem value="exit">↗ Saída</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </CardHeader>
