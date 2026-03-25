@@ -37,6 +37,7 @@ const deviceSchema = z.object({
   agent_id: z.string().optional(),
   api_username: z.string().optional(),
   api_password: z.string().optional(),
+  passage_direction: z.enum(['entry', 'exit']).optional(),
 });
 
 type DeviceFormData = z.infer<typeof deviceSchema>;
