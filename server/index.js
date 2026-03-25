@@ -96,6 +96,11 @@ function createLocalServer(options = {}) {
   const agentController = new AgentController(db);
   syncEngine.setAgentController(agentController);
 
+  // Fast-lane: upload logs immediately when a new access event is captured
+  agentController.onNewEvent(() => {
+    syncEngine.triggerFastLaneSync();
+  });
+
   // Auto-start agent polling so device connectivity is tracked from boot
   agentController.start().catch(err => {
     console.error('[Dock Check Server] AgentController auto-start failed:', err.message);

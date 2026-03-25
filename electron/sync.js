@@ -286,9 +286,44 @@ class SyncEngine {
     const logs = this.db.getUnsyncedLogs?.() || [];
     if (logs.length === 0) return;
 
-    const response = await this.callEdgeFunction('agent-sync/upload-logs', 'POST', { logs });
-    if (response.success) {
-      this.db.markLogsSynced(logs.map((l) => l.id));
+    try {
+      const response = await this.callEdgeFunction('agent-sync/upload-logs', 'POST', { logs });
+      if (response.success) {
+        this.db.markLogsSynced(logs.map((l) => l.id));
+        this._uploadLogsCount += logs.length;
+        this._lastUploadLogsError = null;
+        console.log(`[sync] Uploaded ${logs.length} access logs`);
+      }
+    } catch (err) {
+      this._lastUploadLogsError = `${new Date().toISOString()}: ${err.message}`;
+      console.error('[sync] Upload logs error:', err.message);
+    }
+  }
+
+  async downloadAccessLogs() {
+    try {
+      const since = this.db.getSyncMeta('last_download_access_logs') || '1970-01-01T00:00:00Z';
+      const response = await this.callEdgeFunction(`agent-sync/download-access-logs?since=${since}`, 'GET');
+      if (response.access_logs && Array.isArray(response.access_logs)) {
+        let count = 0;
+        for (const log of response.access_logs) {
+          try {
+            this.db.upsertAccessLogFromCloud?.(log);
+            count++;
+          } catch (err) {
+            console.error(`[sync] access_log upsert failed for ${log.id}:`, err.message);
+          }
+        }
+        if (count > 0) {
+          this._downloadLogsCount += count;
+          console.log(`[sync] Downloaded ${count} access logs from cloud`);
+        }
+        this._lastDownloadLogsError = null;
+      }
+      this.db.setSyncMeta('last_download_access_logs', new Date().toISOString());
+    } catch (err) {
+      this._lastDownloadLogsError = `${new Date().toISOString()}: ${err.message}`;
+      console.error('[sync] Download access logs error:', err.message);
     }
   }
 
