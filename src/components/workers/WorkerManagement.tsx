@@ -20,6 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ResolvedAvatar } from '@/components/ResolvedAvatar';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
   Upload,
@@ -31,10 +32,12 @@ import {
   XCircle,
   Fingerprint,
   Eye,
-  Hash
+  Hash,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import type { Worker, WorkerStatus } from '@/types/supabase';
-import { useQueryClient } from '@tanstack/react-query';
 import { WorkerDetailsDialog } from './WorkerDetailsDialog';
 import { NewWorkerDialog } from './NewWorkerDialog';
 
