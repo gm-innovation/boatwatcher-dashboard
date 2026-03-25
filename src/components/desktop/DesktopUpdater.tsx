@@ -1,13 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { getElectronAPI, type UpdaterStatus } from "@/lib/dataProvider";
 import { toast } from "sonner";
-import { RefreshCw, Download, RotateCcw, CheckCircle2, AlertTriangle, Loader2, Save, Link } from "lucide-react";
+import { RefreshCw, Download, RotateCcw, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 
 const defaultStatus: UpdaterStatus = {
   configured: false,
@@ -23,9 +22,6 @@ const defaultStatus: UpdaterStatus = {
 export const DesktopUpdater = () => {
   const [status, setStatus] = useState<UpdaterStatus>(defaultStatus);
   const [loading, setLoading] = useState(true);
-  const [updateUrl, setUpdateUrl] = useState("");
-  const [urlDirty, setUrlDirty] = useState(false);
-  const [savingUrl, setSavingUrl] = useState(false);
 
   const api = getElectronAPI();
 
@@ -37,12 +33,6 @@ export const DesktopUpdater = () => {
       setLoading(false);
     });
 
-    // Load current update URL
-    const currentUrl = api.getUpdateUrl?.();
-    if (currentUrl) {
-      setUpdateUrl(currentUrl);
-    }
-
     api.onUpdaterStatusChange((s) => setStatus(s));
   }, []);
 
@@ -50,11 +40,7 @@ export const DesktopUpdater = () => {
     if (!api) return;
     const result = await api.updater.checkForUpdates();
     if (result && !result.ok) {
-      if (result.reason === "not_configured") {
-        toast.error("URL de atualização não configurada", {
-          description: "Informe a URL do repositório de atualizações abaixo e salve.",
-        });
-      } else if (result.reason === "not_packaged") {
+      if (result.reason === "not_packaged") {
         toast.warning("Modo desenvolvimento", {
           description: "O atualizador só funciona na versão empacotada (.exe).",
         });
@@ -71,27 +57,6 @@ export const DesktopUpdater = () => {
     await api.updater.installDownloadedUpdate();
   }, [api]);
 
-  const handleSaveUrl = useCallback(async () => {
-    if (!api?.setUpdateUrl) return;
-    setSavingUrl(true);
-    try {
-      await api.setUpdateUrl(updateUrl.trim());
-      setUrlDirty(false);
-      toast.success("URL de atualização salva");
-      // Re-fetch status after setting URL
-      const s = await api.updater.getStatus();
-      setStatus(s);
-      // Auto-check for updates after saving a valid URL
-      if (updateUrl.trim()) {
-        await handleCheck();
-      }
-    } catch (err) {
-      toast.error("Erro ao salvar URL");
-    } finally {
-      setSavingUrl(false);
-    }
-  }, [api, updateUrl, handleCheck]);
-
   if (!api) return null;
 
   const isIdle = !status.checking && !status.downloading && !status.downloaded && !status.error;
@@ -103,7 +68,7 @@ export const DesktopUpdater = () => {
           <div>
             <CardTitle className="text-lg">Atualização do Desktop</CardTitle>
             <CardDescription>
-              Gerencie as atualizações do aplicativo Desktop
+              Atualizações automáticas via GitHub Releases
             </CardDescription>
           </div>
           {status.version && (
@@ -115,38 +80,6 @@ export const DesktopUpdater = () => {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* URL configuration */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium flex items-center gap-1.5">
-            <Link className="h-3.5 w-3.5" />
-            URL de atualização
-          </label>
-          <div className="flex gap-2">
-            <Input
-              value={updateUrl}
-              onChange={(e) => {
-                setUpdateUrl(e.target.value);
-                setUrlDirty(true);
-              }}
-              placeholder="https://github.com/owner/repo/releases/download/latest"
-              className="text-sm"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSaveUrl}
-              disabled={!urlDirty || savingUrl}
-              className="gap-1 shrink-0"
-            >
-              {savingUrl ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-              Salvar
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            URL base do GitHub Releases onde os arquivos de atualização são publicados.
-          </p>
-        </div>
-
         {loading ? (
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -154,7 +87,6 @@ export const DesktopUpdater = () => {
           </div>
         ) : (
           <>
-            {/* Status display */}
             {status.checking && (
               <div className="flex items-center gap-2 text-muted-foreground text-sm">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -199,11 +131,10 @@ export const DesktopUpdater = () => {
               <p className="text-sm text-muted-foreground">
                 {status.configured
                   ? "Nenhuma atualização pendente."
-                  : "Atualizador não configurado. Informe a URL de atualização acima."}
+                  : "Disponível apenas na versão instalada."}
               </p>
             )}
 
-            {/* Actions */}
             <div className="flex gap-2 pt-2">
               <Button
                 variant="outline"

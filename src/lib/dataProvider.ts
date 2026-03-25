@@ -103,8 +103,6 @@ export const getElectronAPI = () => {
     };
     getServerUrl: () => string;
     setServerUrl: (url: string) => Promise<boolean>;
-    getUpdateUrl: () => string;
-    setUpdateUrl: (url: string) => Promise<boolean>;
     isOnline: () => boolean;
     onSyncStatusChange: (callback: (status: any) => void) => void;
     onUpdaterStatusChange: (callback: (status: UpdaterStatus) => void) => void;
