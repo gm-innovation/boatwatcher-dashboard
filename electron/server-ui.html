@@ -628,7 +628,8 @@
 
     for (const d of devices) {
       const creds = d.api_credentials || {};
-      const credLabel = creds.user ? `${esc(creds.user)}:***` : '—';
+      const credUser = creds.username || creds.user || creds.login || '';
+      const credLabel = credUser ? `${esc(credUser)}:***` : '—';
       html += `<tr>
         <td>${esc(d.name)}</td>
         <td style="font-family:monospace;">${esc(d.controlid_ip_address || '—')}</td>
