@@ -258,6 +258,39 @@ export const CompanyForm = () => {
             />
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <Label htmlFor="responsibleName">Responsável</Label>
+              <Input
+                id="responsibleName"
+                value={responsibleName}
+                onChange={(e) => setResponsibleName(e.target.value)}
+                className="mt-2"
+                placeholder="Nome do responsável"
+              />
+            </div>
+            <div>
+              <Label htmlFor="phone">Telefone</Label>
+              <Input
+                id="phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="mt-2"
+                placeholder="(00) 00000-0000"
+              />
+            </div>
+            <div>
+              <Label htmlFor="address">Endereço</Label>
+              <Input
+                id="address"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className="mt-2"
+                placeholder="Endereço completo"
+              />
+            </div>
+          </div>
+
           <Button type="submit" disabled={isLoading}>
             {isLoading ? "Salvando..." : selectedCompanyId && selectedCompanyId !== "new" ? "Atualizar Empresa" : "Cadastrar Empresa"}
           </Button>
