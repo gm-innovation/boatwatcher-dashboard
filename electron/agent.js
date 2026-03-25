@@ -178,7 +178,7 @@ class AgentController {
     return new Promise((resolve, reject) => {
       const req = http.get({
         hostname: ip,
-        port,
+        port: creds.port,
         path: `/api/access/last?session=${session}`,
         timeout: 3000,
       }, (res) => {
