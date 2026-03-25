@@ -119,7 +119,15 @@ async function controlIdRequest(device, endpoint, method = 'GET', body, _retried
 }
 
 async function controlIdRequestBinary(device, endpoint, queryParams, imageBuffer, _retried = false) {
-  const session = await loginToDevice(device);
+  let session;
+  try {
+    session = await loginToDevice(device);
+  } catch (loginErr) {
+    const err = new Error(`[phase=login.fcgi] ${loginErr.message}`);
+    err.phase = 'login.fcgi';
+    throw err;
+  }
+
   const url = buildDeviceUrl(device, endpoint, session, queryParams);
   const headers = { 'Content-Type': 'application/octet-stream' };
 
@@ -146,7 +154,10 @@ async function controlIdRequestBinary(device, endpoint, queryParams, imageBuffer
   }
 
   if (!response.ok) {
-    throw new Error(typeof data === 'string' ? data : `HTTP ${response.status}`);
+    const detail = typeof data === 'string' ? data : (data?.error || `HTTP ${response.status}`);
+    const err = new Error(`[phase=${endpoint}] ${detail}`);
+    err.phase = endpoint;
+    throw err;
   }
 
   return data;

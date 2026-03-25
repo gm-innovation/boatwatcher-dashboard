@@ -661,8 +661,9 @@
 
   function getConnStatusHtml(deviceId) {
     const s = deviceConnStatus[deviceId];
-    if (s === 'ok') return '<span class="conn-status conn-ok">● Online</span>';
-    if (s === 'fail') return '<span class="conn-status conn-fail">● Offline</span>';
+    const msg = deviceConnMessages[deviceId] || '';
+    if (s === 'ok') return `<span class="conn-status conn-ok">● Autenticado</span>${msg ? `<br><span style="font-size:10px;color:#4ade80;">${esc(msg)}</span>` : ''}`;
+    if (s === 'fail') return `<span class="conn-status conn-fail">● Falha</span>${msg ? `<br><span style="font-size:10px;color:#f87171;">${esc(msg)}</span>` : ''}`;
     return '<span class="conn-status conn-pending">● Não testado</span>';
   }
 

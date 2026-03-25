@@ -392,6 +392,25 @@ function registerIpcHandlers() {
     });
   });
 
+  ipcMain.handle('server:test-device-auth', async (_event, deviceId) => {
+    if (!deviceId || !serverRuntime?.db) return { ok: false, error: 'Servidor não inicializado' };
+    try {
+      const device = serverRuntime.db.getDeviceById?.(deviceId);
+      if (!device || !device.controlid_ip_address) {
+        return { ok: false, error: 'Dispositivo não encontrado ou sem IP' };
+      }
+      const { loginToDevice, invalidateSession } = require('../server/lib/controlid');
+      // Clear any cached session to force a fresh login
+      invalidateSession(device);
+      const session = await loginToDevice(device);
+      logToFile(`Auth test OK for device ${device.name} (${device.controlid_ip_address}): session=${session.substring(0, 8)}...`);
+      return { ok: true, session: true };
+    } catch (err) {
+      logToFile(`Auth test FAILED for device ${deviceId}: ${err.message}`);
+      return { ok: false, error: err.message };
+    }
+  });
+
   ipcMain.handle('server:trigger-sync', async () => {
     try {
       await serverRuntime?.syncEngine?.triggerSync?.();
