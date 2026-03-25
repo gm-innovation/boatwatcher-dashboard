@@ -1,37 +1,62 @@
 
 
-## Enrollment automático ao atualizar trabalhador
+## Enrollment automático: Worker → Projetos Permitidos → Dispositivos
 
-### Problema raiz
-Quando o usuário atualiza um trabalhador (nome, foto, CPF) pelo formulário "Editar Trabalhador", o sistema apenas salva no banco de dados. Ele **não** dispara o enrollment nos dispositivos ControlID onde o trabalhador já está cadastrado (`devices_enrolled`). O usuário precisa manualmente abrir o dialog de Enrollment e re-sincronizar — e provavelmente não sabe disso.
+### Modelo de dados clarificado
 
-### Solução
-Após salvar um trabalhador que já tem `devices_enrolled` preenchido, disparar automaticamente o enrollment nos dispositivos listados, reutilizando o fluxo existente (`worker-enrollment` edge function + fila de comandos).
+```text
+Cliente (Company) ──owns──▶ Project ──has──▶ Devices
+                                ▲
+Empresa terceirizada (Company) ──has──▶ Workers ──allowed_project_ids──┘
+Cliente (Company) ──has──▶ Workers (tripulação) ──allowed_project_ids──┘
+```
+
+- **Cliente**: empresa dona do projeto (`projects.client_id = company.id`)
+- **Empresas**: terceirizadas que prestam serviço ao cliente. Workers pertencem a elas via `workers.company_id`
+- **Tripulação**: workers do próprio cliente, também via `workers.company_id`
+- **Vínculo worker↔projeto**: `workers.allowed_project_ids[]` — independente de ser terceirizada ou tripulação
+
+### Cadeia de resolução de dispositivos
+
+```
+Worker.allowed_project_ids → Projects → Devices (com agent_id)
+```
+
+Não depende de `devices_enrolled` (que fica sempre vazio). O campo `allowed_project_ids` já é preenchido no formulário.
 
 ### Alterações
 
-**1. `src/components/workers/WorkerManagement.tsx` — WorkerForm.onSubmit**
-- Após `updateWorker()` bem-sucedido, verificar se `worker.devices_enrolled` tem dispositivos
-- Se sim, chamar `supabase.functions.invoke("worker-enrollment")` com `action: 'enroll'` e os `deviceIds` do `devices_enrolled`
-- Mostrar toast informando que o enrollment foi re-enviado automaticamente
-- Abrir o tracking dialog (fase `tracking`) com os `commandIds` retornados para o usuário acompanhar
+**1. Edge Function `worker-enrollment/index.ts` — Resolver dispositivos via `allowed_project_ids`**
 
-**2. `src/components/workers/WorkerManagement.tsx` — Extrair EnrollmentTracker**
-- Extrair a fase `tracking` do `EnrollmentDialog` em um componente reutilizável `EnrollmentTracker`
-- Usar esse componente tanto no dialog de enrollment manual quanto no auto-enrollment pós-update
+Quando `deviceIds` não é fornecido ou está vazio:
+- Buscar `worker.allowed_project_ids`
+- Buscar todos os dispositivos onde `project_id` está em `allowed_project_ids` E que tenham `agent_id` não-nulo
+- Usar esses dispositivos para enfileirar comandos
+- Atualizar `workers.devices_enrolled` com os IDs dos dispositivos após enfileirar
+- Se `deviceIds` for fornecido, manter comportamento atual (retrocompatibilidade)
 
-**3. `src/components/workers/WorkerManagement.tsx` — Estado do WorkerManagement**
-- Adicionar estado `autoEnrollCommandIds` + `autoEnrollWorker` no componente pai
-- Quando o update dispara auto-enrollment, popular esses estados e mostrar um dialog de tracking
+**2. `WorkerManagement.tsx` — Disparar enrollment no create e update**
 
-### Fluxo do usuário após implementação
-1. Edita trabalhador → clica "Atualizar"
-2. Dados salvos no banco
-3. Se o trabalhador tem dispositivos em `devices_enrolled`:
-   - Toast: "Dados atualizados. Re-sincronizando biometria em X dispositivo(s)..."
-   - Dialog de tracking abre automaticamente mostrando status dos comandos
-4. Se não tem dispositivos: comportamento atual (apenas toast de sucesso)
+- **Ao editar**: após salvar, chamar `worker-enrollment` com apenas `workerId` (sem `deviceIds` — a função resolve via `allowed_project_ids`)
+- **Ao criar**: após salvar + upload de foto, mesma lógica
+- Remover a verificação `if (enrolledDevices.length > 0)` — agora sempre tenta
+- Se retornar `commandIds`, abrir tracking dialog; se 0 dispositivos, toast normal
+
+**3. `DeviceManagement.tsx` — Bulk enrollment ao vincular dispositivo a projeto**
+
+- Após criar/editar dispositivo com `project_id`: buscar todos os workers cujo `allowed_project_ids` contém esse projeto
+- Chamar `worker-enrollment` para cada worker (ou criar endpoint bulk na edge function)
+- Garante que ao configurar dispositivos, todos os workers existentes sejam sincronizados
+
+### Fluxo do usuário
+
+1. Admin cria projeto com `client_id = Empresa X`
+2. Admin cadastra workers (da empresa X ou terceirizadas), marcando o projeto em "Projetos Permitidos"
+3. Admin adiciona dispositivo ao projeto → sistema enfileira enrollment de todos os workers que têm aquele projeto em `allowed_project_ids`
+4. Admin cria/edita trabalhador com projetos permitidos → enrollment automático nos dispositivos desses projetos
 
 ### Arquivos alterados
-- `src/components/workers/WorkerManagement.tsx`
+- `supabase/functions/worker-enrollment/index.ts` — resolução via `allowed_project_ids`
+- `src/components/workers/WorkerManagement.tsx` — enrollment automático no create/update
+- `src/components/devices/DeviceManagement.tsx` — bulk enrollment ao criar dispositivo
 
