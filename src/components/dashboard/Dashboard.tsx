@@ -6,7 +6,7 @@ import { ProjectInfoCard } from './ProjectInfoCard';
 import { StatisticsCards } from './StatisticsCards';
 import { WorkersOnBoardTable, WorkerOnBoard } from './WorkersOnBoardTable';
 import { CompaniesOnBoardList } from './CompaniesOnBoardList';
-import { RecentActivityFeed } from './RecentActivityFeed';
+
 import { format } from 'date-fns';
 import { useQueryClient } from '@tanstack/react-query';
 
