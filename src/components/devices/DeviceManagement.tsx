@@ -324,6 +324,9 @@ export const DeviceManagement = () => {
         password: data.api_password || '',
         port: 80
       },
+      configuration: {
+        passage_direction: data.passage_direction || null,
+      },
       status: 'offline' as const
     };
 
