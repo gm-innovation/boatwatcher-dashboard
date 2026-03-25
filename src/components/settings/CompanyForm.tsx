@@ -33,6 +33,9 @@ export const CompanyForm = () => {
   const [companyName, setCompanyName] = useState("");
   const [projectManagers, setProjectManagers] = useState("");
   const [vessels, setVessels] = useState("");
+  const [responsibleName, setResponsibleName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -42,11 +45,17 @@ export const CompanyForm = () => {
         setCompanyName(company.name);
         setProjectManagers(company.project_managers?.join('\n') || '');
         setVessels(company.vessels?.join('\n') || '');
+        setResponsibleName((company as any).responsible_name || '');
+        setPhone((company as any).phone || '');
+        setAddress((company as any).address || '');
       }
     } else {
       setCompanyName("");
       setProjectManagers("");
       setVessels("");
+      setResponsibleName("");
+      setPhone("");
+      setAddress("");
     }
   }, [selectedCompanyId, companies]);
 
@@ -121,6 +130,9 @@ export const CompanyForm = () => {
         name: companyName,
         project_managers: projectManagersArray,
         vessels: vesselsArray,
+        responsible_name: responsibleName || null,
+        phone: phone || null,
+        address: address || null,
         ...(logoUrlLight && { logo_url_light: logoUrlLight }),
         ...(logoUrlDark && { logo_url_dark: logoUrlDark }),
       };
@@ -142,6 +154,9 @@ export const CompanyForm = () => {
       setCompanyName("");
       setProjectManagers("");
       setVessels("");
+      setResponsibleName("");
+      setPhone("");
+      setAddress("");
       setSelectedCompanyId(null);
       refetch();
     } catch (error: any) {
@@ -241,6 +256,39 @@ export const CompanyForm = () => {
               className="mt-2"
               placeholder="Digite os nomes das embarcações, uma por linha"
             />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <Label htmlFor="responsibleName">Responsável</Label>
+              <Input
+                id="responsibleName"
+                value={responsibleName}
+                onChange={(e) => setResponsibleName(e.target.value)}
+                className="mt-2"
+                placeholder="Nome do responsável"
+              />
+            </div>
+            <div>
+              <Label htmlFor="phone">Telefone</Label>
+              <Input
+                id="phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="mt-2"
+                placeholder="(00) 00000-0000"
+              />
+            </div>
+            <div>
+              <Label htmlFor="address">Endereço</Label>
+              <Input
+                id="address"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className="mt-2"
+                placeholder="Endereço completo"
+              />
+            </div>
           </div>
 
           <Button type="submit" disabled={isLoading}>

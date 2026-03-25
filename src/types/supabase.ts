@@ -10,6 +10,9 @@ export interface Company {
   status: string | null;
   api_password: string | null;
   api_environment: string | null;
+  responsible_name: string | null;
+  phone: string | null;
+  address: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -174,5 +177,40 @@ export interface Notification {
   priority: string;
   related_entity_type: string | null;
   related_entity_id: string | null;
+  created_at: string;
+}
+
+export interface DocumentType {
+  id: string;
+  name: string;
+  default_validity_days: number | null;
+  description: string | null;
+  created_at: string;
+}
+
+export interface PendingWorker {
+  id: string;
+  company_id: string;
+  name: string;
+  document_number: string | null;
+  role: string | null;
+  photo_url: string | null;
+  job_function_id: string | null;
+  submitted_by: string | null;
+  status: string;
+  review_notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface GeneratedReport {
+  id: string;
+  report_type: string;
+  project_id: string | null;
+  filters: Record<string, any>;
+  data: Record<string, any> | null;
+  file_url: string | null;
+  created_by: string | null;
   created_at: string;
 }
