@@ -6,6 +6,8 @@ import { createWorker, updateWorker, deleteWorker } from '@/hooks/useDataProvide
 import { uploadFile } from '@/lib/storageProvider';
 import { isElectron } from '@/lib/dataProvider';
 import { supabase } from '@/integrations/supabase/client';
+import { shouldUseLocalServer } from '@/lib/runtimeProfile';
+import { localControlId } from '@/lib/localServerProvider';
 import { useWorkers, useCompanies, useProjects } from '@/hooks/useSupabase';
 import { useDevices, useWorkerEnrollment } from '@/hooks/useControlID';
 import { useResolvedUrl } from '@/hooks/useResolvedUrl';
