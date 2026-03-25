@@ -651,9 +651,18 @@ serve(async (req) => {
             // Update existing worker
             await supabase.from('workers').update({
               name: w.name,
+              code: w.code || undefined,
               role: w.role,
               company_id: w.company_id || null,
               status: w.status || 'pending_review',
+              document_number: w.document_number || undefined,
+              photo_url: w.photo_url || undefined,
+              job_function_id: w.job_function_id || null,
+              birth_date: w.birth_date || null,
+              gender: w.gender || null,
+              blood_type: w.blood_type || null,
+              observations: w.observations || null,
+              devices_enrolled: w.devices_enrolled || [],
               allowed_project_ids: agent.project_id ? [agent.project_id] : [],
               updated_at: new Date().toISOString(),
             }).eq('id', cloudId)
