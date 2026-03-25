@@ -551,7 +551,7 @@ serve(async (req) => {
       // need to be available locally — no project/company filter applied
       const { data: workers, error } = await supabase
         .from('workers')
-        .select('id, name, code, document_number, photo_url, status, company_id, role, allowed_project_ids, updated_at')
+        .select('id, name, code, document_number, photo_url, status, company_id, role, allowed_project_ids, devices_enrolled, job_function_id, birth_date, gender, blood_type, observations, updated_at')
         .gte('updated_at', since)
         .eq('status', 'active')
 
@@ -651,9 +651,18 @@ serve(async (req) => {
             // Update existing worker
             await supabase.from('workers').update({
               name: w.name,
+              code: w.code || undefined,
               role: w.role,
               company_id: w.company_id || null,
               status: w.status || 'pending_review',
+              document_number: w.document_number || undefined,
+              photo_url: w.photo_url || undefined,
+              job_function_id: w.job_function_id || null,
+              birth_date: w.birth_date || null,
+              gender: w.gender || null,
+              blood_type: w.blood_type || null,
+              observations: w.observations || null,
+              devices_enrolled: w.devices_enrolled || [],
               allowed_project_ids: agent.project_id ? [agent.project_id] : [],
               updated_at: new Date().toISOString(),
             }).eq('id', cloudId)
@@ -664,10 +673,18 @@ serve(async (req) => {
           // Insert new worker with pending_review status
           const { data: inserted, error: insertError } = await supabase.from('workers').insert({
             name: w.name,
+            code: w.code || undefined,
             document_number: w.document_number,
+            photo_url: w.photo_url || null,
             company_id: w.company_id || null,
             role: w.role,
             status: 'pending_review',
+            job_function_id: w.job_function_id || null,
+            birth_date: w.birth_date || null,
+            gender: w.gender || null,
+            blood_type: w.blood_type || null,
+            observations: w.observations || null,
+            devices_enrolled: w.devices_enrolled || [],
             allowed_project_ids: agent.project_id ? [agent.project_id] : [],
           }).select('id').single()
 

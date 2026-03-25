@@ -1317,10 +1317,13 @@ function createDatabaseAPI(db, startCode) {
       }
       if (existing) {
         db.prepare(`
-          UPDATE workers SET name = ?, company_id = ?, role = ?, status = ?, document_number = ?, 
-          photo_url = ?, allowed_project_ids = ?, updated_at = datetime('now'), synced = 1, cloud_id = ?
+          UPDATE workers SET code = ?, name = ?, company_id = ?, role = ?, status = ?, document_number = ?, 
+          photo_url = ?, allowed_project_ids = ?, job_function_id = ?, birth_date = ?, gender = ?,
+          blood_type = ?, observations = ?, devices_enrolled = ?,
+          updated_at = datetime('now'), synced = 1, cloud_id = ?
           WHERE id = ?
         `).run(
+          data.code || 0,
           data.name,
           localCompanyId,
           data.role,
@@ -1328,13 +1331,21 @@ function createDatabaseAPI(db, startCode) {
           data.document_number,
           data.photo_url,
           JSON.stringify(data.allowed_project_ids || []),
+          data.job_function_id || null,
+          data.birth_date || null,
+          data.gender || null,
+          data.blood_type || null,
+          data.observations || null,
+          JSON.stringify(data.devices_enrolled || []),
           data.id,
           existing.id,
         );
       } else {
         db.prepare(`
-          INSERT INTO workers (id, code, name, company_id, role, status, document_number, photo_url, allowed_project_ids, cloud_id, synced)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+          INSERT INTO workers (id, code, name, company_id, role, status, document_number, photo_url,
+          allowed_project_ids, job_function_id, birth_date, gender, blood_type, observations, devices_enrolled,
+          cloud_id, synced)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
         `).run(
           uuidv4(),
           data.code || 0,
@@ -1345,6 +1356,12 @@ function createDatabaseAPI(db, startCode) {
           data.document_number,
           data.photo_url,
           JSON.stringify(data.allowed_project_ids || []),
+          data.job_function_id || null,
+          data.birth_date || null,
+          data.gender || null,
+          data.blood_type || null,
+          data.observations || null,
+          JSON.stringify(data.devices_enrolled || []),
           data.id,
         );
       }
