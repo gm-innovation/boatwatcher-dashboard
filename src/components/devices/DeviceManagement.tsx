@@ -37,6 +37,7 @@ const deviceSchema = z.object({
   agent_id: z.string().optional(),
   api_username: z.string().optional(),
   api_password: z.string().optional(),
+  passage_direction: z.enum(['entry', 'exit']).optional(),
 });
 
 type DeviceFormData = z.infer<typeof deviceSchema>;
@@ -190,10 +191,17 @@ const DeviceCard = ({ device, onRefresh }: { device: Device; onRefresh: () => vo
                 <p className="text-sm text-muted-foreground">{device.controlid_ip_address}</p>
               </div>
             </div>
-            <Badge variant="outline" className={getStatusColor(device.status)}>
-              {device.status === 'online' ? <Wifi className="h-3 w-3 mr-1" /> : <WifiOff className="h-3 w-3 mr-1" />}
-              {device.status}
-            </Badge>
+            <div className="flex flex-col items-end gap-1">
+              <Badge variant="outline" className={getStatusColor(device.status)}>
+                {device.status === 'online' ? <Wifi className="h-3 w-3 mr-1" /> : <WifiOff className="h-3 w-3 mr-1" />}
+                {device.status}
+              </Badge>
+              {(device.configuration as any)?.passage_direction && (
+                <Badge variant="secondary" className="text-xs">
+                  {(device.configuration as any).passage_direction === 'entry' ? '↙ Entrada' : '↗ Saída'}
+                </Badge>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -316,6 +324,9 @@ export const DeviceManagement = () => {
         password: data.api_password || '',
         port: 80
       },
+      configuration: {
+        passage_direction: data.passage_direction || null,
+      },
       status: 'offline' as const
     };
 
@@ -416,9 +427,21 @@ export const DeviceManagement = () => {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Localização</Label>
-                <Input placeholder="Ex: Portaria Principal" {...register('location')} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Localização</Label>
+                  <Input placeholder="Ex: Portaria Principal" {...register('location')} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Direção de Passagem</Label>
+                  <Select onValueChange={(value) => setValue('passage_direction', value as 'entry' | 'exit')}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="entry">↙ Entrada</SelectItem>
+                      <SelectItem value="exit">↗ Saída</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

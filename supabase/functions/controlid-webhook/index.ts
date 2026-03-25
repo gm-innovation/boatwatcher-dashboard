@@ -36,7 +36,7 @@ serve(async (req) => {
     const deviceIdentifier = event.serial_number || event.device_id
     const { data: device, error: deviceError } = await supabase
       .from('devices')
-      .select('id, name, project_id')
+      .select('id, name, project_id, configuration')
       .eq('controlid_serial_number', deviceIdentifier)
       .single()
 
@@ -83,13 +83,18 @@ serve(async (req) => {
     // Update device status
     await supabase.from('devices').update({ last_event_timestamp: new Date().toISOString(), status: 'online' }).eq('id', device.id)
 
+    // Resolve direction for unrecognized attempts too
+    const unrecognizedDirection = event.direction
+      ? mapDirection(event.direction)
+      : ((device.configuration as any)?.passage_direction || 'unknown')
+
     // Unrecognized attempt
     if (!event.user_id) {
       await supabase.from('access_logs').insert({
         device_id: device.id, device_name: device.name,
         timestamp: new Date(event.time ? event.time * 1000 : Date.now()).toISOString(),
         access_status: 'denied', reason: 'not_recognized',
-        direction: mapDirection(event.direction), score: event.score,
+        direction: unrecognizedDirection, score: event.score,
         photo_capture_url: event.photo || null
       })
 
@@ -139,13 +144,18 @@ serve(async (req) => {
       }
     }
 
+    // Resolve direction: prefer event payload, fallback to device config
+    const resolvedDirection = event.direction
+      ? mapDirection(event.direction)
+      : ((device.configuration as any)?.passage_direction || 'unknown')
+
     // Insert access log
     await supabase.from('access_logs').insert({
       worker_id: worker?.id || null, worker_name: workerName, worker_document: workerDocument,
       device_id: device.id, device_name: device.name,
       timestamp: new Date(event.time ? event.time * 1000 : Date.now()).toISOString(),
       access_status: accessGranted ? 'granted' : 'denied', reason,
-      direction: mapDirection(event.direction), score: event.score,
+      direction: resolvedDirection, score: event.score,
       photo_capture_url: event.photo || null
     })
 
