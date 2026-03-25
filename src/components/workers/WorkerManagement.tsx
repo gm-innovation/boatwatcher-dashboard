@@ -152,21 +152,46 @@ const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
         savedWorkerName = data.name;
       }
 
-      // Auto-enrollment: always trigger based on allowed_project_ids
-      // Edge function resolves devices automatically when no deviceIds provided
+      // Auto-enrollment: trigger based on allowed_project_ids
       if (savedWorkerId && data.allowed_project_ids.length > 0) {
         try {
-          const { data: enrollResult, error: enrollError } = await supabase.functions.invoke("worker-enrollment", {
-            body: { action: 'enroll', workerId: savedWorkerId }
-          });
-          if (!enrollError && enrollResult?.commandIds?.length > 0) {
-            toast({ 
-              title: worker ? 'Dados atualizados' : 'Trabalhador cadastrado',
-              description: `Sincronizando biometria em ${enrollResult.resolvedDeviceCount || enrollResult.commandIds.length} dispositivo(s)...`,
+          const useLocal = await shouldUseLocalServer();
+
+          if (useLocal) {
+            // Desktop: call local server directly for immediate hardware response
+            const result = await localControlId.enrollWorker(savedWorkerId, [], 'enroll');
+            if (result?.success || result?.results?.some((r: any) => r.success)) {
+              toast({
+                title: worker ? 'Dados atualizados' : 'Trabalhador cadastrado',
+                description: result.message || `Enrollment concluído em ${result.results?.length || 0} dispositivo(s).`,
+              });
+              queryClient.invalidateQueries({ queryKey: ['workers'] });
+              onSuccess();
+              return;
+            } else {
+              toast({
+                title: worker ? 'Dados atualizados' : 'Trabalhador cadastrado',
+                description: result.message || 'Enrollment falhou em alguns dispositivos.',
+                variant: 'destructive',
+              });
+              queryClient.invalidateQueries({ queryKey: ['workers'] });
+              onSuccess();
+              return;
+            }
+          } else {
+            // Web / fallback: use cloud edge function (queues via agent_commands)
+            const { data: enrollResult, error: enrollError } = await supabase.functions.invoke("worker-enrollment", {
+              body: { action: 'enroll', workerId: savedWorkerId }
             });
-            queryClient.invalidateQueries({ queryKey: ['workers'] });
-            onSuccess({ workerId: savedWorkerId, workerName: savedWorkerName, commandIds: enrollResult.commandIds });
-            return;
+            if (!enrollError && enrollResult?.commandIds?.length > 0) {
+              toast({ 
+                title: worker ? 'Dados atualizados' : 'Trabalhador cadastrado',
+                description: `Sincronizando biometria em ${enrollResult.resolvedDeviceCount || enrollResult.commandIds.length} dispositivo(s)...`,
+              });
+              queryClient.invalidateQueries({ queryKey: ['workers'] });
+              onSuccess({ workerId: savedWorkerId, workerName: savedWorkerName, commandIds: enrollResult.commandIds });
+              return;
+            }
           }
         } catch (enrollErr) {
           console.error('Auto-enrollment failed:', enrollErr);
