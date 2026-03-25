@@ -52,10 +52,33 @@ class SyncEngine {
   start() {
     this.interval = setInterval(() => this.checkAndSync(), this.syncIntervalMs);
     setTimeout(() => this.checkAndSync(), 5000);
+
+    // Dedicated high-frequency command polling loop (every 5s)
+    this.commandPollInterval = setInterval(() => this.pollCommands(), 5000);
+    // First poll after 3s (before full sync completes)
+    setTimeout(() => this.pollCommands(), 3000);
   }
 
   stop() {
     if (this.interval) clearInterval(this.interval);
+    if (this.commandPollInterval) clearInterval(this.commandPollInterval);
+  }
+
+  /** Fast command polling — independent from the 60s sync cycle */
+  async pollCommands() {
+    if (!this.isConfigured() || this._isProcessingCommands) return;
+
+    const online = await this.checkConnectivity();
+    if (!online) return;
+
+    this._isProcessingCommands = true;
+    try {
+      await this.downloadAndExecuteCommands();
+    } catch (err) {
+      console.error('[command-poll] Error:', err.message);
+    } finally {
+      this._isProcessingCommands = false;
+    }
   }
 
   getStatus() {
