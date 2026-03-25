@@ -54,7 +54,7 @@ type WorkerFormData = z.infer<typeof workerSchema>;
 
 interface WorkerFormProps {
   worker?: Worker | null;
-  onSuccess: () => void;
+  onSuccess: (autoEnrollResult?: { workerId: string; workerName: string; commandIds: string[] }) => void;
   onCancel: () => void;
 }
 
@@ -125,6 +125,33 @@ const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
           allowed_project_ids: data.allowed_project_ids,
           photo_url: photoUrl,
         });
+
+        // Auto-enrollment: if worker has devices_enrolled, re-sync automatically
+        const enrolledDevices = worker.devices_enrolled || [];
+        if (enrolledDevices.length > 0) {
+          try {
+            const { data: enrollResult, error: enrollError } = await supabase.functions.invoke("worker-enrollment", {
+              body: { action: 'enroll', workerId: worker.id, deviceIds: enrolledDevices }
+            });
+            if (!enrollError && enrollResult?.commandIds?.length > 0) {
+              toast({ 
+                title: 'Dados atualizados',
+                description: `Re-sincronizando biometria em ${enrolledDevices.length} dispositivo(s)...`,
+              });
+              queryClient.invalidateQueries({ queryKey: ['workers'] });
+              onSuccess({ workerId: worker.id, workerName: worker.name, commandIds: enrollResult.commandIds });
+              return;
+            }
+          } catch (enrollErr) {
+            console.error('Auto-enrollment failed:', enrollErr);
+            toast({ 
+              title: 'Trabalhador atualizado', 
+              description: 'Não foi possível re-sincronizar a biometria automaticamente. Use o botão de Enrollment manualmente.',
+              variant: 'destructive',
+            });
+          }
+        }
+
         toast({ title: 'Trabalhador atualizado com sucesso' });
       } else {
         const newWorker = await createWorker({
@@ -508,6 +535,109 @@ const EnrollmentDialog = ({ worker, onClose }: EnrollmentDialogProps) => {
   );
 };
 
+// Reusable enrollment tracker component
+interface EnrollmentTrackerProps {
+  commandIds: string[];
+  onClose: () => void;
+  workerName?: string;
+}
+
+const EnrollmentTracker = ({ commandIds, onClose, workerName }: EnrollmentTrackerProps) => {
+  const { data: devices = [] } = useDevices();
+  const { enroll } = useWorkerEnrollment();
+  const queryClient = useQueryClient();
+
+  const { data: commandStatuses = [] } = useQuery({
+    queryKey: ['enrollment-commands', commandIds],
+    queryFn: async () => {
+      if (commandIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from('agent_commands')
+        .select('id, device_id, status, error_message, command, executed_at, payload')
+        .in('id', commandIds);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: commandIds.length > 0,
+    refetchInterval: commandIds.length > 0 ? 3000 : false,
+  });
+
+  const allDone = commandStatuses.length > 0 &&
+    commandStatuses.every(c => c.status === 'completed' || c.status === 'failed');
+
+  useEffect(() => {
+    if (allDone) {
+      queryClient.invalidateQueries({ queryKey: ['workers'] });
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+    }
+  }, [allDone, queryClient]);
+
+  const getDeviceName = (deviceId: string) =>
+    devices.find(d => d.id === deviceId)?.name || deviceId.slice(0, 8);
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed': return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case 'failed': return <XCircle className="h-4 w-4 text-destructive" />;
+      case 'in_progress': return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
+      default: return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'completed': return 'Concluído';
+      case 'failed': return 'Falhou';
+      case 'in_progress': return 'Executando...';
+      default: return 'Aguardando agente...';
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {workerName && (
+        <p className="text-sm text-muted-foreground">
+          Re-sincronizando biometria de <strong>{workerName}</strong>
+        </p>
+      )}
+      <div className="space-y-2">
+        <Label className="flex items-center gap-2">
+          {allDone ? (
+            <CheckCircle className="h-4 w-4 text-green-500" />
+          ) : (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          )}
+          {allDone ? 'Enrollment finalizado' : 'Aguardando execução pelo agente local...'}
+        </Label>
+        <div className="border rounded-md divide-y">
+          {commandStatuses.map(cmd => (
+            <div key={cmd.id} className="flex items-center justify-between p-3">
+              <div className="flex items-center gap-3">
+                {getStatusIcon(cmd.status)}
+                <div>
+                  <p className="text-sm font-medium">{getDeviceName(cmd.device_id)}</p>
+                  <p className="text-xs text-muted-foreground">{getStatusLabel(cmd.status)}</p>
+                  {cmd.error_message && (
+                    <p className="text-xs text-destructive flex items-center gap-1 mt-1">
+                      <AlertCircle className="h-3 w-3" />
+                      {cmd.error_message}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex justify-end pt-4 border-t">
+        <Button onClick={onClose}>
+          {allDone ? 'Fechar' : 'Fechar (continua em background)'}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 export const WorkerManagement = () => {
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
@@ -515,6 +645,7 @@ export const WorkerManagement = () => {
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [enrollingWorker, setEnrollingWorker] = useState<Worker | null>(null);
+  const [autoEnrollData, setAutoEnrollData] = useState<{ workerName: string; commandIds: string[] } | null>(null);
   const { data: workers = [], isLoading, refetch } = useWorkers();
   const { data: companies = [] } = useCompanies();
   const queryClient = useQueryClient();
@@ -582,15 +713,37 @@ export const WorkerManagement = () => {
           </DialogHeader>
           <WorkerForm 
             worker={editingWorker} 
-            onSuccess={() => {
+            onSuccess={(autoEnrollResult) => {
               setIsEditDialogOpen(false);
               setEditingWorker(null);
+              if (autoEnrollResult) {
+                setAutoEnrollData({
+                  workerName: autoEnrollResult.workerName,
+                  commandIds: autoEnrollResult.commandIds,
+                });
+              }
             }}
             onCancel={() => {
               setIsEditDialogOpen(false);
               setEditingWorker(null);
             }}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Auto-Enrollment Tracking Dialog */}
+      <Dialog open={!!autoEnrollData} onOpenChange={(open) => !open && setAutoEnrollData(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Re-sincronização Biométrica</DialogTitle>
+          </DialogHeader>
+          {autoEnrollData && (
+            <EnrollmentTracker
+              commandIds={autoEnrollData.commandIds}
+              workerName={autoEnrollData.workerName}
+              onClose={() => setAutoEnrollData(null)}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
