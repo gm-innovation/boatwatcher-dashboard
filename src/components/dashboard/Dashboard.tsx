@@ -94,8 +94,9 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
             onExport={handleExport}
           />
         </div>
-        <div className="xl:col-span-2">
+        <div className="xl:col-span-2 space-y-6">
           <CompaniesOnBoardList companies={companiesOnBoard} />
+          <RecentActivityFeed projectId={projectId} />
         </div>
       </div>
     </div>
