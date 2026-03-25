@@ -1,47 +1,42 @@
 
+Objetivo: eliminar de vez o erro de re-sincronização biométrica (`UNIQUE constraint failed: users.id`) e garantir autorização após reconhecimento.
 
-## Bug: Dispositivo reconhece mas nega acesso
+Diagnóstico confirmado:
+- O fluxo Web está enfileirando comandos corretamente.
+- Os comandos no backend estão falhando no agente local com `"[phase=create_objects.fcgi] ... users.id"`.
+- Isso indica que o executor local ainda está tratando “usuário já existe” como falha em pelo menos um caminho de enrollment.
+- Do I know what the issue is? **Sim**: o enrollment local não está 100% idempotente em runtime (ou o binário ativo não está usando a versão corrigida), então o passo de criação do usuário aborta antes de consolidar regra de acesso/foto.
 
-### Causa raiz
+Plano de implementação:
+1) Tornar criação de usuário realmente idempotente no executor local
+- Em `server/lib/controlid.js`, trocar o passo de criação de `users` para `create_or_modify_objects.fcgi` (upsert nativo do Control iD), evitando erro de UNIQUE.
+- Manter fallback compatível: se `create_or_modify_objects` não existir no firmware, usar `create_objects` com tolerância a duplicidade sem depender de token exato (`users.id`).
 
-O enrollment em `server/lib/controlid.js` → `enrollUserOnDevice()` faz apenas:
-1. Cria o usuário (`create_objects.fcgi` → `users`) ✓
-2. Envia a foto (`user_set_image.fcgi`) ✓
-3. **Não atribui regra de acesso** ✗
+2) Blindar vínculo de regra de acesso
+- Ainda em `server/lib/controlid.js`, manter/fortalecer o passo de `user_access_rules` com comportamento idempotente.
+- Preservar `device.configuration.access_rule_id` e fallback para `1`.
+- Se a API do dispositivo suportar upsert para o objeto, usar upsert; senão ignorar duplicidade com parser robusto.
 
-Sem uma `user_access_rules` vinculando o usuário a uma regra de acesso, o dispositivo ControlID reconhece o rosto mas não tem permissão para liberar a porta. Isso é documentado pela ControlID: o usuário precisa de uma regra de acesso (direta ou via grupo) para que o dispositivo autorize a passagem em modo standalone.
+3) Alinhar caminho alternativo de hardware
+- Aplicar a mesma estratégia idempotente em `supabase/functions/controlid-api/index.ts` (fluxo direto), para não existir diferença entre caminhos de execução.
 
-### Correção
+4) Adicionar prova de versão em runtime (evitar falso “atualizado”)
+- Incluir um identificador de revisão do enrollment (ex.: `enrollment_revision`) no health/status do servidor local e no resultado do comando processado.
+- Assim fica visível no painel qual revisão do código realmente executou o comando que falhou.
 
-#### `server/lib/controlid.js` — função `enrollUserOnDevice()`
+5) Melhorar feedback do modal de re-sincronização
+- Em `src/components/workers/WorkerManagement.tsx`, ajustar o estado final:
+  - Se houver falhas: “Finalizado com falhas” (ícone de alerta), não check verde.
+  - Mostrar resumo: `sucesso X/Y`, `falha Z`, e revisão do executor quando disponível.
 
-Adicionar Step 1.5 após criar o usuário: criar um `user_access_rules` vinculando o trabalhador à regra de acesso padrão (id=1, que é a regra "Acesso Livre" pré-configurada nos dispositivos ControlID).
+6) Validação ponta a ponta
+- Re-sincronizar o mesmo trabalhador já existente em 2 dispositivos.
+- Esperado: sem falha por `users.id`; comandos “completed”.
+- Validar no equipamento: reconhecimento + acesso autorizado.
+- Repetir nova re-sincronização para confirmar idempotência (não deve quebrar no segundo envio).
 
-```javascript
-// Step 1.5: Assign default access rule to user
-await controlIdRequest(device, 'create_objects.fcgi', 'POST', {
-  object: 'user_access_rules',
-  values: [{
-    user_id: controlIdCode,
-    access_rule_id: 1,  // Default "Acesso Livre" rule
-  }],
-});
-```
-
-Opcionalmente, permitir configurar o `access_rule_id` via `device.configuration.access_rule_id` para dispositivos com regras personalizadas.
-
-#### `supabase/functions/worker-enrollment/index.ts`
-
-Verificar se o enrollment via nuvem (fila de comandos) também precisa dessa etapa. Se o comando `enroll_worker` é processado pelo servidor local via `agent_commands`, a correção acima já cobre. Caso contrário, replicar a mesma lógica.
-
-### Resultado esperado
-
-Após o enrollment, o usuário terá: cadastro + foto + regra de acesso. O dispositivo reconhecerá E autorizará a passagem.
-
-### Necessidade de re-enrollment
-
-Os trabalhadores já cadastrados (como Alexandre Silva) precisarão ser re-enrollados para que a regra de acesso seja criada. Isso pode ser feito editando o trabalhador ou disparando o enrollment manualmente.
-
-### Arquivos afetados
-- `server/lib/controlid.js` — adicionar criação de `user_access_rules` no enrollment
-
+Detalhes técnicos (arquivos):
+- `server/lib/controlid.js` (correção principal do executor local)
+- `supabase/functions/controlid-api/index.ts` (paridade de comportamento)
+- `electron/sync.js` e/ou rota de status local (exposição de revisão em runtime)
+- `src/components/workers/WorkerManagement.tsx` (status final correto no tracker)
