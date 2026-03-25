@@ -8,27 +8,28 @@ const sessionCache = new Map();
 const SESSION_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 function parseApiCredentials(apiCredentials) {
-  if (!apiCredentials) return {};
+  let raw = {};
+  if (!apiCredentials) return { username: 'admin', password: 'admin', port: 80 };
   if (typeof apiCredentials === 'string') {
-    try {
-      return JSON.parse(apiCredentials);
-    } catch {
-      return {};
-    }
+    try { raw = JSON.parse(apiCredentials); } catch { raw = {}; }
+  } else {
+    raw = apiCredentials;
   }
-  return apiCredentials;
+  return {
+    username: raw.username || raw.user || raw.login || 'admin',
+    password: raw.password || 'admin',
+    port: raw.port || 80,
+  };
 }
 
 function getDeviceKey(device) {
   const creds = parseApiCredentials(device.api_credentials);
-  const port = creds.port || 80;
-  return `${device.controlid_ip_address}:${port}`;
+  return `${device.controlid_ip_address}:${creds.port}`;
 }
 
 function getBaseUrl(device) {
   const creds = parseApiCredentials(device.api_credentials);
-  const port = creds.port || 80;
-  return `http://${device.controlid_ip_address}:${port}`;
+  return `http://${device.controlid_ip_address}:${creds.port}`;
 }
 
 async function loginToDevice(device) {
@@ -37,14 +38,14 @@ async function loginToDevice(device) {
   if (cached && cached.expiry > Date.now()) return cached.session;
 
   const creds = parseApiCredentials(device.api_credentials);
-  const login = creds.username || creds.user || 'admin';
-  const password = creds.password || 'admin';
   const baseUrl = getBaseUrl(device);
+
+  console.log(`[controlid] Login attempt: ${baseUrl}/login.fcgi (user=${creds.username})`);
 
   const response = await fetch(`${baseUrl}/login.fcgi`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ login, password }),
+    body: JSON.stringify({ login: creds.username, password: creds.password }),
     signal: AbortSignal.timeout(10000),
   });
 
@@ -73,7 +74,15 @@ function buildDeviceUrl(device, endpoint, session, queryParams = '') {
 }
 
 async function controlIdRequest(device, endpoint, method = 'GET', body, _retried = false) {
-  const session = await loginToDevice(device);
+  let session;
+  try {
+    session = await loginToDevice(device);
+  } catch (loginErr) {
+    const err = new Error(`[phase=login.fcgi] ${loginErr.message}`);
+    err.phase = 'login.fcgi';
+    throw err;
+  }
+
   const url = buildDeviceUrl(device, endpoint, session);
   const headers = { 'Content-Type': 'application/json' };
 
@@ -100,14 +109,25 @@ async function controlIdRequest(device, endpoint, method = 'GET', body, _retried
   }
 
   if (!response.ok) {
-    throw new Error(typeof data === 'string' ? data : `HTTP ${response.status}`);
+    const detail = typeof data === 'string' ? data : (data?.error || `HTTP ${response.status}`);
+    const err = new Error(`[phase=${endpoint}] ${detail}`);
+    err.phase = endpoint;
+    throw err;
   }
 
   return data;
 }
 
 async function controlIdRequestBinary(device, endpoint, queryParams, imageBuffer, _retried = false) {
-  const session = await loginToDevice(device);
+  let session;
+  try {
+    session = await loginToDevice(device);
+  } catch (loginErr) {
+    const err = new Error(`[phase=login.fcgi] ${loginErr.message}`);
+    err.phase = 'login.fcgi';
+    throw err;
+  }
+
   const url = buildDeviceUrl(device, endpoint, session, queryParams);
   const headers = { 'Content-Type': 'application/octet-stream' };
 
@@ -134,7 +154,10 @@ async function controlIdRequestBinary(device, endpoint, queryParams, imageBuffer
   }
 
   if (!response.ok) {
-    throw new Error(typeof data === 'string' ? data : `HTTP ${response.status}`);
+    const detail = typeof data === 'string' ? data : (data?.error || `HTTP ${response.status}`);
+    const err = new Error(`[phase=${endpoint}] ${detail}`);
+    err.phase = endpoint;
+    throw err;
   }
 
   return data;

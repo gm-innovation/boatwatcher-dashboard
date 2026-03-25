@@ -49,11 +49,18 @@ class AgentController {
   }
 
   parseApiCredentials(apiCredentials) {
-    if (!apiCredentials) return {};
+    if (!apiCredentials) return { username: 'admin', password: 'admin', port: 80 };
+    let raw = {};
     if (typeof apiCredentials === 'string') {
-      try { return JSON.parse(apiCredentials); } catch { return {}; }
+      try { raw = JSON.parse(apiCredentials); } catch { raw = {}; }
+    } else {
+      raw = apiCredentials;
     }
-    return apiCredentials;
+    return {
+      username: raw.username || raw.user || raw.login || 'admin',
+      password: raw.password || 'admin',
+      port: raw.port || 80,
+    };
   }
 
   getDeviceKey(device) {
@@ -68,16 +75,13 @@ class AgentController {
     if (cached && cached.expiry > Date.now()) return cached.session;
 
     const creds = this.parseApiCredentials(device.api_credentials);
-    const login = creds.username || creds.user || 'admin';
-    const password = creds.password || 'admin';
-    const port = creds.port || 80;
     const ip = device.controlid_ip_address;
 
     return new Promise((resolve, reject) => {
-      const postData = JSON.stringify({ login, password });
+      const postData = JSON.stringify({ login: creds.username, password: creds.password });
       const req = http.request({
         hostname: ip,
-        port,
+        port: creds.port,
         path: '/login.fcgi',
         method: 'POST',
         timeout: 5000,
@@ -170,12 +174,11 @@ class AgentController {
     }
 
     const creds = this.parseApiCredentials(device.api_credentials);
-    const port = creds.port || 80;
 
     return new Promise((resolve, reject) => {
       const req = http.get({
         hostname: ip,
-        port,
+        port: creds.port,
         path: `/api/access/last?session=${session}`,
         timeout: 3000,
       }, (res) => {

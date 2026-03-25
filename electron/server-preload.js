@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('serverAPI', {
   addDevice: (data) => ipcRenderer.invoke('server:add-device', data),
   removeDevice: (id) => ipcRenderer.invoke('server:remove-device', id),
   testDeviceConnection: (ip) => ipcRenderer.invoke('server:test-device-connection', ip),
+  testDeviceAuth: (deviceId) => ipcRenderer.invoke('server:test-device-auth', deviceId),
   triggerSync: () => ipcRenderer.invoke('server:trigger-sync'),
   resetAndFullSync: () => ipcRenderer.invoke('server:reset-and-full-sync'),
   restartService: () => ipcRenderer.invoke('server:restart-service'),
