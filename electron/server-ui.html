@@ -537,31 +537,43 @@
     btnEl.disabled = true;
     btnEl.textContent = '...';
     try {
-      const result = await window.serverAPI.testDeviceConnection(ip);
-      deviceConnStatus[id] = (result && result.ok) ? 'ok' : 'fail';
+      const result = await window.serverAPI.testDeviceAuth(id);
+      if (result && result.ok) {
+        deviceConnStatus[id] = 'ok';
+        deviceConnMessages[id] = result.session ? 'Sessão OK' : '';
+      } else {
+        deviceConnStatus[id] = 'fail';
+        deviceConnMessages[id] = result?.error || 'Falha na autenticação';
+      }
     } catch (_) {
       deviceConnStatus[id] = 'fail';
+      deviceConnMessages[id] = 'Erro de conexão';
     }
     // Update just the status cell without full re-render
     const row = btnEl.closest('tr');
     const statusCell = row.querySelector('.device-conn-status');
-    if (deviceConnStatus[id] === 'ok') {
-      statusCell.innerHTML = '<span class="conn-status conn-ok">● Online</span>';
-    } else {
-      statusCell.innerHTML = '<span class="conn-status conn-fail">● Offline</span>';
-    }
+    statusCell.innerHTML = getConnStatusHtml(id);
     btnEl.disabled = false;
     btnEl.textContent = 'Testar';
   }
+
+  let deviceConnMessages = {};
 
   async function autoTestAllDevices(devices) {
     for (const d of devices) {
       if (d.controlid_ip_address && !deviceConnStatus[d.id]) {
         try {
-          const result = await window.serverAPI.testDeviceConnection(d.controlid_ip_address);
-          deviceConnStatus[d.id] = (result && result.ok) ? 'ok' : 'fail';
+          const result = await window.serverAPI.testDeviceAuth(d.id);
+          if (result && result.ok) {
+            deviceConnStatus[d.id] = 'ok';
+            deviceConnMessages[d.id] = result.session ? 'Sessão OK' : '';
+          } else {
+            deviceConnStatus[d.id] = 'fail';
+            deviceConnMessages[d.id] = result?.error || 'Falha';
+          }
         } catch (_) {
           deviceConnStatus[d.id] = 'fail';
+          deviceConnMessages[d.id] = 'Erro';
         }
       }
     }
