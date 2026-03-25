@@ -5,7 +5,6 @@ const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
 let localServerUrl = 'http://localhost:3001';
-let updateFeedUrl = process.env.DOCKCHECK_DESKTOP_UPDATE_URL || '';
 const devServerUrl = process.env.DOCKCHECK_DESKTOP_DEV_URL || 'http://localhost:8080';
 let updateHandlersRegistered = false;
 
@@ -37,7 +36,6 @@ function loadAppConfig() {
 
     const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     if (config.serverUrl) localServerUrl = config.serverUrl;
-    if (typeof config.updateUrl === 'string') updateFeedUrl = config.updateUrl;
   } catch {
     // use defaults
   }
@@ -46,19 +44,11 @@ function loadAppConfig() {
 function saveAppConfig(nextConfig = {}) {
   const mergedConfig = {
     serverUrl: localServerUrl,
-    updateUrl: updateFeedUrl,
     ...nextConfig,
   };
 
   fs.writeFileSync(getConfigPath(), JSON.stringify(mergedConfig, null, 2));
   localServerUrl = mergedConfig.serverUrl;
-  updateFeedUrl = mergedConfig.updateUrl;
-  updateStatus = {
-    ...updateStatus,
-    configured: Boolean(updateFeedUrl),
-    error: null,
-  };
-  emitUpdaterStatus();
 }
 
 function getWindowIconPath() {
@@ -196,7 +186,7 @@ function registerUpdaterHandlers() {
   autoUpdater.on('checking-for-update', () => {
     updateStatus = {
       ...updateStatus,
-      configured: Boolean(updateFeedUrl),
+      configured: app.isPackaged,
       checking: true,
       error: null,
     };
@@ -293,35 +283,20 @@ function registerUpdaterHandlers() {
       mainWindow.setProgressBar(-1);
     }
     emitUpdaterStatus();
-
-    if (updateFeedUrl) {
-      dialog.showErrorBox('Falha na atualização', updateStatus.error);
-    }
   });
 }
 
 async function checkForUpdates() {
-  updateStatus = {
-    ...updateStatus,
-    configured: Boolean(updateFeedUrl),
-  };
-  emitUpdaterStatus();
-
   if (!app.isPackaged) {
     return { ok: false, reason: 'not_packaged' };
   }
 
-  if (!updateFeedUrl) {
-    return { ok: false, reason: 'not_configured' };
+  try {
+    await autoUpdater.checkForUpdates();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, reason: 'error', message: error?.message || 'Erro desconhecido' };
   }
-
-  autoUpdater.setFeedURL({
-    provider: 'generic',
-    url: updateFeedUrl,
-  });
-
-  await autoUpdater.checkForUpdates();
-  return { ok: true };
 }
 
 function registerIpcHandlers() {
@@ -367,13 +342,6 @@ function registerIpcHandlers() {
     saveAppConfig({ serverUrl: url });
     return true;
   });
-  ipcMain.on('config:getUpdateUrlSync', (event) => {
-    event.returnValue = updateFeedUrl;
-  });
-  ipcMain.handle('config:setUpdateUrl', (_, url) => {
-    saveAppConfig({ updateUrl: url.trim() });
-    return true;
-  });
 
   // === Updater ===
   ipcMain.handle('updater:getStatus', () => updateStatus);
@@ -399,14 +367,14 @@ app.whenReady().then(async () => {
   loadAppConfig();
   updateStatus = {
     ...updateStatus,
-    configured: Boolean(updateFeedUrl),
+    configured: app.isPackaged,
   };
 
   registerUpdaterHandlers();
   registerIpcHandlers();
   createWindow();
 
-  if (app.isPackaged && updateFeedUrl) {
+  if (app.isPackaged) {
     setTimeout(() => {
       checkForUpdates().catch(() => undefined);
     }, 3000);
