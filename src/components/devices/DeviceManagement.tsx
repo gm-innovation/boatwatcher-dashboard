@@ -427,9 +427,21 @@ export const DeviceManagement = () => {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Localização</Label>
-                <Input placeholder="Ex: Portaria Principal" {...register('location')} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Localização</Label>
+                  <Input placeholder="Ex: Portaria Principal" {...register('location')} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Direção de Passagem</Label>
+                  <Select onValueChange={(value) => setValue('passage_direction', value as 'entry' | 'exit')}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="entry">↙ Entrada</SelectItem>
+                      <SelectItem value="exit">↗ Saída</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
