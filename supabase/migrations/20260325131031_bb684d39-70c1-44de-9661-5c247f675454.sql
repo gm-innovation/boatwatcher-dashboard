@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS idx_agent_commands_agent_status_created ON public.agent_commands(agent_id, status, created_at);
