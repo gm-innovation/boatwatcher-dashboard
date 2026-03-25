@@ -2,6 +2,31 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from "../_shared/cors.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+/** Extract bucket and path from a storage:// URI or raw bucket path */
+function parseStorageRef(photoUrl: string | null): { bucket: string; path: string } | null {
+  if (!photoUrl) return null;
+
+  // storage://worker-photos/workers/abc.jpg
+  if (photoUrl.startsWith('storage://')) {
+    const rest = photoUrl.replace('storage://', '');
+    const slashIndex = rest.indexOf('/');
+    if (slashIndex === -1) return null;
+    return { bucket: rest.substring(0, slashIndex), path: rest.substring(slashIndex + 1) };
+  }
+
+  // worker-photos/workers/abc.jpg
+  const rawMatch = photoUrl.match(/^(worker-photos|worker-documents)\/(.+)$/);
+  if (rawMatch) return { bucket: rawMatch[1], path: rawMatch[2] };
+
+  // Full URL containing /storage/v1/object/...
+  const urlMatch = photoUrl.match(
+    /\/storage\/v1\/(?:object|render\/image)\/(?:public|sign)\/(worker-photos|worker-documents)\/([^?]+)/,
+  );
+  if (urlMatch) return { bucket: urlMatch[1], path: decodeURIComponent(urlMatch[2]) };
+
+  return null;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -48,6 +73,24 @@ serve(async (req) => {
 
     const workerCode = Number(worker.code)
 
+    // --- Generate signed URL for the worker photo ---
+    let photoSignedUrl: string | null = null;
+    const storageRef = parseStorageRef(worker.photo_url);
+    if (storageRef) {
+      const { data: signedData, error: signedError } = await supabase.storage
+        .from(storageRef.bucket)
+        .createSignedUrl(storageRef.path, 3600); // 1 hour
+
+      if (signedError) {
+        console.warn('Failed to create signed URL for photo:', signedError.message);
+      } else {
+        photoSignedUrl = signedData.signedUrl;
+      }
+    } else if (worker.photo_url && worker.photo_url.startsWith('http')) {
+      // Already a full URL (legacy), pass through
+      photoSignedUrl = worker.photo_url;
+    }
+
     // Fetch devices with agent_id
     const { data: devices, error: devicesError } = await supabase
       .from('devices')
@@ -80,6 +123,7 @@ serve(async (req) => {
             worker_name: worker.name,
             document_number: worker.document_number,
             photo_url: worker.photo_url,
+            photo_signed_url: photoSignedUrl,
           },
           status: 'pending',
           created_by: userId,
@@ -98,7 +142,7 @@ serve(async (req) => {
     const queuedCount = commandIds.length
     const failedCount = Object.keys(errors).length
 
-    console.log('Enrollment queued:', { queuedCount, failedCount, commandIds })
+    console.log('Enrollment queued:', { queuedCount, failedCount, commandIds, photoSignedUrl: !!photoSignedUrl })
 
     return new Response(
       JSON.stringify({
