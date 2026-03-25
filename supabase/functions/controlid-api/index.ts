@@ -179,7 +179,8 @@ async function enrollUser(
   registration: string,
   userPhoto?: string
 ): Promise<ControlIDResponse> {
-  const userResult = await controlIDRequest(device, 'create_objects.fcgi', 'POST', {
+  // Step 1: Upsert user (create_or_modify for idempotency)
+  let userResult = await controlIDRequest(device, 'create_or_modify_objects.fcgi', 'POST', {
     object: 'users',
     values: [{
       id: userId,
@@ -188,8 +189,43 @@ async function enrollUser(
     }]
   })
 
+  // Fallback if firmware doesn't support upsert
   if (!userResult.success) {
-    return userResult
+    const errMsg = (userResult.error || '').toLowerCase()
+    if (errMsg.includes('unique') || errMsg.includes('duplicate') || errMsg.includes('already')) {
+      // User exists — that's fine, continue
+    } else {
+      // Try legacy create_objects as fallback
+      userResult = await controlIDRequest(device, 'create_objects.fcgi', 'POST', {
+        object: 'users',
+        values: [{ id: userId, name: userName, registration: registration }]
+      })
+      if (!userResult.success) {
+        const fallbackErr = (userResult.error || '').toLowerCase()
+        if (!fallbackErr.includes('unique') && !fallbackErr.includes('duplicate') && !fallbackErr.includes('already')) {
+          return userResult
+        }
+      }
+    }
+  }
+
+  // Step 1.5: Assign access rule (idempotent)
+  const accessRuleResult = await controlIDRequest(device, 'create_or_modify_objects.fcgi', 'POST', {
+    object: 'user_access_rules',
+    values: [{ user_id: userId, access_rule_id: 1 }]
+  })
+  if (!accessRuleResult.success) {
+    // Fallback
+    const fallback = await controlIDRequest(device, 'create_objects.fcgi', 'POST', {
+      object: 'user_access_rules',
+      values: [{ user_id: userId, access_rule_id: 1 }]
+    })
+    if (!fallback.success) {
+      const msg = (fallback.error || '').toLowerCase()
+      if (!msg.includes('unique') && !msg.includes('duplicate') && !msg.includes('already')) {
+        console.warn('Failed to assign access rule:', fallback.error)
+      }
+    }
   }
 
   if (userPhoto) {

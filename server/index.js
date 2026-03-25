@@ -115,6 +115,7 @@ function createLocalServer(options = {}) {
     res.json({
       status: 'ok',
       version: '1.0.0',
+      enrollment_revision: 3,
       uptime: process.uptime(),
       database: 'connected',
       runtime: {

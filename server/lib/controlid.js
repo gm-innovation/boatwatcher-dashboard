@@ -205,9 +205,10 @@ async function enrollUserOnDevice(device, worker, photoBase64) {
   const controlIdCode = getWorkerControlIdCode(worker);
   const registration = String(worker.document_number || worker.code || worker.id);
 
-  // Step 1: Create user via /create_objects.fcgi (idempotent for re-sync)
+  // Step 1: Create/update user via upsert (create_or_modify_objects.fcgi)
+  // This avoids UNIQUE constraint errors when re-syncing existing workers
   try {
-    await controlIdRequest(device, 'create_objects.fcgi', 'POST', {
+    await controlIdRequest(device, 'create_or_modify_objects.fcgi', 'POST', {
       object: 'users',
       values: [{
         id: controlIdCode,
@@ -215,9 +216,24 @@ async function enrollUserOnDevice(device, worker, photoBase64) {
         registration: registration,
       }],
     });
-  } catch (error) {
-    if (!isUniqueConstraintError(error, 'users.id')) {
-      throw error;
+  } catch (upsertErr) {
+    // Fallback: if firmware doesn't support upsert, try create with duplicate tolerance
+    console.warn(`[controlid] create_or_modify_objects failed, falling back to create_objects: ${upsertErr.message}`);
+    try {
+      await controlIdRequest(device, 'create_objects.fcgi', 'POST', {
+        object: 'users',
+        values: [{
+          id: controlIdCode,
+          name: worker.name,
+          registration: registration,
+        }],
+      });
+    } catch (createErr) {
+      // Ignore any duplicate/unique error — user already exists
+      const msg = String(createErr?.message || '').toLowerCase();
+      if (!msg.includes('unique') && !msg.includes('duplicate') && !msg.includes('already')) {
+        throw createErr;
+      }
     }
   }
 
@@ -228,16 +244,28 @@ async function enrollUserOnDevice(device, worker, photoBase64) {
     : 1;
 
   try {
-    await controlIdRequest(device, 'create_objects.fcgi', 'POST', {
+    await controlIdRequest(device, 'create_or_modify_objects.fcgi', 'POST', {
       object: 'user_access_rules',
       values: [{
         user_id: controlIdCode,
         access_rule_id: accessRuleId,
       }],
     });
-  } catch (error) {
-    if (!isUniqueConstraintError(error, 'user_access_rules')) {
-      throw error;
+  } catch (upsertErr) {
+    // Fallback for firmware without upsert support
+    try {
+      await controlIdRequest(device, 'create_objects.fcgi', 'POST', {
+        object: 'user_access_rules',
+        values: [{
+          user_id: controlIdCode,
+          access_rule_id: accessRuleId,
+        }],
+      });
+    } catch (createErr) {
+      const msg = String(createErr?.message || '').toLowerCase();
+      if (!msg.includes('unique') && !msg.includes('duplicate') && !msg.includes('already')) {
+        throw createErr;
+      }
     }
   }
 
