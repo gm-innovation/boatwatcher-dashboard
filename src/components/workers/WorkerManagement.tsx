@@ -58,6 +58,12 @@ interface WorkerFormProps {
   onCancel: () => void;
 }
 
+interface WorkerFormProps {
+  worker?: Worker | null;
+  onSuccess: (autoEnrollResult?: { workerId: string; workerName: string; commandIds: string[] }) => void;
+  onCancel: () => void;
+}
+
 const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const resolvedWorkerPhotoUrl = useResolvedUrl(worker?.photo_url);
