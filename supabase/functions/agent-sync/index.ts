@@ -551,7 +551,7 @@ serve(async (req) => {
       // need to be available locally — no project/company filter applied
       const { data: workers, error } = await supabase
         .from('workers')
-        .select('id, name, code, document_number, photo_url, status, company_id, role, allowed_project_ids, updated_at')
+        .select('id, name, code, document_number, photo_url, status, company_id, role, allowed_project_ids, devices_enrolled, job_function_id, birth_date, gender, blood_type, observations, updated_at')
         .gte('updated_at', since)
         .eq('status', 'active')
 
