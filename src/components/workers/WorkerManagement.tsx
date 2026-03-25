@@ -520,11 +520,19 @@ const EnrollmentDialog = ({ worker, onClose }: EnrollmentDialogProps) => {
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
               {allDone ? (
-                <CheckCircle className="h-4 w-4 text-green-500" />
+                enrollHasFailures ? (
+                  <AlertCircle className="h-4 w-4 text-yellow-500" />
+                ) : (
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                )
               ) : (
                 <Loader2 className="h-4 w-4 animate-spin" />
               )}
-              {allDone ? 'Enrollment finalizado' : 'Aguardando execução pelo agente local...'}
+              {allDone
+                ? enrollHasFailures
+                  ? `Finalizado com falhas (${enrollSuccessCount}/${commandStatuses.length} sucesso, ${enrollFailedCount} falha${enrollFailedCount > 1 ? 's' : ''})`
+                  : `Enrollment finalizado (${enrollSuccessCount}/${commandStatuses.length} sucesso)`
+                : 'Aguardando execução pelo agente local...'}
             </Label>
             <div className="border rounded-md divide-y">
               {commandStatuses.map(cmd => (
