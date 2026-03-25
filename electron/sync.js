@@ -8,6 +8,13 @@ class SyncEngine {
     this.listeners = [];
     this.syncIntervalMs = 60000;
     this.agentController = null;
+    this._fastLaneTimer = null;
+    this._fastLaneThrottleMs = 3000; // min 3s between fast-lane syncs
+    this._lastFastLane = 0;
+    this._lastUploadLogsError = null;
+    this._lastDownloadLogsError = null;
+    this._uploadLogsCount = 0;
+    this._downloadLogsCount = 0;
     this.status = {
       online: false,
       lastSync: null,
