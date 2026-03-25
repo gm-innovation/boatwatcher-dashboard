@@ -1,30 +1,16 @@
 
 
-## Corrigir falha de CI: package-lock.json desatualizado
+## Bump para v1.2.17
 
-### Problema
-
-O `package-lock.json` no repositório está obsoleto (ainda referencia o nome `vite_react_shadcn_ts` v0.0.0). Quando o CI executa `npm install --package-lock-only`, o npm tenta resolver todas as dependências do zero e encontra um conflito de peer dependencies com `react-dom` nos pacotes `@radix-ui/*`.
-
-### Solução
-
-Adicionar `--legacy-peer-deps` aos dois comandos npm no workflow do CI para ignorar conflitos de peer dependencies (comportamento padrão do bun, que é o gerenciador usado localmente).
+O `package.json` será atualizado de `"version": "1.2.16"` para `"1.2.17"` para evitar conflitos residuais com a tag v1.2.16 no GitHub.
 
 ### Alteração
 
-**`.github/workflows/desktop-release.yml` linhas 64-67**:
-
-```yaml
-      - name: Install dependencies
-        run: |
-          npm install --package-lock-only --legacy-peer-deps
-          npm ci --foreground-scripts --loglevel=verbose --legacy-peer-deps
-```
+**`package.json`**: `"version": "1.2.16"` → `"1.2.17"`
 
 ### Após o commit
 
-1. Deletar a tag `v1.2.16` e o release no GitHub
-2. Aguardar o commit aparecer no GitHub
-3. Recriar a tag `v1.2.16` a partir do novo commit
-4. O CI deve passar e gerar o instalador
+1. Aguardar o commit aparecer no GitHub (verificar na lista de commits)
+2. Criar a tag `v1.2.17` **a partir desse commit**
+3. O CI deve passar com as correções de `--legacy-peer-deps` já aplicadas
 
