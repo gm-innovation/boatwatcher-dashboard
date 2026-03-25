@@ -117,16 +117,24 @@ class SyncEngine {
 
   getStatus() {
     const configured = this.isConfigured();
+    const unsyncedLogs = this.db.getUnsyncedLogs?.()?.length || 0;
     this.status.pendingCount =
       (this.db.getUnsyncedWorkers?.()?.length || 0) +
-      (this.db.getUnsyncedLogs?.()?.length || 0) +
+      unsyncedLogs +
       (this.db.getPendingSyncCount?.() || 0);
     this.status.configured = configured;
     this.status.mode = configured ? 'cloud-sync' : 'local-only';
     this.status.message = configured
       ? (this.status.online ? 'Sincronização online.' : 'Sem conexão com a internet.')
       : 'Sincronização não configurada. Operando apenas localmente.';
-    return { ...this.status };
+    return {
+      ...this.status,
+      unsyncedLogsCount: unsyncedLogs,
+      uploadLogsCount: this._uploadLogsCount,
+      downloadLogsCount: this._downloadLogsCount,
+      lastUploadLogsError: this._lastUploadLogsError,
+      lastDownloadLogsError: this._lastDownloadLogsError,
+    };
   }
 
   async bootstrapFromAccessToken(accessToken) {
