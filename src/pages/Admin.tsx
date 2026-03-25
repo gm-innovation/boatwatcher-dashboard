@@ -12,10 +12,12 @@ import { PendingRegistrations } from "@/components/people/PendingRegistrations";
 import { DocumentExpirationCheck } from "@/components/admin/DocumentExpirationCheck";
 import { AgentManagement } from "@/components/devices/AgentManagement";
 import { ConnectivityDashboard } from "@/components/devices/ConnectivityDashboard";
-import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, UserCheck, FileWarning, Bot, Wifi } from "lucide-react";
+import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, UserCheck, FileWarning, Bot, Wifi, MonitorDown } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { usesLocalServer } from "@/lib/runtimeProfile";
+import { isElectron } from "@/lib/dataProvider";
+import { DesktopUpdater } from "@/components/desktop/DesktopUpdater";
 
 type AdminTab = {
   value: string;
@@ -27,6 +29,7 @@ type AdminTab = {
 const Admin = () => {
   const location = useLocation();
   const isLocalRuntime = usesLocalServer();
+  const isDesktop = isElectron();
 
   const tabs: AdminTab[] = [
     { value: 'pending', label: 'Aprovações', icon: UserCheck, content: <PendingRegistrations /> },
@@ -41,6 +44,7 @@ const Admin = () => {
     { value: 'documents', label: 'Documentos', icon: FileWarning, content: <DocumentExpirationCheck /> },
     { value: 'agents', label: 'Agentes', icon: Bot, content: <AgentManagement /> },
     { value: 'connectivity', label: 'Conectividade', icon: Wifi, content: <ConnectivityDashboard /> },
+    ...(isDesktop ? [{ value: 'desktop-update', label: 'Atualização', icon: MonitorDown, content: <DesktopUpdater /> } as AdminTab] : []),
   ];
 
   const getDefaultTab = () => {
