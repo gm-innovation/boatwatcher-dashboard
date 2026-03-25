@@ -209,6 +209,16 @@ async function enrollUserOnDevice(device, worker, photoBase64) {
     }],
   });
 
+  // Step 1.5: Assign access rule so device authorises passage
+  const accessRuleId = (device.configuration && device.configuration.access_rule_id) || 1;
+  await controlIdRequest(device, 'create_objects.fcgi', 'POST', {
+    object: 'user_access_rules',
+    values: [{
+      user_id: controlIdCode,
+      access_rule_id: accessRuleId,
+    }],
+  });
+
   // Step 2: Send photo via /user_set_image.fcgi (binary octet-stream)
   if (!photoBase64) {
     return {
