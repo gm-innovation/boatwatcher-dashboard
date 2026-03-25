@@ -290,13 +290,29 @@ export const DiagnosticsPanel = () => {
 
       try {
         const agentStatus = await localAgent.getStatus();
+        const details: string[] = [];
+        details.push(agentStatus.running ? 'Em execução' : 'Parado');
+        details.push(`${agentStatus.devicesCount || 0} dispositivo(s)`);
+        if (agentStatus.capturedEventsCount != null) {
+          details.push(`${agentStatus.capturedEventsCount} eventos capturados`);
+        }
+        if (agentStatus.ignoredDedupeCount) {
+          details.push(`${agentStatus.ignoredDedupeCount} ignorados (dedupe)`);
+        }
+        if (agentStatus.ignoredInvalidCount) {
+          details.push(`${agentStatus.ignoredInvalidCount} ignorados (inválido)`);
+        }
+        if (agentStatus.lastCapturedAt) {
+          details.push(`Último captura: ${new Date(agentStatus.lastCapturedAt).toLocaleTimeString()}`);
+        }
+        if (agentStatus.lastIgnoreReason) {
+          details.push(`Último motivo ignorado: ${agentStatus.lastIgnoreReason}`);
+        }
         results.push({
           id: 'devices',
           name: 'Agente Local',
           status: agentStatus.running ? 'ok' : 'warning',
-          message: agentStatus.running
-            ? `Agente em execução • ${agentStatus.devicesCount || 0} dispositivo(s) monitorados`
-            : 'Agente parado no momento',
+          message: details.join(' • '),
           lastCheck: new Date()
         });
       } catch (e: any) {
