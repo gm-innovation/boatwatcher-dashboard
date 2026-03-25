@@ -1,37 +1,23 @@
 
 
-## Problema: Versão hardcoded "v1.0.0" no Local Server
+## Situacao
 
-O arquivo `electron/server-ui.html` tem a versão **hardcoded** na linha 186:
-```html
-<span class="version" id="versionLabel">v1.0.0</span>
-```
+A versao instalada **e** a v1.2.13 (confirmado pelo caminho do .exe nos logs). Porem, a UI mostra "v1.0.0" porque **o codigo que corrigimos** (buscar versao dinamica via IPC) ainda nao foi compilado e distribuido — ele existe apenas no repositorio.
 
-Não existe nenhum mecanismo para buscar a versão real do `app.getVersion()` (que vem do `package.json`). Por isso, mesmo instalando a v1.2.13, a UI sempre mostra "v1.0.0" — e o auto-updater usa esse label para exibir "Versão atual", causando confusão.
+As mudancas pendentes de deploy no Local Server sao:
+1. **Versao dinamica na UI** (correcao do v1.0.0 hardcoded)
+2. **Polling de comandos a cada 5s** (correcao de latencia de enrollment)
+3. **Execucao paralela por dispositivo**
 
-O build do instalador **está correto** (o arquivo se chama `DockCheck-Local-Server-Setup-1.2.13.exe`), mas a UI não reflete.
+## Plano
 
-### Correções
+**Sim, sera necessario reinstalar uma unica vez** — mas primeiro precisamos gerar o novo instalador:
 
-**1. `electron/local-server-main.js`** — Adicionar IPC handler para retornar a versão real:
-```javascript
-ipcMain.handle('server:get-version', () => app.getVersion());
-```
+1. **Bump `package.json`** de `1.2.13` para `1.2.14`
+2. Isso dispara o CI (GitHub Actions) para gerar `DockCheck-Local-Server-Setup-1.2.14.exe`
+3. O operador baixa e instala por cima (nao precisa desinstalar)
+4. A partir da v1.2.14, todas as correcoes estarao ativas e o auto-updater funcionara para versoes futuras
 
-**2. `electron/server-preload.js`** — Expor no bridge:
-```javascript
-getVersion: () => ipcRenderer.invoke('server:get-version'),
-```
-
-**3. `electron/server-ui.html`** — No `DOMContentLoaded`, buscar versão real e atualizar o label:
-```javascript
-const version = await window.serverAPI.getVersion();
-document.getElementById('versionLabel').textContent = `v${version}`;
-document.getElementById('currentVersion').textContent = `v${version}`;
-```
-
-### Arquivos alterados
-- `electron/local-server-main.js` — 1 linha (novo IPC handler)
-- `electron/server-preload.js` — 1 linha (expor getVersion)
-- `electron/server-ui.html` — atualizar init para buscar versão dinâmica
+### Alteracao
+- `package.json`: `"version": "1.2.13"` → `"1.2.14"`
 
