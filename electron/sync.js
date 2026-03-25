@@ -226,6 +226,7 @@ class SyncEngine {
       await this.uploadQueuedOperations(['user_company', 'company_document', 'worker_document']);
       await this.uploadLogs();
       await this.downloadUpdates();
+      await this.downloadAccessLogs();
       await this.downloadAndExecuteCommands();
       await this.uploadLogs();
       await this.downloadUpdates();
