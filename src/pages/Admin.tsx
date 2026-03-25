@@ -29,6 +29,7 @@ type AdminTab = {
 const Admin = () => {
   const location = useLocation();
   const isLocalRuntime = usesLocalServer();
+  const isDesktop = isElectron();
 
   const tabs: AdminTab[] = [
     { value: 'pending', label: 'Aprovações', icon: UserCheck, content: <PendingRegistrations /> },
