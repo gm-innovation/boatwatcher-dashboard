@@ -191,6 +191,12 @@ function getWorkerControlIdCode(worker) {
   return Number(worker.code || worker.id);
 }
 
+function isUniqueConstraintError(error, constraintToken) {
+  const message = String(error?.message || '');
+  if (!message.toLowerCase().includes('unique')) return false;
+  return constraintToken ? message.includes(constraintToken) : true;
+}
+
 async function enrollUserOnDevice(device, worker, photoBase64) {
   if (!device.controlid_ip_address) {
     return { success: false, error: 'Dispositivo sem IP configurado.' };
@@ -199,25 +205,41 @@ async function enrollUserOnDevice(device, worker, photoBase64) {
   const controlIdCode = getWorkerControlIdCode(worker);
   const registration = String(worker.document_number || worker.code || worker.id);
 
-  // Step 1: Create user via /create_objects.fcgi
-  await controlIdRequest(device, 'create_objects.fcgi', 'POST', {
-    object: 'users',
-    values: [{
-      id: controlIdCode,
-      name: worker.name,
-      registration: registration,
-    }],
-  });
+  // Step 1: Create user via /create_objects.fcgi (idempotent for re-sync)
+  try {
+    await controlIdRequest(device, 'create_objects.fcgi', 'POST', {
+      object: 'users',
+      values: [{
+        id: controlIdCode,
+        name: worker.name,
+        registration: registration,
+      }],
+    });
+  } catch (error) {
+    if (!isUniqueConstraintError(error, 'users.id')) {
+      throw error;
+    }
+  }
 
-  // Step 1.5: Assign access rule so device authorises passage
-  const accessRuleId = (device.configuration && device.configuration.access_rule_id) || 1;
-  await controlIdRequest(device, 'create_objects.fcgi', 'POST', {
-    object: 'user_access_rules',
-    values: [{
-      user_id: controlIdCode,
-      access_rule_id: accessRuleId,
-    }],
-  });
+  // Step 1.5: Assign access rule so device authorises passage (idempotent)
+  const configuredAccessRuleId = Number(device?.configuration?.access_rule_id);
+  const accessRuleId = Number.isInteger(configuredAccessRuleId) && configuredAccessRuleId > 0
+    ? configuredAccessRuleId
+    : 1;
+
+  try {
+    await controlIdRequest(device, 'create_objects.fcgi', 'POST', {
+      object: 'user_access_rules',
+      values: [{
+        user_id: controlIdCode,
+        access_rule_id: accessRuleId,
+      }],
+    });
+  } catch (error) {
+    if (!isUniqueConstraintError(error, 'user_access_rules')) {
+      throw error;
+    }
+  }
 
   // Step 2: Send photo via /user_set_image.fcgi (binary octet-stream)
   if (!photoBase64) {
