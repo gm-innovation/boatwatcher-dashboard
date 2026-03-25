@@ -130,6 +130,9 @@ export const CompanyForm = () => {
         name: companyName,
         project_managers: projectManagersArray,
         vessels: vesselsArray,
+        responsible_name: responsibleName || null,
+        phone: phone || null,
+        address: address || null,
         ...(logoUrlLight && { logo_url_light: logoUrlLight }),
         ...(logoUrlDark && { logo_url_dark: logoUrlDark }),
       };
