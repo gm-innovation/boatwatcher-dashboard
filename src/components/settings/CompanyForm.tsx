@@ -154,6 +154,9 @@ export const CompanyForm = () => {
       setCompanyName("");
       setProjectManagers("");
       setVessels("");
+      setResponsibleName("");
+      setPhone("");
+      setAddress("");
       setSelectedCompanyId(null);
       refetch();
     } catch (error: any) {
