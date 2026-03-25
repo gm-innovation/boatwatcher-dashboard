@@ -591,6 +591,10 @@ const EnrollmentTracker = ({ commandIds, onClose, workerName }: EnrollmentTracke
   const allDone = commandStatuses.length > 0 &&
     commandStatuses.every(c => c.status === 'completed' || c.status === 'failed');
 
+  const successCount = commandStatuses.filter(c => c.status === 'completed').length;
+  const failedCount = commandStatuses.filter(c => c.status === 'failed').length;
+  const hasFailures = failedCount > 0;
+
   useEffect(() => {
     if (allDone) {
       queryClient.invalidateQueries({ queryKey: ['workers'] });
@@ -629,11 +633,19 @@ const EnrollmentTracker = ({ commandIds, onClose, workerName }: EnrollmentTracke
       <div className="space-y-2">
         <Label className="flex items-center gap-2">
           {allDone ? (
-            <CheckCircle className="h-4 w-4 text-green-500" />
+            hasFailures ? (
+              <AlertCircle className="h-4 w-4 text-yellow-500" />
+            ) : (
+              <CheckCircle className="h-4 w-4 text-green-500" />
+            )
           ) : (
             <Loader2 className="h-4 w-4 animate-spin" />
           )}
-          {allDone ? 'Enrollment finalizado' : 'Aguardando execução pelo agente local...'}
+          {allDone
+            ? hasFailures
+              ? `Finalizado com falhas (${successCount}/${commandStatuses.length} sucesso, ${failedCount} falha${failedCount > 1 ? 's' : ''})`
+              : `Enrollment finalizado (${successCount}/${commandStatuses.length} sucesso)`
+            : 'Aguardando execução pelo agente local...'}
         </Label>
         <div className="border rounded-md divide-y">
           {commandStatuses.map(cmd => (
