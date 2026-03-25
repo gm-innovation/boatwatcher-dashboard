@@ -1,56 +1,37 @@
 
-Diagnóstico objetivo (com evidência)
-- O agente está vivo: `local_agents.last_seen_at` está avançando a cada ~60s.
-- Os dispositivos não recebem atualização: `devices.updated_at` ficou parado em `20:52:04`.
-- Logo, o heartbeat está chegando, mas sem telemetria de dispositivos (sem `devices[]`) no endpoint `agent-sync/status`.
-- Do I know what the issue is? **Sim**: existe um descompasso de protocolo (cliente local enviando heartbeat “legado” sem `devices`) e o backend hoje não tem fallback para esse caso.
 
-Plano de correção (em 2 fases, sem depender só de reinstalação local)
-1) Compatibilidade imediata no backend (`supabase/functions/agent-sync/index.ts`)
-- No `POST /status`, sempre registrar modo do heartbeat:
-  - `mode=full` quando vier `devices[]`
-  - `mode=legacy` quando não vier
-- Se `mode=legacy`, aplicar fallback:
-  - atualizar `devices.status='online'` para todos os dispositivos com `agent_id = agent.id`
-  - atualizar `updated_at`
-- Se `mode=full`, manter atualização por `serial_number` (como já está), com normalização (`trim`).
+## Enrollment automático ao atualizar trabalhador
 
-2) Blindagem de observabilidade no backend (mesmo arquivo)
-- Retornar no JSON: `mode`, `devices_received`, `devices_updated`.
-- Logar sempre 1 linha por heartbeat com esses campos (inclusive quando `devices` não vier), para não ficar “silencioso” novamente.
+### Problema raiz
+Quando o usuário atualiza um trabalhador (nome, foto, CPF) pelo formulário "Editar Trabalhador", o sistema apenas salva no banco de dados. Ele **não** dispara o enrollment nos dispositivos ControlID onde o trabalhador já está cadastrado (`devices_enrolled`). O usuário precisa manualmente abrir o dialog de Enrollment e re-sincronizar — e provavelmente não sabe disso.
 
-3) Correção de protocolo no cliente local (próximo release) (`electron/sync.js` + `electron/agent.js`)
-- Garantir envio obrigatório de `devices[]` em todos os heartbeats.
-- Incluir `heartbeat_schema_version: 2`.
-- Se `devices[]` vier vazio mas houver devices locais, forçar `reloadDevices()` e reenviar no próximo ciclo.
-- Manter normalização de serial (`trim`) antes do envio.
+### Solução
+Após salvar um trabalhador que já tem `devices_enrolled` preenchido, disparar automaticamente o enrollment nos dispositivos listados, reutilizando o fluxo existente (`worker-enrollment` edge function + fila de comandos).
 
-4) Evitar falsa percepção no painel local (`electron/server-ui.html`)
-- Renomear coluna “Conectividade” para “Teste manual”.
-- Mostrar separadamente “Status enviado ao sistema” (baseado no heartbeat), para alinhar expectativa com Web/Desktop.
+### Alterações
 
-5) Diagnóstico visível na Web (`src/components/admin/DiagnosticsPanel.tsx` e `src/components/devices/ConnectivityDashboard.tsx`)
-- Exibir:
-  - Último modo de heartbeat (`full`/`legacy`)
-  - `devices_received` e `devices_updated` do último ciclo
-  - Timestamp da última atualização de status de dispositivos
-- Assim fica claro quando o agente está online, mas sem payload de conectividade.
+**1. `src/components/workers/WorkerManagement.tsx` — WorkerForm.onSubmit**
+- Após `updateWorker()` bem-sucedido, verificar se `worker.devices_enrolled` tem dispositivos
+- Se sim, chamar `supabase.functions.invoke("worker-enrollment")` com `action: 'enroll'` e os `deviceIds` do `devices_enrolled`
+- Mostrar toast informando que o enrollment foi re-enviado automaticamente
+- Abrir o tracking dialog (fase `tracking`) com os `commandIds` retornados para o usuário acompanhar
 
-Validação fim-a-fim
-1. Reiniciar serviço local.
-2. Confirmar em até 60–90s:
-- `local_agents.last_seen_at` avança
-- `devices.updated_at` avança
-- status muda para online na Web/Desktop
-3. Desligar o agente local:
-- dispositivos voltam para offline por ausência de heartbeat (ou por regra de staleness, se aplicada).
-4. Confirmar no Diagnóstico:
-- heartbeat em `full` (ideal) ou `legacy` (compatibilidade ativa).
+**2. `src/components/workers/WorkerManagement.tsx` — Extrair EnrollmentTracker**
+- Extrair a fase `tracking` do `EnrollmentDialog` em um componente reutilizável `EnrollmentTracker`
+- Usar esse componente tanto no dialog de enrollment manual quanto no auto-enrollment pós-update
 
-Arquivos-alvo
-- `supabase/functions/agent-sync/index.ts` (principal, correção imediata)
-- `electron/sync.js`
-- `electron/agent.js`
-- `electron/server-ui.html`
-- `src/components/admin/DiagnosticsPanel.tsx`
-- `src/components/devices/ConnectivityDashboard.tsx`
+**3. `src/components/workers/WorkerManagement.tsx` — Estado do WorkerManagement**
+- Adicionar estado `autoEnrollCommandIds` + `autoEnrollWorker` no componente pai
+- Quando o update dispara auto-enrollment, popular esses estados e mostrar um dialog de tracking
+
+### Fluxo do usuário após implementação
+1. Edita trabalhador → clica "Atualizar"
+2. Dados salvos no banco
+3. Se o trabalhador tem dispositivos em `devices_enrolled`:
+   - Toast: "Dados atualizados. Re-sincronizando biometria em X dispositivo(s)..."
+   - Dialog de tracking abre automaticamente mostrando status dos comandos
+4. Se não tem dispositivos: comportamento atual (apenas toast de sucesso)
+
+### Arquivos alterados
+- `src/components/workers/WorkerManagement.tsx`
+
