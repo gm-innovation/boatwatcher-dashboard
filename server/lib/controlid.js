@@ -3,6 +3,10 @@ const path = require('path');
 
 const DATA_DIR = process.env.BW_DATA_DIR || path.join(__dirname, '..', 'data');
 
+// Session cache: ip:port -> { session, expiry }
+const sessionCache = new Map();
+const SESSION_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
 function parseApiCredentials(apiCredentials) {
   if (!apiCredentials) return {};
   if (typeof apiCredentials === 'string') {
@@ -15,27 +19,63 @@ function parseApiCredentials(apiCredentials) {
   return apiCredentials;
 }
 
-function buildDeviceUrl(device, endpoint, queryParams = '') {
-  const apiCredentials = parseApiCredentials(device.api_credentials);
-  const port = apiCredentials.port || 80;
-  const qs = queryParams ? `?${queryParams}` : '';
-  return `http://${device.controlid_ip_address}:${port}/${endpoint}${qs}`;
+function getDeviceKey(device) {
+  const creds = parseApiCredentials(device.api_credentials);
+  const port = creds.port || 80;
+  return `${device.controlid_ip_address}:${port}`;
 }
 
-function buildAuthHeaders(device) {
-  const apiCredentials = parseApiCredentials(device.api_credentials);
-  const headers = {};
-  const username = apiCredentials.username || apiCredentials.user;
-  const password = apiCredentials.password;
-  if (username && password) {
-    headers.Authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+function getBaseUrl(device) {
+  const creds = parseApiCredentials(device.api_credentials);
+  const port = creds.port || 80;
+  return `http://${device.controlid_ip_address}:${port}`;
+}
+
+async function loginToDevice(device) {
+  const key = getDeviceKey(device);
+  const cached = sessionCache.get(key);
+  if (cached && cached.expiry > Date.now()) return cached.session;
+
+  const creds = parseApiCredentials(device.api_credentials);
+  const login = creds.username || creds.user || 'admin';
+  const password = creds.password || 'admin';
+  const baseUrl = getBaseUrl(device);
+
+  const response = await fetch(`${baseUrl}/login.fcgi`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login, password }),
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Login falhou no dispositivo (HTTP ${response.status})`);
   }
-  return headers;
+
+  const data = await response.json();
+  if (!data.session) {
+    throw new Error('Login falhou: dispositivo não retornou sessão');
+  }
+
+  sessionCache.set(key, { session: data.session, expiry: Date.now() + SESSION_TTL_MS });
+  return data.session;
 }
 
-async function controlIdRequest(device, endpoint, method = 'GET', body) {
-  const url = buildDeviceUrl(device, endpoint);
-  const headers = { 'Content-Type': 'application/json', ...buildAuthHeaders(device) };
+function invalidateSession(device) {
+  sessionCache.delete(getDeviceKey(device));
+}
+
+function buildDeviceUrl(device, endpoint, session, queryParams = '') {
+  const baseUrl = getBaseUrl(device);
+  const params = [`session=${session}`];
+  if (queryParams) params.push(queryParams);
+  return `${baseUrl}/${endpoint}?${params.join('&')}`;
+}
+
+async function controlIdRequest(device, endpoint, method = 'GET', body, _retried = false) {
+  const session = await loginToDevice(device);
+  const url = buildDeviceUrl(device, endpoint, session);
+  const headers = { 'Content-Type': 'application/json' };
 
   const response = await fetch(url, {
     method,
@@ -43,6 +83,12 @@ async function controlIdRequest(device, endpoint, method = 'GET', body) {
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(10000),
   });
+
+  // Retry once on 401
+  if (response.status === 401 && !_retried) {
+    invalidateSession(device);
+    return controlIdRequest(device, endpoint, method, body, true);
+  }
 
   const text = await response.text();
   let data = null;
@@ -60,9 +106,10 @@ async function controlIdRequest(device, endpoint, method = 'GET', body) {
   return data;
 }
 
-async function controlIdRequestBinary(device, endpoint, queryParams, imageBuffer) {
-  const url = buildDeviceUrl(device, endpoint, queryParams);
-  const headers = { 'Content-Type': 'application/octet-stream', ...buildAuthHeaders(device) };
+async function controlIdRequestBinary(device, endpoint, queryParams, imageBuffer, _retried = false) {
+  const session = await loginToDevice(device);
+  const url = buildDeviceUrl(device, endpoint, session, queryParams);
+  const headers = { 'Content-Type': 'application/octet-stream' };
 
   const response = await fetch(url, {
     method: 'POST',
@@ -70,6 +117,12 @@ async function controlIdRequestBinary(device, endpoint, queryParams, imageBuffer
     body: imageBuffer,
     signal: AbortSignal.timeout(15000),
   });
+
+  // Retry once on 401
+  if (response.status === 401 && !_retried) {
+    invalidateSession(device);
+    return controlIdRequestBinary(device, endpoint, queryParams, imageBuffer, true);
+  }
 
   const text = await response.text();
   let data = null;
@@ -203,4 +256,6 @@ module.exports = {
   enrollUserOnDevice,
   removeUserFromDevice,
   getWorkerControlIdCode,
+  loginToDevice,
+  invalidateSession,
 };

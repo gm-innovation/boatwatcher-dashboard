@@ -15,31 +15,72 @@ interface ControlIDResponse {
   error?: string
 }
 
-function buildUrl(device: DeviceCredentials, endpoint: string, queryParams = ''): string {
-  const qs = queryParams ? `?${queryParams}` : ''
-  return `http://${device.ip}:${device.port || 80}/${endpoint}${qs}`
+// Session cache: ip:port -> { session, expiry }
+const sessionCache = new Map<string, { session: string; expiry: number }>()
+const SESSION_TTL_MS = 10 * 60 * 1000 // 10 minutes
+
+function getDeviceKey(device: DeviceCredentials): string {
+  return `${device.ip}:${device.port || 80}`
 }
 
-function buildAuthHeaders(device: DeviceCredentials): Record<string, string> {
-  const headers: Record<string, string> = {}
-  if (device.username && device.password) {
-    headers['Authorization'] = `Basic ${btoa(`${device.username}:${device.password}`)}`
+function getBaseUrl(device: DeviceCredentials): string {
+  return `http://${device.ip}:${device.port || 80}`
+}
+
+async function loginToDevice(device: DeviceCredentials): Promise<string> {
+  const key = getDeviceKey(device)
+  const cached = sessionCache.get(key)
+  if (cached && cached.expiry > Date.now()) return cached.session
+
+  const login = device.username || 'admin'
+  const password = device.password || 'admin'
+  const baseUrl = getBaseUrl(device)
+
+  console.log(`ControlID Login: POST ${baseUrl}/login.fcgi`)
+
+  const response = await fetch(`${baseUrl}/login.fcgi`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login, password }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Login failed (HTTP ${response.status})`)
   }
-  return headers
+
+  const data = await response.json()
+  if (!data.session) {
+    throw new Error('Login failed: device did not return session')
+  }
+
+  sessionCache.set(key, { session: data.session, expiry: Date.now() + SESSION_TTL_MS })
+  return data.session
+}
+
+function invalidateSession(device: DeviceCredentials) {
+  sessionCache.delete(getDeviceKey(device))
+}
+
+function buildUrl(device: DeviceCredentials, endpoint: string, session: string, queryParams = ''): string {
+  const baseUrl = getBaseUrl(device)
+  const params = [`session=${session}`]
+  if (queryParams) params.push(queryParams)
+  return `${baseUrl}/${endpoint}?${params.join('&')}`
 }
 
 async function controlIDRequest(
   device: DeviceCredentials,
   endpoint: string,
   method: string = 'GET',
-  body?: any
+  body?: any,
+  _retried = false
 ): Promise<ControlIDResponse> {
-  const url = buildUrl(device, endpoint)
-
   try {
+    const session = await loginToDevice(device)
+    const url = buildUrl(device, endpoint, session)
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...buildAuthHeaders(device),
     }
 
     console.log(`ControlID Request: ${method} ${url}`)
@@ -49,6 +90,12 @@ async function controlIDRequest(
       headers,
       body: body ? JSON.stringify(body) : undefined,
     })
+
+    // Retry once on 401
+    if (response.status === 401 && !_retried) {
+      invalidateSession(device)
+      return controlIDRequest(device, endpoint, method, body, true)
+    }
 
     const text = await response.text()
     console.log(`ControlID Response (${response.status}):`, text.substring(0, 500))
@@ -73,14 +120,15 @@ async function controlIDRequestBinary(
   device: DeviceCredentials,
   endpoint: string,
   queryParams: string,
-  imageData: Uint8Array
+  imageData: Uint8Array,
+  _retried = false
 ): Promise<ControlIDResponse> {
-  const url = buildUrl(device, endpoint, queryParams)
-
   try {
+    const session = await loginToDevice(device)
+    const url = buildUrl(device, endpoint, session, queryParams)
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/octet-stream',
-      ...buildAuthHeaders(device),
     }
 
     console.log(`ControlID Binary Request: POST ${url} (${imageData.byteLength} bytes)`)
@@ -90,6 +138,12 @@ async function controlIDRequestBinary(
       headers,
       body: imageData,
     })
+
+    // Retry once on 401
+    if (response.status === 401 && !_retried) {
+      invalidateSession(device)
+      return controlIDRequestBinary(device, endpoint, queryParams, imageData, true)
+    }
 
     const text = await response.text()
     console.log(`ControlID Binary Response (${response.status}):`, text.substring(0, 500))
@@ -125,7 +179,6 @@ async function enrollUser(
   registration: string,
   userPhoto?: string
 ): Promise<ControlIDResponse> {
-  // Step 1: Create user via /create_objects.fcgi
   const userResult = await controlIDRequest(device, 'create_objects.fcgi', 'POST', {
     object: 'users',
     values: [{
@@ -139,7 +192,6 @@ async function enrollUser(
     return userResult
   }
 
-  // Step 2: Send photo via /user_set_image.fcgi (binary)
   if (userPhoto) {
     try {
       const binaryString = atob(userPhoto)
@@ -167,14 +219,12 @@ async function enrollUser(
 }
 
 async function removeUser(device: DeviceCredentials, userId: number): Promise<ControlIDResponse> {
-  // Step 1: Remove photo via /user_destroy_image.fcgi
   try {
     await controlIDRequest(device, 'user_destroy_image.fcgi', 'POST', { user_id: userId })
   } catch (err) {
     console.warn('Failed to remove photo:', err.message)
   }
 
-  // Step 2: Remove user via /destroy_objects.fcgi
   return await controlIDRequest(device, 'destroy_objects.fcgi', 'POST', {
     object: 'users',
     where: { users: { id: userId } }
@@ -274,7 +324,6 @@ serve(async (req) => {
         break
 
       case 'enrollUser': {
-        // Use worker code (integer) as ControlID ID
         const workerCode = Number(params.workerCode || params.userId)
         const registration = String(params.registration || params.userId)
         result = await enrollUser(device, workerCode, params.userName, registration, params.userPhoto)
