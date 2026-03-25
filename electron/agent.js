@@ -81,7 +81,7 @@ class AgentController {
       const postData = JSON.stringify({ login: creds.username, password: creds.password });
       const req = http.request({
         hostname: ip,
-        port,
+        port: creds.port,
         path: '/login.fcgi',
         method: 'POST',
         timeout: 5000,
