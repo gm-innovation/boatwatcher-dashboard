@@ -174,7 +174,6 @@ class AgentController {
     }
 
     const creds = this.parseApiCredentials(device.api_credentials);
-    const port = creds.port || 80;
 
     return new Promise((resolve, reject) => {
       const req = http.get({
