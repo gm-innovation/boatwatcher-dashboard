@@ -49,11 +49,18 @@ class AgentController {
   }
 
   parseApiCredentials(apiCredentials) {
-    if (!apiCredentials) return {};
+    if (!apiCredentials) return { username: 'admin', password: 'admin', port: 80 };
+    let raw = {};
     if (typeof apiCredentials === 'string') {
-      try { return JSON.parse(apiCredentials); } catch { return {}; }
+      try { raw = JSON.parse(apiCredentials); } catch { raw = {}; }
+    } else {
+      raw = apiCredentials;
     }
-    return apiCredentials;
+    return {
+      username: raw.username || raw.user || raw.login || 'admin',
+      password: raw.password || 'admin',
+      port: raw.port || 80,
+    };
   }
 
   getDeviceKey(device) {
