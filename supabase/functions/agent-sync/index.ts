@@ -673,10 +673,18 @@ serve(async (req) => {
           // Insert new worker with pending_review status
           const { data: inserted, error: insertError } = await supabase.from('workers').insert({
             name: w.name,
+            code: w.code || undefined,
             document_number: w.document_number,
+            photo_url: w.photo_url || null,
             company_id: w.company_id || null,
             role: w.role,
             status: 'pending_review',
+            job_function_id: w.job_function_id || null,
+            birth_date: w.birth_date || null,
+            gender: w.gender || null,
+            blood_type: w.blood_type || null,
+            observations: w.observations || null,
+            devices_enrolled: w.devices_enrolled || [],
             allowed_project_ids: agent.project_id ? [agent.project_id] : [],
           }).select('id').single()
 
