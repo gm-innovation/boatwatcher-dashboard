@@ -713,15 +713,37 @@ export const WorkerManagement = () => {
           </DialogHeader>
           <WorkerForm 
             worker={editingWorker} 
-            onSuccess={() => {
+            onSuccess={(autoEnrollResult) => {
               setIsEditDialogOpen(false);
               setEditingWorker(null);
+              if (autoEnrollResult) {
+                setAutoEnrollData({
+                  workerName: autoEnrollResult.workerName,
+                  commandIds: autoEnrollResult.commandIds,
+                });
+              }
             }}
             onCancel={() => {
               setIsEditDialogOpen(false);
               setEditingWorker(null);
             }}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Auto-Enrollment Tracking Dialog */}
+      <Dialog open={!!autoEnrollData} onOpenChange={(open) => !open && setAutoEnrollData(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Re-sincronização Biométrica</DialogTitle>
+          </DialogHeader>
+          {autoEnrollData && (
+            <EnrollmentTracker
+              commandIds={autoEnrollData.commandIds}
+              workerName={autoEnrollData.workerName}
+              onClose={() => setAutoEnrollData(null)}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
