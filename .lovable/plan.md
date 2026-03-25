@@ -1,28 +1,37 @@
 
+Objetivo: corrigir a sincronização de eventos no dashboard (Web e Desktop) com paridade real entre os dois ambientes.
 
-## Remover Atividade Recente + Corrigir Atualização em Tempo Real
+1) Diagnóstico técnico confirmado
+- O agente está enviando heartbeat (`agent-sync/status`), mas não há evidência de `upload-logs`.
+- `local_agents.last_sync_at` permanece `NULL`, indicando que o fluxo de envio de logs não está concluindo.
+- Hoje o Desktop não baixa `access_logs` da nuvem (só sobe), então não existe paridade bidirecional Web ↔ Desktop.
 
-### Problema
-1. O card "Atividade Recente" é redundante — a tabela de trabalhadores a bordo já mostra quem está presente
-2. Eventos de saída do dispositivo não atualizam o dashboard porque o agente local pode não estar sincronizando em tempo real com a nuvem
+2) Sincronização imediata após evento (reduzir latência real)
+- Arquivos: `server/index.js`, `electron/sync.js`
+- Conectar `agentController.onNewEvent(...)` a um gatilho de sync rápido (com debounce/throttle) para não esperar apenas o ciclo de 60s.
+- Manter sync periódico como fallback, mas adicionar “fast lane” para eventos de acesso.
 
-### Alterações
+3) Paridade bidirecional Web/Desktop para logs
+- Arquivos: `supabase/functions/agent-sync/index.ts`, `electron/sync.js`, `electron/database.js`
+- Criar endpoint `GET agent-sync/download-access-logs?since=...` (escopado ao `project_id` do agente via `devices`).
+- No SyncEngine, adicionar etapa `download-access-logs` com checkpoint próprio (`last_download_access_logs`).
+- Implementar `upsertAccessLogFromCloud` no SQLite para evitar duplicação e permitir reconciliação.
 
-#### 1. Remover RecentActivityFeed do Dashboard
-**Arquivo:** `src/components/dashboard/Dashboard.tsx`
-- Remover import e uso de `RecentActivityFeed`
-- O layout volta ao padrão: tabela de trabalhadores (3/5) + lista de empresas (2/5) sem o card extra
+4) Corrigir cálculo local de “trabalhadores a bordo” por projeto
+- Arquivo: `electron/database.js`
+- Ajustar `getWorkersOnBoard(projectId)` para filtrar logs pelos dispositivos do projeto (hoje o SQL ignora `projectId`).
+- Usar regra “último evento do trabalhador no projeto” (entry => a bordo, exit => fora).
 
-#### 2. Aumentar frequência de refetch da query `workers-on-board`
-**Arquivo:** `src/hooks/useSupabase.ts`
-- Reduzir `refetchInterval` de 30s para 10s para capturar mudanças mais rapidamente
-- Isso garante que mesmo sem realtime (Desktop offline), os dados atualizam em até 10s
+5) Robustez de direção dos eventos
+- Arquivos: `electron/agent.js`, `src/hooks/useSupabase.ts` (se necessário)
+- Normalizar direção para `entry|exit|unknown` no momento da captura (incluindo fallback por configuração do dispositivo), evitando casos em que saída não remove trabalhador.
 
-#### 3. Garantir que o realtime invalida corretamente
-**Arquivo:** `src/hooks/useRealtimeAccessLogs.ts`
-- Já escuta INSERTs e invalida `workers-on-board` — está correto
-- Quando um evento de saída chega à nuvem, a query é re-executada e o worker é removido da lista
+6) Observabilidade para fechar o problema de vez
+- Arquivos: `electron/sync.js`, `server/routes/sync.js`, `src/components/admin/DiagnosticsPanel.tsx`
+- Expor contadores de fila de logs, último upload de logs e último erro de sync.
+- Mostrar esses indicadores no diagnóstico para confirmar rapidamente se o gargalo está em captura, upload ou download.
 
-### Nota sobre sincronização Desktop → Nuvem
-O fluxo de sincronização (agente local → edge function `agent-sync/upload-logs` → tabela `access_logs`) já está implementado. Se o dispositivo de saída gerou um evento mas não apareceu, o problema é que o agente local não enviou o log para a nuvem ainda (ciclo de sync é 60s). Não há mudança de código necessária aqui — o polling de 10s na query cloud + realtime garantem que assim que o log chegar, o dashboard atualiza.
-
+Validação final (E2E)
+- Teste 1: passar na entrada → aparece no dashboard Web e Desktop.
+- Teste 2: passar na saída → trabalhador sai de “a bordo” em ambos.
+- Teste 3: simular queda de internet, gerar eventos locais e validar reconciliação ao voltar conexão.
