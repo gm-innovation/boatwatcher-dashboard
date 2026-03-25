@@ -114,6 +114,9 @@ const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
   const onSubmit = async (data: WorkerFormData) => {
     setIsUploading(true);
     try {
+      let savedWorkerId: string;
+      let savedWorkerName: string;
+
       if (worker) {
         const photoUrl = await uploadPhoto(worker.id);
         await updateWorker(worker.id, {
@@ -125,34 +128,8 @@ const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
           allowed_project_ids: data.allowed_project_ids,
           photo_url: photoUrl,
         });
-
-        // Auto-enrollment: if worker has devices_enrolled, re-sync automatically
-        const enrolledDevices = worker.devices_enrolled || [];
-        if (enrolledDevices.length > 0) {
-          try {
-            const { data: enrollResult, error: enrollError } = await supabase.functions.invoke("worker-enrollment", {
-              body: { action: 'enroll', workerId: worker.id, deviceIds: enrolledDevices }
-            });
-            if (!enrollError && enrollResult?.commandIds?.length > 0) {
-              toast({ 
-                title: 'Dados atualizados',
-                description: `Re-sincronizando biometria em ${enrolledDevices.length} dispositivo(s)...`,
-              });
-              queryClient.invalidateQueries({ queryKey: ['workers'] });
-              onSuccess({ workerId: worker.id, workerName: worker.name, commandIds: enrollResult.commandIds });
-              return;
-            }
-          } catch (enrollErr) {
-            console.error('Auto-enrollment failed:', enrollErr);
-            toast({ 
-              title: 'Trabalhador atualizado', 
-              description: 'Não foi possível re-sincronizar a biometria automaticamente. Use o botão de Enrollment manualmente.',
-              variant: 'destructive',
-            });
-          }
-        }
-
-        toast({ title: 'Trabalhador atualizado com sucesso' });
+        savedWorkerId = worker.id;
+        savedWorkerName = data.name;
       } else {
         const newWorker = await createWorker({
           name: data.name,
@@ -169,10 +146,32 @@ const WorkerForm = ({ worker, onSuccess, onCancel }: WorkerFormProps) => {
             await updateWorker(newWorker.id, { photo_url: photoUrl });
           }
         }
-
-        toast({ title: 'Trabalhador cadastrado com sucesso' });
+        savedWorkerId = newWorker?.id;
+        savedWorkerName = data.name;
       }
 
+      // Auto-enrollment: always trigger based on allowed_project_ids
+      // Edge function resolves devices automatically when no deviceIds provided
+      if (savedWorkerId && data.allowed_project_ids.length > 0) {
+        try {
+          const { data: enrollResult, error: enrollError } = await supabase.functions.invoke("worker-enrollment", {
+            body: { action: 'enroll', workerId: savedWorkerId }
+          });
+          if (!enrollError && enrollResult?.commandIds?.length > 0) {
+            toast({ 
+              title: worker ? 'Dados atualizados' : 'Trabalhador cadastrado',
+              description: `Sincronizando biometria em ${enrollResult.resolvedDeviceCount || enrollResult.commandIds.length} dispositivo(s)...`,
+            });
+            queryClient.invalidateQueries({ queryKey: ['workers'] });
+            onSuccess({ workerId: savedWorkerId, workerName: savedWorkerName, commandIds: enrollResult.commandIds });
+            return;
+          }
+        } catch (enrollErr) {
+          console.error('Auto-enrollment failed:', enrollErr);
+        }
+      }
+
+      toast({ title: worker ? 'Trabalhador atualizado com sucesso' : 'Trabalhador cadastrado com sucesso' });
       queryClient.invalidateQueries({ queryKey: ['workers'] });
       onSuccess();
     } catch (error: any) {
