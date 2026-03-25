@@ -1092,14 +1092,22 @@ function createDatabaseAPI(db, startCode) {
     // === Workers On Board ===
     getWorkersOnBoard(projectId) {
       const today = new Date().toISOString().split('T')[0];
+      
+      // Filter by project devices when projectId is provided
+      const deviceFilter = projectId
+        ? 'AND al.device_id IN (SELECT id FROM devices WHERE project_id = ?)'
+        : '';
+      const params = projectId ? [today, projectId] : [today];
+
       const rows = db.prepare(`
         WITH last_events AS (
-          SELECT worker_id, worker_name, device_name, direction, timestamp,
-            ROW_NUMBER() OVER (PARTITION BY worker_id ORDER BY timestamp DESC) as rn
-          FROM access_logs
-          WHERE timestamp >= ? || 'T00:00:00'
-            AND access_status = 'granted'
-            AND worker_id IS NOT NULL
+          SELECT al.worker_id, al.worker_name, al.device_name, al.direction, al.timestamp,
+            ROW_NUMBER() OVER (PARTITION BY al.worker_id ORDER BY al.timestamp DESC) as rn
+          FROM access_logs al
+          WHERE al.timestamp >= ? || 'T00:00:00'
+            AND al.access_status = 'granted'
+            AND al.worker_id IS NOT NULL
+            ${deviceFilter}
         )
         SELECT le.worker_id, le.worker_name, le.device_name, le.timestamp as entry_time,
           w.name, w.role, w.company_id, c.name as company_name
@@ -1107,7 +1115,7 @@ function createDatabaseAPI(db, startCode) {
         LEFT JOIN workers w ON le.worker_id = w.id
         LEFT JOIN companies c ON w.company_id = c.id
         WHERE le.rn = 1 AND le.direction = 'entry'
-      `).all(today);
+      `).all(...params);
 
       return rows.map((r) => ({
         id: r.worker_id,
