@@ -214,7 +214,7 @@ class AgentController {
 
     // Determine direction based on device config or event data
     const direction = event.direction || 
-      (device.configuration?.direction) || 
+      (device.configuration?.passage_direction) || 
       'unknown';
 
     // Resolve worker UUID from integer code sent by ControlID device
