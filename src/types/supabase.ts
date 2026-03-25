@@ -10,6 +10,9 @@ export interface Company {
   status: string | null;
   api_password: string | null;
   api_environment: string | null;
+  responsible_name: string | null;
+  phone: string | null;
+  address: string | null;
   created_at: string;
   updated_at: string;
 }
