@@ -364,6 +364,9 @@ const EnrollmentDialog = ({ worker, onClose }: EnrollmentDialogProps) => {
   // Stop polling when all commands are done
   const allDone = commandStatuses.length > 0 && 
     commandStatuses.every(c => c.status === 'completed' || c.status === 'failed');
+  const enrollSuccessCount = commandStatuses.filter(c => c.status === 'completed').length;
+  const enrollFailedCount = commandStatuses.filter(c => c.status === 'failed').length;
+  const enrollHasFailures = enrollFailedCount > 0;
 
   useEffect(() => {
     if (allDone) {
