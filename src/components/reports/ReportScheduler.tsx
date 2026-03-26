@@ -36,7 +36,8 @@ import {
   Pause,
   Clock,
   FileText,
-  Mail
+  Mail,
+  Loader2
 } from 'lucide-react';
 import { 
   useReportSchedules, 
