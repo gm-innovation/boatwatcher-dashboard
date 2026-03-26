@@ -245,7 +245,7 @@ export const ClientsManagement = () => {
       toast({ title: 'Erro ao remover cliente', variant: 'destructive' });
     } else {
       toast({ title: 'Cliente removido' });
-      queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
     }
   };
 

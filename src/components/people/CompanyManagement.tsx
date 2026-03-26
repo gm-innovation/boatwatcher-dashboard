@@ -81,7 +81,7 @@ export const CompanyManagement = () => {
     try {
       await deleteCompany(company.id);
       toast({ title: 'Empresa removida' });
-      queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['contractor-companies'] });
     } catch {
       toast({ title: 'Erro ao remover empresa', variant: 'destructive' });
     }

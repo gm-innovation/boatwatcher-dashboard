@@ -8,6 +8,7 @@ export interface Company {
   cnpj: string | null;
   contact_email: string | null;
   status: string | null;
+  type: string | null;
   api_password: string | null;
   api_environment: string | null;
   responsible_name: string | null;
