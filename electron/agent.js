@@ -286,8 +286,8 @@ class AgentController {
     const creds = this.parseApiCredentials(device.api_credentials);
     const lastEventId = this.getLastEventId(device);
 
-    // Use POST /access_logs.fcgi with ControlID API format
-    const payload = { limit: 100 };
+    // Use POST /load_objects.fcgi with ControlID API format (documented endpoint)
+    const payload = { object: 'access_logs', limit: 100 };
     if (lastEventId > 0) {
       payload.where = { access_logs: { id: { '>': lastEventId } } };
     }
@@ -298,7 +298,7 @@ class AgentController {
       const req = http.request({
         hostname: ip,
         port: creds.port,
-        path: `/access_logs.fcgi?session=${session}`,
+        path: `/load_objects.fcgi?session=${session}`,
         method: 'POST',
         timeout: 5000,
         headers: {
