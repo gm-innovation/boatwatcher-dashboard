@@ -1,42 +1,49 @@
 
 
-# Adicionar Linha Expandível com Detalhes de Eventos por Trabalhador
+# Alternar Entrada/Saída — Nunca Eventos Consecutivos do Mesmo Tipo
 
-## O que falta (conforme o print de produção)
+## Problema
+Atualmente o `rawLogs` exibe todos os eventos brutos em sequência, permitindo entradas consecutivas ou saídas consecutivas. A regra de negócio exige alternância estrita: entrada → saída → entrada → saída.
 
-1. **Linha expandível**: Clicar no chevron (▼) ao lado do nome expande uma seção de detalhes abaixo da linha do trabalhador
-2. **Entrada/Saída com data completa**: A coluna Entrada mostra `dd/MM HH:mm` (não apenas `HH:mm`); Saída mostra badge "A bordo" quando aplicável
-3. **Seção expandida dividida em dois períodos**:
-   - **Período Diurno (05:00 - 18:59)**: lista todos os eventos individuais (ENTRADA verde / SAIDA laranja) com Dispositivo e Data/Horário, e contagem de registros
-   - **Período Noturno (19:00 - 04:59)**: mesma estrutura, ou "Nenhum registro noturno." se vazio
-4. **Header da seção expandida**: "Nome: X  Função: Y  Empresa: Z"
-5. **Tempo total acumulado**: Exibido em formato `Xh Ym` (ex: `3602h 10m`) — calculado como soma de todo o período, não apenas um dia
-
-## Mudanças
+## Solução
 
 ### `src/components/reports/WorkerTimeReport.tsx`
 
-**Dados**:
-- Incluir o array de logs brutos (`rawLogs`) em cada `WorkerTimeRow` para renderizar na expansão
-- Incluir `device_name` de cada log
-- Mudar `formatTime` para mostrar `dd/MM HH:mm` em vez de só `HH:mm`
+Adicionar uma função `normalizeAlternatingLogs` que filtra os logs ordenados por timestamp para garantir alternância:
 
-**Interface da WorkerTimeRow**:
-- Adicionar `rawLogs: Array<{ direction: string; device_name: string; timestamp: string }>` ao tipo
+1. Percorrer logs ordenados cronologicamente
+2. Manter estado do último tipo aceito (`entry` ou `exit`)
+3. Só incluir o log se for diferente do último tipo aceito
+4. Primeiro log válido deve ser `entry`; após `entry`, só aceitar `exit`; após `exit`, só aceitar `entry`
 
-**CompanyGroup → WorkerRow**:
-- Adicionar estado `expandedWorker` (set de IDs expandidos)
-- Cada linha de trabalhador tem um chevron (▼/▲) clicável
-- Ao expandir, renderizar abaixo uma `<tr>` com `<td colSpan={7}>` contendo:
-  - Header: `Nome: X  Função: Y  Empresa: Z`
-  - Grid 2 colunas:
-    - Esquerda: "Período Diurno (05:00 - 18:59)" + contagem + tabela de eventos (Evento, Dispositivo, Data/Horário)
-    - Direita: "Período Noturno (19:00 - 04:59)" + contagem + tabela ou mensagem vazia
-  - Eventos coloridos: ENTRADA em verde, SAIDA em laranja/vermelho
+Aplicar esta função em **dois pontos**:
+- No `rawLogs` salvo em cada `WorkerTimeRow` (afeta a expansão com períodos diurno/noturno)
+- Nos arrays `entries`/`exits` usados para calcular `firstEntry`, `lastExit`, `totalMinutes` e `isOnBoard`
 
-**Classificação diurno/noturno**:
-- Diurno: hora entre 05:00 e 18:59
-- Noturno: hora entre 19:00 e 04:59
+```typescript
+function normalizeAlternatingLogs(sorted: Array<{ direction: string; [k: string]: any }>) {
+  const result = [];
+  let expectEntry = true;
+  for (const log of sorted) {
+    if (expectEntry && log.direction === 'entry') {
+      result.push(log);
+      expectEntry = false;
+    } else if (!expectEntry && log.direction === 'exit') {
+      result.push(log);
+      expectEntry = true;
+    }
+    // skip consecutive same-direction logs
+  }
+  return result;
+}
+```
+
+Usar os logs normalizados para:
+- `firstEntry` = primeiro log (sempre entry)
+- `lastExit` = último log se for exit
+- `isOnBoard` = último log é entry (sem exit correspondente)
+- `totalMinutes` = soma dos pares entry→exit
+- `rawLogs` passado à expansão = apenas os alternados
 
 ### Arquivo alterado
 - `src/components/reports/WorkerTimeReport.tsx`
