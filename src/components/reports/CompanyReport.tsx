@@ -40,24 +40,33 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
   const companyData = useMemo<CompanyData[]>(() => {
     if (!accessLogs.length || !workers.length) return [];
 
-    // Map worker_id -> company name
-    const workerCompanyMap = new Map<string, string>();
-    for (const w of workers) {
-      const companyName = w.company && typeof w.company === 'object' && 'name' in w.company
-        ? (w.company as { name: string }).name
-        : 'Sem empresa';
-      workerCompanyMap.set(w.id, companyName);
-    }
+    // Build hybrid lookup
+    const workerById = new Map(workers.map((w: any) => [w.id, w]));
+    const workerByName = new Map(workers.map((w: any) => [w.name?.toLowerCase().trim(), w]));
 
-    // Group logs by worker, then compute entry/exit pairs
+    const findWorker = (log: any) => {
+      if (log.worker_id && workerById.has(log.worker_id)) return workerById.get(log.worker_id)!;
+      if (log.worker_name) return workerByName.get(log.worker_name.toLowerCase().trim()) || null;
+      return null;
+    };
+
+    const getCompanyName = (w: any) => {
+      if (!w) return 'Sem empresa';
+      const comp = w.company && typeof w.company === 'object' && 'name' in w.company
+        ? (w.company as { name: string }).name : 'Sem empresa';
+      return comp;
+    };
+
+    // Group logs by resolved worker key
     const companyStats = new Map<string, { workers: Set<string>; entries: number; totalMinutes: number }>();
 
-    // Group by worker
     const workerLogs = new Map<string, typeof accessLogs>();
     for (const log of accessLogs) {
-      if (!log.worker_id) continue;
-      if (!workerLogs.has(log.worker_id)) workerLogs.set(log.worker_id, []);
-      workerLogs.get(log.worker_id)!.push(log);
+      const w = findWorker(log);
+      const key = w?.id || log.worker_id || log.worker_name || '';
+      if (!key) continue;
+      if (!workerLogs.has(key)) workerLogs.set(key, []);
+      workerLogs.get(key)!.push(log);
     }
 
     workerLogs.forEach((logs, workerId) => {
