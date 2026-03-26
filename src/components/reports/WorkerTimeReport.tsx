@@ -12,7 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Download, FileDown, Search, Users, Building2, ChevronDown, ChevronRight } from 'lucide-react';
 import { exportReportPdf } from '@/utils/exportReportPdf';
-import { format, differenceInMinutes } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface WorkerTimeReportProps {
