@@ -361,6 +361,9 @@ class AgentController {
   }
 
   processEvent(device, rawEvent) {
+    // Store last raw payload for diagnostics
+    device._lastEventPayload = rawEvent;
+
     // Parse and normalize the raw hardware event
     const event = parseControlIdEvent(rawEvent, device);
     if (!event) {
