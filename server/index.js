@@ -137,6 +137,46 @@ function createLocalServer(options = {}) {
     });
   });
 
+  // ── ControlID Monitor webhook receiver ────────────────────────────────
+  // Devices configured with Monitor push events here in real-time.
+  // Payload: { object_changes: [{ object, type, values }], device_id }
+  serverApp.post('/api/notifications/dao', (req, res) => {
+    const { object_changes, device_id: hwDeviceId } = req.body || {};
+    if (!Array.isArray(object_changes)) {
+      return res.status(200).json({ received: true, processed: 0 });
+    }
+
+    // Find the local device matching the hardware device_id
+    const device = agentController.devices.find(d =>
+      String(d.controlid_serial_number) === String(hwDeviceId)
+    ) || { id: null, name: `hw-${hwDeviceId}`, configuration: {} };
+
+    let processed = 0;
+    for (const change of object_changes) {
+      if (change.object !== 'access_logs' || change.type !== 'inserted') continue;
+      const v = change.values || {};
+      // Build a raw event compatible with parseControlIdEvent
+      const rawEvent = {
+        id: parseInt(v.id, 10) || 0,
+        time: v.time,
+        event: v.event,
+        user_id: v.user_id !== '0' ? v.user_id : null,
+        portal_id: v.portal_id,
+      };
+      agentController.processEvent(device, rawEvent);
+      processed++;
+    }
+
+    console.log(`[Monitor] Received ${object_changes.length} changes from device ${hwDeviceId}, processed ${processed} access_logs`);
+    res.status(200).json({ received: true, processed });
+  });
+
+  // Also accept other Monitor endpoints (alive, operation_mode, etc.)
+  serverApp.post('/api/notifications/:type', (req, res) => {
+    console.log(`[Monitor] Notification type=${req.params.type} from device=${req.body?.device_id}`);
+    res.status(200).json({ received: true });
+  });
+
   serverApp.use('/api/workers', workersRoutes);
   serverApp.use('/api/companies', companiesRoutes);
   serverApp.use('/api/company-documents', companyDocumentsRoutes);

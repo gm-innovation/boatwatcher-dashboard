@@ -271,14 +271,13 @@ class AgentController {
     const creds = this.parseApiCredentials(device.api_credentials);
     const lastEventId = this.getLastEventId(device);
 
-    // Use POST /access_logs.fcgi with pagination (like the Python agent)
-    const postData = JSON.stringify({
-      where_args: lastEventId > 0
-        ? { access_logs: { id: { '>': lastEventId } } }
-        : {},
-      limit: 100,
-      order: 'id',
-    });
+    // Use POST /access_logs.fcgi with ControlID API format
+    const payload = { limit: 100 };
+    if (lastEventId > 0) {
+      payload.where = { access_logs: { id: { '>': lastEventId } } };
+    }
+    payload.order = { access_logs: { id: 'ASC' } };
+    const postData = JSON.stringify(payload);
 
     return new Promise((resolve, reject) => {
       const req = http.request({
