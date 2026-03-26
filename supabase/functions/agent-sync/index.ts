@@ -6,6 +6,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-agent-token',
 }
 
+/**
+ * BRT safety net: if a timestamp appears to be ~3h behind the current time,
+ * it's likely a ControlID device timestamp in BRT without UTC correction.
+ * Apply +3h to fix it server-side.
+ */
+function correctBrtTimestamp(ts: string): string {
+  const parsed = new Date(ts);
+  if (isNaN(parsed.getTime())) return ts;
+  const now = Date.now();
+  const diff = now - parsed.getTime();
+  // If timestamp is between 2.5h and 3.5h behind current time, apply +3h
+  if (diff > 2.5 * 3600000 && diff < 3.5 * 3600000) {
+    parsed.setHours(parsed.getHours() + 3);
+    return parsed.toISOString();
+  }
+  return ts;
+}
+
 function resolveWorkerPhotoPath(photoUrl?: string | null) {
   if (!photoUrl) return null
 
