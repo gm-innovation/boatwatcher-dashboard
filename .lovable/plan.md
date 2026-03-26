@@ -1,39 +1,45 @@
 
 
-# Fix: ControlID `order` parameter format
+# Fix: Formato correto da API ControlID `load_objects.fcgi`
 
-## Problem
-The `lastPollResponse` reveals the exact error:
-```json
-{"error":"Invalid member 'order' (array expected, got object)","code":1}
+## Problema raiz
+
+Estamos adivinhando o formato dos parâmetros a cada build. A documentação oficial do ControlID mostra o formato exato:
+
+```text
+where: [{ object: "access_logs", field: "id", operator: ">", value: 1 }]
 ```
 
-The agent sends `order` as an object (`{ access_logs: { id: "ASC" } }`), but the ControlID API expects it as an **array**.
+Nosso código envia formatos inventados (`{ access_logs: { id: { '>': ... } } }`), gerando erros diferentes a cada tentativa.
 
-## Fix
+## Correção definitiva
 
-### `electron/agent.js` — Change `order` to array format
+### `electron/agent.js` — Usar formato documentado
 
-Current (broken):
+**Payload simples (sem filtro):**
 ```javascript
-payload.order = { access_logs: { id: 'ASC' } };
+const payload = { object: 'access_logs' };
 ```
 
-Fixed:
-```javascript
-payload.order = [{ access_logs: { id: 'ASC' } }];
-```
-
-Also wrap `where` in an array for consistency with the API format:
+**Com filtro de `lastEventId`:**
 ```javascript
 if (lastEventId > 0) {
-  payload.where = [{ access_logs: { id: { '>': lastEventId } } }];
+  payload.where = [{
+    object: 'access_logs',
+    field: 'id',
+    operator: '>',
+    value: lastEventId
+  }];
 }
 ```
 
-### `server/package.json` — Bump to 1.3.5
+**Remover `order`** — não há documentação oficial para esse campo em `load_objects.fcgi`, e os IDs já são sequenciais. Isso elimina o risco de erros de formato.
 
-### Files changed
-- `electron/agent.js` — fix `order` and `where` to use arrays
-- `server/package.json` — version 1.3.5
+**Remover `limit`** — também não documentado; o hardware retorna tudo por padrão.
+
+### `server/package.json` — Bump para 1.3.6
+
+### Arquivos alterados
+- `electron/agent.js` — payload corrigido conforme documentação oficial
+- `server/package.json` — versão 1.3.6
 
