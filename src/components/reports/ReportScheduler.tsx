@@ -321,7 +321,20 @@ export const ReportScheduler = () => {
                         onCheckedChange={() => handleToggle(schedule.id, schedule.is_active)}
                       />
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right space-x-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRunNow(schedule.id)}
+                        disabled={runningId === schedule.id}
+                        title="Executar agora"
+                      >
+                        {runningId === schedule.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Play className="h-4 w-4 text-primary" />
+                        )}
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
