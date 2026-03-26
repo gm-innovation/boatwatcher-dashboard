@@ -1,51 +1,63 @@
 
-Diagnóstico objetivo (com base no código + dados atuais):
-- O problema principal agora não é mais “falta de saída”, e sim dados corrompidos por correção de horário agressiva.
-- Encontrei 4 registros em `access_logs` com `timestamp` no futuro (28–66 min à frente do `created_at`), todos no mesmo lote (`created_at = 2026-03-26 15:38:05.937582+00`).
-- A lógica do dashboard usa a entrada mais recente; como existe uma entrada futura (ex.: 16:44 UTC), ela fica “sem saída posterior” e mantém pessoa a bordo indevidamente.
-- Também há 1 duplicata de saída (mesmo worker/device/direction/timestamp), sinal de reenvio sem idempotência.
 
-Plano de correção (implementação):
-1) Remover a correção heurística perigosa no ingest de logs (backend function)
-- Arquivo: `supabase/functions/agent-sync/index.ts`
-- Ajuste:
-  - Remover o `correctBrtTimestamp` baseado em “diferença de ~3h para o now”.
-  - Não aplicar +3h no servidor por heurística temporal.
-  - Manter apenas parse/normalização de formato (ISO), e rejeitar timestamps absurdamente no futuro (ex.: > 5 min) com log explícito de rejeição.
-- Motivo: essa heurística corrige errado lotes atrasados de ~3h e gera eventos no futuro.
+# Diagnóstico: Correção BRT ainda não aplicada pelo agent local
 
-2) Corrigir os registros já corrompidos (migração SQL)
-- Criar migração para ajustar somente anomalias seguras:
-  - Caso A (supercorreção): `timestamp > created_at + 15 min` e dentro de janela plausível de erro => `timestamp - 3h`.
-  - Caso B (se houver): `created_at - timestamp` entre 2h30 e 3h30 => `timestamp + 3h`.
-- Escopo inicial: últimos 1–2 dias para evitar tocar histórico antigo sem necessidade.
-- Resultado esperado: eliminar entradas futuras que estão “prendendo” trabalhador a bordo.
+## Problema Confirmado
 
-3) Blindar o dashboard contra outliers de horário
-- Arquivo: `src/hooks/useSupabase.ts` (`useWorkersOnBoard`)
-- Ajuste:
-  - Aplicar teto temporal nas queries de entrada/saída: `timestamp <= now + 2 min`.
-- Motivo: um registro futuro isolado não pode quebrar o estado “a bordo”.
+O registro mais recente no banco:
+- **Entry**: `timestamp: 2026-03-26 13:53:54+00`, `created_at: 2026-03-26 16:54:11+00`
+- Diferença: exatamente **3 horas** → o agent.js local NÃO aplicou a correção BRT (servidor não foi reiniciado)
 
-4) Corrigir card de “Persistência (access_logs)” no Diagnóstico
-- Arquivo: `src/components/admin/DiagnosticsPanel.tsx`
-- Ajuste:
-  - Buscar último log filtrado pelo projeto ativo (via devices do projeto), não global.
-  - Aplicar o mesmo teto temporal (`<= now + 2 min`) para não exibir evento futuro inválido como “último”.
-- Motivo: o painel hoje mascara diagnóstico ao mostrar evento global/anômalo.
+A edge function `validateTimestamp` foi alterada para NÃO corrigir timestamps (apenas rejeitar futuros). Resultado: timestamps chegam 3h atrasados novamente.
 
-5) Endurecer deduplicação (estabilização)
-- Arquivos: `electron/agent.js`, `electron/sync.js`, `supabase/functions/agent-sync/index.ts` (fase de robustez)
-- Ajuste recomendado:
-  - Priorizar dedupe por identificador de evento (quando disponível) em vez de só timestamp.
-  - Evitar duplicata por reupload (idempotência de envio).
-- Motivo: já há duplicata real de saída no banco; isso vira ruído operacional.
+O dashboard vê: última saída em `16:37 UTC` > última entrada em `13:53 UTC` → conclui que o trabalhador já saiu → mostra 0.
 
-Validação pós-implementação (obrigatória):
-- Verificar SQL:
-  - 0 linhas com `timestamp > created_at + 5 min` (janela recente).
-  - 0 linhas com `created_at - timestamp` em ~3h (janela recente).
-- Teste E2E:
-  - Passar na Entrada e depois na Saída com o mesmo colaborador.
-  - Confirmar sequência no banco (entry < exit), no Pipeline (Persistência) e no Dashboard (não fica a bordo após saída).
-- Confirmar que novos logs entram sem correção adicional indevida e sem duplicações.
+## Solução: Reintroduzir correção BRT na edge function com janela segura
+
+A correção anterior falhou porque usava janela ampla (2.5h-3.5h) que capturou logs já corrigidos. Agora usaremos uma janela **estreita e segura**:
+
+### 1. `supabase/functions/agent-sync/index.ts` — `validateTimestamp()`
+
+Modificar para detectar e corrigir timestamps que estão **precisamente ~3h atrás** do horário do servidor (janela de 2h50m a 3h10m). Isso é seguro porque:
+- Logs corretamente convertidos chegam com diferença de segundos (< 2 min)
+- Logs BRT sem correção chegam com diferença de ~3h exatos
+- A janela de 20 min é estreita o suficiente para não capturar outros cenários
+
+```typescript
+function validateTimestamp(ts: string): { valid: boolean; timestamp: string; reason?: string } {
+  const parsed = new Date(ts);
+  if (isNaN(parsed.getTime())) return { valid: false, timestamp: ts, reason: 'unparseable' };
+  const now = Date.now();
+  const diffMs = parsed.getTime() - now;
+  
+  // Reject future timestamps (> 5 min ahead)
+  if (diffMs > 5 * 60 * 1000) {
+    return { valid: false, timestamp: ts, reason: `${Math.round(diffMs/60000)}min in future` };
+  }
+  
+  // Detect BRT offset: timestamp is 2h50m–3h10m behind server time
+  const lagMs = now - parsed.getTime();
+  if (lagMs > 170 * 60000 && lagMs < 190 * 60000) {
+    const corrected = new Date(parsed.getTime() + 3 * 3600000);
+    console.log(`[validateTimestamp] BRT correction applied: ${ts} → ${corrected.toISOString()}`);
+    return { valid: true, timestamp: corrected.toISOString() };
+  }
+  
+  return { valid: true, timestamp: ts };
+}
+```
+
+### 2. Migração SQL — Corrigir o último registro
+
+```sql
+UPDATE access_logs 
+SET timestamp = timestamp + interval '3 hours'
+WHERE created_at > '2026-03-26 16:50:00+00'
+  AND timestamp < '2026-03-26 14:00:00+00'
+  AND direction = 'entry';
+```
+
+### Arquivos alterados
+- **`supabase/functions/agent-sync/index.ts`** — correção BRT com janela segura de 20 min
+- **Migração SQL** — corrigir entrada mais recente
+
