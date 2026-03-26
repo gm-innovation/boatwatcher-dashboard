@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useCompanies } from '@/hooks/useSupabase';
+import { useContractorCompanies } from '@/hooks/useSupabase';
 import { createCompany, updateCompany, deleteCompany } from '@/hooks/useDataProvider';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
