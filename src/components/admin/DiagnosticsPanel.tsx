@@ -929,6 +929,95 @@ export const DiagnosticsPanel = () => {
         </CardContent>
       </Card>
 
+      {/* Event Pipeline Card — Cloud mode only */}
+      {!isLocalRuntime && (
+        <Card className="border-2 border-indigo-500/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Zap className="h-5 w-5 text-indigo-500" />
+              Pipeline de Eventos
+              {cloudHeartbeatSchema ? (
+                <Badge className="bg-green-500/10 text-green-500 border-green-500/20 ml-auto">Schema v{cloudHeartbeatSchema}</Badge>
+              ) : (
+                <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 ml-auto">Sem telemetria</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!cloudHeartbeatSchema ? (
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Servidor local desatualizado</AlertTitle>
+                <AlertDescription>
+                  O servidor local não está enviando métricas de pipeline (heartbeatSchemaVersion ausente).
+                  <strong> É necessário atualizar o build do servidor local</strong> — reiniciar não basta.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                {/* Stage 1: Capture */}
+                <div className="p-3 rounded-lg border bg-card space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">1. Captura ControlID</p>
+                  <p className="text-2xl font-bold">{cloudPipelineMetrics?.capturedEventsCount ?? 0}</p>
+                  <p className="text-xs text-muted-foreground">eventos capturados</p>
+                  {(cloudPipelineMetrics?.ignoredInvalidCount > 0 || cloudPipelineMetrics?.ignoredDedupeCount > 0) && (
+                    <p className="text-xs text-yellow-500">
+                      {cloudPipelineMetrics.ignoredInvalidCount || 0} inválidos, {cloudPipelineMetrics.ignoredDedupeCount || 0} dedup
+                    </p>
+                  )}
+                  {cloudPipelineMetrics?.lastCapturedAt && (
+                    <p className="text-xs text-muted-foreground">
+                      Última: {new Date(cloudPipelineMetrics.lastCapturedAt).toLocaleTimeString()}
+                    </p>
+                  )}
+                  {cloudPipelineMetrics?.lastIgnoreReason && (
+                    <p className="text-xs text-yellow-500 truncate" title={cloudPipelineMetrics.lastIgnoreReason}>
+                      Motivo: {cloudPipelineMetrics.lastIgnoreReason}
+                    </p>
+                  )}
+                </div>
+
+                {/* Stage 2: Local Queue */}
+                <div className="p-3 rounded-lg border bg-card space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">2. Fila Local</p>
+                  <p className={`text-2xl font-bold ${(cloudPipelineMetrics?.unsyncedLogsCount ?? 0) > 0 ? 'text-yellow-500' : ''}`}>
+                    {cloudPipelineMetrics?.unsyncedLogsCount ?? 0}
+                  </p>
+                  <p className="text-xs text-muted-foreground">logs aguardando upload</p>
+                </div>
+
+                {/* Stage 3: Upload */}
+                <div className="p-3 rounded-lg border bg-card space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">3. Upload para Nuvem</p>
+                  <p className="text-2xl font-bold">{cloudPipelineMetrics?.uploadLogsCount ?? 0}</p>
+                  <p className="text-xs text-muted-foreground">logs enviados</p>
+                  {cloudPipelineMetrics?.lastUploadLogsError && (
+                    <p className="text-xs text-red-500 truncate" title={cloudPipelineMetrics.lastUploadLogsError}>
+                      Erro: {cloudPipelineMetrics.lastUploadLogsError}
+                    </p>
+                  )}
+                </div>
+
+                {/* Stage 4: Cloud Persistence */}
+                <div className="p-3 rounded-lg border bg-card space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">4. Persistência (access_logs)</p>
+                  {cloudPipelineMetrics?.lastCloudAccessLog ? (
+                    <>
+                      <p className="text-sm font-medium">{cloudPipelineMetrics.lastCloudAccessLog.worker_name || 'Sem nome'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {cloudPipelineMetrics.lastCloudAccessLog.direction} — {new Date(cloudPipelineMetrics.lastCloudAccessLog.timestamp).toLocaleString()}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">Nenhum registro em access_logs</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Device Telemetry — Local or Cloud */}
       {deviceTelemetry?.agent?.devices && (
         <Card className="border-2 border-cyan-500/20">
