@@ -57,6 +57,22 @@ export const ReportScheduler = () => {
   const createSchedule = useCreateReportSchedule();
   const deleteSchedule = useDeleteReportSchedule();
   const toggleSchedule = useToggleReportSchedule();
+  const [runningId, setRunningId] = useState<string | null>(null);
+
+  const handleRunNow = async (scheduleId: string) => {
+    setRunningId(scheduleId);
+    try {
+      const { error } = await (await import('@/integrations/supabase/client')).supabase.functions.invoke('scheduled-reports', {
+        body: { schedule_id: scheduleId, manual: true },
+      });
+      if (error) throw error;
+      toast.success('Relatório gerado com sucesso');
+    } catch (err: any) {
+      toast.error('Erro: ' + (err.message || 'falha ao executar'));
+    } finally {
+      setRunningId(null);
+    }
+  };
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState<CreateReportScheduleInput>({
