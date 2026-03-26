@@ -111,6 +111,16 @@ class AgentController {
       ignoredInvalidCount: this._ignoredInvalidCount,
       lastCapturedAt: this._lastCapturedAt,
       lastIgnoreReason: this._lastIgnoreReason,
+      devices: this.devices.map(d => ({
+        name: d.name,
+        ip: d.controlid_ip_address,
+        serial: d.controlid_serial_number,
+        status: d._lastError ? 'error' : 'ok',
+        lastError: d._lastError || null,
+        lastPollAt: d._lastPollAt || null,
+        lastEventId: this.getLastEventId(d),
+        lastEventPayload: d._lastEventPayload || null,
+      })),
     };
   }
 
