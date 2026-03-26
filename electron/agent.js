@@ -111,6 +111,16 @@ class AgentController {
       ignoredInvalidCount: this._ignoredInvalidCount,
       lastCapturedAt: this._lastCapturedAt,
       lastIgnoreReason: this._lastIgnoreReason,
+      devices: this.devices.map(d => ({
+        name: d.name,
+        ip: d.controlid_ip_address,
+        serial: d.controlid_serial_number,
+        status: d._lastError ? 'error' : 'ok',
+        lastError: d._lastError || null,
+        lastPollAt: d._lastPollAt || null,
+        lastEventId: this.getLastEventId(d),
+        lastEventPayload: d._lastEventPayload || null,
+      })),
     };
   }
 
@@ -209,11 +219,15 @@ class AgentController {
     for (const device of this.devices) {
       try {
         await this.pollDevice(device);
+        device._lastError = null;
+        device._lastPollAt = new Date().toISOString();
         if (device.controlid_serial_number) {
           this.deviceConnectivity.set(device.controlid_serial_number, { online: true });
         }
         this.persistDeviceStatus(device, 'online');
       } catch (err) {
+        device._lastError = err.message;
+        device._lastPollAt = new Date().toISOString();
         if (device.controlid_serial_number) {
           this.deviceConnectivity.set(device.controlid_serial_number, { online: false });
         }
@@ -347,6 +361,9 @@ class AgentController {
   }
 
   processEvent(device, rawEvent) {
+    // Store last raw payload for diagnostics
+    device._lastEventPayload = rawEvent;
+
     // Parse and normalize the raw hardware event
     const event = parseControlIdEvent(rawEvent, device);
     if (!event) {

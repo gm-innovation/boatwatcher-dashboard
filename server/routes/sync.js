@@ -104,7 +104,7 @@ router.get('/diagnostics', (req, res) => {
 
     // Check sync configuration
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'NOT SET';
-    const hasToken = !!(req.syncEngine.accessToken);
+    const hasToken = !!(req.syncEngine.agentToken);
 
     res.json({
       version: serverVersion,
