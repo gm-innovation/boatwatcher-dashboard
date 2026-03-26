@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useCompanies } from '@/hooks/useSupabase';
+import { useClients } from '@/hooks/useSupabase';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
