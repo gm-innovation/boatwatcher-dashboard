@@ -289,9 +289,9 @@ class AgentController {
     // Use POST /load_objects.fcgi with ControlID API format (documented endpoint)
     const payload = { object: 'access_logs', limit: 100 };
     if (lastEventId > 0) {
-      payload.where = { access_logs: { id: { '>': lastEventId } } };
+      payload.where = [{ access_logs: { id: { '>': lastEventId } } }];
     }
-    payload.order = { access_logs: { id: 'ASC' } };
+    payload.order = [{ access_logs: { id: 'ASC' } }];
     const postData = JSON.stringify(payload);
 
     return new Promise((resolve, reject) => {
