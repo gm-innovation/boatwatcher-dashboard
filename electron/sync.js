@@ -526,12 +526,28 @@ class SyncEngine {
       // Collect device telemetry (lastError, lastPollAt, lastEventPayload) for cloud diagnostics
       const deviceTelemetry = this.agentController?.getStatus?.()?.devices || null;
 
+      // Collect pipeline metrics for remote diagnostics
+      const agentStatus = this.agentController?.getStatus?.() || {};
+      const unsyncedLogs = this.db.getUnsyncedLogs?.() || [];
+      const pipelineMetrics = {
+        capturedEventsCount: agentStatus.capturedEventsCount || 0,
+        ignoredInvalidCount: agentStatus.ignoredInvalidCount || 0,
+        ignoredDedupeCount: agentStatus.ignoredDedupeCount || 0,
+        lastCapturedAt: agentStatus.lastCapturedAt || null,
+        lastIgnoreReason: agentStatus.lastIgnoreReason || null,
+        unsyncedLogsCount: unsyncedLogs.length,
+        uploadLogsCount: this._uploadLogsCount,
+        lastUploadLogsError: this._lastUploadLogsError,
+      };
+
       await this.callEdgeFunction('agent-sync/status', 'POST', {
+        heartbeatSchemaVersion: 2,
         version: (() => { try { return require('../server/package.json').version; } catch { try { return require('./package.json').version; } catch { return '1.3.0'; } } })(),
         sync_status: this.status.syncing ? 'syncing' : 'idle',
         pending_count: this.status.pendingCount,
         devices,
         deviceTelemetry,
+        pipelineMetrics,
       });
     } catch (err) {
       console.error('Heartbeat error:', err.message);

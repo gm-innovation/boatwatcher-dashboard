@@ -642,9 +642,9 @@ serve(async (req) => {
     if (req.method === 'POST' && action === 'status') {
       const body = await req.json().catch(() => ({}))
 
-      // Merge deviceTelemetry into configuration JSONB if provided
+      // Build configuration update with telemetry + pipeline metrics
       let configurationUpdate: Record<string, unknown> | undefined = undefined
-      if (body.deviceTelemetry) {
+      if (body.deviceTelemetry || body.pipelineMetrics || body.heartbeatSchemaVersion) {
         // Fetch current configuration to merge
         const { data: currentAgent } = await supabase
           .from('local_agents')
@@ -652,8 +652,20 @@ serve(async (req) => {
           .eq('id', agent.id)
           .single()
         const existing = (currentAgent?.configuration as Record<string, unknown>) || {}
-        configurationUpdate = { ...existing, deviceTelemetry: body.deviceTelemetry }
+        configurationUpdate = {
+          ...existing,
+          ...(body.deviceTelemetry ? { deviceTelemetry: body.deviceTelemetry } : {}),
+          ...(body.pipelineMetrics ? { pipelineMetrics: body.pipelineMetrics } : {}),
+          heartbeatSchemaVersion: body.heartbeatSchemaVersion || existing.heartbeatSchemaVersion || null,
+          lastHeartbeatReceivedAt: new Date().toISOString(),
+        }
       }
+
+      // Log pipeline diagnostics for remote debugging
+      const schemaV = body.heartbeatSchemaVersion || 0
+      const pm = body.pipelineMetrics || {}
+      const dtCount = Array.isArray(body.deviceTelemetry) ? body.deviceTelemetry.length : 0
+      console.log(`[agent-sync/status] Agent ${agent.id}: schemaV=${schemaV} devices_telemetry=${dtCount} captured=${pm.capturedEventsCount ?? '?'} unsynced=${pm.unsyncedLogsCount ?? '?'} uploaded=${pm.uploadLogsCount ?? '?'} lastUploadErr=${pm.lastUploadLogsError ? 'YES' : 'no'}`)
 
       const updatePayload: Record<string, unknown> = {
         status: 'online',

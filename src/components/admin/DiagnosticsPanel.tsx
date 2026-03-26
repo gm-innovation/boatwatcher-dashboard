@@ -184,6 +184,8 @@ export const DiagnosticsPanel = () => {
       authDiagnostics,
       authPingResult,
       echoAuthResult,
+      deviceTelemetry: deviceTelemetry || null,
+      pipelineMetrics: cloudPipelineMetrics || null,
       systemDiagnostics: diagnostics.map(d => ({
         id: d.id,
         name: d.name,
