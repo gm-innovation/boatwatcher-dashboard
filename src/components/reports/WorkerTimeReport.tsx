@@ -144,7 +144,9 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
         lastExit: isOnBoard ? null : lastExit,
         totalMinutes,
         isOnBoard,
-        rawLogs: sorted.map(l => ({
+        rawLogs: normalizeAlternatingLogs(
+          sorted.filter(l => l.access_status === 'granted' && (l.direction === 'entry' || l.direction === 'exit'))
+        ).map(l => ({
           direction: l.direction || 'unknown',
           device_name: l.device_name || '-',
           timestamp: l.timestamp,
