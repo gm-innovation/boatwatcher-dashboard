@@ -354,6 +354,14 @@ export const DiagnosticsPanel = () => {
         lastCheck: new Date()
       });
 
+      // Fetch full diagnostics (includes device telemetry)
+      try {
+        const diagData = await localSync.getDiagnostics();
+        setDeviceTelemetry(diagData);
+      } catch {
+        setDeviceTelemetry(null);
+      }
+
       setDiagnostics(results);
       setLastRunTime(new Date());
       setIsRunning(false);
