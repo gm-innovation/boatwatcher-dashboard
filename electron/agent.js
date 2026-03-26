@@ -231,6 +231,30 @@ class AgentController {
     } catch { /* ignore */ }
   }
 
+  getLastEventId(device) {
+    try {
+      const rawDb = this.db.getRawDb?.();
+      if (rawDb) {
+        const key = `last_event_id_${device.id}`;
+        const row = rawDb.prepare('SELECT value FROM sync_meta WHERE key = ?').get(key);
+        return row ? parseInt(row.value, 10) || 0 : 0;
+      }
+    } catch { /* ignore */ }
+    return 0;
+  }
+
+  setLastEventId(device, eventId) {
+    try {
+      const rawDb = this.db.getRawDb?.();
+      if (rawDb) {
+        const key = `last_event_id_${device.id}`;
+        rawDb.prepare(
+          "INSERT OR REPLACE INTO sync_meta (key, value, updated_at) VALUES (?, ?, datetime('now'))"
+        ).run(key, String(eventId));
+      }
+    } catch { /* ignore */ }
+  }
+
   async pollDevice(device, _retried = false) {
     const ip = device.controlid_ip_address;
     if (!ip) throw new Error('No IP');
@@ -243,13 +267,28 @@ class AgentController {
     }
 
     const creds = this.parseApiCredentials(device.api_credentials);
+    const lastEventId = this.getLastEventId(device);
+
+    // Use POST /access_logs.fcgi with pagination (like the Python agent)
+    const postData = JSON.stringify({
+      where_args: lastEventId > 0
+        ? { access_logs: { id: { '>': lastEventId } } }
+        : {},
+      limit: 100,
+      order: 'id',
+    });
 
     return new Promise((resolve, reject) => {
-      const req = http.get({
+      const req = http.request({
         hostname: ip,
         port: creds.port,
-        path: `/api/access/last?session=${session}`,
-        timeout: 3000,
+        path: `/access_logs.fcgi?session=${session}`,
+        method: 'POST',
+        timeout: 5000,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+        },
       }, (res) => {
         if (res.statusCode === 401 && !_retried) {
           this.invalidateSession(device);
@@ -261,9 +300,30 @@ class AgentController {
         res.on('data', (chunk) => data += chunk);
         res.on('end', () => {
           try {
-            const rawEvent = JSON.parse(data);
-            if (rawEvent && (rawEvent.timestamp || rawEvent.time || rawEvent.date)) {
+            const response = JSON.parse(data);
+            const events = response.access_logs || response.events || [];
+            if (!Array.isArray(events)) {
+              // Fallback: single event response (legacy /api/access/last format)
+              if (response && (response.timestamp || response.time || response.date)) {
+                this.processEvent(device, response);
+              }
+              resolve();
+              return;
+            }
+
+            let maxId = lastEventId;
+            for (const rawEvent of events) {
+              const eventId = rawEvent.id || 0;
               this.processEvent(device, rawEvent);
+              if (eventId > maxId) maxId = eventId;
+            }
+
+            if (maxId > lastEventId) {
+              this.setLastEventId(device, maxId);
+            }
+
+            if (events.length > 0) {
+              console.log(`[Agent] Polled ${events.length} events from ${device.name} (lastId: ${lastEventId} → ${maxId})`);
             }
           } catch { /* ignore parse errors */ }
           resolve();
@@ -272,6 +332,8 @@ class AgentController {
 
       req.on('error', (err) => reject(err));
       req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+      req.write(postData);
+      req.end();
     });
   }
 
