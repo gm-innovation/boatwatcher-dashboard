@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useCompanies } from '@/hooks/useSupabase';
+import { useContractorCompanies } from '@/hooks/useSupabase';
 import { createCompany, updateCompany, deleteCompany } from '@/hooks/useDataProvider';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
@@ -30,13 +30,13 @@ const CompanyForm = ({ company, onSuccess, onCancel }: CompanyFormProps) => {
 
     try {
       if (company) {
-        await updateCompany(company.id, { name, cnpj, contact_email: contactEmail });
+        await updateCompany(company.id, { name, cnpj, contact_email: contactEmail, type: 'company' });
         toast({ title: 'Empresa atualizada com sucesso' });
       } else {
-        await createCompany({ name, cnpj, contact_email: contactEmail });
+        await createCompany({ name, cnpj, contact_email: contactEmail, type: 'company' });
         toast({ title: 'Empresa cadastrada com sucesso' });
       }
-      queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['contractor-companies'] });
       onSuccess();
     } catch (error: any) {
       toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' });
@@ -72,7 +72,7 @@ const CompanyForm = ({ company, onSuccess, onCancel }: CompanyFormProps) => {
 export const CompanyManagement = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
-  const { data: companies = [], isLoading } = useCompanies();
+  const { data: companies = [], isLoading } = useContractorCompanies();
   const queryClient = useQueryClient();
 
   const handleDelete = async (company: Company) => {
@@ -81,7 +81,7 @@ export const CompanyManagement = () => {
     try {
       await deleteCompany(company.id);
       toast({ title: 'Empresa removida' });
-      queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['contractor-companies'] });
     } catch {
       toast({ title: 'Erro ao remover empresa', variant: 'destructive' });
     }

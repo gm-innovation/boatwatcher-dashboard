@@ -14,6 +14,42 @@ export const useCompanies = () => {
   });
 };
 
+export const useClients = () => {
+  return useQuery({
+    queryKey: ['clients'],
+    queryFn: async () => {
+      if (usesLocalServer()) {
+        const all = await fetchCompanies() as Company[];
+        return all.filter(c => c.type === 'client');
+      }
+      const { data, error } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('type', 'client');
+      if (error) throw error;
+      return (data || []) as Company[];
+    }
+  });
+};
+
+export const useContractorCompanies = () => {
+  return useQuery({
+    queryKey: ['contractor-companies'],
+    queryFn: async () => {
+      if (usesLocalServer()) {
+        const all = await fetchCompanies() as Company[];
+        return all.filter(c => c.type === 'company' || !c.type);
+      }
+      const { data, error } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('type', 'company');
+      if (error) throw error;
+      return (data || []) as Company[];
+    }
+  });
+};
+
 export const useWorkers = () => {
   return useQuery({
     queryKey: ['workers'],

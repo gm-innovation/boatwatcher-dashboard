@@ -1,0 +1,1 @@
+ALTER TABLE public.companies ADD COLUMN type TEXT NOT NULL DEFAULT 'company';

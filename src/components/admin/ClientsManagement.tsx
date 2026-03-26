@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useCompanies } from '@/hooks/useSupabase';
+import { useClients } from '@/hooks/useSupabase';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
@@ -74,6 +74,7 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
       const payload = { 
         name, 
         status,
+        type: 'client' as const,
         cnpj: cnpj || null,
         contact_email: contactEmail || null,
         logo_url_light: logoUrlLight || null,
@@ -94,7 +95,7 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
         if (error) throw error;
         toast({ title: 'Cliente cadastrado com sucesso' });
       }
-      queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
       onSuccess();
     } catch (error: any) {
       toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' });
@@ -232,7 +233,7 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
 export const ClientsManagement = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Company | null>(null);
-  const { data: companies = [], isLoading } = useCompanies();
+  const { data: companies = [], isLoading } = useClients();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
 
@@ -244,7 +245,7 @@ export const ClientsManagement = () => {
       toast({ title: 'Erro ao remover cliente', variant: 'destructive' });
     } else {
       toast({ title: 'Cliente removido' });
-      queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
     }
   };
 
