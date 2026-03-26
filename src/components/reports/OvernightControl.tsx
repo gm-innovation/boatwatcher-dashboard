@@ -50,10 +50,10 @@ export const OvernightControl = ({ projectId, startDate, endDate }: OvernightCon
     if (!accessLogs.length) return [];
 
     // Build hybrid lookup
-    const workerById = new Map(workers.map((w: any) => [w.id, w]));
-    const workerByName = new Map(workers.map((w: any) => [w.name?.toLowerCase().trim(), w]));
+    const workerById = new Map<string, any>(workers.map((w: any) => [w.id, w]));
+    const workerByName = new Map<string, any>(workers.map((w: any) => [w.name?.toLowerCase().trim(), w]));
 
-    const findWorker = (log: any) => {
+    const findWorker = (log: any): any | null => {
       if (log.worker_id && workerById.has(log.worker_id)) return workerById.get(log.worker_id)!;
       if (log.worker_name) return workerByName.get(log.worker_name.toLowerCase().trim()) || null;
       return null;
