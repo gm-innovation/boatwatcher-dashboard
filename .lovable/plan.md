@@ -1,49 +1,45 @@
 
 
-# Evolução do Sistema de Relatórios
+# Reestruturar Página de Relatórios conforme referência
 
-## Situação Atual
-- A página de relatórios faz queries ao vivo (access_logs, workers, worker_documents) sem salvar snapshots
-- A tabela `generated_reports` existe mas não é utilizada
-- A edge function `scheduled-reports` gera dados mas não salva na `generated_reports`
-- O `ReportScheduler` existe como componente mas não está na página de relatórios
-- Não há cron job configurado para execução automática
-- Não há envio de e-mail aos destinatários
+## Objetivo
+Redesenhar a página de relatórios para seguir o layout do sistema de produção: título "Relatórios de Acesso", filtros globais no topo (Projeto + Período + Buscar Dados), abas simplificadas (Trabalhadores, Empresas, Todos Trabalhadores, Visão Geral, Controle de Pernoite), e na aba "Trabalhadores" exibir tempo de trabalho por trabalhador com sub-filtros e agrupamento por empresa.
 
-## Plano de Implementação
+## Mudanças
 
-### 1. Atualizar a Edge Function `scheduled-reports`
-- Salvar o resultado de cada relatório na tabela `generated_reports` com `report_type`, `project_id`, `filters` (incluindo date_range) e `data` (JSON com o snapshot)
-- Adicionar campos `date_range_start` e `date_range_end` à tabela `generated_reports` via migração
-- Enriquecer os relatórios: cruzar access_logs com workers/companies para incluir nomes, empresas, horas trabalhadas no snapshot JSON
-- Filtrar por `project_id` quando disponível (via devices do projeto)
+### 1. `src/pages/Reports.tsx` — Reestruturar layout
+- Renomear título para "Relatórios de Acesso"
+- Manter filtros globais no topo: Projeto (select), Período (data início / data fim), botão "Buscar Dados" (azul)
+- Mudar abas para: **Trabalhadores** (default), **Empresas**, **Todos Trabalhadores**, **Visão Geral**, **Controle de Pernoite**
+- Remover abas "Gerados", "Agendamentos" e "Conformidade" da página principal (podem ser acessadas via Admin)
+- Passar `projectId`, `startDate`, `endDate` para todos os componentes de aba
+- A aba "Trabalhadores" usará um novo componente `WorkerTimeReport`
+- A aba "Todos Trabalhadores" reutiliza `ReportsList` (todos os acessos brutos)
 
-### 2. Adicionar Geração Manual de Relatórios
-- Na página Reports, adicionar botão "Gerar Relatório" que chama a edge function `scheduled-reports` com `{ schedule_id, manual: true }` ou parâmetros diretos (`report_type`, `project_id`, `date_range`)
-- Mostrar loading e toast de sucesso/erro
+### 2. Criar `src/components/reports/WorkerTimeReport.tsx` — Aba principal
+Componente que mostra "Tempo de Trabalho por Trabalhador", seguindo o print:
+- **Sub-filtros**: buscar trabalhador (input), filtro por função (select com job_functions), filtro por empresa (select), checkbox "a Bordo"
+- **Botões de exportação**: CSV, PDF, Detalhado (PDF) — alinhados à direita
+- **Tabela**: colunas Nº, Nome (com badge "A bordo" se sem saída), Função, Empresa, Entrada, Saída, Tempo Total
+- **Agrupamento por empresa**: header de grupo com logo/nome da empresa antes dos trabalhadores daquela empresa
+- **Dados**: query access_logs no período selecionado, cruzar com workers (name, role/job_function, company), calcular entrada/saída/tempo total por trabalhador
+- Detectar "a bordo" (última entrada sem saída correspondente)
 
-### 3. Criar aba "Relatórios Gerados" na página Reports
-- Nova aba listando registros da tabela `generated_reports` ordenados por `created_at` desc
-- Cada item mostra: tipo, período, data de geração, quantidade de registros
-- Ao clicar, abre dialog/drawer renderizando o campo `data` em tabela formatada
-- Botões de exportar PDF/CSV a partir do snapshot salvo
+### 3. Ajustar componentes existentes
+- `CompanyReport`, `OvernightControl`, `PresenceReport`: remover filtros internos redundantes (já recebem do nível da página)
+- Todos recebem `projectId`, `startDate`, `endDate` como props
 
-### 4. Integrar o ReportScheduler na página Reports
-- Adicionar aba "Agendamentos" usando o componente `ReportScheduler` já existente
-- Adicionar botão "Executar Agora" em cada agendamento que chama a edge function manualmente
+## Detalhes Técnicos
+- Query: `access_logs` filtrado por devices do projeto, período selecionado
+- Join: `workers` com `companies` e `job_functions` para nome, função, empresa
+- Cálculo de tempo: primeira entrada - última saída por trabalhador/dia; "a bordo" = entry sem exit posterior
+- Agrupamento: Map por company_name, renderizar header de grupo antes de cada bloco
+- Hooks utilizados: `useAccessLogs`, `useJobFunctions`, `useCompanies`, `useWorkers`
 
-### 5. Configurar Cron Job (pg_cron)
-- Habilitar extensões `pg_cron` e `pg_net`
-- Criar job que chama `scheduled-reports` a cada hora para verificar agendamentos pendentes
-
-### 6. Migração SQL
-- Adicionar colunas `date_range_start` e `date_range_end` (timestamptz) à `generated_reports`
-- Adicionar policy de UPDATE para admins em `generated_reports`
-
-### Arquivos Alterados/Criados
-- `supabase/functions/scheduled-reports/index.ts` — salvar em generated_reports, enriquecer dados
-- `src/pages/Reports.tsx` — adicionar abas "Gerados" e "Agendamentos"
-- `src/components/reports/GeneratedReportsList.tsx` — novo componente para listar/visualizar relatórios salvos
-- `src/components/reports/ReportScheduler.tsx` — adicionar botão "Executar Agora"
-- Migração SQL — colunas e policies
+### Arquivos alterados/criados
+- `src/pages/Reports.tsx` — reestruturar
+- `src/components/reports/WorkerTimeReport.tsx` — novo componente principal
+- `src/components/reports/PresenceReport.tsx` — remover filtros internos, receber props
+- `src/components/reports/CompanyReport.tsx` — já recebe props (ok)
+- `src/components/reports/OvernightControl.tsx` — já recebe props (ok)
 
