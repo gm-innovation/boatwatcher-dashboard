@@ -1,45 +1,57 @@
 
 
-# Reestruturar Página de Relatórios conforme referência
+# Correção dos Relatórios Vazios + Robustez da Identificação
 
-## Objetivo
-Redesenhar a página de relatórios para seguir o layout do sistema de produção: título "Relatórios de Acesso", filtros globais no topo (Projeto + Período + Buscar Dados), abas simplificadas (Trabalhadores, Empresas, Todos Trabalhadores, Visão Geral, Controle de Pernoite), e na aba "Trabalhadores" exibir tempo de trabalho por trabalhador com sub-filtros e agrupamento por empresa.
+## Causa Raiz Identificada
 
-## Mudanças
+A migração `20260326153724` removeu as foreign keys entre `access_logs` e `workers`/`devices`:
+```sql
+ALTER TABLE public.access_logs DROP CONSTRAINT IF EXISTS access_logs_worker_id_fkey;
+ALTER TABLE public.access_logs DROP CONSTRAINT IF EXISTS access_logs_device_id_fkey;
+```
 
-### 1. `src/pages/Reports.tsx` — Reestruturar layout
-- Renomear título para "Relatórios de Acesso"
-- Manter filtros globais no topo: Projeto (select), Período (data início / data fim), botão "Buscar Dados" (azul)
-- Mudar abas para: **Trabalhadores** (default), **Empresas**, **Todos Trabalhadores**, **Visão Geral**, **Controle de Pernoite**
-- Remover abas "Gerados", "Agendamentos" e "Conformidade" da página principal (podem ser acessadas via Admin)
-- Passar `projectId`, `startDate`, `endDate` para todos os componentes de aba
-- A aba "Trabalhadores" usará um novo componente `WorkerTimeReport`
-- A aba "Todos Trabalhadores" reutiliza `ReportsList` (todos os acessos brutos)
+Porém, a query em `fetchAccessLogs` (useDataProvider.ts) ainda tenta fazer join via FK:
+```
+.select('*, worker:workers(...), device:devices(...)')
+```
 
-### 2. Criar `src/components/reports/WorkerTimeReport.tsx` — Aba principal
-Componente que mostra "Tempo de Trabalho por Trabalhador", seguindo o print:
-- **Sub-filtros**: buscar trabalhador (input), filtro por função (select com job_functions), filtro por empresa (select), checkbox "a Bordo"
-- **Botões de exportação**: CSV, PDF, Detalhado (PDF) — alinhados à direita
-- **Tabela**: colunas Nº, Nome (com badge "A bordo" se sem saída), Função, Empresa, Entrada, Saída, Tempo Total
-- **Agrupamento por empresa**: header de grupo com logo/nome da empresa antes dos trabalhadores daquela empresa
-- **Dados**: query access_logs no período selecionado, cruzar com workers (name, role/job_function, company), calcular entrada/saída/tempo total por trabalhador
-- Detectar "a bordo" (última entrada sem saída correspondente)
+PostgREST retorna **400**: *"Could not find a relationship between 'access_logs' and 'workers'"*
 
-### 3. Ajustar componentes existentes
-- `CompanyReport`, `OvernightControl`, `PresenceReport`: remover filtros internos redundantes (já recebem do nível da página)
-- Todos recebem `projectId`, `startDate`, `endDate` como props
+Todos os relatórios usam `useAccessLogs` -> `fetchAccessLogs` -> **todas as abas recebem array vazio**.
 
-## Detalhes Técnicos
-- Query: `access_logs` filtrado por devices do projeto, período selecionado
-- Join: `workers` com `companies` e `job_functions` para nome, função, empresa
-- Cálculo de tempo: primeira entrada - última saída por trabalhador/dia; "a bordo" = entry sem exit posterior
-- Agrupamento: Map por company_name, renderizar header de grupo antes de cada bloco
-- Hooks utilizados: `useAccessLogs`, `useJobFunctions`, `useCompanies`, `useWorkers`
+## Plano de Correção
 
-### Arquivos alterados/criados
-- `src/pages/Reports.tsx` — reestruturar
-- `src/components/reports/WorkerTimeReport.tsx` — novo componente principal
-- `src/components/reports/PresenceReport.tsx` — remover filtros internos, receber props
-- `src/components/reports/CompanyReport.tsx` — já recebe props (ok)
-- `src/components/reports/OvernightControl.tsx` — já recebe props (ok)
+### Passo 1: Corrigir `fetchAccessLogs` em `src/hooks/useDataProvider.ts`
+
+Remover os joins FK e fazer `select('*')` apenas. Os dados denormalizados (`worker_name`, `worker_document`, `device_name`) já existem diretamente na tabela `access_logs`, então nenhuma informação é perdida.
+
+```typescript
+// ANTES (quebrado):
+.select('*, worker:workers(id, name, document_number, company_id), device:devices(id, name, project_id)')
+
+// DEPOIS (funcional):
+.select('*')
+```
+
+### Passo 2: Melhorar matching híbrido no `WorkerTimeReport`
+
+O componente já busca workers separadamente e faz matching por ID e nome. Vou reforçar a lógica:
+
+- Chave primária de agrupamento: `worker_id` quando presente, fallback para `worker_name`
+- Matching com tabela workers: por `id`, depois por `name`, depois por `document_number`
+- Deduplicação: se mesmo trabalhador aparecer por ID e por nome, unificar
+
+### Passo 3: Aplicar matching híbrido nos outros relatórios
+
+- `PresenceReport`: usa `worker_id` como chave, adicionar fallback por `worker_name`
+- `CompanyReport`: usa `worker_id`, adicionar fallback
+- `OvernightControl`: usa `worker_id`, adicionar fallback
+- `ReportsList`: já exibe dados brutos, sem necessidade de matching
+
+### Arquivos alterados
+- `src/hooks/useDataProvider.ts` — remover joins FK de `fetchAccessLogs`
+- `src/components/reports/WorkerTimeReport.tsx` — reforçar matching híbrido
+- `src/components/reports/PresenceReport.tsx` — adicionar fallback por nome
+- `src/components/reports/CompanyReport.tsx` — adicionar fallback por nome
+- `src/components/reports/OvernightControl.tsx` — adicionar fallback por nome
 
