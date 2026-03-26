@@ -332,7 +332,7 @@ class AgentController {
         port: creds.port,
         path: `/load_objects.fcgi?session=${session}`,
         method: 'POST',
-        timeout: 5000,
+        timeout: 10000,
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData),
