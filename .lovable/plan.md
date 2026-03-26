@@ -1,48 +1,57 @@
 
+Objetivo: identificar com precisão em qual etapa quebra o fluxo **ControlID → Servidor Local → Lovable Cloud → access_logs** e deixar isso visível no Diagnóstico Web.
 
-# Exibir Telemetria dos Dispositivos na Web (via Nuvem)
+Diagnóstico atual (com base no backend):
+- O agente local está online e enviando heartbeat (`last_seen_at` atualiza).
+- `local_agents.configuration` continua `{}` (sem `deviceTelemetry`).
+- Não há inserts em `access_logs` no backend.
+- Portanto, **reiniciar não basta** para mudanças de código; para mudanças do servidor local, precisa **atualizar/reinstalar build**.
 
-## Problema
-O card "Telemetria dos Dispositivos" no painel de Diagnóstico só aparece quando `isLocalRuntime` é verdadeiro (modo Desktop com servidor local). Quando acessado pela Web, o painel não consegue acessar `localhost:3001/api/sync/diagnostics` e portanto não exibe os dados de telemetria nem o payload do último evento.
+Plano de implementação
 
-## Solução
-Fazer o servidor local **enviar** a telemetria dos dispositivos para a nuvem a cada ciclo de sincronização, e o painel Web **ler** esses dados da tabela `local_agents`.
+1) Instrumentar heartbeat com “assinatura de build” e métricas de pipeline
+- Arquivo: `electron/sync.js`
+- Enviar no `agent-sync/status`:
+  - `heartbeatSchemaVersion` (ex.: 2)
+  - `deviceTelemetry` (sempre array, mesmo vazio)
+  - `pipelineMetrics` com:
+    - `capturedEventsCount`, `ignoredInvalidCount`, `ignoredDedupeCount`, `lastCapturedAt`, `lastIgnoreReason`
+    - `unsyncedLogsCount`, `uploadLogsCount`, `lastUploadLogsError`
 
-## Plano (3 arquivos)
+2) Persistir e logar recepção dessas métricas no backend
+- Arquivo: `supabase/functions/agent-sync/index.ts`
+- Na rota `status`, salvar em `local_agents.configuration`:
+  - `heartbeatSchemaVersion`
+  - `deviceTelemetry`
+  - `pipelineMetrics`
+  - `lastHeartbeatReceivedAt`
+- Adicionar log objetivo:
+  - recebeu telemetria? quantos devices? quantos com payload? contagem de capturas? erro de upload?
 
-### 1. `electron/sync.js` — Upload de telemetria no ciclo de sync
-No final do `triggerSync()`, coletar `agentController.getStatus().devices` e atualizar o campo `configuration` do `local_agents` na nuvem via `agent-sync/status`:
-```javascript
-// Após upload/download, enviar telemetria
-const agentStatus = this.agentController?.getStatus?.();
-if (agentStatus?.devices) {
-  await this.callEdgeFunction('agent-sync/status', 'POST', {
-    version: '1.3.1',
-    deviceTelemetry: agentStatus.devices
-  });
-}
-```
+3) Exibir “Pipeline de Evento” no Diagnóstico Web
+- Arquivo: `src/components/admin/DiagnosticsPanel.tsx`
+- Ler `local_agents.configuration` e renderizar um card com 4 etapas:
+  - Captura no ControlID (captured/ignored/última captura)
+  - Fila local (unsynced logs)
+  - Upload para backend (upload count/último erro)
+  - Persistência em `access_logs` (último registro)
+- Mostrar alerta claro quando o agente não envia `heartbeatSchemaVersion`/telemetria:
+  - “Servidor local desatualizado — requer atualização (não apenas restart)”.
 
-### 2. `supabase/functions/agent-sync/index.ts` — Rota `status` salvar telemetria
-Na rota `status` (que já atualiza `last_seen_at`), gravar `deviceTelemetry` no campo `configuration` da tabela `local_agents`:
-```typescript
-// Na rota POST status:
-const { version, deviceTelemetry } = await req.json();
-await supabase.from('local_agents').update({
-  last_seen_at: new Date().toISOString(),
-  status: 'online',
-  version,
-  configuration: { ...(agent.configuration || {}), deviceTelemetry }
-}).eq('id', agent.id);
-```
+4) Incluir telemetria no “Copiar Diagnóstico”
+- Arquivo: `src/components/admin/DiagnosticsPanel.tsx`
+- Adicionar `deviceTelemetry` + `pipelineMetrics` ao JSON copiado para facilitar suporte técnico.
 
-### 3. `src/components/admin/DiagnosticsPanel.tsx` — Exibir telemetria na Web
-- No modo Web (não-local), buscar `local_agents` com `configuration` via Supabase
-- Se `configuration.deviceTelemetry` existir, renderizar o mesmo card de "Telemetria dos Dispositivos" que já existe para o modo local
-- Remover a condição `isLocalRuntime &&` do card, tornando-o visível quando houver dados de qualquer fonte
+Validação (fim a fim)
+- Após atualizar o servidor local, validar no Diagnóstico Web:
+  - `heartbeatSchemaVersion` presente
+  - card de pipeline preenchido
+  - última captura avançando ao passar na catraca
+  - `unsyncedLogsCount` sobe e zera após sync
+  - novo registro em `access_logs`.
 
-### Arquivos alterados
-- `electron/sync.js` — push de telemetria para a nuvem
-- `supabase/functions/agent-sync/index.ts` — persistir telemetria no `local_agents.configuration`
-- `src/components/admin/DiagnosticsPanel.tsx` — buscar e exibir telemetria da nuvem no modo Web
-
+Detalhes técnicos
+- Não precisa nova tabela: usar `local_agents.configuration` (JSONB) para snapshot operacional.
+- Se `capturedEventsCount` ficar 0 com devices online, falha está na recepção/parsing local.
+- Se capturas > 0 e `unsyncedLogsCount` cresce com `lastUploadLogsError`, falha está no envio ao backend.
+- Se upload OK e `access_logs` seguir vazio, falha está na persistência/validação no backend.
