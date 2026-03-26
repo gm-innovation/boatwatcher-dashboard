@@ -578,9 +578,28 @@ export const DiagnosticsPanel = () => {
         } else {
           setDeviceTelemetry(null);
         }
+        setCloudPipelineMetrics(agentConfig?.pipelineMetrics || null);
+        setCloudHeartbeatSchema(typeof agentConfig?.heartbeatSchemaVersion === 'number' ? agentConfig.heartbeatSchemaVersion : null);
       } catch {
         setDeviceTelemetry(null);
+        setCloudPipelineMetrics(null);
+        setCloudHeartbeatSchema(null);
       }
+
+      // Fetch last access_log for pipeline stage 4
+      try {
+        const { data: lastLog } = await supabase
+          .from('access_logs')
+          .select('id, timestamp, worker_name, direction')
+          .order('timestamp', { ascending: false })
+          .limit(1);
+        if (lastLog?.[0]) {
+          setCloudPipelineMetrics((prev: any) => ({
+            ...prev,
+            lastCloudAccessLog: lastLog[0],
+          }));
+        }
+      } catch { /* ignore */ }
     }
 
     setDiagnostics(results);
