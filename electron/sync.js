@@ -200,16 +200,12 @@ class SyncEngine {
 
     await this.sendHeartbeat();
 
-    const pendingWorkers = this.db.getUnsyncedWorkers?.() || [];
-    const pendingLogs = this.db.getUnsyncedLogs?.() || [];
-    const pendingOperations = this.db.getPendingSyncOperations?.() || [];
-
-    // Force sync if never synced before (last_sync_at is null)
-    const neverSynced = !this.status.lastSync && !this.db.getSyncMeta?.('last_sync');
-
-    if (pendingWorkers.length > 0 || pendingLogs.length > 0 || pendingOperations.length > 0 || wasOffline || neverSynced) {
-      await this.triggerSync();
-    }
+    // Always trigger sync when online — the sync is idempotent
+    // (checkpoints prevent re-downloading unchanged data).
+    // Previously this only ran when there were pending local changes,
+    // which caused downloads (workers, devices, companies) to stop
+    // entirely when the agent wasn't capturing events locally.
+    await this.triggerSync();
 
     this.notifyListeners();
   }
