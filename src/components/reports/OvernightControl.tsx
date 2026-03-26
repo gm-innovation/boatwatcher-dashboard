@@ -49,12 +49,24 @@ export const OvernightControl = ({ projectId, startDate, endDate }: OvernightCon
   const overnightWorkers = useMemo<OvernightWorker[]>(() => {
     if (!accessLogs.length) return [];
 
-    // Group logs by worker_id
+    // Build hybrid lookup
+    const workerById = new Map(workers.map((w: any) => [w.id, w]));
+    const workerByName = new Map(workers.map((w: any) => [w.name?.toLowerCase().trim(), w]));
+
+    const findWorker = (log: any) => {
+      if (log.worker_id && workerById.has(log.worker_id)) return workerById.get(log.worker_id)!;
+      if (log.worker_name) return workerByName.get(log.worker_name.toLowerCase().trim()) || null;
+      return null;
+    };
+
+    // Group logs by resolved worker key
     const workerLogs = new Map<string, typeof accessLogs>();
     for (const log of accessLogs) {
-      if (!log.worker_id) continue;
-      if (!workerLogs.has(log.worker_id)) workerLogs.set(log.worker_id, []);
-      workerLogs.get(log.worker_id)!.push(log);
+      const w = findWorker(log);
+      const key = w?.id || log.worker_id || log.worker_name || '';
+      if (!key) continue;
+      if (!workerLogs.has(key)) workerLogs.set(key, []);
+      workerLogs.get(key)!.push(log);
     }
 
     const result: OvernightWorker[] = [];
