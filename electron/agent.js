@@ -45,10 +45,12 @@ function normalizeTimestamp(event) {
   const parsed = typeof raw === 'number' ? raw * 1000 : Date.parse(raw);
   if (isNaN(parsed)) return null;
   const d = new Date(parsed);
-  // ControlID reports local time (BRT) without timezone info.
-  // Node.js Date.parse treats timezone-less strings as UTC, which is wrong.
-  // Re-interpret as BRT (UTC-3) by shifting +3h to get real UTC.
-  if (typeof raw === 'string' && !/[Zz+\-]\d{2}/.test(raw)) {
+  // ControlID reports local time (BRT) in ALL formats — both string and numeric.
+  // Numeric Unix timestamps from the device are computed from its local clock (BRT),
+  // so they are 3h behind real UTC. Always apply +3h correction.
+  if (typeof raw === 'number') {
+    d.setHours(d.getHours() + 3);
+  } else if (typeof raw === 'string' && !/[Zz+\-]\d{2}/.test(raw)) {
     d.setHours(d.getHours() + 3);
   }
   return d.toISOString();
