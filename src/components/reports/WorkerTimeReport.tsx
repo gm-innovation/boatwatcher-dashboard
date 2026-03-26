@@ -115,18 +115,19 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
     workerLogs.forEach((logs, key) => {
       const sorted = [...logs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-      const entries = sorted.filter(l => l.direction === 'entry' && l.access_status === 'granted');
-      const exits = sorted.filter(l => l.direction === 'exit' && l.access_status === 'granted');
+      const grantedSorted = sorted.filter(l => l.access_status === 'granted' && (l.direction === 'entry' || l.direction === 'exit'));
+      const alternating = normalizeAlternatingLogs(grantedSorted);
 
-      const firstEntry = entries.length > 0 ? new Date(entries[0].timestamp) : null;
-      const lastExit = exits.length > 0 ? new Date(exits[exits.length - 1].timestamp) : null;
-
-      const lastLog = sorted[sorted.length - 1];
-      const isOnBoard = lastLog?.direction === 'entry' && lastLog?.access_status === 'granted';
+      const firstEntry = alternating.length > 0 && alternating[0].direction === 'entry' ? new Date(alternating[0].timestamp) : null;
+      const lastLog = alternating.length > 0 ? alternating[alternating.length - 1] : null;
+      const isOnBoard = lastLog?.direction === 'entry';
+      const lastExit = lastLog?.direction === 'exit' ? new Date(lastLog.timestamp) : null;
 
       let totalMinutes = 0;
-      if (firstEntry && lastExit && lastExit > firstEntry) {
-        totalMinutes = differenceInMinutes(lastExit, firstEntry);
+      for (let i = 0; i < alternating.length - 1; i += 2) {
+        if (alternating[i].direction === 'entry' && alternating[i + 1]?.direction === 'exit') {
+          totalMinutes += differenceInMinutes(new Date(alternating[i + 1].timestamp), new Date(alternating[i].timestamp));
+        }
       }
 
       const worker = workerById.get(key) || findWorker(logs[0]);
