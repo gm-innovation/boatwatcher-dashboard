@@ -72,7 +72,7 @@ const CompanyForm = ({ company, onSuccess, onCancel }: CompanyFormProps) => {
 export const CompanyManagement = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
-  const { data: companies = [], isLoading } = useCompanies();
+  const { data: companies = [], isLoading } = useContractorCompanies();
   const queryClient = useQueryClient();
 
   const handleDelete = async (company: Company) => {
