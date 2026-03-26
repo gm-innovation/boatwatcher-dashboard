@@ -116,10 +116,12 @@ function createLocalServer(options = {}) {
     next();
   });
 
+  const serverVersion = require('./package.json').version;
+
   serverApp.get('/api/health', (_req, res) => {
     res.json({
       status: 'ok',
-      version: '1.0.0',
+      version: serverVersion,
       enrollment_revision: 3,
       uptime: process.uptime(),
       database: 'connected',
