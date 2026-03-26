@@ -71,14 +71,14 @@ export const useCompanyLogo = (companyId: string | null) => {
 export type DateFilter = 'today' | '7days' | '30days';
 
 export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilter = 'today') => {
-  const startDate = dateFilter === 'today'
-    ? format(startOfDay(new Date()), 'yyyy-MM-dd')
-    : dateFilter === '7days'
-      ? format(startOfDay(subDays(new Date(), 7)), 'yyyy-MM-dd')
-      : format(startOfDay(subDays(new Date(), 30)), 'yyyy-MM-dd');
+  // UTC-aware: compute local midnight then convert to ISO for correct timezone offset
+  const now = new Date();
+  const daysBack = dateFilter === 'today' ? 0 : dateFilter === '7days' ? 7 : 30;
+  const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack);
+  const startTimestamp = localMidnight.toISOString();
 
   return useQuery({
-    queryKey: ['workers-on-board', projectId, startDate],
+    queryKey: ['workers-on-board', projectId, startTimestamp],
     queryFn: async () => {
       if (!projectId) return [];
 
@@ -107,32 +107,36 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
         .eq('direction', 'entry')
         .eq('access_status', 'granted')
         .in('device_id', deviceIds)
-        .gte('timestamp', `${startDate}T00:00:00`)
+        .gte('timestamp', startTimestamp)
         .order('timestamp', { ascending: false });
 
       if (entryError) throw entryError;
 
       const { data: exitLogs, error: exitError } = await supabase
         .from('access_logs')
-        .select('worker_id, timestamp')
+        .select('worker_id, worker_name, timestamp')
         .eq('direction', 'exit')
         .in('device_id', deviceIds)
-        .gte('timestamp', `${startDate}T00:00:00`);
+        .gte('timestamp', startTimestamp);
 
       if (exitError) throw exitError;
 
+      // Use worker_name as the primary key for matching entries/exits (handles UUID mismatch)
       const workersOnBoard = new Map<string, any>();
 
       for (const entry of entryLogs || []) {
-        if (!entry.worker_id) continue;
+        const key = entry.worker_name || entry.worker_id || '';
+        if (!key) continue;
 
-        const hasExit = exitLogs?.some(exit =>
-          exit.worker_id === entry.worker_id &&
-          new Date(exit.timestamp) > new Date(entry.timestamp)
-        );
+        // Match exit by worker_name first, fallback to worker_id
+        const hasExit = exitLogs?.some(exit => {
+          const nameMatch = entry.worker_name && exit.worker_name && exit.worker_name === entry.worker_name;
+          const idMatch = exit.worker_id === entry.worker_id;
+          return (nameMatch || idMatch) && new Date(exit.timestamp) > new Date(entry.timestamp);
+        });
 
-        if (!hasExit && !workersOnBoard.has(entry.worker_id)) {
-          workersOnBoard.set(entry.worker_id, {
+        if (!hasExit && !workersOnBoard.has(key)) {
+          workersOnBoard.set(key, {
             worker_id: entry.worker_id,
             worker_name: entry.worker_name,
             device_name: entry.device_name,
@@ -141,31 +145,35 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
         }
       }
 
-      const workerIds = Array.from(workersOnBoard.keys());
-      if (workerIds.length === 0) return [];
+      if (workersOnBoard.size === 0) return [];
 
-      // Try to enrich with workers table data, but don't discard if not found
-      const { data: workers } = await supabase
-        .from('workers')
-        .select('id, name, role, company_id, companies(name)')
-        .in('id', workerIds);
+      // Enrich by worker_name (handles UUID mismatch)
+      const workerNames = Array.from(workersOnBoard.values())
+        .map(w => w.worker_name)
+        .filter(Boolean);
 
-      const workersMap = new Map<string, any>();
+      const { data: workers } = workerNames.length > 0
+        ? await supabase
+            .from('workers')
+            .select('id, name, role, company_id, companies(name)')
+            .in('name', workerNames)
+        : { data: [] };
+
+      const workersByName = new Map<string, any>();
       for (const w of workers || []) {
-        workersMap.set(w.id, w);
+        workersByName.set(w.name, w);
       }
 
-      return workerIds.map((wId) => {
-        const onBoard = workersOnBoard.get(wId);
-        const enriched = workersMap.get(wId);
+      return Array.from(workersOnBoard.entries()).map(([key, onBoard]) => {
+        const enriched = workersByName.get(onBoard.worker_name);
         return {
-          id: wId,
-          name: enriched?.name || onBoard?.worker_name || 'Desconhecido',
-          location: onBoard?.device_name || null,
+          id: enriched?.id || onBoard.worker_id || key,
+          name: enriched?.name || onBoard.worker_name || 'Desconhecido',
+          location: onBoard.device_name || null,
           role: enriched?.role || null,
           company: enriched?.companies?.name || 'N/A',
           company_id: enriched?.company_id || null,
-          entryTime: onBoard?.entry_time,
+          entryTime: onBoard.entry_time,
         };
       });
     },
