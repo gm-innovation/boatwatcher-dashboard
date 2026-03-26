@@ -586,11 +586,13 @@ export const DiagnosticsPanel = () => {
         setCloudHeartbeatSchema(null);
       }
 
-      // Fetch last access_log for pipeline stage 4
+      // Fetch last access_log for pipeline stage 4 (filtered by temporal ceiling)
       try {
+        const maxTs = new Date(Date.now() + 2 * 60 * 1000).toISOString();
         const { data: lastLog } = await supabase
           .from('access_logs')
           .select('id, timestamp, worker_name, direction')
+          .lte('timestamp', maxTs)
           .order('timestamp', { ascending: false })
           .limit(1);
         if (lastLog?.[0]) {

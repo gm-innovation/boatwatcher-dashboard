@@ -346,13 +346,18 @@ serve(async (req) => {
             deviceId = null
           }
 
-          // Apply BRT safety net to timestamp
-          const correctedTimestamp = correctBrtTimestamp(String(l.timestamp));
+          // Validate timestamp (no automatic corrections)
+          const tsCheck = validateTimestamp(String(l.timestamp));
+          if (!tsCheck.valid) {
+            console.warn(`[agent-sync/upload-logs] Rejecting log index=${i}: ${tsCheck.reason} (raw=${l.timestamp})`);
+            rejected.push({ index: i, reason: tsCheck.reason || 'invalid timestamp' });
+            continue;
+          }
 
           accepted.push({
             worker_id: workerId,
             device_id: deviceId,
-            timestamp: correctedTimestamp,
+            timestamp: tsCheck.timestamp,
             access_status: accessStatus,
             direction,
             reason: l.reason || null,
