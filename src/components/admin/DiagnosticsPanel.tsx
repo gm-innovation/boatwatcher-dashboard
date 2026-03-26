@@ -25,7 +25,11 @@ import {
   Copy,
   CheckCheck,
   Cloud,
+  Cpu,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { InterLayerConnectivityCard } from './InterLayerConnectivityCard';
 import { getSessionDiagnostics, forceLogout } from '@/utils/ensureValidSession';
