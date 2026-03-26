@@ -386,6 +386,8 @@ export type Database = {
           created_at: string
           created_by: string | null
           data: Json | null
+          date_range_end: string | null
+          date_range_start: string | null
           file_url: string | null
           filters: Json | null
           id: string
@@ -396,6 +398,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           data?: Json | null
+          date_range_end?: string | null
+          date_range_start?: string | null
           file_url?: string | null
           filters?: Json | null
           id?: string
@@ -406,6 +410,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           data?: Json | null
+          date_range_end?: string | null
+          date_range_start?: string | null
           file_url?: string | null
           filters?: Json | null
           id?: string

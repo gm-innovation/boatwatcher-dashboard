@@ -5,7 +5,9 @@ import { PresenceReport } from "@/components/reports/PresenceReport";
 import { ComplianceReport } from "@/components/reports/ComplianceReport";
 import { CompanyReport } from "@/components/reports/CompanyReport";
 import { OvernightControl } from "@/components/reports/OvernightControl";
-import { FileText, Clock, FileCheck, Building2, Moon, Users } from "lucide-react";
+import { GeneratedReportsList } from "@/components/reports/GeneratedReportsList";
+import { ReportScheduler } from "@/components/reports/ReportScheduler";
+import { FileText, Clock, FileCheck, Building2, Moon, Users, Archive, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -65,8 +67,16 @@ const Reports = () => {
         </Button>
       </div>
 
-      <Tabs defaultValue="workers" className="space-y-6">
+      <Tabs defaultValue="generated" className="space-y-6">
         <TabsList className="flex-wrap">
+          <TabsTrigger value="generated" className="gap-2">
+            <Archive className="h-4 w-4" />
+            Gerados
+          </TabsTrigger>
+          <TabsTrigger value="schedules" className="gap-2">
+            <Calendar className="h-4 w-4" />
+            Agendamentos
+          </TabsTrigger>
           <TabsTrigger value="workers" className="gap-2">
             <Users className="h-4 w-4" />
             Trabalhadores
@@ -92,6 +102,14 @@ const Reports = () => {
             Conformidade
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="generated">
+          <GeneratedReportsList />
+        </TabsContent>
+
+        <TabsContent value="schedules">
+          <ReportScheduler />
+        </TabsContent>
 
         <TabsContent value="workers">
           <ReportsList />
