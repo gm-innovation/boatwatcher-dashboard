@@ -30,10 +30,10 @@ const CompanyForm = ({ company, onSuccess, onCancel }: CompanyFormProps) => {
 
     try {
       if (company) {
-        await updateCompany(company.id, { name, cnpj, contact_email: contactEmail });
+        await updateCompany(company.id, { name, cnpj, contact_email: contactEmail, type: 'company' });
         toast({ title: 'Empresa atualizada com sucesso' });
       } else {
-        await createCompany({ name, cnpj, contact_email: contactEmail });
+        await createCompany({ name, cnpj, contact_email: contactEmail, type: 'company' });
         toast({ title: 'Empresa cadastrada com sucesso' });
       }
       queryClient.invalidateQueries({ queryKey: ['companies'] });
