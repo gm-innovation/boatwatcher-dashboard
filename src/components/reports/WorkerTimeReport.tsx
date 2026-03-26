@@ -123,12 +123,13 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
       const isOnBoard = lastLog?.direction === 'entry';
       const lastExit = lastLog?.direction === 'exit' ? new Date(lastLog.timestamp) : null;
 
-      let totalMinutes = 0;
+      let totalMs = 0;
       for (let i = 0; i < alternating.length - 1; i += 2) {
         if (alternating[i].direction === 'entry' && alternating[i + 1]?.direction === 'exit') {
-          totalMinutes += differenceInMinutes(new Date(alternating[i + 1].timestamp), new Date(alternating[i].timestamp));
+          totalMs += new Date(alternating[i + 1].timestamp).getTime() - new Date(alternating[i].timestamp).getTime();
         }
       }
+      const totalMinutes = Math.round(totalMs / 60000);
 
       const worker = workerById.get(key) || findWorker(logs[0]);
       const companyObj = worker?.companies as any;
