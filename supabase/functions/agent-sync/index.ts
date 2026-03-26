@@ -315,9 +315,23 @@ serve(async (req) => {
             else accessStatus = 'granted' // default
           }
 
+          // Validate worker_id: only keep valid UUIDs, null out invalid ones
+          let workerId = l.worker_id || null
+          if (workerId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(workerId))) {
+            console.warn(`[agent-sync/upload-logs] Invalid worker_id format: ${workerId}, setting to null`)
+            workerId = null
+          }
+
+          // Validate device_id similarly
+          let deviceId = l.device_id || null
+          if (deviceId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(deviceId))) {
+            console.warn(`[agent-sync/upload-logs] Invalid device_id format: ${deviceId}, setting to null`)
+            deviceId = null
+          }
+
           accepted.push({
-            worker_id: l.worker_id || null,
-            device_id: l.device_id || null,
+            worker_id: workerId,
+            device_id: deviceId,
             timestamp: l.timestamp,
             access_status: accessStatus,
             direction,
