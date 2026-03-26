@@ -44,7 +44,14 @@ function normalizeTimestamp(event) {
   if (!raw) return null;
   const parsed = typeof raw === 'number' ? raw * 1000 : Date.parse(raw);
   if (isNaN(parsed)) return null;
-  return new Date(parsed).toISOString();
+  const d = new Date(parsed);
+  // ControlID reports local time (BRT) without timezone info.
+  // Node.js Date.parse treats timezone-less strings as UTC, which is wrong.
+  // Re-interpret as BRT (UTC-3) by shifting +3h to get real UTC.
+  if (typeof raw === 'string' && !/[Zz+\-]\d{2}/.test(raw)) {
+    d.setHours(d.getHours() + 3);
+  }
+  return d.toISOString();
 }
 
 function parseControlIdEvent(rawEvent, device) {
