@@ -524,7 +524,7 @@ class SyncEngine {
       console.log(`[sync] Heartbeat: devices_sent=${devices.length}`);
 
       await this.callEdgeFunction('agent-sync/status', 'POST', {
-        version: process.env.npm_package_version || '1.0.0',
+        version: (() => { try { return require('../server/package.json').version; } catch { try { return require('./package.json').version; } catch { return '1.3.0'; } } })(),
         sync_status: this.status.syncing ? 'syncing' : 'idle',
         pending_count: this.status.pendingCount,
         devices,
