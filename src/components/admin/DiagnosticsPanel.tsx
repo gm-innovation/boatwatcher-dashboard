@@ -1083,6 +1083,24 @@ export const DiagnosticsPanel = () => {
                       )}
                     </CollapsibleContent>
                   </Collapsible>
+
+                  <Collapsible>
+                    <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                      <ChevronRight className="h-3 w-3 collapsible-chevron" />
+                      Última Resposta do Polling (Raw)
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      {device.lastPollResponse ? (
+                        <pre className="mt-2 p-3 rounded bg-muted/50 text-xs font-mono overflow-auto max-h-48 whitespace-pre-wrap break-all">
+                          {typeof device.lastPollResponse === 'string'
+                            ? device.lastPollResponse
+                            : JSON.stringify(device.lastPollResponse, null, 2)}
+                        </pre>
+                      ) : (
+                        <p className="mt-2 text-xs text-muted-foreground italic">Nenhuma resposta de polling registrada.</p>
+                      )}
+                    </CollapsibleContent>
+                  </Collapsible>
                 </div>
               ))}
 

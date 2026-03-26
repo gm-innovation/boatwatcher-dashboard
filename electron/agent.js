@@ -120,6 +120,7 @@ class AgentController {
         lastPollAt: d._lastPollAt || null,
         lastEventId: this.getLastEventId(d),
         lastEventPayload: d._lastEventPayload || null,
+        lastPollResponse: d._lastPollResponse || null,
       })),
     };
   }
@@ -285,8 +286,8 @@ class AgentController {
     const creds = this.parseApiCredentials(device.api_credentials);
     const lastEventId = this.getLastEventId(device);
 
-    // Use POST /access_logs.fcgi with ControlID API format
-    const payload = { limit: 100 };
+    // Use POST /load_objects.fcgi with ControlID API format (documented endpoint)
+    const payload = { object: 'access_logs', limit: 100 };
     if (lastEventId > 0) {
       payload.where = { access_logs: { id: { '>': lastEventId } } };
     }
@@ -297,7 +298,7 @@ class AgentController {
       const req = http.request({
         hostname: ip,
         port: creds.port,
-        path: `/access_logs.fcgi?session=${session}`,
+        path: `/load_objects.fcgi?session=${session}`,
         method: 'POST',
         timeout: 5000,
         headers: {
@@ -305,7 +306,7 @@ class AgentController {
           'Content-Length': Buffer.byteLength(postData),
         },
       }, (res) => {
-        console.log(`[Agent][${device.name}] access_logs.fcgi responded status=${res.statusCode}`);
+        console.log(`[Agent][${device.name}] load_objects.fcgi responded status=${res.statusCode}`);
 
         if (res.statusCode === 401 && !_retried) {
           console.log(`[Agent][${device.name}] Got 401, retrying with fresh session...`);
@@ -319,6 +320,8 @@ class AgentController {
         res.on('end', () => {
           try {
             const response = JSON.parse(data);
+            // Save raw response for diagnostics (truncated to 2KB)
+            device._lastPollResponse = data.length > 2048 ? data.slice(0, 2048) + '…[truncated]' : data;
             const events = response.access_logs || response.events || [];
             if (!Array.isArray(events)) {
               console.log(`[Agent][${device.name}] Response is not an array. Keys: ${Object.keys(response).join(', ')}. Checking single-event fallback.`);
