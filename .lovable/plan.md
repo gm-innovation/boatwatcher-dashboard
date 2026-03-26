@@ -1,29 +1,52 @@
 
 
-# Eliminar Erros de Timeout e Melhorar Resiliência do Agent
+# Fix: Correção BRT para Timestamps Numéricos do ControlID
 
-## Problema
+## Problema Raiz
 
-O dispositivo "Engenharia - Entrada" mostra status "Erro" com "Timeout" mesmo tendo capturado eventos com sucesso (último event ID = 24). Um único timeout intermitente marca o dispositivo como offline/erro, criando falsos alarmes. Além disso, o polling sequencial com timeout de 5s pode causar atrasos em cascata.
+O payload do ControlID usa `"time": 1774531220` (Unix timestamp numérico). O relógio do dispositivo está em BRT, então esse valor representa **13:20:20 BRT**, mas o agent trata como 13:20:20 UTC (sem aplicar +3h). O evento é armazenado como `13:20:20+00` em vez de `16:20:20+00`.
 
-## Correções — `electron/agent.js`
+**Consequência no dashboard:** A última saída é `16:13:19+00` (correta). A nova entrada é `13:20:20+00` (errada, 3h atrás). O dashboard vê `entrada < saída` e conclui que o trabalhador já saiu → mostra 0 a bordo.
 
-### 1. Aumentar timeout e adicionar retry automático
-- Aumentar timeout de 5s → 10s para login e polling (dispositivos ControlID em redes corporativas podem ser mais lentos)
-- Adicionar retry automático com backoff: se o primeiro request falhar por timeout, tentar uma segunda vez antes de marcar erro
+**Confirmação:** O evento #25 está na nuvem com `timestamp: 2026-03-26 13:20:20+00` — exatamente 3h a menos que o esperado.
 
-### 2. Threshold de falhas consecutivas antes de marcar "offline"
-- Não marcar dispositivo como "offline" em um único timeout
-- Usar contador de falhas consecutivas (`_consecutiveFailures`) — só marcar offline após 3 falhas seguidas
-- Limpar erro e contador quando um poll for bem-sucedido
+## Correção
 
-### 3. Polling paralelo em vez de sequencial
-- Mudar `pollDevices()` de `for...await` sequencial para `Promise.allSettled()` paralelo
-- Cada dispositivo é polled independentemente, sem bloquear os outros
+### 1. `electron/agent.js` — `normalizeTimestamp()`
 
-### 4. Limpar erro stale após sucesso
-- Quando um poll é bem-sucedido, garantir que `_lastError` seja limpo (já acontece) e que o status visual reflita isso imediatamente
+Aplicar a correção BRT (+3h) também para timestamps numéricos. O ControlID configura seu relógio em hora local (BRT) e gera Unix timestamps a partir desse relógio local, resultando em valores 3h atrasados em relação ao UTC real.
 
-## Arquivo alterado
-- **`electron/agent.js`** — `pollDevices()`, `pollDevice()`, `loginToDevice()`, novo campo `_consecutiveFailures`
+```javascript
+function normalizeTimestamp(event) {
+  const raw = event.timestamp || event.time || event.date || event.datetime;
+  if (!raw) return null;
+  const parsed = typeof raw === 'number' ? raw * 1000 : Date.parse(raw);
+  if (isNaN(parsed)) return null;
+  const d = new Date(parsed);
+  // ControlID reports local time (BRT) in ALL formats — both string and numeric.
+  // Numeric Unix timestamps from the device are computed from its local clock (BRT),
+  // so they are 3h behind real UTC. Always apply +3h correction.
+  if (typeof raw === 'number') {
+    d.setHours(d.getHours() + 3);
+  } else if (typeof raw === 'string' && !/[Zz+\-]\d{2}/.test(raw)) {
+    d.setHours(d.getHours() + 3);
+  }
+  return d.toISOString();
+}
+```
+
+### 2. Migração SQL — Corrigir evento #25 e similares
+
+Corrigir os logs que foram armazenados com timestamps numéricos sem correção BRT. Estes têm `created_at` recente mas `timestamp` 3h atrasado:
+
+```sql
+UPDATE access_logs 
+SET timestamp = timestamp + interval '3 hours'
+WHERE timestamp < '2026-03-26 14:00:00+00'
+  AND created_at > '2026-03-26 16:00:00+00';
+```
+
+### Arquivos alterados
+- **`electron/agent.js`** — corrigir `normalizeTimestamp` para timestamps numéricos
+- **Migração SQL** — corrigir logs existentes com offset errado
 
