@@ -101,6 +101,9 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
       const deviceIds = (projectDevices || []).map(d => d.id);
       if (deviceIds.length === 0) return [];
 
+      // Temporal ceiling: ignore timestamps more than 2 min in the future
+      const maxTimestamp = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+
       const { data: entryLogs, error: entryError } = await supabase
         .from('access_logs')
         .select('worker_id, worker_name, device_name, timestamp')
@@ -108,6 +111,7 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
         .eq('access_status', 'granted')
         .in('device_id', deviceIds)
         .gte('timestamp', startTimestamp)
+        .lte('timestamp', maxTimestamp)
         .order('timestamp', { ascending: false });
 
       if (entryError) throw entryError;
@@ -117,7 +121,8 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
         .select('worker_id, worker_name, timestamp')
         .eq('direction', 'exit')
         .in('device_id', deviceIds)
-        .gte('timestamp', startTimestamp);
+        .gte('timestamp', startTimestamp)
+        .lte('timestamp', maxTimestamp);
 
       if (exitError) throw exitError;
 

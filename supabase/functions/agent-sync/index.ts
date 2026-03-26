@@ -7,21 +7,20 @@ const corsHeaders = {
 }
 
 /**
- * BRT safety net: if a timestamp appears to be ~3h behind the current time,
- * it's likely a ControlID device timestamp in BRT without UTC correction.
- * Apply +3h to fix it server-side.
+ * Validate timestamp: reject timestamps that are absurdly in the future (> 5 min ahead).
+ * Returns the timestamp as-is if valid, or null if it should be rejected.
+ * No automatic corrections are applied — the agent is responsible for proper UTC conversion.
  */
-function correctBrtTimestamp(ts: string): string {
+function validateTimestamp(ts: string): { valid: boolean; timestamp: string; reason?: string } {
   const parsed = new Date(ts);
-  if (isNaN(parsed.getTime())) return ts;
+  if (isNaN(parsed.getTime())) return { valid: false, timestamp: ts, reason: 'unparseable timestamp' };
   const now = Date.now();
-  const diff = now - parsed.getTime();
-  // If timestamp is between 2.5h and 3.5h behind current time, apply +3h
-  if (diff > 2.5 * 3600000 && diff < 3.5 * 3600000) {
-    parsed.setHours(parsed.getHours() + 3);
-    return parsed.toISOString();
+  const diffMs = parsed.getTime() - now;
+  // Reject timestamps more than 5 minutes in the future
+  if (diffMs > 5 * 60 * 1000) {
+    return { valid: false, timestamp: ts, reason: `timestamp ${Math.round(diffMs / 60000)}min in the future` };
   }
-  return ts;
+  return { valid: true, timestamp: ts };
 }
 
 function resolveWorkerPhotoPath(photoUrl?: string | null) {
@@ -347,13 +346,18 @@ serve(async (req) => {
             deviceId = null
           }
 
-          // Apply BRT safety net to timestamp
-          const correctedTimestamp = correctBrtTimestamp(String(l.timestamp));
+          // Validate timestamp (no automatic corrections)
+          const tsCheck = validateTimestamp(String(l.timestamp));
+          if (!tsCheck.valid) {
+            console.warn(`[agent-sync/upload-logs] Rejecting log index=${i}: ${tsCheck.reason} (raw=${l.timestamp})`);
+            rejected.push({ index: i, reason: tsCheck.reason || 'invalid timestamp' });
+            continue;
+          }
 
           accepted.push({
             worker_id: workerId,
             device_id: deviceId,
-            timestamp: correctedTimestamp,
+            timestamp: tsCheck.timestamp,
             access_status: accessStatus,
             direction,
             reason: l.reason || null,
