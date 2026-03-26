@@ -1,74 +1,72 @@
 
 
-# Diagnóstico Atualizado — O sistema referência confirma a arquitetura correta
+# Correção Crítica: Formato do Payload de Polling + Receptor de Monitor ControlID
 
-## O que o sistema referência ensina
+## Causa raiz encontrada
 
-O fluxo descrito (Dispositivo → Webhook/Polling → Edge Function → Banco de Dados → Frontend) é **exatamente** o que já implementamos. A arquitetura está correta. O problema não é de design — é operacional.
+Comparando nosso código com a documentação ControlID e o agente Python que funciona, encontrei o erro:
 
-## Evidências atuais do banco de dados
-
-- **`version: 1.0.0`** no heartbeat — o servidor local do usuário ainda roda código antigo
-- **`last_sync_at: NULL`** — nenhum `upload-logs` foi executado
-- **Nenhum access_log novo desde 25/03** — eventos do dispositivo não chegam à nuvem
-- **download-workers**: fallback funcionando (log mostra "Incremental returned 0, falling back to full download, found=1")
-
-## Causa raiz identificada: 2 problemas restantes
-
-### Problema 1: Heartbeat envia versão errada (impede diagnóstico)
-
-A linha 527 do `electron/sync.js` usa:
-```javascript
-version: process.env.npm_package_version || '1.0.0'
+**Nosso código (`electron/agent.js` linha 275-281) envia:**
+```json
+{
+  "where_args": { "access_logs": { "id": { ">": 0 } } },
+  "limit": 100,
+  "order": "id"
+}
 ```
 
-`npm_package_version` **só existe quando o servidor é iniciado via `npm start`**. Se o servidor é iniciado diretamente (ex: via Electron ou como serviço Windows), essa variável é `undefined` e a versão sempre reporta `1.0.0`. Precisamos usar a mesma abordagem do health endpoint: `require('./package.json').version`.
+**O formato correto (documentação ControlID + agente Python) é:**
+```json
+{
+  "where": { "access_logs": { "id": { ">": 0 } } },
+  "limit": 100,
+  "order": { "access_logs": { "id": "ASC" } }
+}
+```
 
-### Problema 2: Falta de logging no `pollDevice` para diagnosticar captura
+O campo `where_args` não existe na API ControlID — o correto é `where`. E `order` precisa ser um objeto, não uma string. O dispositivo provavelmente retorna todos os logs sem filtro (ignorando parâmetros desconhecidos) ou retorna vazio, explicando `capturedEventsCount: 0`.
 
-O `pollDevice()` no `agent.js` captura erros silenciosamente em vários pontos (parse errors, login failures). Se o dispositivo ControlID não responde ao `access_logs.fcgi` ou retorna um formato inesperado, o agente simplesmente ignora sem logar. Precisamos adicionar logging explícito para ver:
-- Se o login no dispositivo está funcionando
-- Se `/access_logs.fcgi` retorna dados
-- Se os eventos estão sendo parseados corretamente
+## Além disso: Monitor Push (documentação que você forneceu)
 
-### Problema 3: Falta de API de diagnóstico no servidor local
+A documentação revela que dispositivos ControlID podem **ENVIAR eventos automaticamente** para um servidor via Monitor (`POST /api/notifications/dao`). Isso é mais confiável que polling e dá eventos em tempo real. Nosso servidor local já roda na porta 3001 — basta adicionar o endpoint receptor.
 
-O usuário mencionou que "não existe painel de diagnóstico no servidor local". Precisamos expor um endpoint `/api/sync/diagnostics` que mostre:
-- Versão real do servidor
-- Estado do agente (running, devices, counters)
-- Últimos erros de upload/download
-- Quantidade de logs não sincronizados no SQLite local
+## Plano (2 mudanças)
 
-## Plano de Correção (3 mudanças)
+### 1. Corrigir formato do polling (`electron/agent.js`)
+- Trocar `where_args` por `where`
+- Trocar `order: 'id'` por `order: { access_logs: { id: 'ASC' } }`
+- Isso corrige a comunicação com `/access_logs.fcgi`
 
-### 1. Corrigir versão no heartbeat (`electron/sync.js`)
+### 2. Adicionar receptor de Monitor ControlID (`server/index.js` + nova rota)
+Criar endpoint `POST /api/notifications/dao` que:
+- Recebe o payload push do ControlID (formato `{ object_changes: [...], device_id }`)
+- Extrai eventos de `access_logs` do array `object_changes`
+- Processa cada evento usando a mesma lógica do `processEvent()` do AgentController
+- Isso permite receber eventos em tempo real sem depender exclusivamente do polling
 
-Trocar `process.env.npm_package_version || '1.0.0'` por leitura dinâmica do `package.json`, igual ao health endpoint.
+O payload do Monitor que o dispositivo envia é:
+```json
+{
+  "object_changes": [{
+    "object": "access_logs",
+    "type": "inserted",
+    "values": {
+      "id": "519",
+      "time": "1532977090",
+      "event": "12",
+      "device_id": "478435",
+      "user_id": "0",
+      "portal_id": "1"
+    }
+  }],
+  "device_id": 478435
+}
+```
 
-**Arquivo:** `electron/sync.js` linha 527
+### Arquivos alterados
+- `electron/agent.js` — corrigir `where_args` → `where` e formato do `order`
+- `server/index.js` — adicionar rota `/api/notifications/dao` para receber push do Monitor ControlID
 
-### 2. Adicionar logging de diagnóstico no agent (`electron/agent.js`)
-
-Adicionar logs explícitos em pontos críticos do `pollDevice()`:
-- Após login (sucesso/falha)
-- Após receber resposta do `access_logs.fcgi` (status code, quantidade de eventos)
-- Quando parse falha (logar o body raw recebido)
-
-**Arquivo:** `electron/agent.js` linhas 258-338
-
-### 3. Criar endpoint de diagnóstico (`server/routes/sync.js`)
-
-Adicionar rota `GET /api/sync/diagnostics` que retorna:
-- Versão do servidor (do package.json)
-- Status do sync engine (completo, incluindo últimos erros)
-- Status do agent controller (counters, devices, último evento)
-- Contagem de logs não sincronizados no SQLite
-- Configuração de sync (URL, token configurado sim/não)
-
-**Arquivo:** `server/routes/sync.js`
-
-### Resumo de arquivos alterados
-- `electron/sync.js` — versão dinâmica no heartbeat
-- `electron/agent.js` — logging de diagnóstico no polling
-- `server/routes/sync.js` — endpoint `/api/sync/diagnostics`
+### Após a atualização
+O polling deve começar a retornar eventos imediatamente. Adicionalmente, se o Monitor for configurado no dispositivo ControlID (apontando `hostname` para o IP do servidor local, `port: 3001`), os eventos chegarão em tempo real sem polling.
 
