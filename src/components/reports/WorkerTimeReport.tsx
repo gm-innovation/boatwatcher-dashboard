@@ -363,6 +363,21 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
 
 /* ─── Helpers ─── */
 
+function normalizeAlternatingLogs<T extends { direction: string }>(sorted: T[]): T[] {
+  const result: T[] = [];
+  let expectEntry = true;
+  for (const log of sorted) {
+    if (expectEntry && log.direction === 'entry') {
+      result.push(log);
+      expectEntry = false;
+    } else if (!expectEntry && log.direction === 'exit') {
+      result.push(log);
+      expectEntry = true;
+    }
+  }
+  return result;
+}
+
 function isDaytime(timestamp: string): boolean {
   const hour = new Date(timestamp).getHours();
   return hour >= 5 && hour <= 18;
