@@ -60,22 +60,7 @@ export type Database = {
           worker_id?: string | null
           worker_name?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "access_logs_device_id_fkey"
-            columns: ["device_id"]
-            isOneToOne: false
-            referencedRelation: "devices"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "access_logs_worker_id_fkey"
-            columns: ["worker_id"]
-            isOneToOne: false
-            referencedRelation: "workers"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       agent_commands: {
         Row: {
