@@ -148,7 +148,7 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
         .in('device_id', deviceIds)
         .gte('timestamp', startTimestamp)
         .lte('timestamp', maxTimestamp)
-        .order('timestamp', { ascending: false });
+        .order('timestamp', { ascending: true });
 
       if (entryError) throw entryError;
 
