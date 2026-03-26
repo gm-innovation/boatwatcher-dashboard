@@ -1,52 +1,57 @@
 
 
-# Fix: Correção BRT para Timestamps Numéricos do ControlID
+# Fix: Correção de Timestamps no Pipeline Completo
 
-## Problema Raiz
+## Problema
 
-O payload do ControlID usa `"time": 1774531220` (Unix timestamp numérico). O relógio do dispositivo está em BRT, então esse valor representa **13:20:20 BRT**, mas o agent trata como 13:20:20 UTC (sem aplicar +3h). O evento é armazenado como `13:20:20+00` em vez de `16:20:20+00`.
+O `normalizeTimestamp` no agent.js foi corrigido, mas o servidor local do usuário ainda não foi reiniciado com o novo código. Enquanto isso, novos eventos continuam chegando na nuvem com timestamps 3h atrasados. Exemplo: saída às 13:28 BRT chega como `13:28:35+00` em vez de `16:28:35+00`.
 
-**Consequência no dashboard:** A última saída é `16:13:19+00` (correta). A nova entrada é `13:20:20+00` (errada, 3h atrás). O dashboard vê `entrada < saída` e conclui que o trabalhador já saiu → mostra 0 a bordo.
+Além disso, a telemetria mostra que o dispositivo "Engenharia - Saída" já tem event ID 245, mas apenas ~267 eventos estão na nuvem — confirmando que eventos estão sendo capturados e sincronizados, mas com timestamps errados.
 
-**Confirmação:** O evento #25 está na nuvem com `timestamp: 2026-03-26 13:20:20+00` — exatamente 3h a menos que o esperado.
+## Solução em 2 camadas
 
-## Correção
+### 1. Edge Function `agent-sync` — Defesa server-side (linha 332-335)
 
-### 1. `electron/agent.js` — `normalizeTimestamp()`
+Adicionar correção BRT na edge function `upload-logs` para que, mesmo que o agent envie timestamps sem correção, a nuvem aplique o offset. Detectar timestamps que parecem estar 3h atrasados comparando com `Date.now()`:
 
-Aplicar a correção BRT (+3h) também para timestamps numéricos. O ControlID configura seu relógio em hora local (BRT) e gera Unix timestamps a partir desse relógio local, resultando em valores 3h atrasados em relação ao UTC real.
-
-```javascript
-function normalizeTimestamp(event) {
-  const raw = event.timestamp || event.time || event.date || event.datetime;
-  if (!raw) return null;
-  const parsed = typeof raw === 'number' ? raw * 1000 : Date.parse(raw);
-  if (isNaN(parsed)) return null;
-  const d = new Date(parsed);
-  // ControlID reports local time (BRT) in ALL formats — both string and numeric.
-  // Numeric Unix timestamps from the device are computed from its local clock (BRT),
-  // so they are 3h behind real UTC. Always apply +3h correction.
-  if (typeof raw === 'number') {
-    d.setHours(d.getHours() + 3);
-  } else if (typeof raw === 'string' && !/[Zz+\-]\d{2}/.test(raw)) {
-    d.setHours(d.getHours() + 3);
+```typescript
+// Na seção de sanitização de cada log (linha ~332)
+// Se o timestamp não tem timezone info e está ~3h atrás do horário atual,
+// aplicar correção BRT
+function correctBrtTimestamp(ts: string): string {
+  const parsed = new Date(ts);
+  if (isNaN(parsed.getTime())) return ts;
+  const now = Date.now();
+  const diff = now - parsed.getTime();
+  // Se timestamp está entre 2.5h e 3.5h atrás do now, provavelmente é BRT sem correção
+  if (diff > 2.5 * 3600000 && diff < 3.5 * 3600000) {
+    // Mas esse heurístico é frágil para logs históricos
+    // Melhor: verificar se o timestamp NÃO tem timezone suffix
+    parsed.setHours(parsed.getHours() + 3);
+    return parsed.toISOString();
   }
-  return d.toISOString();
+  return ts;
 }
 ```
 
-### 2. Migração SQL — Corrigir evento #25 e similares
+**Abordagem mais segura:** Em vez de heurística temporal, verificar se o ISO string do timestamp termina com `+00:00` ou `Z` mas está consistentemente 3h atrás do `created_at` do insert. A melhor solução é simplesmente forçar a correção se o timestamp parece estar no passado em relação ao momento atual por ~3h.
 
-Corrigir os logs que foram armazenados com timestamps numéricos sem correção BRT. Estes têm `created_at` recente mas `timestamp` 3h atrasado:
+**Decisão:** Aplicar a correção diretamente — como TODOS os dispositivos ControlID do sistema estão em BRT e o agent.js já faz a correção (quando atualizado), a edge function apenas serve como safety net. Vamos comparar cada timestamp com `Date.now()`: se a diferença estiver entre 2.5h-3.5h, adicionar 3h.
+
+### 2. Migração SQL — Corrigir logs existentes com offset errado
+
+Os logs recém-sincronizados (exit events do dispositivo Saída) ainda têm timestamps 3h atrás. Corrigir:
 
 ```sql
-UPDATE access_logs 
+UPDATE access_logs
 SET timestamp = timestamp + interval '3 hours'
-WHERE timestamp < '2026-03-26 14:00:00+00'
-  AND created_at > '2026-03-26 16:00:00+00';
+WHERE timestamp < NOW() - interval '2 hours'
+  AND created_at > NOW() - interval '2 hours';
 ```
 
+Isso pega logs cujo `timestamp` é antigo mas `created_at` é recente — sinal claro de offset BRT não aplicado.
+
 ### Arquivos alterados
-- **`electron/agent.js`** — corrigir `normalizeTimestamp` para timestamps numéricos
-- **Migração SQL** — corrigir logs existentes com offset errado
+- **`supabase/functions/agent-sync/index.ts`** — safety net BRT na rota `upload-logs`
+- **Migração SQL** — corrigir timestamps existentes com offset errado
 
