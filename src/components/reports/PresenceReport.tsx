@@ -1,26 +1,26 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useCompanies, useProjects } from '@/hooks/useSupabase';
+import { useCompanies } from '@/hooks/useSupabase';
+import { useAccessLogs } from '@/hooks/useControlID';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Download, Calendar, Clock, User, Building2, FileDown } from 'lucide-react';
+import { Download, Calendar, Clock, User, FileDown } from 'lucide-react';
 import { exportReportPdf } from '@/utils/exportReportPdf';
-import { format, startOfDay, endOfDay, differenceInMinutes } from 'date-fns';
+import { format, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-export const PresenceReport = () => {
-  const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [selectedWorkerId, setSelectedWorkerId] = useState<string>('all');
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('all');
+interface PresenceReportProps {
+  projectId: string;
+  startDate: string;
+  endDate: string;
+}
 
+export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReportProps) => {
   const { data: companies = [] } = useCompanies();
+  const { data: accessLogs = [], isLoading } = useAccessLogs(projectId || null, startDate, endDate, 1000);
 
   const { data: workers = [] } = useQuery({
     queryKey: ['workers-list'],
@@ -31,86 +31,61 @@ export const PresenceReport = () => {
     },
   });
 
-  const { data: presenceData = [], isLoading } = useQuery({
-    queryKey: ['presence-report', startDate, endDate, selectedWorkerId, selectedCompanyId],
-    queryFn: async () => {
-      let query = supabase
-        .from('access_logs')
-        .select('*')
-        .gte('timestamp', startOfDay(new Date(startDate)).toISOString())
-        .lte('timestamp', endOfDay(new Date(endDate)).toISOString())
-        .order('timestamp', { ascending: true });
+  const presenceData = useMemo(() => {
+    if (!accessLogs.length) return [];
 
-      const { data, error } = await query;
-      if (error) throw error;
+    const grouped: Record<string, Record<string, { entries: Date[]; exits: Date[] }>> = {};
 
-      // Group by worker and date
-      const grouped: Record<string, Record<string, { entries: Date[]; exits: Date[] }>> = {};
-      
-      data.forEach((log: any) => {
-        const workerId = log.worker_id || 'unknown';
-        const workerName = log.worker_name || 'Desconhecido';
-        const dateKey = format(new Date(log.timestamp), 'yyyy-MM-dd');
+    accessLogs.forEach((log: any) => {
+      const workerId = log.worker_id || 'unknown';
+      const dateKey = format(new Date(log.timestamp), 'yyyy-MM-dd');
 
-        if (!grouped[workerId]) {
-          grouped[workerId] = {};
+      if (!grouped[workerId]) grouped[workerId] = {};
+      if (!grouped[workerId][dateKey]) grouped[workerId][dateKey] = { entries: [], exits: [] };
+
+      if (log.direction === 'entry' && log.access_status === 'granted') {
+        grouped[workerId][dateKey].entries.push(new Date(log.timestamp));
+      } else if (log.direction === 'exit' && log.access_status === 'granted') {
+        grouped[workerId][dateKey].exits.push(new Date(log.timestamp));
+      }
+    });
+
+    const results: any[] = [];
+    Object.entries(grouped).forEach(([workerId, dates]) => {
+      Object.entries(dates).forEach(([date, times]) => {
+        const firstEntry = times.entries.length > 0 ? Math.min(...times.entries.map(d => d.getTime())) : null;
+        const lastExit = times.exits.length > 0 ? Math.max(...times.exits.map(d => d.getTime())) : null;
+
+        let totalMinutes = 0;
+        if (firstEntry && lastExit) {
+          totalMinutes = differenceInMinutes(lastExit, firstEntry);
         }
-        if (!grouped[workerId][dateKey]) {
-          grouped[workerId][dateKey] = { entries: [], exits: [] };
-        }
 
-        if (log.direction === 'entry' && log.access_status === 'granted') {
-          grouped[workerId][dateKey].entries.push(new Date(log.timestamp));
-        } else if (log.direction === 'exit' && log.access_status === 'granted') {
-          grouped[workerId][dateKey].exits.push(new Date(log.timestamp));
-        }
-      });
+        const worker = workers.find(w => w.id === workerId);
 
-      // Calculate hours for each worker/date
-      const results: any[] = [];
-      Object.entries(grouped).forEach(([workerId, dates]) => {
-        Object.entries(dates).forEach(([date, times]) => {
-          const firstEntry = times.entries.length > 0 ? Math.min(...times.entries.map(d => d.getTime())) : null;
-          const lastExit = times.exits.length > 0 ? Math.max(...times.exits.map(d => d.getTime())) : null;
-          
-          let totalMinutes = 0;
-          if (firstEntry && lastExit) {
-            totalMinutes = differenceInMinutes(lastExit, firstEntry);
-          }
-
-          const worker = workers.find(w => w.id === workerId);
-          
-          // Apply filters
-          if (selectedWorkerId !== 'all' && workerId !== selectedWorkerId) return;
-          if (selectedCompanyId !== 'all' && worker?.company_id !== selectedCompanyId) return;
-
-          results.push({
-            workerId,
-            workerName: worker?.name || 'Desconhecido',
-            companyId: worker?.company_id,
-            companyName: companies.find(c => c.id === worker?.company_id)?.name || '-',
-            date,
-            firstEntry: firstEntry ? new Date(firstEntry) : null,
-            lastExit: lastExit ? new Date(lastExit) : null,
-            totalMinutes,
-            totalHours: Math.floor(totalMinutes / 60),
-            remainingMinutes: totalMinutes % 60,
-          });
+        results.push({
+          workerId,
+          workerName: worker?.name || 'Desconhecido',
+          companyName: companies.find(c => c.id === worker?.company_id)?.name || '-',
+          date,
+          firstEntry: firstEntry ? new Date(firstEntry) : null,
+          lastExit: lastExit ? new Date(lastExit) : null,
+          totalMinutes,
+          totalHours: Math.floor(totalMinutes / 60),
+          remainingMinutes: totalMinutes % 60,
         });
       });
+    });
 
-      return results.sort((a, b) => {
-        if (a.date !== b.date) return a.date.localeCompare(b.date);
-        return a.workerName.localeCompare(b.workerName);
-      });
-    },
-    enabled: !!startDate && !!endDate,
-  });
+    return results.sort((a, b) => a.date.localeCompare(b.date) || a.workerName.localeCompare(b.workerName));
+  }, [accessLogs, workers, companies]);
+
+  const totalHoursAll = presenceData.reduce((sum: number, row: any) => sum + row.totalMinutes, 0);
 
   const handleExport = () => {
     const csvContent = [
       ['Data', 'Trabalhador', 'Empresa', 'Entrada', 'Saída', 'Total Horas'].join(','),
-      ...presenceData.map(row => [
+      ...presenceData.map((row: any) => [
         format(new Date(row.date), 'dd/MM/yyyy'),
         row.workerName,
         row.companyName,
@@ -119,7 +94,6 @@ export const PresenceReport = () => {
         `${row.totalHours}h ${row.remainingMinutes}m`,
       ].join(','))
     ].join('\n');
-
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -139,7 +113,7 @@ export const PresenceReport = () => {
         { header: 'Saída', key: 'saida', width: 18, align: 'center' },
         { header: 'Total', key: 'total', width: 20, align: 'center' },
       ],
-      data: presenceData.map(row => ({
+      data: presenceData.map((row: any) => ({
         data: format(new Date(row.date), 'dd/MM/yyyy'),
         trabalhador: row.workerName,
         empresa: row.companyName,
@@ -155,13 +129,20 @@ export const PresenceReport = () => {
     });
   };
 
-  const totalHoursAll = presenceData.reduce((sum, row) => sum + row.totalMinutes, 0);
+  if (!projectId) {
+    return (
+      <div className="text-center py-12 text-muted-foreground border rounded-lg">
+        <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+        <p>Selecione um projeto para ver o relatório de presença</p>
+      </div>
+    );
+  }
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>Relatório de Presença</CardTitle>
+          <CardTitle>Visão Geral de Presença</CardTitle>
           <div className="flex items-center gap-2">
             <Button onClick={handleExportPdf} variant="outline" disabled={presenceData.length === 0}>
               <FileDown className="h-4 w-4 mr-2" />
@@ -175,46 +156,6 @@ export const PresenceReport = () => {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="space-y-2">
-            <Label>Data Início</Label>
-            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Data Fim</Label>
-            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Trabalhador</Label>
-            <Select value={selectedWorkerId} onValueChange={setSelectedWorkerId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Todos" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {workers.map(worker => (
-                  <SelectItem key={worker.id} value={worker.id}>{worker.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Empresa</Label>
-            <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Todas" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas</SelectItem>
-                {companies.map(company => (
-                  <SelectItem key={company.id} value={company.id}>{company.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
         {/* Summary */}
         <div className="flex gap-4 p-4 bg-muted/50 rounded-lg">
           <div className="flex items-center gap-2">
@@ -248,7 +189,7 @@ export const PresenceReport = () => {
                 </tr>
               </thead>
               <tbody>
-                {presenceData.map((row, index) => (
+                {presenceData.map((row: any, index: number) => (
                   <tr key={index} className="border-b hover:bg-muted/50">
                     <td className="p-3 text-sm">
                       {format(new Date(row.date), "dd/MM/yyyy", { locale: ptBR })}
