@@ -233,7 +233,7 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
 export const ClientsManagement = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Company | null>(null);
-  const { data: companies = [], isLoading } = useCompanies();
+  const { data: companies = [], isLoading } = useClients();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
 
