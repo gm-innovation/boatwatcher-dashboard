@@ -1,55 +1,74 @@
 
 
-# Diagnóstico Final — Por que a sincronização continua quebrada
+# Diagnóstico Atualizado — O sistema referência confirma a arquitetura correta
 
-## Evidências concretas do banco de dados
+## O que o sistema referência ensina
 
-1. **`last_sync_at` = NULL** — O agente nunca executou `upload-logs`
-2. **`version: 1.0.0`** — O heartbeat reporta versão hardcoded. A versão no `server/package.json` e `server/index.js` é `1.0.0` fixa, então não é possível saber se o código atualizado está realmente rodando
-3. **`download-workers found=0`** — O checkpoint já passou do `updated_at` do worker Alexandre (2026-03-25 18:59), então ele nunca mais é baixado para o SQLite local
-4. **Nenhum access_log novo desde 25/03** — A entrada que você fez hoje NÃO chegou à nuvem
+O fluxo descrito (Dispositivo → Webhook/Polling → Edge Function → Banco de Dados → Frontend) é **exatamente** o que já implementamos. A arquitetura está correta. O problema não é de design — é operacional.
 
-## 3 Problemas que ainda existem no código
+## Evidências atuais do banco de dados
 
-### Problema 1: `download-workers` não tem fallback (Edge Function)
-O fix anterior deveria ter adicionado um fallback para re-baixar workers quando `found=0`, mas **o código atual não tem esse fallback**. O query continua usando `.gte('updated_at', since)` sem retry. Resultado: SQLite local fica sem workers → agente não resolve `user_id` → logs ficam incompletos.
+- **`version: 1.0.0`** no heartbeat — o servidor local do usuário ainda roda código antigo
+- **`last_sync_at: NULL`** — nenhum `upload-logs` foi executado
+- **Nenhum access_log novo desde 25/03** — eventos do dispositivo não chegam à nuvem
+- **download-workers**: fallback funcionando (log mostra "Incremental returned 0, falling back to full download, found=1")
 
-### Problema 2: `uploadLogs()` envia o objeto completo do SQLite sem sanitizar
-O `getUnsyncedLogs()` retorna `SELECT * FROM access_logs WHERE synced = 0`, que inclui campos como `synced`, `created_at`, e `id` (TEXT). A Edge Function `upload-logs` insere esses dados no Postgres que tem `id` como UUID e `access_status`/`direction` como ENUMs. Se qualquer campo extra causar erro, o insert falha silenciosamente (o `try/catch` no sync.js captura mas não expõe o erro com detalhes suficientes).
+## Causa raiz identificada: 2 problemas restantes
 
-### Problema 3: Versão hardcoded impede diagnóstico
-`server/index.js` linha 122 tem `version: '1.0.0'` hardcoded. O heartbeat usa `process.env.npm_package_version || '1.0.0'`. Impossível saber se a versão atualizada está rodando.
+### Problema 1: Heartbeat envia versão errada (impede diagnóstico)
 
-## Plano de Correção (3 arquivos)
-
-### 1. Edge Function `agent-sync/index.ts` — Fallback no download-workers
-Quando `found=0` e o `since` não é epoch, refazer a query SEM filtro de data para garantir que todos os workers ativos sejam baixados. Isso resolve o problema do SQLite vazio.
-
-### 2. `electron/sync.js` — Sanitizar payload antes do upload
-No método `uploadLogs()`, remover campos SQLite-internos (`synced`, `created_at`, `id`) antes de enviar. O `id` será gerado pelo Postgres. Garantir que `access_status` e `direction` tenham valores canônicos.
-
-### 3. `server/index.js` + `server/package.json` — Versão dinâmica
-Usar `require('./package.json').version` no health endpoint e bumpar a versão para `1.3.0` para poder confirmar que o código atualizado está rodando.
-
-## Detalhe técnico
-
-```text
-FLUXO ATUAL (quebrado):
-  Leitor ControlID → agent.js pollDevice() → insertAccessLog(synced=0)
-  → uploadLogs() envia SELECT * (com campos extras)
-  → Edge Function insert no Postgres → FALHA (campos incompatíveis)
-  → Erro capturado silenciosamente → last_sync_at permanece NULL
-
-FLUXO CORRIGIDO:
-  Leitor → agent.js → insertAccessLog(synced=0)
-  → uploadLogs() sanitiza (remove synced/created_at/id)
-  → Edge Function insert → SUCESSO
-  → markLogsSynced() → last_sync_at atualizado
+A linha 527 do `electron/sync.js` usa:
+```javascript
+version: process.env.npm_package_version || '1.0.0'
 ```
 
-### Arquivos alterados
-- `supabase/functions/agent-sync/index.ts` — fallback download-workers
-- `electron/sync.js` — sanitização do payload uploadLogs
-- `server/index.js` — versão dinâmica
-- `server/package.json` — bump versão para 1.3.0
+`npm_package_version` **só existe quando o servidor é iniciado via `npm start`**. Se o servidor é iniciado diretamente (ex: via Electron ou como serviço Windows), essa variável é `undefined` e a versão sempre reporta `1.0.0`. Precisamos usar a mesma abordagem do health endpoint: `require('./package.json').version`.
+
+### Problema 2: Falta de logging no `pollDevice` para diagnosticar captura
+
+O `pollDevice()` no `agent.js` captura erros silenciosamente em vários pontos (parse errors, login failures). Se o dispositivo ControlID não responde ao `access_logs.fcgi` ou retorna um formato inesperado, o agente simplesmente ignora sem logar. Precisamos adicionar logging explícito para ver:
+- Se o login no dispositivo está funcionando
+- Se `/access_logs.fcgi` retorna dados
+- Se os eventos estão sendo parseados corretamente
+
+### Problema 3: Falta de API de diagnóstico no servidor local
+
+O usuário mencionou que "não existe painel de diagnóstico no servidor local". Precisamos expor um endpoint `/api/sync/diagnostics` que mostre:
+- Versão real do servidor
+- Estado do agente (running, devices, counters)
+- Últimos erros de upload/download
+- Quantidade de logs não sincronizados no SQLite local
+
+## Plano de Correção (3 mudanças)
+
+### 1. Corrigir versão no heartbeat (`electron/sync.js`)
+
+Trocar `process.env.npm_package_version || '1.0.0'` por leitura dinâmica do `package.json`, igual ao health endpoint.
+
+**Arquivo:** `electron/sync.js` linha 527
+
+### 2. Adicionar logging de diagnóstico no agent (`electron/agent.js`)
+
+Adicionar logs explícitos em pontos críticos do `pollDevice()`:
+- Após login (sucesso/falha)
+- Após receber resposta do `access_logs.fcgi` (status code, quantidade de eventos)
+- Quando parse falha (logar o body raw recebido)
+
+**Arquivo:** `electron/agent.js` linhas 258-338
+
+### 3. Criar endpoint de diagnóstico (`server/routes/sync.js`)
+
+Adicionar rota `GET /api/sync/diagnostics` que retorna:
+- Versão do servidor (do package.json)
+- Status do sync engine (completo, incluindo últimos erros)
+- Status do agent controller (counters, devices, último evento)
+- Contagem de logs não sincronizados no SQLite
+- Configuração de sync (URL, token configurado sim/não)
+
+**Arquivo:** `server/routes/sync.js`
+
+### Resumo de arquivos alterados
+- `electron/sync.js` — versão dinâmica no heartbeat
+- `electron/agent.js` — logging de diagnóstico no polling
+- `server/routes/sync.js` — endpoint `/api/sync/diagnostics`
 
