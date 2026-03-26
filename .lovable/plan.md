@@ -1,50 +1,35 @@
 
 
-# Alternar Entrada/Saída — Nunca Eventos Consecutivos do Mesmo Tipo
+# Fix: Cálculo do Tempo Total Truncando Minutos
 
 ## Problema
-Atualmente o `rawLogs` exibe todos os eventos brutos em sequência, permitindo entradas consecutivas ou saídas consecutivas. A regra de negócio exige alternância estrita: entrada → saída → entrada → saída.
+`differenceInMinutes` (date-fns) trunca segundos parciais em **cada par** entrada→saída. Com vários pares ao longo do dia, os segundos perdidos se acumulam, resultando em tempo total menor que o real (ex: 4h 17m ao invés de 5h 23m).
 
 ## Solução
+Somar milissegundos brutos de todos os pares, depois converter para minutos **uma única vez** com arredondamento.
 
 ### `src/components/reports/WorkerTimeReport.tsx`
-
-Adicionar uma função `normalizeAlternatingLogs` que filtra os logs ordenados por timestamp para garantir alternância:
-
-1. Percorrer logs ordenados cronologicamente
-2. Manter estado do último tipo aceito (`entry` ou `exit`)
-3. Só incluir o log se for diferente do último tipo aceito
-4. Primeiro log válido deve ser `entry`; após `entry`, só aceitar `exit`; após `exit`, só aceitar `entry`
-
-Aplicar esta função em **dois pontos**:
-- No `rawLogs` salvo em cada `WorkerTimeRow` (afeta a expansão com períodos diurno/noturno)
-- Nos arrays `entries`/`exits` usados para calcular `firstEntry`, `lastExit`, `totalMinutes` e `isOnBoard`
+Trocar o loop de cálculo (linhas 126-131):
 
 ```typescript
-function normalizeAlternatingLogs(sorted: Array<{ direction: string; [k: string]: any }>) {
-  const result = [];
-  let expectEntry = true;
-  for (const log of sorted) {
-    if (expectEntry && log.direction === 'entry') {
-      result.push(log);
-      expectEntry = false;
-    } else if (!expectEntry && log.direction === 'exit') {
-      result.push(log);
-      expectEntry = true;
-    }
-    // skip consecutive same-direction logs
+// ANTES — trunca cada par individualmente
+let totalMinutes = 0;
+for (let i = 0; i < alternating.length - 1; i += 2) {
+  if (...) {
+    totalMinutes += differenceInMinutes(exit, entry);
   }
-  return result;
 }
+
+// DEPOIS — soma ms brutos, converte uma vez
+let totalMs = 0;
+for (let i = 0; i < alternating.length - 1; i += 2) {
+  if (alternating[i].direction === 'entry' && alternating[i + 1]?.direction === 'exit') {
+    totalMs += new Date(alternating[i + 1].timestamp).getTime() - new Date(alternating[i].timestamp).getTime();
+  }
+}
+const totalMinutes = Math.round(totalMs / 60000);
 ```
 
-Usar os logs normalizados para:
-- `firstEntry` = primeiro log (sempre entry)
-- `lastExit` = último log se for exit
-- `isOnBoard` = último log é entry (sem exit correspondente)
-- `totalMinutes` = soma dos pares entry→exit
-- `rawLogs` passado à expansão = apenas os alternados
-
 ### Arquivo alterado
-- `src/components/reports/WorkerTimeReport.tsx`
+- `src/components/reports/WorkerTimeReport.tsx` (apenas o bloco de cálculo ~linhas 126-131)
 
