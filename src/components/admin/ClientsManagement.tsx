@@ -95,7 +95,7 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
         if (error) throw error;
         toast({ title: 'Cliente cadastrado com sucesso' });
       }
-      queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
       onSuccess();
     } catch (error: any) {
       toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' });
