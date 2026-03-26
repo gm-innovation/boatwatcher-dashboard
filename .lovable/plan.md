@@ -1,57 +1,51 @@
 
+Diagnóstico objetivo (com base no código + dados atuais):
+- O problema principal agora não é mais “falta de saída”, e sim dados corrompidos por correção de horário agressiva.
+- Encontrei 4 registros em `access_logs` com `timestamp` no futuro (28–66 min à frente do `created_at`), todos no mesmo lote (`created_at = 2026-03-26 15:38:05.937582+00`).
+- A lógica do dashboard usa a entrada mais recente; como existe uma entrada futura (ex.: 16:44 UTC), ela fica “sem saída posterior” e mantém pessoa a bordo indevidamente.
+- Também há 1 duplicata de saída (mesmo worker/device/direction/timestamp), sinal de reenvio sem idempotência.
 
-# Fix: Correção de Timestamps no Pipeline Completo
+Plano de correção (implementação):
+1) Remover a correção heurística perigosa no ingest de logs (backend function)
+- Arquivo: `supabase/functions/agent-sync/index.ts`
+- Ajuste:
+  - Remover o `correctBrtTimestamp` baseado em “diferença de ~3h para o now”.
+  - Não aplicar +3h no servidor por heurística temporal.
+  - Manter apenas parse/normalização de formato (ISO), e rejeitar timestamps absurdamente no futuro (ex.: > 5 min) com log explícito de rejeição.
+- Motivo: essa heurística corrige errado lotes atrasados de ~3h e gera eventos no futuro.
 
-## Problema
+2) Corrigir os registros já corrompidos (migração SQL)
+- Criar migração para ajustar somente anomalias seguras:
+  - Caso A (supercorreção): `timestamp > created_at + 15 min` e dentro de janela plausível de erro => `timestamp - 3h`.
+  - Caso B (se houver): `created_at - timestamp` entre 2h30 e 3h30 => `timestamp + 3h`.
+- Escopo inicial: últimos 1–2 dias para evitar tocar histórico antigo sem necessidade.
+- Resultado esperado: eliminar entradas futuras que estão “prendendo” trabalhador a bordo.
 
-O `normalizeTimestamp` no agent.js foi corrigido, mas o servidor local do usuário ainda não foi reiniciado com o novo código. Enquanto isso, novos eventos continuam chegando na nuvem com timestamps 3h atrasados. Exemplo: saída às 13:28 BRT chega como `13:28:35+00` em vez de `16:28:35+00`.
+3) Blindar o dashboard contra outliers de horário
+- Arquivo: `src/hooks/useSupabase.ts` (`useWorkersOnBoard`)
+- Ajuste:
+  - Aplicar teto temporal nas queries de entrada/saída: `timestamp <= now + 2 min`.
+- Motivo: um registro futuro isolado não pode quebrar o estado “a bordo”.
 
-Além disso, a telemetria mostra que o dispositivo "Engenharia - Saída" já tem event ID 245, mas apenas ~267 eventos estão na nuvem — confirmando que eventos estão sendo capturados e sincronizados, mas com timestamps errados.
+4) Corrigir card de “Persistência (access_logs)” no Diagnóstico
+- Arquivo: `src/components/admin/DiagnosticsPanel.tsx`
+- Ajuste:
+  - Buscar último log filtrado pelo projeto ativo (via devices do projeto), não global.
+  - Aplicar o mesmo teto temporal (`<= now + 2 min`) para não exibir evento futuro inválido como “último”.
+- Motivo: o painel hoje mascara diagnóstico ao mostrar evento global/anômalo.
 
-## Solução em 2 camadas
+5) Endurecer deduplicação (estabilização)
+- Arquivos: `electron/agent.js`, `electron/sync.js`, `supabase/functions/agent-sync/index.ts` (fase de robustez)
+- Ajuste recomendado:
+  - Priorizar dedupe por identificador de evento (quando disponível) em vez de só timestamp.
+  - Evitar duplicata por reupload (idempotência de envio).
+- Motivo: já há duplicata real de saída no banco; isso vira ruído operacional.
 
-### 1. Edge Function `agent-sync` — Defesa server-side (linha 332-335)
-
-Adicionar correção BRT na edge function `upload-logs` para que, mesmo que o agent envie timestamps sem correção, a nuvem aplique o offset. Detectar timestamps que parecem estar 3h atrasados comparando com `Date.now()`:
-
-```typescript
-// Na seção de sanitização de cada log (linha ~332)
-// Se o timestamp não tem timezone info e está ~3h atrás do horário atual,
-// aplicar correção BRT
-function correctBrtTimestamp(ts: string): string {
-  const parsed = new Date(ts);
-  if (isNaN(parsed.getTime())) return ts;
-  const now = Date.now();
-  const diff = now - parsed.getTime();
-  // Se timestamp está entre 2.5h e 3.5h atrás do now, provavelmente é BRT sem correção
-  if (diff > 2.5 * 3600000 && diff < 3.5 * 3600000) {
-    // Mas esse heurístico é frágil para logs históricos
-    // Melhor: verificar se o timestamp NÃO tem timezone suffix
-    parsed.setHours(parsed.getHours() + 3);
-    return parsed.toISOString();
-  }
-  return ts;
-}
-```
-
-**Abordagem mais segura:** Em vez de heurística temporal, verificar se o ISO string do timestamp termina com `+00:00` ou `Z` mas está consistentemente 3h atrás do `created_at` do insert. A melhor solução é simplesmente forçar a correção se o timestamp parece estar no passado em relação ao momento atual por ~3h.
-
-**Decisão:** Aplicar a correção diretamente — como TODOS os dispositivos ControlID do sistema estão em BRT e o agent.js já faz a correção (quando atualizado), a edge function apenas serve como safety net. Vamos comparar cada timestamp com `Date.now()`: se a diferença estiver entre 2.5h-3.5h, adicionar 3h.
-
-### 2. Migração SQL — Corrigir logs existentes com offset errado
-
-Os logs recém-sincronizados (exit events do dispositivo Saída) ainda têm timestamps 3h atrás. Corrigir:
-
-```sql
-UPDATE access_logs
-SET timestamp = timestamp + interval '3 hours'
-WHERE timestamp < NOW() - interval '2 hours'
-  AND created_at > NOW() - interval '2 hours';
-```
-
-Isso pega logs cujo `timestamp` é antigo mas `created_at` é recente — sinal claro de offset BRT não aplicado.
-
-### Arquivos alterados
-- **`supabase/functions/agent-sync/index.ts`** — safety net BRT na rota `upload-logs`
-- **Migração SQL** — corrigir timestamps existentes com offset errado
-
+Validação pós-implementação (obrigatória):
+- Verificar SQL:
+  - 0 linhas com `timestamp > created_at + 5 min` (janela recente).
+  - 0 linhas com `created_at - timestamp` em ~3h (janela recente).
+- Teste E2E:
+  - Passar na Entrada e depois na Saída com o mesmo colaborador.
+  - Confirmar sequência no banco (entry < exit), no Pipeline (Persistência) e no Dashboard (não fica a bordo após saída).
+- Confirmar que novos logs entram sem correção adicional indevida e sem duplicações.
