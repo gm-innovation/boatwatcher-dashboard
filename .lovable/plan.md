@@ -1,61 +1,55 @@
 
-# Investigação Profunda — Causas Raiz do Erro de Sincronização
 
-## Diagnóstico Confirmado por Evidências
+# Diagnóstico Final — Por que a sincronização continua quebrada
 
-### Evidência 1: Os logs do Edge Function mostram que o servidor local NUNCA chamou `upload-logs`
-A análise de analytics mostra apenas chamadas a `download-commands` (a cada 5s) e `status` (heartbeat a cada 60s). **Nenhuma chamada a `upload-logs`, `download-workers`, `download-devices`, `download-access-logs` foi registrada.** Isso significa que `triggerSync()` nunca executa — apenas o heartbeat e o command-poll rodam.
+## Evidências concretas do banco de dados
 
-### Evidência 2: `last_sync_at` do agente continua NULL
-O agente `0afe0864` está online (last_seen_at atualizado), mas `last_sync_at = NULL` confirma que nenhum upload de logs foi realizado.
+1. **`last_sync_at` = NULL** — O agente nunca executou `upload-logs`
+2. **`version: 1.0.0`** — O heartbeat reporta versão hardcoded. A versão no `server/package.json` e `server/index.js` é `1.0.0` fixa, então não é possível saber se o código atualizado está realmente rodando
+3. **`download-workers found=0`** — O checkpoint já passou do `updated_at` do worker Alexandre (2026-03-25 18:59), então ele nunca mais é baixado para o SQLite local
+4. **Nenhum access_log novo desde 25/03** — A entrada que você fez hoje NÃO chegou à nuvem
 
-### Evidência 3: Os dados no cloud são de teste manual
-Os 8 access_logs existentes no cloud têm timestamps inconsistentes (criados em 2026-03-25 19:59 com timestamps de 17:59/18:59/19:14), e 5 deles não têm `device_id` — são inserções manuais, não vindas do agente.
+## 3 Problemas que ainda existem no código
 
----
+### Problema 1: `download-workers` não tem fallback (Edge Function)
+O fix anterior deveria ter adicionado um fallback para re-baixar workers quando `found=0`, mas **o código atual não tem esse fallback**. O query continua usando `.gte('updated_at', since)` sem retry. Resultado: SQLite local fica sem workers → agente não resolve `user_id` → logs ficam incompletos.
 
-## 3 Causas-Raiz Identificadas
+### Problema 2: `uploadLogs()` envia o objeto completo do SQLite sem sanitizar
+O `getUnsyncedLogs()` retorna `SELECT * FROM access_logs WHERE synced = 0`, que inclui campos como `synced`, `created_at`, e `id` (TEXT). A Edge Function `upload-logs` insere esses dados no Postgres que tem `id` como UUID e `access_status`/`direction` como ENUMs. Se qualquer campo extra causar erro, o insert falha silenciosamente (o `try/catch` no sync.js captura mas não expõe o erro com detalhes suficientes).
 
-### Causa 1 (CRÍTICA): O agente usa endpoint errado para capturar eventos
-O `electron/agent.js` usa `GET /api/access/last` que retorna **apenas o último evento**. O agente Python (`controlid_agent.py`) usa `POST /access_logs.fcgi` com paginação `since_id`, que é o endpoint correto.
+### Problema 3: Versão hardcoded impede diagnóstico
+`server/index.js` linha 122 tem `version: '1.0.0'` hardcoded. O heartbeat usa `process.env.npm_package_version || '1.0.0'`. Impossível saber se a versão atualizada está rodando.
 
-**Consequência:** Se nenhum evento novo ocorre entre polls de 5s, o mesmo evento é retornado → deduplicação o descarta. Se múltiplos eventos ocorrem entre polls, todos exceto o último são perdidos.
+## Plano de Correção (3 arquivos)
 
-**Correção:** Trocar para `POST /access_logs.fcgi` com tracking de `last_event_id` por dispositivo, igual ao agente Python.
+### 1. Edge Function `agent-sync/index.ts` — Fallback no download-workers
+Quando `found=0` e o `since` não é epoch, refazer a query SEM filtro de data para garantir que todos os workers ativos sejam baixados. Isso resolve o problema do SQLite vazio.
 
-### Causa 2 (CRÍTICA): O sync engine só executa `triggerSync()` quando há dados pendentes locais
-Em `checkAndSync()` (linha 210):
+### 2. `electron/sync.js` — Sanitizar payload antes do upload
+No método `uploadLogs()`, remover campos SQLite-internos (`synced`, `created_at`, `id`) antes de enviar. O `id` será gerado pelo Postgres. Garantir que `access_status` e `direction` tenham valores canônicos.
+
+### 3. `server/index.js` + `server/package.json` — Versão dinâmica
+Usar `require('./package.json').version` no health endpoint e bumpar a versão para `1.3.0` para poder confirmar que o código atualizado está rodando.
+
+## Detalhe técnico
+
+```text
+FLUXO ATUAL (quebrado):
+  Leitor ControlID → agent.js pollDevice() → insertAccessLog(synced=0)
+  → uploadLogs() envia SELECT * (com campos extras)
+  → Edge Function insert no Postgres → FALHA (campos incompatíveis)
+  → Erro capturado silenciosamente → last_sync_at permanece NULL
+
+FLUXO CORRIGIDO:
+  Leitor → agent.js → insertAccessLog(synced=0)
+  → uploadLogs() sanitiza (remove synced/created_at/id)
+  → Edge Function insert → SUCESSO
+  → markLogsSynced() → last_sync_at atualizado
 ```
-if (pendingWorkers.length > 0 || pendingLogs.length > 0 || ... || wasOffline || neverSynced) {
-    await this.triggerSync();
-}
-```
-Após o primeiro sync bem-sucedido (que seta `last_sync`), se não há logs locais pendentes (porque o agente não captura nada — vide Causa 1), `triggerSync()` nunca mais roda. Os downloads de workers, devices, companies etc. simplesmente param.
 
-**Correção:** Forçar `triggerSync()` a cada ciclo de 60s, independente de dados pendentes.
+### Arquivos alterados
+- `supabase/functions/agent-sync/index.ts` — fallback download-workers
+- `electron/sync.js` — sanitização do payload uploadLogs
+- `server/index.js` — versão dinâmica
+- `server/package.json` — bump versão para 1.3.0
 
-### Causa 3 (MODERADA): A lógica web "Workers on Board" tem dados corretos mas possível inconsistência visual
-A query cloud no `useSupabase.ts` está correta — os 3 logs de teste deveriam mostrar Alexandre como "a bordo" (última entrada 19:14 sem saída posterior). O screenshot mostra "A Bordo: 0" no card mas Alexandre na tabela, sugerindo um problema de cache/timing entre o StatisticsCards e o WorkersOnBoardTable.
-
-**Investigação adicional:** Isso pode ser um render stale do React Query — a refetchInterval de 10s pode estar com cache. Não é o problema principal.
-
----
-
-## Plano de Correção
-
-### Etapa 1 — Corrigir captura de eventos no agente (`electron/agent.js`)
-Trocar `GET /api/access/last` para `POST /access_logs.fcgi` com:
-- Tracking de `last_event_id` por dispositivo (persistido no SQLite via `sync_meta`)
-- Processamento de múltiplos eventos por poll
-- Mantendo toda a normalização existente (direction, status, timestamp)
-
-### Etapa 2 — Forçar sync periódico (`electron/sync.js`)
-Alterar `checkAndSync()` para sempre chamar `triggerSync()` quando online, removendo a condição de "só sincronizar com dados pendentes". O sync já é idempotente (checkpoints impedem re-download).
-
-### Etapa 3 — Garantir consistência do dashboard web (`src/hooks/useSupabase.ts`)
-Ajustar query para usar `companies(name)` com join explícito e verificar que `workersOnBoard` e `companiesOnBoard` são derivados da mesma fonte de dados no mesmo render cycle.
-
-### Arquivos a alterar
-- `electron/agent.js` — trocar endpoint de polling para `access_logs.fcgi`
-- `electron/sync.js` — remover condição em `checkAndSync()`, sempre sincronizar
-- `src/hooks/useSupabase.ts` — review menor de consistência
