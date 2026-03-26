@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Download, FileDown, Search, Users, Building2 } from 'lucide-react';
+import { Download, FileDown, Search, Users, Building2, ChevronDown, ChevronRight } from 'lucide-react';
 import { exportReportPdf } from '@/utils/exportReportPdf';
 import { format, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -19,6 +19,12 @@ interface WorkerTimeReportProps {
   projectId: string;
   startDate: string;
   endDate: string;
+}
+
+interface RawLog {
+  direction: string;
+  device_name: string;
+  timestamp: string;
 }
 
 interface WorkerTimeRow {
@@ -31,6 +37,7 @@ interface WorkerTimeRow {
   lastExit: Date | null;
   totalMinutes: number;
   isOnBoard: boolean;
+  rawLogs: RawLog[];
 }
 
 export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeReportProps) => {
@@ -38,6 +45,7 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
   const [selectedFunction, setSelectedFunction] = useState<string>('all');
   const [selectedCompany, setSelectedCompany] = useState<string>('all');
   const [onlyOnBoard, setOnlyOnBoard] = useState(false);
+  const [expandedWorkers, setExpandedWorkers] = useState<Set<string>>(new Set());
 
   const { data: companies = [] } = useCompanies();
   const { data: accessLogs = [], isLoading } = useAccessLogs(projectId, startDate, endDate, 1000);
@@ -56,7 +64,7 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
     queryFn: async () => {
       const { data, error } = await supabase
         .from('workers')
-        .select('id, name, role, company_id, job_function_id, companies(id, name), job_functions(id, name)')
+        .select('id, name, role, company_id, job_function_id, document_number, companies(id, name), job_functions(id, name)')
         .order('name');
       if (error) throw error;
       return data;
@@ -66,13 +74,13 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
   const rows = useMemo<WorkerTimeRow[]>(() => {
     if (!accessLogs.length) return [];
 
-    // Build worker lookup maps for hybrid matching
     const workerById = new Map<string, typeof workers[0]>();
     const workerByName = new Map<string, typeof workers[0]>();
     const workerByDoc = new Map<string, typeof workers[0]>();
     for (const w of workers) {
       workerById.set(w.id, w);
       if (w.name) workerByName.set(w.name.toLowerCase().trim(), w);
+      if (w.document_number) workerByDoc.set(w.document_number.trim(), w);
     }
 
     const findWorker = (log: any) => {
@@ -82,20 +90,18 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
         if (byName) return byName;
       }
       if (log.worker_document) {
-        const byDoc = workers.find(w => w.name?.toLowerCase().trim() === log.worker_name?.toLowerCase().trim());
+        const byDoc = workerByDoc.get(log.worker_document.trim());
         if (byDoc) return byDoc;
       }
       return null;
     };
 
-    // Resolve canonical key per log (prefer worker.id for dedup)
     const resolveKey = (log: any): string => {
       const w = findWorker(log);
       if (w) return w.id;
       return log.worker_id || log.worker_name || '';
     };
 
-    // Group logs by resolved worker key
     const workerLogs = new Map<string, typeof accessLogs>();
     for (const log of accessLogs) {
       const key = resolveKey(log);
@@ -115,7 +121,6 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
       const firstEntry = entries.length > 0 ? new Date(entries[0].timestamp) : null;
       const lastExit = exits.length > 0 ? new Date(exits[exits.length - 1].timestamp) : null;
 
-      // "a bordo" = last granted log is an entry
       const lastLog = sorted[sorted.length - 1];
       const isOnBoard = lastLog?.direction === 'entry' && lastLog?.access_status === 'granted';
 
@@ -124,7 +129,6 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
         totalMinutes = differenceInMinutes(lastExit, firstEntry);
       }
 
-      // Find worker info via hybrid matching
       const worker = workerById.get(key) || findWorker(logs[0]);
       const companyObj = worker?.companies as any;
       const jobObj = worker?.job_functions as any;
@@ -139,13 +143,17 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
         lastExit: isOnBoard ? null : lastExit,
         totalMinutes,
         isOnBoard,
+        rawLogs: sorted.map(l => ({
+          direction: l.direction || 'unknown',
+          device_name: l.device_name || '-',
+          timestamp: l.timestamp,
+        })),
       });
     });
 
     return results.sort((a, b) => a.companyName.localeCompare(b.companyName) || a.workerName.localeCompare(b.workerName));
   }, [accessLogs, workers]);
 
-  // Apply filters
   const filteredRows = useMemo(() => {
     return rows.filter(row => {
       if (searchTerm) {
@@ -162,7 +170,6 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
     });
   }, [rows, searchTerm, selectedCompany, selectedFunction, onlyOnBoard, workers]);
 
-  // Group by company
   const grouped = useMemo(() => {
     const map = new Map<string, WorkerTimeRow[]>();
     for (const row of filteredRows) {
@@ -173,7 +180,16 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
     return Array.from(map.entries());
   }, [filteredRows]);
 
-  const formatTime = (date: Date | null) => date ? format(date, 'HH:mm') : '-';
+  const toggleExpanded = (workerId: string) => {
+    setExpandedWorkers(prev => {
+      const next = new Set(prev);
+      if (next.has(workerId)) next.delete(workerId);
+      else next.add(workerId);
+      return next;
+    });
+  };
+
+  const formatTime = (date: Date | null) => date ? format(date, 'dd/MM HH:mm') : '-';
   const formatDuration = (mins: number) => {
     if (mins <= 0) return '-';
     return `${Math.floor(mins / 60)}h ${mins % 60}m`;
@@ -305,8 +321,9 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
           ) : filteredRows.length > 0 ? (
             <ScrollArea className="h-[500px]">
               <table className="w-full">
-                <thead className="sticky top-0 bg-card border-b">
+                <thead className="sticky top-0 bg-card border-b z-10">
                   <tr>
+                    <th className="text-left p-3 text-sm font-medium text-muted-foreground w-10"></th>
                     <th className="text-left p-3 text-sm font-medium text-muted-foreground w-12">Nº</th>
                     <th className="text-left p-3 text-sm font-medium text-muted-foreground">Nome</th>
                     <th className="text-left p-3 text-sm font-medium text-muted-foreground">Função</th>
@@ -318,7 +335,16 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
                 </thead>
                 <tbody>
                   {grouped.map(([companyName, companyRows]) => (
-                    <CompanyGroup key={companyName} companyName={companyName} rows={companyRows} startIndex={filteredRows.indexOf(companyRows[0])} formatTime={formatTime} formatDuration={formatDuration} />
+                    <CompanyGroup
+                      key={companyName}
+                      companyName={companyName}
+                      rows={companyRows}
+                      startIndex={filteredRows.indexOf(companyRows[0])}
+                      formatTime={formatTime}
+                      formatDuration={formatDuration}
+                      expandedWorkers={expandedWorkers}
+                      onToggleExpand={toggleExpanded}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -335,17 +361,38 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
   );
 };
 
-function CompanyGroup({ companyName, rows, startIndex, formatTime, formatDuration }: {
+/* ─── Helpers ─── */
+
+function isDaytime(timestamp: string): boolean {
+  const hour = new Date(timestamp).getHours();
+  return hour >= 5 && hour <= 18;
+}
+
+function classifyLogs(rawLogs: RawLog[]) {
+  const day: RawLog[] = [];
+  const night: RawLog[] = [];
+  for (const log of rawLogs) {
+    if (isDaytime(log.timestamp)) day.push(log);
+    else night.push(log);
+  }
+  return { day, night };
+}
+
+/* ─── Company Group ─── */
+
+function CompanyGroup({ companyName, rows, startIndex, formatTime, formatDuration, expandedWorkers, onToggleExpand }: {
   companyName: string;
   rows: WorkerTimeRow[];
   startIndex: number;
   formatTime: (d: Date | null) => string;
   formatDuration: (m: number) => string;
+  expandedWorkers: Set<string>;
+  onToggleExpand: (id: string) => void;
 }) {
   return (
     <>
       <tr className="bg-muted/60">
-        <td colSpan={7} className="p-3">
+        <td colSpan={8} className="p-3">
           <div className="flex items-center gap-2">
             <Building2 className="h-4 w-4 text-primary" />
             <span className="font-semibold text-sm">{companyName}</span>
@@ -353,32 +400,155 @@ function CompanyGroup({ companyName, rows, startIndex, formatTime, formatDuratio
           </div>
         </td>
       </tr>
-      {rows.map((row, i) => (
-        <tr key={row.workerId} className="border-b hover:bg-muted/30">
-          <td className="p-3 text-sm text-muted-foreground">{startIndex + i + 1}</td>
-          <td className="p-3 text-sm font-medium">
-            <div className="flex items-center gap-2">
-              {row.workerName}
-              {row.isOnBoard && (
-                <Badge className="bg-green-500/15 text-green-600 border-green-500/20 text-xs">
-                  A bordo
-                </Badge>
-              )}
-            </div>
-          </td>
-          <td className="p-3 text-sm text-muted-foreground">{row.role}</td>
-          <td className="p-3 text-sm text-muted-foreground">{row.companyName}</td>
-          <td className="p-3 text-sm text-center">{formatTime(row.firstEntry)}</td>
-          <td className="p-3 text-sm text-center">{formatTime(row.lastExit)}</td>
-          <td className="p-3 text-center">
-            {row.totalMinutes > 0 ? (
-              <Badge variant="secondary">{formatDuration(row.totalMinutes)}</Badge>
-            ) : (
-              <span className="text-sm text-muted-foreground">-</span>
+      {rows.map((row, i) => {
+        const isExpanded = expandedWorkers.has(row.workerId);
+        return (
+          <WorkerRow
+            key={row.workerId}
+            row={row}
+            index={startIndex + i + 1}
+            isExpanded={isExpanded}
+            onToggle={() => onToggleExpand(row.workerId)}
+            formatTime={formatTime}
+            formatDuration={formatDuration}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+/* ─── Worker Row ─── */
+
+function WorkerRow({ row, index, isExpanded, onToggle, formatTime, formatDuration }: {
+  row: WorkerTimeRow;
+  index: number;
+  isExpanded: boolean;
+  onToggle: () => void;
+  formatTime: (d: Date | null) => string;
+  formatDuration: (m: number) => string;
+}) {
+  const { day, night } = useMemo(() => classifyLogs(row.rawLogs), [row.rawLogs]);
+
+  return (
+    <>
+      <tr className="border-b hover:bg-muted/30 cursor-pointer" onClick={onToggle}>
+        <td className="p-3 text-muted-foreground">
+          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </td>
+        <td className="p-3 text-sm text-muted-foreground">{index}</td>
+        <td className="p-3 text-sm font-medium">
+          <div className="flex items-center gap-2">
+            {row.workerName}
+            {row.isOnBoard && (
+              <Badge className="bg-green-500/15 text-green-600 border-green-500/20 text-xs">
+                A bordo
+              </Badge>
             )}
+          </div>
+        </td>
+        <td className="p-3 text-sm text-muted-foreground">{row.role}</td>
+        <td className="p-3 text-sm text-muted-foreground">{row.companyName}</td>
+        <td className="p-3 text-sm text-center">{formatTime(row.firstEntry)}</td>
+        <td className="p-3 text-sm text-center">
+          {row.isOnBoard ? (
+            <Badge className="bg-green-500/15 text-green-600 border-green-500/20 text-xs">A bordo</Badge>
+          ) : formatTime(row.lastExit)}
+        </td>
+        <td className="p-3 text-center">
+          {row.totalMinutes > 0 ? (
+            <Badge variant="secondary">{formatDuration(row.totalMinutes)}</Badge>
+          ) : (
+            <span className="text-sm text-muted-foreground">-</span>
+          )}
+        </td>
+      </tr>
+      {isExpanded && (
+        <tr>
+          <td colSpan={8} className="p-0">
+            <ExpandedDetails row={row} dayLogs={day} nightLogs={night} />
           </td>
         </tr>
-      ))}
+      )}
     </>
+  );
+}
+
+/* ─── Expanded Details ─── */
+
+function ExpandedDetails({ row, dayLogs, nightLogs }: {
+  row: WorkerTimeRow;
+  dayLogs: RawLog[];
+  nightLogs: RawLog[];
+}) {
+  return (
+    <div className="bg-muted/20 border-t border-b p-4 space-y-4">
+      {/* Header */}
+      <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+        <span><strong>Nome:</strong> {row.workerName}</span>
+        <span><strong>Função:</strong> {row.role}</span>
+        <span><strong>Empresa:</strong> {row.companyName}</span>
+      </div>
+
+      {/* Day / Night grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <PeriodTable title="Período Diurno (05:00 - 18:59)" logs={dayLogs} />
+        <PeriodTable title="Período Noturno (19:00 - 04:59)" logs={nightLogs} emptyMessage="Nenhum registro noturno." />
+      </div>
+    </div>
+  );
+}
+
+/* ─── Period Table ─── */
+
+function PeriodTable({ title, logs, emptyMessage }: {
+  title: string;
+  logs: RawLog[];
+  emptyMessage?: string;
+}) {
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <div className="bg-muted/50 px-3 py-2 flex items-center justify-between">
+        <span className="text-sm font-semibold">{title}</span>
+        <Badge variant="secondary" className="text-xs">{logs.length} registros</Badge>
+      </div>
+      {logs.length > 0 ? (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b bg-muted/30">
+              <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Evento</th>
+              <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Dispositivo</th>
+              <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Data/Horário</th>
+            </tr>
+          </thead>
+          <tbody>
+            {logs.map((log, i) => {
+              const isEntry = log.direction === 'entry';
+              return (
+                <tr key={i} className="border-b last:border-0">
+                  <td className="px-3 py-1.5">
+                    <Badge
+                      className={
+                        isEntry
+                          ? 'bg-green-500/15 text-green-600 border-green-500/20 text-xs'
+                          : 'bg-orange-500/15 text-orange-600 border-orange-500/20 text-xs'
+                      }
+                    >
+                      {isEntry ? 'ENTRADA' : 'SAÍDA'}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-1.5 text-muted-foreground">{log.device_name}</td>
+                  <td className="px-3 py-1.5 text-muted-foreground">
+                    {format(new Date(log.timestamp), 'dd/MM/yyyy HH:mm')}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      ) : (
+        <p className="text-sm text-muted-foreground px-3 py-4 text-center">{emptyMessage || 'Nenhum registro.'}</p>
+      )}
+    </div>
   );
 }
