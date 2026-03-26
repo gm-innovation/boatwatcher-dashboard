@@ -66,6 +66,8 @@ export const DiagnosticsPanel = () => {
   const [diagnostics, setDiagnostics] = useState<DiagnosticItem[]>([]);
   const [lastRunTime, setLastRunTime] = useState<Date | null>(null);
   const [deviceTelemetry, setDeviceTelemetry] = useState<any>(null);
+  const [cloudPipelineMetrics, setCloudPipelineMetrics] = useState<any>(null);
+  const [cloudHeartbeatSchema, setCloudHeartbeatSchema] = useState<number | null>(null);
   const [authDiagnostics, setAuthDiagnostics] = useState<AuthDiagnostics | null>(null);
   const [isTestingAuth, setIsTestingAuth] = useState(false);
   const isLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
