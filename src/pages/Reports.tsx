@@ -2,12 +2,10 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ReportsList } from "@/components/reports/ReportsList";
 import { PresenceReport } from "@/components/reports/PresenceReport";
-import { ComplianceReport } from "@/components/reports/ComplianceReport";
 import { CompanyReport } from "@/components/reports/CompanyReport";
 import { OvernightControl } from "@/components/reports/OvernightControl";
-import { GeneratedReportsList } from "@/components/reports/GeneratedReportsList";
-import { ReportScheduler } from "@/components/reports/ReportScheduler";
-import { FileText, Clock, FileCheck, Building2, Moon, Users, Archive, Calendar } from "lucide-react";
+import { WorkerTimeReport } from "@/components/reports/WorkerTimeReport";
+import { Users, Building2, FileText, Clock, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -23,11 +21,11 @@ const Reports = () => {
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Relatórios</h1>
+        <h1 className="text-2xl font-bold">Relatórios de Acesso</h1>
         <p className="text-muted-foreground">Visualize e exporte relatórios do sistema</p>
       </div>
 
-      {/* Filters Row */}
+      {/* Global Filters */}
       <div className="flex flex-wrap items-end gap-4 p-4 bg-card rounded-lg border">
         <div className="flex-1 min-w-[200px]">
           <label className="text-sm font-medium mb-2 block">Projeto *</label>
@@ -46,18 +44,18 @@ const Reports = () => {
         </div>
         <div>
           <label className="text-sm font-medium mb-2 block">Data Início</label>
-          <Input 
-            type="date" 
-            value={startDate} 
+          <Input
+            type="date"
+            value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             className="w-[160px]"
           />
         </div>
         <div>
           <label className="text-sm font-medium mb-2 block">Data Fim</label>
-          <Input 
-            type="date" 
-            value={endDate} 
+          <Input
+            type="date"
+            value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             className="w-[160px]"
           />
@@ -67,16 +65,8 @@ const Reports = () => {
         </Button>
       </div>
 
-      <Tabs defaultValue="generated" className="space-y-6">
+      <Tabs defaultValue="workers" className="space-y-6">
         <TabsList className="flex-wrap">
-          <TabsTrigger value="generated" className="gap-2">
-            <Archive className="h-4 w-4" />
-            Gerados
-          </TabsTrigger>
-          <TabsTrigger value="schedules" className="gap-2">
-            <Calendar className="h-4 w-4" />
-            Agendamentos
-          </TabsTrigger>
           <TabsTrigger value="workers" className="gap-2">
             <Users className="h-4 w-4" />
             Trabalhadores
@@ -87,7 +77,7 @@ const Reports = () => {
           </TabsTrigger>
           <TabsTrigger value="access" className="gap-2">
             <FileText className="h-4 w-4" />
-            Todos os Acessos
+            Todos Trabalhadores
           </TabsTrigger>
           <TabsTrigger value="presence" className="gap-2">
             <Clock className="h-4 w-4" />
@@ -97,22 +87,10 @@ const Reports = () => {
             <Moon className="h-4 w-4" />
             Controle de Pernoite
           </TabsTrigger>
-          <TabsTrigger value="compliance" className="gap-2">
-            <FileCheck className="h-4 w-4" />
-            Conformidade
-          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="generated">
-          <GeneratedReportsList />
-        </TabsContent>
-
-        <TabsContent value="schedules">
-          <ReportScheduler />
-        </TabsContent>
-
         <TabsContent value="workers">
-          <ReportsList />
+          <WorkerTimeReport projectId={selectedProject} startDate={startDate} endDate={endDate} />
         </TabsContent>
 
         <TabsContent value="companies">
@@ -120,19 +98,15 @@ const Reports = () => {
         </TabsContent>
 
         <TabsContent value="access">
-          <ReportsList />
+          <ReportsList projectId={selectedProject} startDate={startDate} endDate={endDate} />
         </TabsContent>
 
         <TabsContent value="presence">
-          <PresenceReport />
+          <PresenceReport projectId={selectedProject} startDate={startDate} endDate={endDate} />
         </TabsContent>
 
         <TabsContent value="overnight">
           <OvernightControl projectId={selectedProject} startDate={startDate} endDate={endDate} />
-        </TabsContent>
-
-        <TabsContent value="compliance">
-          <ComplianceReport />
         </TabsContent>
       </Tabs>
     </div>
