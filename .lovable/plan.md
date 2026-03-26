@@ -1,37 +1,25 @@
 
 
-# Telemetria por Dispositivo + Último Evento
+# Exibir Telemetria por Dispositivo no Painel de Diagnóstico
 
-## Mudanças
+## Problema
+O servidor local já expõe telemetria por dispositivo em `GET /api/sync/diagnostics` (incluindo `lastError`, `lastPollAt`, `lastEventPayload`), mas a interface web não consome nem exibe esses dados.
 
-### 1. `electron/agent.js` — Telemetria por dispositivo
+## Plano
 
-No `pollDevices()`, gravar em cada device:
-- `_lastError` / `_lastPollAt` / `_status`
-- `_lastEventPayload` — o último `rawEvent` recebido (para debug)
+### 1. Adicionar método `getDiagnostics()` ao `localServerProvider.ts`
+- Nova função: `localSync.getDiagnostics()` → `GET /api/sync/diagnostics`
+- Retorna o objeto completo com `sync`, `agent` (incluindo array `devices`), `local_db`, `config`
 
-No `processEvent()`, salvar `device._lastEventPayload = rawEvent` antes de processar.
-
-Expandir `getStatus()` para incluir array `devices`:
-```javascript
-devices: this.devices.map(d => ({
-  name: d.name,
-  ip: d.controlid_ip_address,
-  serial: d.controlid_serial_number,
-  status: d._lastError ? 'error' : 'ok',
-  lastError: d._lastError || null,
-  lastPollAt: d._lastPollAt || null,
-  lastEventId: this.getLastEventId(d),
-  lastEventPayload: d._lastEventPayload || null,
-}))
-```
-
-### 2. `server/routes/sync.js` — Fix token + devices no diagnóstico
-
-- Corrigir `has_access_token`: `req.syncEngine.accessToken` → `req.syncEngine.agentToken`
-- O `agentStatus` já incluirá `devices` automaticamente do `getStatus()` expandido
+### 2. Adicionar card "Telemetria dos Dispositivos" no `DiagnosticsPanel.tsx`
+No bloco `isLocalRuntime` do `runDiagnostics()`:
+- Chamar `localSync.getDiagnostics()` e armazenar em novo state `deviceTelemetry`
+- Renderizar um novo Card após os cards existentes com:
+  - Lista de dispositivos com: nome, IP, serial, status (badge verde/vermelho), último erro, último poll
+  - Para cada dispositivo, exibir `lastEventPayload` em bloco `<pre>` JSON formatado (colapsável)
+  - Se `lastEventPayload` for `null`, exibir "Nenhum evento capturado ainda"
 
 ### Arquivos alterados
-- `electron/agent.js`
-- `server/routes/sync.js`
+- `src/lib/localServerProvider.ts` — adicionar `getDiagnostics` ao `localSync`
+- `src/components/admin/DiagnosticsPanel.tsx` — novo card de telemetria por dispositivo com payload do último evento
 
