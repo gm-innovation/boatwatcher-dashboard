@@ -86,4 +86,48 @@ router.post('/agent/stop', (req, res) => {
   }
 });
 
+// Full diagnostics endpoint
+router.get('/diagnostics', (req, res) => {
+  try {
+    const syncStatus = req.syncEngine.getStatus();
+    const agentStatus = req.agentController.getStatus();
+
+    // Count unsynced logs in SQLite
+    let unsyncedCount = 0;
+    try {
+      const rawDb = req.db.getRawDb?.();
+      if (rawDb) {
+        const row = rawDb.prepare('SELECT COUNT(*) as count FROM access_logs WHERE synced = 0').get();
+        unsyncedCount = row?.count || 0;
+      }
+    } catch { /* ignore */ }
+
+    // Check sync configuration
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'NOT SET';
+    const hasToken = !!(req.syncEngine.accessToken);
+
+    res.json({
+      version: serverVersion,
+      timestamp: new Date().toISOString(),
+      sync: {
+        ...syncStatus,
+        lastUploadLogsError: req.syncEngine._lastUploadLogsError || null,
+        lastDownloadLogsError: req.syncEngine._lastDownloadLogsError || null,
+        uploadLogsCount: req.syncEngine._uploadLogsCount || 0,
+        downloadLogsCount: req.syncEngine._downloadLogsCount || 0,
+      },
+      agent: agentStatus,
+      local_db: {
+        unsynced_access_logs: unsyncedCount,
+      },
+      config: {
+        supabase_url: supabaseUrl.replace(/\/\/(.{8}).*(@|\.supabase)/, '//$1***$2'),
+        has_access_token: hasToken,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
