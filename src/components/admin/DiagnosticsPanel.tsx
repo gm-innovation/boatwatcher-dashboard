@@ -65,6 +65,7 @@ export const DiagnosticsPanel = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DiagnosticItem[]>([]);
   const [lastRunTime, setLastRunTime] = useState<Date | null>(null);
+  const [deviceTelemetry, setDeviceTelemetry] = useState<any>(null);
   const [authDiagnostics, setAuthDiagnostics] = useState<AuthDiagnostics | null>(null);
   const [isTestingAuth, setIsTestingAuth] = useState(false);
   const isLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
