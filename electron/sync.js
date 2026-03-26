@@ -280,16 +280,34 @@ class SyncEngine {
   }
 
   async uploadLogs() {
-    const logs = this.db.getUnsyncedLogs?.() || [];
-    if (logs.length === 0) return;
+    const rawLogs = this.db.getUnsyncedLogs?.() || [];
+    if (rawLogs.length === 0) return;
+
+    // Sanitize: remove SQLite-internal fields and ensure canonical ENUM values
+    const VALID_ACCESS_STATUS = ['granted', 'denied'];
+    const VALID_DIRECTION = ['entry', 'exit', 'unknown'];
+
+    const logs = rawLogs.map(({ synced, created_at, id, cloud_id, ...rest }) => ({
+      ...rest,
+      access_status: VALID_ACCESS_STATUS.includes(rest.access_status) ? rest.access_status : 'granted',
+      direction: VALID_DIRECTION.includes(rest.direction) ? rest.direction : 'unknown',
+    }));
+
+    // Keep local IDs for marking as synced after success
+    const localIds = rawLogs.map((l) => l.id);
 
     try {
+      console.log(`[sync] Uploading ${logs.length} sanitized access logs...`);
       const response = await this.callEdgeFunction('agent-sync/upload-logs', 'POST', { logs });
       if (response.success) {
-        this.db.markLogsSynced(logs.map((l) => l.id));
+        this.db.markLogsSynced(localIds);
         this._uploadLogsCount += logs.length;
         this._lastUploadLogsError = null;
-        console.log(`[sync] Uploaded ${logs.length} access logs`);
+        console.log(`[sync] Uploaded ${logs.length} access logs successfully`);
+      } else {
+        const errDetail = response.error || response.message || JSON.stringify(response);
+        this._lastUploadLogsError = `${new Date().toISOString()}: server returned success=false — ${errDetail}`;
+        console.error('[sync] Upload logs rejected by server:', errDetail);
       }
     } catch (err) {
       this._lastUploadLogsError = `${new Date().toISOString()}: ${err.message}`;
