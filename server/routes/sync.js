@@ -1,5 +1,11 @@
 const express = require('express');
+const path = require('path');
 const router = express.Router();
+
+const serverVersion = (() => {
+  try { return require(path.join(__dirname, '..', 'package.json')).version; }
+  catch { return 'unknown'; }
+})();
 
 router.get('/status', (req, res) => {
   try {

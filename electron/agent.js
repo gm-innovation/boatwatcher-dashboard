@@ -262,7 +262,9 @@ class AgentController {
     let session;
     try {
       session = await this.loginToDevice(device);
+      console.log(`[Agent][${device.name}] Login OK (ip=${ip})`);
     } catch (err) {
+      console.error(`[Agent][${device.name}] Login FAILED (ip=${ip}): ${err.message}`);
       throw new Error(`Login failed: ${err.message}`);
     }
 
@@ -290,7 +292,10 @@ class AgentController {
           'Content-Length': Buffer.byteLength(postData),
         },
       }, (res) => {
+        console.log(`[Agent][${device.name}] access_logs.fcgi responded status=${res.statusCode}`);
+
         if (res.statusCode === 401 && !_retried) {
+          console.log(`[Agent][${device.name}] Got 401, retrying with fresh session...`);
           this.invalidateSession(device);
           this.pollDevice(device, true).then(resolve).catch(reject);
           return;
@@ -303,6 +308,7 @@ class AgentController {
             const response = JSON.parse(data);
             const events = response.access_logs || response.events || [];
             if (!Array.isArray(events)) {
+              console.log(`[Agent][${device.name}] Response is not an array. Keys: ${Object.keys(response).join(', ')}. Checking single-event fallback.`);
               // Fallback: single event response (legacy /api/access/last format)
               if (response && (response.timestamp || response.time || response.date)) {
                 this.processEvent(device, response);
@@ -310,6 +316,8 @@ class AgentController {
               resolve();
               return;
             }
+
+            console.log(`[Agent][${device.name}] Received ${events.length} events (lastEventId=${lastEventId})`);
 
             let maxId = lastEventId;
             for (const rawEvent of events) {
@@ -323,9 +331,11 @@ class AgentController {
             }
 
             if (events.length > 0) {
-              console.log(`[Agent] Polled ${events.length} events from ${device.name} (lastId: ${lastEventId} → ${maxId})`);
+              console.log(`[Agent][${device.name}] Polled ${events.length} events (lastId: ${lastEventId} → ${maxId})`);
             }
-          } catch { /* ignore parse errors */ }
+          } catch (parseErr) {
+            console.error(`[Agent][${device.name}] Failed to parse response: ${parseErr.message}. Raw body (first 500 chars): ${data.slice(0, 500)}`);
+          }
           resolve();
         });
       });
