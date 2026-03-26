@@ -36,7 +36,7 @@ const CompanyForm = ({ company, onSuccess, onCancel }: CompanyFormProps) => {
         await createCompany({ name, cnpj, contact_email: contactEmail, type: 'company' });
         toast({ title: 'Empresa cadastrada com sucesso' });
       }
-      queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['contractor-companies'] });
       onSuccess();
     } catch (error: any) {
       toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' });
