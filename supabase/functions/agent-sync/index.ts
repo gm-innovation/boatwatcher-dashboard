@@ -352,6 +352,55 @@ serve(async (req) => {
         console.warn(`[agent-sync/upload-logs] Rejected logs:`, JSON.stringify(rejected.slice(0, 10)))
       }
 
+      // Resolve local worker_ids to cloud UUIDs using worker_name or worker_document
+      for (const log of accepted) {
+        const wId = log.worker_id as string | null
+        if (!wId) continue
+
+        // Check if this worker_id actually exists in the cloud workers table
+        const { data: existingWorker } = await supabase
+          .from('workers')
+          .select('id')
+          .eq('id', wId)
+          .maybeSingle()
+
+        if (!existingWorker) {
+          // worker_id is a local UUID — try to resolve by name or document
+          let resolved = false
+
+          if (log.worker_document) {
+            const { data: byDoc } = await supabase
+              .from('workers')
+              .select('id')
+              .eq('document_number', log.worker_document)
+              .maybeSingle()
+            if (byDoc) {
+              console.log(`[agent-sync/upload-logs] Resolved worker_id ${wId} -> ${byDoc.id} via document`)
+              log.worker_id = byDoc.id
+              resolved = true
+            }
+          }
+
+          if (!resolved && log.worker_name) {
+            const { data: byName } = await supabase
+              .from('workers')
+              .select('id')
+              .eq('name', log.worker_name)
+              .maybeSingle()
+            if (byName) {
+              console.log(`[agent-sync/upload-logs] Resolved worker_id ${wId} -> ${byName.id} via name`)
+              log.worker_id = byName.id
+              resolved = true
+            }
+          }
+
+          if (!resolved) {
+            console.warn(`[agent-sync/upload-logs] Could not resolve local worker_id ${wId}, setting to null`)
+            log.worker_id = null
+          }
+        }
+      }
+
       let insertedCount = 0
       if (accepted.length > 0) {
         const { error } = await supabase.from('access_logs').insert(accepted)

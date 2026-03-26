@@ -144,22 +144,30 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
       const workerIds = Array.from(workersOnBoard.keys());
       if (workerIds.length === 0) return [];
 
-      const { data: workers, error: workersError } = await supabase
+      // Try to enrich with workers table data, but don't discard if not found
+      const { data: workers } = await supabase
         .from('workers')
         .select('id, name, role, company_id, companies(name)')
         .in('id', workerIds);
 
-      if (workersError) throw workersError;
+      const workersMap = new Map<string, any>();
+      for (const w of workers || []) {
+        workersMap.set(w.id, w);
+      }
 
-      return (workers || []).map((worker: any) => ({
-        id: worker.id,
-        name: worker.name,
-        location: workersOnBoard.get(worker.id)?.device_name || null,
-        role: worker.role,
-        company: worker.companies?.name || 'N/A',
-        company_id: worker.company_id,
-        entryTime: workersOnBoard.get(worker.id)?.entry_time,
-      }));
+      return workerIds.map((wId) => {
+        const onBoard = workersOnBoard.get(wId);
+        const enriched = workersMap.get(wId);
+        return {
+          id: wId,
+          name: enriched?.name || onBoard?.worker_name || 'Desconhecido',
+          location: onBoard?.device_name || null,
+          role: enriched?.role || null,
+          company: enriched?.companies?.name || 'N/A',
+          company_id: enriched?.company_id || null,
+          entryTime: onBoard?.entry_time,
+        };
+      });
     },
     enabled: !!projectId,
     refetchInterval: 10000,
