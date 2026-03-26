@@ -320,6 +320,8 @@ class AgentController {
         res.on('end', () => {
           try {
             const response = JSON.parse(data);
+            // Save raw response for diagnostics (truncated to 2KB)
+            device._lastPollResponse = data.length > 2048 ? data.slice(0, 2048) + '…[truncated]' : data;
             const events = response.access_logs || response.events || [];
             if (!Array.isArray(events)) {
               console.log(`[Agent][${device.name}] Response is not an array. Keys: ${Object.keys(response).join(', ')}. Checking single-event fallback.`);
