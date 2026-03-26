@@ -225,22 +225,47 @@ class AgentController {
   }
 
   async pollDevices() {
-    for (const device of this.devices) {
+    await Promise.allSettled(this.devices.map(device => this.pollDeviceWithRetry(device)));
+  }
+
+  async pollDeviceWithRetry(device) {
+    try {
+      await this.pollDevice(device);
+      // Success — clear errors and failure counter
+      device._lastError = null;
+      device._consecutiveFailures = 0;
+      device._lastPollAt = new Date().toISOString();
+      if (device.controlid_serial_number) {
+        this.deviceConnectivity.set(device.controlid_serial_number, { online: true });
+      }
+      this.persistDeviceStatus(device, 'online');
+    } catch (firstErr) {
+      // Retry once before counting as failure
       try {
+        this.invalidateSession(device);
         await this.pollDevice(device);
         device._lastError = null;
+        device._consecutiveFailures = 0;
         device._lastPollAt = new Date().toISOString();
         if (device.controlid_serial_number) {
           this.deviceConnectivity.set(device.controlid_serial_number, { online: true });
         }
         this.persistDeviceStatus(device, 'online');
-      } catch (err) {
-        device._lastError = err.message;
+      } catch (retryErr) {
+        device._consecutiveFailures = (device._consecutiveFailures || 0) + 1;
+        device._lastError = retryErr.message;
         device._lastPollAt = new Date().toISOString();
-        if (device.controlid_serial_number) {
-          this.deviceConnectivity.set(device.controlid_serial_number, { online: false });
+
+        // Only mark offline after FAILURE_THRESHOLD consecutive failures
+        if (device._consecutiveFailures >= this.FAILURE_THRESHOLD) {
+          if (device.controlid_serial_number) {
+            this.deviceConnectivity.set(device.controlid_serial_number, { online: false });
+          }
+          this.persistDeviceStatus(device, 'offline');
+          console.error(`[Agent][${device.name}] Offline after ${device._consecutiveFailures} consecutive failures: ${retryErr.message}`);
+        } else {
+          console.warn(`[Agent][${device.name}] Failure ${device._consecutiveFailures}/${this.FAILURE_THRESHOLD}: ${retryErr.message}`);
         }
-        this.persistDeviceStatus(device, 'offline');
       }
     }
   }
