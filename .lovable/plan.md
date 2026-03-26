@@ -1,63 +1,49 @@
 
 
-# Diagnóstico: Correção BRT ainda não aplicada pelo agent local
+# Evolução do Sistema de Relatórios
 
-## Problema Confirmado
+## Situação Atual
+- A página de relatórios faz queries ao vivo (access_logs, workers, worker_documents) sem salvar snapshots
+- A tabela `generated_reports` existe mas não é utilizada
+- A edge function `scheduled-reports` gera dados mas não salva na `generated_reports`
+- O `ReportScheduler` existe como componente mas não está na página de relatórios
+- Não há cron job configurado para execução automática
+- Não há envio de e-mail aos destinatários
 
-O registro mais recente no banco:
-- **Entry**: `timestamp: 2026-03-26 13:53:54+00`, `created_at: 2026-03-26 16:54:11+00`
-- Diferença: exatamente **3 horas** → o agent.js local NÃO aplicou a correção BRT (servidor não foi reiniciado)
+## Plano de Implementação
 
-A edge function `validateTimestamp` foi alterada para NÃO corrigir timestamps (apenas rejeitar futuros). Resultado: timestamps chegam 3h atrasados novamente.
+### 1. Atualizar a Edge Function `scheduled-reports`
+- Salvar o resultado de cada relatório na tabela `generated_reports` com `report_type`, `project_id`, `filters` (incluindo date_range) e `data` (JSON com o snapshot)
+- Adicionar campos `date_range_start` e `date_range_end` à tabela `generated_reports` via migração
+- Enriquecer os relatórios: cruzar access_logs com workers/companies para incluir nomes, empresas, horas trabalhadas no snapshot JSON
+- Filtrar por `project_id` quando disponível (via devices do projeto)
 
-O dashboard vê: última saída em `16:37 UTC` > última entrada em `13:53 UTC` → conclui que o trabalhador já saiu → mostra 0.
+### 2. Adicionar Geração Manual de Relatórios
+- Na página Reports, adicionar botão "Gerar Relatório" que chama a edge function `scheduled-reports` com `{ schedule_id, manual: true }` ou parâmetros diretos (`report_type`, `project_id`, `date_range`)
+- Mostrar loading e toast de sucesso/erro
 
-## Solução: Reintroduzir correção BRT na edge function com janela segura
+### 3. Criar aba "Relatórios Gerados" na página Reports
+- Nova aba listando registros da tabela `generated_reports` ordenados por `created_at` desc
+- Cada item mostra: tipo, período, data de geração, quantidade de registros
+- Ao clicar, abre dialog/drawer renderizando o campo `data` em tabela formatada
+- Botões de exportar PDF/CSV a partir do snapshot salvo
 
-A correção anterior falhou porque usava janela ampla (2.5h-3.5h) que capturou logs já corrigidos. Agora usaremos uma janela **estreita e segura**:
+### 4. Integrar o ReportScheduler na página Reports
+- Adicionar aba "Agendamentos" usando o componente `ReportScheduler` já existente
+- Adicionar botão "Executar Agora" em cada agendamento que chama a edge function manualmente
 
-### 1. `supabase/functions/agent-sync/index.ts` — `validateTimestamp()`
+### 5. Configurar Cron Job (pg_cron)
+- Habilitar extensões `pg_cron` e `pg_net`
+- Criar job que chama `scheduled-reports` a cada hora para verificar agendamentos pendentes
 
-Modificar para detectar e corrigir timestamps que estão **precisamente ~3h atrás** do horário do servidor (janela de 2h50m a 3h10m). Isso é seguro porque:
-- Logs corretamente convertidos chegam com diferença de segundos (< 2 min)
-- Logs BRT sem correção chegam com diferença de ~3h exatos
-- A janela de 20 min é estreita o suficiente para não capturar outros cenários
+### 6. Migração SQL
+- Adicionar colunas `date_range_start` e `date_range_end` (timestamptz) à `generated_reports`
+- Adicionar policy de UPDATE para admins em `generated_reports`
 
-```typescript
-function validateTimestamp(ts: string): { valid: boolean; timestamp: string; reason?: string } {
-  const parsed = new Date(ts);
-  if (isNaN(parsed.getTime())) return { valid: false, timestamp: ts, reason: 'unparseable' };
-  const now = Date.now();
-  const diffMs = parsed.getTime() - now;
-  
-  // Reject future timestamps (> 5 min ahead)
-  if (diffMs > 5 * 60 * 1000) {
-    return { valid: false, timestamp: ts, reason: `${Math.round(diffMs/60000)}min in future` };
-  }
-  
-  // Detect BRT offset: timestamp is 2h50m–3h10m behind server time
-  const lagMs = now - parsed.getTime();
-  if (lagMs > 170 * 60000 && lagMs < 190 * 60000) {
-    const corrected = new Date(parsed.getTime() + 3 * 3600000);
-    console.log(`[validateTimestamp] BRT correction applied: ${ts} → ${corrected.toISOString()}`);
-    return { valid: true, timestamp: corrected.toISOString() };
-  }
-  
-  return { valid: true, timestamp: ts };
-}
-```
-
-### 2. Migração SQL — Corrigir o último registro
-
-```sql
-UPDATE access_logs 
-SET timestamp = timestamp + interval '3 hours'
-WHERE created_at > '2026-03-26 16:50:00+00'
-  AND timestamp < '2026-03-26 14:00:00+00'
-  AND direction = 'entry';
-```
-
-### Arquivos alterados
-- **`supabase/functions/agent-sync/index.ts`** — correção BRT com janela segura de 20 min
-- **Migração SQL** — corrigir entrada mais recente
+### Arquivos Alterados/Criados
+- `supabase/functions/scheduled-reports/index.ts` — salvar em generated_reports, enriquecer dados
+- `src/pages/Reports.tsx` — adicionar abas "Gerados" e "Agendamentos"
+- `src/components/reports/GeneratedReportsList.tsx` — novo componente para listar/visualizar relatórios salvos
+- `src/components/reports/ReportScheduler.tsx` — adicionar botão "Executar Agora"
+- Migração SQL — colunas e policies
 
