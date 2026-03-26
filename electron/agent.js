@@ -120,6 +120,7 @@ class AgentController {
         lastPollAt: d._lastPollAt || null,
         lastEventId: this.getLastEventId(d),
         lastEventPayload: d._lastEventPayload || null,
+        lastPollResponse: d._lastPollResponse || null,
       })),
     };
   }
