@@ -74,6 +74,7 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
       const payload = { 
         name, 
         status,
+        type: 'client' as const,
         cnpj: cnpj || null,
         contact_email: contactEmail || null,
         logo_url_light: logoUrlLight || null,
