@@ -168,6 +168,7 @@ export type Database = {
           project_managers: string[] | null
           responsible_name: string | null
           status: string | null
+          type: string
           updated_at: string
           vessels: string[] | null
         }
@@ -186,6 +187,7 @@ export type Database = {
           project_managers?: string[] | null
           responsible_name?: string | null
           status?: string | null
+          type?: string
           updated_at?: string
           vessels?: string[] | null
         }
@@ -204,6 +206,7 @@ export type Database = {
           project_managers?: string[] | null
           responsible_name?: string | null
           status?: string | null
+          type?: string
           updated_at?: string
           vessels?: string[] | null
         }
