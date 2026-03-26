@@ -25,7 +25,11 @@ import {
   Copy,
   CheckCheck,
   Cloud,
+  Cpu,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { InterLayerConnectivityCard } from './InterLayerConnectivityCard';
 import { getSessionDiagnostics, forceLogout } from '@/utils/ensureValidSession';
@@ -61,6 +65,7 @@ export const DiagnosticsPanel = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DiagnosticItem[]>([]);
   const [lastRunTime, setLastRunTime] = useState<Date | null>(null);
+  const [deviceTelemetry, setDeviceTelemetry] = useState<any>(null);
   const [authDiagnostics, setAuthDiagnostics] = useState<AuthDiagnostics | null>(null);
   const [isTestingAuth, setIsTestingAuth] = useState(false);
   const isLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
@@ -348,6 +353,14 @@ export const DiagnosticsPanel = () => {
         message: 'A auditoria estrutural do banco local ficará para a fase de endurecimento offline-first.',
         lastCheck: new Date()
       });
+
+      // Fetch full diagnostics (includes device telemetry)
+      try {
+        const diagData = await localSync.getDiagnostics();
+        setDeviceTelemetry(diagData);
+      } catch {
+        setDeviceTelemetry(null);
+      }
 
       setDiagnostics(results);
       setLastRunTime(new Date());
@@ -869,6 +882,82 @@ export const DiagnosticsPanel = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Device Telemetry — Local Server only */}
+      {isLocalRuntime && deviceTelemetry?.agent?.devices && (
+        <Card className="border-2 border-cyan-500/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Cpu className="h-5 w-5 text-cyan-500" />
+              Telemetria dos Dispositivos
+              <Badge variant="outline" className="ml-auto">{deviceTelemetry.agent.devices.length} dispositivo(s)</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {deviceTelemetry.agent.devices.length === 0 && (
+                <p className="text-sm text-muted-foreground">Nenhum dispositivo configurado no agente local.</p>
+              )}
+              {deviceTelemetry.agent.devices.map((device: any, idx: number) => (
+                <div key={device.serial || idx} className="rounded-lg border bg-card p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Wifi className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">{device.name || 'Sem nome'}</span>
+                      <span className="text-xs text-muted-foreground font-mono">{device.ip}</span>
+                    </div>
+                    <Badge className={device.status === 'error'
+                      ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                      : 'bg-green-500/10 text-green-500 border-green-500/20'
+                    }>
+                      {device.status === 'error' ? 'Erro' : 'OK'}
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Serial</p>
+                      <p className="font-mono text-xs">{device.serial || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Último Poll</p>
+                      <p className="text-xs">{device.lastPollAt ? new Date(device.lastPollAt).toLocaleTimeString() : '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Último Event ID</p>
+                      <p className="font-mono text-xs">{device.lastEventId ?? '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Último Erro</p>
+                      <p className="text-xs text-red-500">{device.lastError || 'Nenhum'}</p>
+                    </div>
+                  </div>
+
+                  <Collapsible>
+                    <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                      <ChevronRight className="h-3 w-3 collapsible-chevron" />
+                      Último Evento (Payload)
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      {device.lastEventPayload ? (
+                        <pre className="mt-2 p-3 rounded bg-muted/50 text-xs font-mono overflow-auto max-h-48">
+                          {JSON.stringify(device.lastEventPayload, null, 2)}
+                        </pre>
+                      ) : (
+                        <p className="mt-2 text-xs text-muted-foreground italic">Nenhum evento capturado ainda.</p>
+                      )}
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
+              ))}
+
+              {deviceTelemetry.version && (
+                <p className="text-xs text-muted-foreground text-right">Servidor Local v{deviceTelemetry.version}</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Inter-Layer Connectivity Tests */}
       <InterLayerConnectivityCard

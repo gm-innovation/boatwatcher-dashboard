@@ -252,6 +252,7 @@ export const localStorage = {
 export const localSync = {
   getStatus: () => apiFetch('/api/sync/status'),
   trigger: () => apiFetch('/api/sync/trigger', { method: 'POST' }),
+  getDiagnostics: () => apiFetch('/api/sync/diagnostics'),
 };
 
 export const localAgent = {
