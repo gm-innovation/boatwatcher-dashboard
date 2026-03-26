@@ -286,12 +286,11 @@ class AgentController {
     const creds = this.parseApiCredentials(device.api_credentials);
     const lastEventId = this.getLastEventId(device);
 
-    // Use POST /load_objects.fcgi with ControlID API format (documented endpoint)
-    const payload = { object: 'access_logs', limit: 100 };
+    // Use POST /load_objects.fcgi with documented ControlID API format
+    const payload = { object: 'access_logs' };
     if (lastEventId > 0) {
-      payload.where = [{ access_logs: { id: { '>': lastEventId } } }];
+      payload.where = [{ object: 'access_logs', field: 'id', operator: '>', value: lastEventId }];
     }
-    payload.order = [{ access_logs: { id: 'ASC' } }];
     const postData = JSON.stringify(payload);
 
     return new Promise((resolve, reject) => {
