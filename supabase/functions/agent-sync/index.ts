@@ -347,10 +347,13 @@ serve(async (req) => {
             deviceId = null
           }
 
+          // Apply BRT safety net to timestamp
+          const correctedTimestamp = correctBrtTimestamp(String(l.timestamp));
+
           accepted.push({
             worker_id: workerId,
             device_id: deviceId,
-            timestamp: l.timestamp,
+            timestamp: correctedTimestamp,
             access_status: accessStatus,
             direction,
             reason: l.reason || null,
