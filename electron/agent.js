@@ -306,7 +306,7 @@ class AgentController {
           'Content-Length': Buffer.byteLength(postData),
         },
       }, (res) => {
-        console.log(`[Agent][${device.name}] access_logs.fcgi responded status=${res.statusCode}`);
+        console.log(`[Agent][${device.name}] load_objects.fcgi responded status=${res.statusCode}`);
 
         if (res.statusCode === 401 && !_retried) {
           console.log(`[Agent][${device.name}] Got 401, retrying with fresh session...`);
