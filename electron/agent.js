@@ -219,11 +219,15 @@ class AgentController {
     for (const device of this.devices) {
       try {
         await this.pollDevice(device);
+        device._lastError = null;
+        device._lastPollAt = new Date().toISOString();
         if (device.controlid_serial_number) {
           this.deviceConnectivity.set(device.controlid_serial_number, { online: true });
         }
         this.persistDeviceStatus(device, 'online');
       } catch (err) {
+        device._lastError = err.message;
+        device._lastPollAt = new Date().toISOString();
         if (device.controlid_serial_number) {
           this.deviceConnectivity.set(device.controlid_serial_number, { online: false });
         }
