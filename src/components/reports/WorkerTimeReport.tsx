@@ -123,13 +123,13 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
       const isOnBoard = lastLog?.direction === 'entry';
       const lastExit = lastLog?.direction === 'exit' ? new Date(lastLog.timestamp) : null;
 
-      let totalMs = 0;
-      for (let i = 0; i < alternating.length - 1; i += 2) {
-        if (alternating[i].direction === 'entry' && alternating[i + 1]?.direction === 'exit') {
-          totalMs += new Date(alternating[i + 1].timestamp).getTime() - new Date(alternating[i].timestamp).getTime();
-        }
+      const firstEntryLog = alternating.find(l => l.direction === 'entry');
+      const lastExitLog = [...alternating].reverse().find(l => l.direction === 'exit');
+      let totalMinutes = 0;
+      if (firstEntryLog && lastExitLog) {
+        const diffMs = new Date(lastExitLog.timestamp).getTime() - new Date(firstEntryLog.timestamp).getTime();
+        totalMinutes = diffMs > 0 ? Math.round(diffMs / 60000) : 0;
       }
-      const totalMinutes = Math.round(totalMs / 60000);
 
       const worker = workerById.get(key) || findWorker(logs[0]);
       const companyObj = worker?.companies as any;
