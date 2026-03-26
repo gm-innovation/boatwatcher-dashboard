@@ -1,40 +1,28 @@
 
 
-# Fix: Upload de Logs Falhando por Foreign Key + Polling Funcionando
+# Fix: Dashboard Mostra 0 Trabalhadores — UUID Mismatch
 
-## Situação Atual (v1.3.6)
+## Problema Real
 
-**Polling corrigido com sucesso**: `{"access_logs":[]}` — a API ControlID responde corretamente. Os lastEventId (20 e 241) mostram que os 258 eventos históricos foram capturados.
+O trabalhador "Alexandre Silva" **existe** na nuvem com `id = 46dc598a...`, mas os `access_logs` foram enviados com `worker_id = 5a96074e...` (UUID gerado pelo banco local SQLite). São UUIDs diferentes para a mesma pessoa.
 
-**Upload bloqueado**: 100 logs presos na fila local. Erro:
-```
-access_logs_worker_id_fkey: insert or update on table "access_logs" 
-violates foreign key constraint
-```
+A query `useWorkersOnBoard` (linha 147-150) faz `workers.id IN ('5a96074e...')` — que não encontra nada porque o ID real na nuvem é `46dc598a...`.
 
-**Causa raiz**: A tabela `access_logs` na nuvem tem `worker_id UUID REFERENCES public.workers(id)`. Os eventos capturados do hardware têm `worker_id` de trabalhadores que não existem na tabela `workers` da nuvem (são códigos inteiros do ControlID mapeados para UUIDs locais, ou UUIDs de trabalhadores que ainda não foram sincronizados).
+## Correção em duas frentes
 
-## Plano de Correção
+### 1. `src/hooks/useSupabase.ts` — Usar dados desnormalizados do `access_logs`
 
-### 1. Migração: Remover FK constraint de `access_logs.worker_id`
+O `access_logs` já contém `worker_name` e `device_name`. Em vez de depender do JOIN obrigatório com `workers` (que falha por UUID mismatch), usar esses campos diretamente e fazer um enriquecimento opcional:
 
-A tabela `access_logs` já armazena dados desnormalizados (`worker_name`, `worker_document`, `device_name`), então a FK é desnecessária e prejudicial. A constraint `access_logs_device_id_fkey` também deve ser removida pela mesma razão.
+- Construir o resultado a partir do Map `workersOnBoard` (que já tem `worker_name`, `device_name`, `entry_time`)
+- Tentar enriquecer com dados do `workers` via JOIN, mas **não descartar** trabalhadores que não foram encontrados
+- Para workers não encontrados no JOIN, usar `worker_name` do log e "N/A" para role/company
 
-```sql
-ALTER TABLE public.access_logs DROP CONSTRAINT IF EXISTS access_logs_worker_id_fkey;
-ALTER TABLE public.access_logs DROP CONSTRAINT IF EXISTS access_logs_device_id_fkey;
-```
+### 2. `supabase/functions/agent-sync/index.ts` — Resolver worker_id local para cloud UUID
 
-### 2. Edge Function `agent-sync/upload-logs` — Fallback para worker_id inválido
-
-Adicionar validação: se `worker_id` não existe na tabela `workers`, setar como `null` antes do insert. Isso garante resiliência mesmo se a FK for re-adicionada no futuro.
-
-### 3. Atualizar memória de arquitetura
-
-Atualizar o contexto para registrar que `access_logs` não usa FK para permitir logs de trabalhadores não cadastrados.
+No momento do upload, tentar resolver o `worker_id` local para o UUID correto na nuvem usando o campo `worker_name` ou `worker_document` como chave de busca. Se encontrar correspondência, substituir o UUID local pelo da nuvem. Isso corrige o problema na fonte.
 
 ### Arquivos alterados
-- **Migração SQL** — remover FK constraints de `access_logs`
-- **`supabase/functions/agent-sync/index.ts`** — validar worker_id antes do insert
-- **`server/package.json`** — bump para 1.3.7 (não obrigatório, pois a correção é server-side)
+- **`src/hooks/useSupabase.ts`** — `useWorkersOnBoard`: resultado baseado em `access_logs` com enriquecimento opcional do `workers`
+- **`supabase/functions/agent-sync/index.ts`** — resolver worker_id para UUID cloud antes do insert
 
