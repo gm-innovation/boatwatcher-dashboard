@@ -906,8 +906,8 @@ export const DiagnosticsPanel = () => {
         </CardContent>
       </Card>
 
-      {/* Device Telemetry — Local Server only */}
-      {isLocalRuntime && deviceTelemetry?.agent?.devices && (
+      {/* Device Telemetry — Local or Cloud */}
+      {deviceTelemetry?.agent?.devices && (
         <Card className="border-2 border-cyan-500/20">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
