@@ -1,57 +1,43 @@
 
 
-# Correção dos Relatórios Vazios + Robustez da Identificação
+# Adicionar Linha Expandível com Detalhes de Eventos por Trabalhador
 
-## Causa Raiz Identificada
+## O que falta (conforme o print de produção)
 
-A migração `20260326153724` removeu as foreign keys entre `access_logs` e `workers`/`devices`:
-```sql
-ALTER TABLE public.access_logs DROP CONSTRAINT IF EXISTS access_logs_worker_id_fkey;
-ALTER TABLE public.access_logs DROP CONSTRAINT IF EXISTS access_logs_device_id_fkey;
-```
+1. **Linha expandível**: Clicar no chevron (▼) ao lado do nome expande uma seção de detalhes abaixo da linha do trabalhador
+2. **Entrada/Saída com data completa**: A coluna Entrada mostra `dd/MM HH:mm` (não apenas `HH:mm`); Saída mostra badge "A bordo" quando aplicável
+3. **Seção expandida dividida em dois períodos**:
+   - **Período Diurno (05:00 - 18:59)**: lista todos os eventos individuais (ENTRADA verde / SAIDA laranja) com Dispositivo e Data/Horário, e contagem de registros
+   - **Período Noturno (19:00 - 04:59)**: mesma estrutura, ou "Nenhum registro noturno." se vazio
+4. **Header da seção expandida**: "Nome: X  Função: Y  Empresa: Z"
+5. **Tempo total acumulado**: Exibido em formato `Xh Ym` (ex: `3602h 10m`) — calculado como soma de todo o período, não apenas um dia
 
-Porém, a query em `fetchAccessLogs` (useDataProvider.ts) ainda tenta fazer join via FK:
-```
-.select('*, worker:workers(...), device:devices(...)')
-```
+## Mudanças
 
-PostgREST retorna **400**: *"Could not find a relationship between 'access_logs' and 'workers'"*
+### `src/components/reports/WorkerTimeReport.tsx`
 
-Todos os relatórios usam `useAccessLogs` -> `fetchAccessLogs` -> **todas as abas recebem array vazio**.
+**Dados**:
+- Incluir o array de logs brutos (`rawLogs`) em cada `WorkerTimeRow` para renderizar na expansão
+- Incluir `device_name` de cada log
+- Mudar `formatTime` para mostrar `dd/MM HH:mm` em vez de só `HH:mm`
 
-## Plano de Correção
+**Interface da WorkerTimeRow**:
+- Adicionar `rawLogs: Array<{ direction: string; device_name: string; timestamp: string }>` ao tipo
 
-### Passo 1: Corrigir `fetchAccessLogs` em `src/hooks/useDataProvider.ts`
+**CompanyGroup → WorkerRow**:
+- Adicionar estado `expandedWorker` (set de IDs expandidos)
+- Cada linha de trabalhador tem um chevron (▼/▲) clicável
+- Ao expandir, renderizar abaixo uma `<tr>` com `<td colSpan={7}>` contendo:
+  - Header: `Nome: X  Função: Y  Empresa: Z`
+  - Grid 2 colunas:
+    - Esquerda: "Período Diurno (05:00 - 18:59)" + contagem + tabela de eventos (Evento, Dispositivo, Data/Horário)
+    - Direita: "Período Noturno (19:00 - 04:59)" + contagem + tabela ou mensagem vazia
+  - Eventos coloridos: ENTRADA em verde, SAIDA em laranja/vermelho
 
-Remover os joins FK e fazer `select('*')` apenas. Os dados denormalizados (`worker_name`, `worker_document`, `device_name`) já existem diretamente na tabela `access_logs`, então nenhuma informação é perdida.
+**Classificação diurno/noturno**:
+- Diurno: hora entre 05:00 e 18:59
+- Noturno: hora entre 19:00 e 04:59
 
-```typescript
-// ANTES (quebrado):
-.select('*, worker:workers(id, name, document_number, company_id), device:devices(id, name, project_id)')
-
-// DEPOIS (funcional):
-.select('*')
-```
-
-### Passo 2: Melhorar matching híbrido no `WorkerTimeReport`
-
-O componente já busca workers separadamente e faz matching por ID e nome. Vou reforçar a lógica:
-
-- Chave primária de agrupamento: `worker_id` quando presente, fallback para `worker_name`
-- Matching com tabela workers: por `id`, depois por `name`, depois por `document_number`
-- Deduplicação: se mesmo trabalhador aparecer por ID e por nome, unificar
-
-### Passo 3: Aplicar matching híbrido nos outros relatórios
-
-- `PresenceReport`: usa `worker_id` como chave, adicionar fallback por `worker_name`
-- `CompanyReport`: usa `worker_id`, adicionar fallback
-- `OvernightControl`: usa `worker_id`, adicionar fallback
-- `ReportsList`: já exibe dados brutos, sem necessidade de matching
-
-### Arquivos alterados
-- `src/hooks/useDataProvider.ts` — remover joins FK de `fetchAccessLogs`
-- `src/components/reports/WorkerTimeReport.tsx` — reforçar matching híbrido
-- `src/components/reports/PresenceReport.tsx` — adicionar fallback por nome
-- `src/components/reports/CompanyReport.tsx` — adicionar fallback por nome
-- `src/components/reports/OvernightControl.tsx` — adicionar fallback por nome
+### Arquivo alterado
+- `src/components/reports/WorkerTimeReport.tsx`
 
