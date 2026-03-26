@@ -1097,35 +1097,61 @@ function createDatabaseAPI(db, startCode) {
       const deviceFilter = projectId
         ? 'AND al.device_id IN (SELECT id FROM devices WHERE project_id = ?)'
         : '';
-      const params = projectId ? [today, projectId] : [today];
+      const exitDeviceFilter = projectId
+        ? 'AND ex.device_id IN (SELECT id FROM devices WHERE project_id = ?)'
+        : '';
+      const params = projectId
+        ? [today, projectId, today, projectId]
+        : [today, today];
 
       const rows = db.prepare(`
-        WITH last_events AS (
-          SELECT al.worker_id, al.worker_name, al.device_name, al.direction, al.timestamp,
-            ROW_NUMBER() OVER (PARTITION BY al.worker_id ORDER BY al.timestamp DESC) as rn
+        WITH first_entries AS (
+          SELECT al.worker_id, al.worker_name, al.device_name, al.timestamp,
+            ROW_NUMBER() OVER (
+              PARTITION BY COALESCE(al.worker_name, al.worker_id)
+              ORDER BY al.timestamp ASC
+            ) as rn
           FROM access_logs al
           WHERE al.timestamp >= ? || 'T00:00:00'
             AND al.access_status = 'granted'
+            AND al.direction = 'entry'
             AND al.worker_id IS NOT NULL
             ${deviceFilter}
         )
-        SELECT le.worker_id, le.worker_name, le.device_name, le.timestamp as entry_time,
+        SELECT fe.worker_id, fe.worker_name, fe.device_name, fe.timestamp as entry_time,
           w.name, w.role, w.company_id, c.name as company_name
-        FROM last_events le
-        LEFT JOIN workers w ON le.worker_id = w.id
+        FROM first_entries fe
+        LEFT JOIN workers w ON fe.worker_id = w.id
         LEFT JOIN companies c ON w.company_id = c.id
-        WHERE le.rn = 1 AND le.direction = 'entry'
+        WHERE fe.rn = 1
+          AND NOT EXISTS (
+            SELECT 1 FROM access_logs ex
+            WHERE (ex.worker_name = fe.worker_name OR ex.worker_id = fe.worker_id)
+              AND ex.direction = 'exit'
+              AND ex.timestamp > fe.timestamp
+              AND ex.timestamp >= ? || 'T00:00:00'
+              ${exitDeviceFilter}
+          )
       `).all(...params);
 
-      return rows.map((r) => ({
-        id: r.worker_id,
-        name: r.name || r.worker_name,
-        location: r.device_name,
-        role: r.role,
-        company: r.company_name || 'N/A',
-        company_id: r.company_id,
-        entryTime: r.entry_time,
-      }));
+      return rows.map((r) => {
+        let entryTime = r.entry_time;
+        // Normalize BRT → UTC (+3h) for timestamps without timezone indicator
+        if (entryTime && !entryTime.includes('Z') && !entryTime.includes('+')) {
+          const d = new Date(entryTime);
+          d.setHours(d.getHours() + 3);
+          entryTime = d.toISOString();
+        }
+        return {
+          id: r.worker_id,
+          name: r.name || r.worker_name,
+          location: r.device_name,
+          role: r.role,
+          company: r.company_name || 'N/A',
+          company_id: r.company_id,
+          entryTime,
+        };
+      });
     },
 
     // === Devices ===
