@@ -34,10 +34,25 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
   const presenceData = useMemo(() => {
     if (!accessLogs.length) return [];
 
+    // Build hybrid lookup
+    const workerById = new Map(workers.map(w => [w.id, w]));
+    const workerByName = new Map(workers.map(w => [w.name?.toLowerCase().trim(), w]));
+
+    const findWorker = (log: any) => {
+      if (log.worker_id && workerById.has(log.worker_id)) return workerById.get(log.worker_id)!;
+      if (log.worker_name) return workerByName.get(log.worker_name.toLowerCase().trim()) || null;
+      return null;
+    };
+
+    const resolveKey = (log: any): string => {
+      const w = findWorker(log);
+      return w?.id || log.worker_id || log.worker_name || 'unknown';
+    };
+
     const grouped: Record<string, Record<string, { entries: Date[]; exits: Date[] }>> = {};
 
     accessLogs.forEach((log: any) => {
-      const workerId = log.worker_id || 'unknown';
+      const workerId = resolveKey(log);
       const dateKey = format(new Date(log.timestamp), 'yyyy-MM-dd');
 
       if (!grouped[workerId]) grouped[workerId] = {};
@@ -61,7 +76,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
           totalMinutes = differenceInMinutes(lastExit, firstEntry);
         }
 
-        const worker = workers.find(w => w.id === workerId);
+        const worker = workerById.get(workerId) || workers.find(w => w.name?.toLowerCase().trim() === workerId?.toLowerCase().trim());
 
         results.push({
           workerId,

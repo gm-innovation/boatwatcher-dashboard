@@ -66,10 +66,39 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
   const rows = useMemo<WorkerTimeRow[]>(() => {
     if (!accessLogs.length) return [];
 
-    // Group logs by worker
+    // Build worker lookup maps for hybrid matching
+    const workerById = new Map<string, typeof workers[0]>();
+    const workerByName = new Map<string, typeof workers[0]>();
+    const workerByDoc = new Map<string, typeof workers[0]>();
+    for (const w of workers) {
+      workerById.set(w.id, w);
+      if (w.name) workerByName.set(w.name.toLowerCase().trim(), w);
+    }
+
+    const findWorker = (log: any) => {
+      if (log.worker_id && workerById.has(log.worker_id)) return workerById.get(log.worker_id)!;
+      if (log.worker_name) {
+        const byName = workerByName.get(log.worker_name.toLowerCase().trim());
+        if (byName) return byName;
+      }
+      if (log.worker_document) {
+        const byDoc = workers.find(w => w.name?.toLowerCase().trim() === log.worker_name?.toLowerCase().trim());
+        if (byDoc) return byDoc;
+      }
+      return null;
+    };
+
+    // Resolve canonical key per log (prefer worker.id for dedup)
+    const resolveKey = (log: any): string => {
+      const w = findWorker(log);
+      if (w) return w.id;
+      return log.worker_id || log.worker_name || '';
+    };
+
+    // Group logs by resolved worker key
     const workerLogs = new Map<string, typeof accessLogs>();
     for (const log of accessLogs) {
-      const key = log.worker_id || log.worker_name || '';
+      const key = resolveKey(log);
       if (!key) continue;
       if (!workerLogs.has(key)) workerLogs.set(key, []);
       workerLogs.get(key)!.push(log);
@@ -86,7 +115,7 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
       const firstEntry = entries.length > 0 ? new Date(entries[0].timestamp) : null;
       const lastExit = exits.length > 0 ? new Date(exits[exits.length - 1].timestamp) : null;
 
-      // "a bordo" = has entry but no exit after it
+      // "a bordo" = last granted log is an entry
       const lastLog = sorted[sorted.length - 1];
       const isOnBoard = lastLog?.direction === 'entry' && lastLog?.access_status === 'granted';
 
@@ -95,8 +124,8 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
         totalMinutes = differenceInMinutes(lastExit, firstEntry);
       }
 
-      // Find worker info
-      const worker = workers.find(w => w.id === key || w.name === (logs[0]?.worker_name || ''));
+      // Find worker info via hybrid matching
+      const worker = workerById.get(key) || findWorker(logs[0]);
       const companyObj = worker?.companies as any;
       const jobObj = worker?.job_functions as any;
 
