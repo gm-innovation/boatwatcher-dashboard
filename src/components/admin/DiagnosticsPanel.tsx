@@ -556,6 +556,29 @@ export const DiagnosticsPanel = () => {
       });
     }
 
+    // Fetch cloud telemetry from local_agents.configuration (works on Web mode)
+    if (!isLocalRuntime) {
+      try {
+        const { data: agents } = await supabase
+          .from('local_agents')
+          .select('configuration, version')
+          .order('last_seen_at', { ascending: false })
+          .limit(1);
+
+        const agentConfig = agents?.[0]?.configuration as Record<string, unknown> | null;
+        if (agentConfig?.deviceTelemetry) {
+          setDeviceTelemetry({
+            agent: { devices: agentConfig.deviceTelemetry },
+            version: agents?.[0]?.version || null,
+          });
+        } else {
+          setDeviceTelemetry(null);
+        }
+      } catch {
+        setDeviceTelemetry(null);
+      }
+    }
+
     setDiagnostics(results);
     setLastRunTime(new Date());
     setIsRunning(false);
