@@ -1,45 +1,40 @@
 
 
-# Fix: Formato correto da API ControlID `load_objects.fcgi`
+# Fix: Upload de Logs Falhando por Foreign Key + Polling Funcionando
 
-## Problema raiz
+## Situação Atual (v1.3.6)
 
-Estamos adivinhando o formato dos parâmetros a cada build. A documentação oficial do ControlID mostra o formato exato:
+**Polling corrigido com sucesso**: `{"access_logs":[]}` — a API ControlID responde corretamente. Os lastEventId (20 e 241) mostram que os 258 eventos históricos foram capturados.
 
-```text
-where: [{ object: "access_logs", field: "id", operator: ">", value: 1 }]
+**Upload bloqueado**: 100 logs presos na fila local. Erro:
+```
+access_logs_worker_id_fkey: insert or update on table "access_logs" 
+violates foreign key constraint
 ```
 
-Nosso código envia formatos inventados (`{ access_logs: { id: { '>': ... } } }`), gerando erros diferentes a cada tentativa.
+**Causa raiz**: A tabela `access_logs` na nuvem tem `worker_id UUID REFERENCES public.workers(id)`. Os eventos capturados do hardware têm `worker_id` de trabalhadores que não existem na tabela `workers` da nuvem (são códigos inteiros do ControlID mapeados para UUIDs locais, ou UUIDs de trabalhadores que ainda não foram sincronizados).
 
-## Correção definitiva
+## Plano de Correção
 
-### `electron/agent.js` — Usar formato documentado
+### 1. Migração: Remover FK constraint de `access_logs.worker_id`
 
-**Payload simples (sem filtro):**
-```javascript
-const payload = { object: 'access_logs' };
+A tabela `access_logs` já armazena dados desnormalizados (`worker_name`, `worker_document`, `device_name`), então a FK é desnecessária e prejudicial. A constraint `access_logs_device_id_fkey` também deve ser removida pela mesma razão.
+
+```sql
+ALTER TABLE public.access_logs DROP CONSTRAINT IF EXISTS access_logs_worker_id_fkey;
+ALTER TABLE public.access_logs DROP CONSTRAINT IF EXISTS access_logs_device_id_fkey;
 ```
 
-**Com filtro de `lastEventId`:**
-```javascript
-if (lastEventId > 0) {
-  payload.where = [{
-    object: 'access_logs',
-    field: 'id',
-    operator: '>',
-    value: lastEventId
-  }];
-}
-```
+### 2. Edge Function `agent-sync/upload-logs` — Fallback para worker_id inválido
 
-**Remover `order`** — não há documentação oficial para esse campo em `load_objects.fcgi`, e os IDs já são sequenciais. Isso elimina o risco de erros de formato.
+Adicionar validação: se `worker_id` não existe na tabela `workers`, setar como `null` antes do insert. Isso garante resiliência mesmo se a FK for re-adicionada no futuro.
 
-**Remover `limit`** — também não documentado; o hardware retorna tudo por padrão.
+### 3. Atualizar memória de arquitetura
 
-### `server/package.json` — Bump para 1.3.6
+Atualizar o contexto para registrar que `access_logs` não usa FK para permitir logs de trabalhadores não cadastrados.
 
 ### Arquivos alterados
-- `electron/agent.js` — payload corrigido conforme documentação oficial
-- `server/package.json` — versão 1.3.6
+- **Migração SQL** — remover FK constraints de `access_logs`
+- **`supabase/functions/agent-sync/index.ts`** — validar worker_id antes do insert
+- **`server/package.json`** — bump para 1.3.7 (não obrigatório, pois a correção é server-side)
 
