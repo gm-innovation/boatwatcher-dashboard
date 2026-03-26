@@ -70,7 +70,8 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
     }
 
     workerLogs.forEach((logs, workerId) => {
-      const companyName = workerCompanyMap.get(workerId) || 'Sem empresa';
+      const worker = workerById.get(workerId) || null;
+      const companyName = getCompanyName(worker) || (logs[0]?.worker_name ? 'Sem empresa' : 'Sem empresa');
       if (!companyStats.has(companyName)) {
         companyStats.set(companyName, { workers: new Set(), entries: 0, totalMinutes: 0 });
       }

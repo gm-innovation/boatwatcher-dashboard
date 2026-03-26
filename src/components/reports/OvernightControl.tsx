@@ -87,7 +87,7 @@ export const OvernightControl = ({ projectId, startDate, endDate }: OvernightCon
         const entryDate = parseISO(lastEntry.timestamp);
         const nights = differenceInCalendarDays(new Date(), entryDate);
 
-        const worker = workers.find(w => w.id === workerId);
+        const worker = workerById.get(workerId) || findWorker(logs[0]);
         const companyName = worker?.company && typeof worker.company === 'object' && 'name' in worker.company
           ? (worker.company as { name: string }).name
           : 'Desconhecida';

@@ -372,7 +372,7 @@ export async function fetchAccessLogs(filters?: { projectId?: string; startDate?
     async () => {
       let query = supabase
         .from('access_logs')
-        .select('*, worker:workers(id, name, document_number, company_id), device:devices(id, name, project_id)')
+        .select('*')
         .order('timestamp', { ascending: false })
         .limit(filters?.limit || 100);
 
