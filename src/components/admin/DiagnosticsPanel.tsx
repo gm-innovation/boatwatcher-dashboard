@@ -556,6 +556,29 @@ export const DiagnosticsPanel = () => {
       });
     }
 
+    // Fetch cloud telemetry from local_agents.configuration (works on Web mode)
+    if (!isLocalRuntime) {
+      try {
+        const { data: agents } = await supabase
+          .from('local_agents')
+          .select('configuration, version')
+          .order('last_seen_at', { ascending: false })
+          .limit(1);
+
+        const agentConfig = agents?.[0]?.configuration as Record<string, unknown> | null;
+        if (agentConfig?.deviceTelemetry) {
+          setDeviceTelemetry({
+            agent: { devices: agentConfig.deviceTelemetry },
+            version: agents?.[0]?.version || null,
+          });
+        } else {
+          setDeviceTelemetry(null);
+        }
+      } catch {
+        setDeviceTelemetry(null);
+      }
+    }
+
     setDiagnostics(results);
     setLastRunTime(new Date());
     setIsRunning(false);
@@ -883,8 +906,8 @@ export const DiagnosticsPanel = () => {
         </CardContent>
       </Card>
 
-      {/* Device Telemetry — Local Server only */}
-      {isLocalRuntime && deviceTelemetry?.agent?.devices && (
+      {/* Device Telemetry — Local or Cloud */}
+      {deviceTelemetry?.agent?.devices && (
         <Card className="border-2 border-cyan-500/20">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">

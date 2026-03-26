@@ -523,11 +523,15 @@ class SyncEngine {
 
       console.log(`[sync] Heartbeat: devices_sent=${devices.length}`);
 
+      // Collect device telemetry (lastError, lastPollAt, lastEventPayload) for cloud diagnostics
+      const deviceTelemetry = this.agentController?.getStatus?.()?.devices || null;
+
       await this.callEdgeFunction('agent-sync/status', 'POST', {
         version: (() => { try { return require('../server/package.json').version; } catch { try { return require('./package.json').version; } catch { return '1.3.0'; } } })(),
         sync_status: this.status.syncing ? 'syncing' : 'idle',
         pending_count: this.status.pendingCount,
         devices,
+        deviceTelemetry,
       });
     } catch (err) {
       console.error('Heartbeat error:', err.message);

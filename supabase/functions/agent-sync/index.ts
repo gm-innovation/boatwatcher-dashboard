@@ -641,6 +641,20 @@ serve(async (req) => {
     // POST /status (heartbeat) — with auto-heal for broken FK references
     if (req.method === 'POST' && action === 'status') {
       const body = await req.json().catch(() => ({}))
+
+      // Merge deviceTelemetry into configuration JSONB if provided
+      let configurationUpdate: Record<string, unknown> | undefined = undefined
+      if (body.deviceTelemetry) {
+        // Fetch current configuration to merge
+        const { data: currentAgent } = await supabase
+          .from('local_agents')
+          .select('configuration')
+          .eq('id', agent.id)
+          .single()
+        const existing = (currentAgent?.configuration as Record<string, unknown>) || {}
+        configurationUpdate = { ...existing, deviceTelemetry: body.deviceTelemetry }
+      }
+
       const updatePayload: Record<string, unknown> = {
         status: 'online',
         last_seen_at: new Date().toISOString(),
@@ -648,6 +662,7 @@ serve(async (req) => {
         version: body.version || null,
         sync_status: body.sync_status || 'idle',
         pending_sync_count: body.pending_count ?? 0,
+        ...(configurationUpdate ? { configuration: configurationUpdate } : {}),
       }
 
       const { error: updateError } = await supabase.from('local_agents').update(updatePayload).eq('id', agent.id)
