@@ -110,9 +110,9 @@ async function controlIDRequest(
     } catch {
       return { success: true, data: text }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('ControlID Request Error:', error)
-    return { success: false, error: error.message }
+    return { success: false, error: (error as Error).message }
   }
 }
 
