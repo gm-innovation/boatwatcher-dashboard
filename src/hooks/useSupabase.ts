@@ -259,9 +259,13 @@ export const useLastAccessLog = (projectId: string | null) => {
       if (usesLocalServer()) {
         try {
           const { fetchAccessLogs } = await import('@/hooks/useDataProvider');
-          const logs = await fetchAccessLogs({ limit: 1, orderBy: 'timestamp', order: 'desc' });
+          const logs = await fetchAccessLogs({ limit: 1 });
           if (logs && logs.length > 0) {
-            return logs[0].timestamp || null;
+            // Sort locally to get latest
+            const sorted = [...logs].sort((a: any, b: any) => 
+              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            );
+            return sorted[0].timestamp || null;
           }
         } catch {
           // fall through to cloud
