@@ -2,7 +2,7 @@
   "name": "dock-check-desktop",
   "repository": "gm-innovation/boatwatcher-dashboard",
   "private": true,
-  "version": "1.3.16",
+  "version": "1.3.17",
   "description": "Dock Check Desktop and web dashboard for workforce, access, and device operations.",
   "author": "Dock Check",
   "type": "module",
