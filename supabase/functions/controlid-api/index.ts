@@ -257,8 +257,8 @@ async function enrollUser(
 async function removeUser(device: DeviceCredentials, userId: number): Promise<ControlIDResponse> {
   try {
     await controlIDRequest(device, 'user_destroy_image.fcgi', 'POST', { user_id: userId })
-  } catch (err) {
-    console.warn('Failed to remove photo:', err.message)
+  } catch (err: unknown) {
+    console.warn('Failed to remove photo:', (err as Error).message)
   }
 
   return await controlIDRequest(device, 'destroy_objects.fcgi', 'POST', {
