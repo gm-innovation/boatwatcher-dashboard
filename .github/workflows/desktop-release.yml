@@ -236,7 +236,7 @@ jobs:
           fi
 
           YML_SHA=$(grep 'sha512:' "$SERVER_YML" | awk 'NR==1{print; exit}' | sed 's/.*sha512:[[:space:]]*//' | tr -d '[:space:]')
-          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | head -1 || true)"
+          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | awk 'NR==1{print; exit}' || true)"
           ACTUAL_SHA=$(openssl dgst -sha512 -binary "$EXE" | openssl base64 -A)
 
           echo "server.yml sha512: $YML_SHA"
