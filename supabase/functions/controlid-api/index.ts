@@ -158,9 +158,9 @@ async function controlIDRequestBinary(
     } catch {
       return { success: true, data: text }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('ControlID Binary Request Error:', error)
-    return { success: false, error: error.message }
+    return { success: false, error: (error as Error).message }
   }
 }
 
