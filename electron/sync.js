@@ -287,7 +287,7 @@ class SyncEngine {
     const VALID_ACCESS_STATUS = ['granted', 'denied'];
     const VALID_DIRECTION = ['entry', 'exit', 'unknown'];
 
-    const logs = rawLogs.map(({ synced, created_at, id, cloud_id, ...rest }) => ({
+    const logs = rawLogs.map(({ synced, created_at, cloud_id, ...rest }) => ({
       ...rest,
       access_status: VALID_ACCESS_STATUS.includes(rest.access_status) ? rest.access_status : 'granted',
       direction: VALID_DIRECTION.includes(rest.direction) ? rest.direction : 'unknown',
