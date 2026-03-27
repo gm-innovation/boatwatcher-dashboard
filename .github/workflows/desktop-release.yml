@@ -125,13 +125,14 @@ jobs:
         if: success() && startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: |
+          set +o pipefail
           echo "--- Searching for app.asar ---"
           ASAR=""
 
           # Primary: expected output directory
           if [ -d "electron-dist" ]; then
             echo "electron-dist/ exists. Contents:"
-            ls -R electron-dist | head -80
+            ls -R electron-dist | awk 'NR<=80{print}'
             for f in $(find electron-dist -name 'app.asar' -type f 2>/dev/null || true); do
               ASAR="$f"
               break
@@ -154,23 +155,23 @@ jobs:
             echo "::error::app.asar not found in electron-dist/ or dist/. Full workspace listing:"
             ls -la
             echo "--- electron-dist contents (if any) ---"
-            find electron-dist -type f 2>/dev/null | head -50 || echo "(directory absent)"
+            find electron-dist -type f 2>/dev/null | awk 'NR<=50{print}' || echo "(directory absent)"
             echo "--- dist contents (if any) ---"
-            find dist -type f 2>/dev/null | head -50 || echo "(directory absent)"
+            find dist -type f 2>/dev/null | awk 'NR<=50{print}' || echo "(directory absent)"
             exit 1
           fi
 
           echo "✅ Found asar: $ASAR"
           ASAR_LIST=$(npx asar list "$ASAR" | tr '\\' '/' | tr -d '\r')
-          echo "$ASAR_LIST" | head -50
-          if echo "$ASAR_LIST" | grep -qE '(^|/)dist/index\.html$'; then
+          awk 'NR<=50{print}' <<< "$ASAR_LIST"
+          if grep -qE '(^|/)dist/index\.html$' <<< "$ASAR_LIST"; then
             echo "✅ dist/index.html confirmed inside app.asar"
           else
             echo "::error::dist/index.html NOT found inside app.asar!"
             echo "--- Lines containing index.html ---"
-            echo "$ASAR_LIST" | grep -i 'index.html' || echo "(none)"
+            grep -i 'index.html' <<< "$ASAR_LIST" || echo "(none)"
             echo "--- Lines containing dist/ ---"
-            echo "$ASAR_LIST" | grep -i 'dist/' | head -20 || echo "(none)"
+            awk 'BEGIN{IGNORECASE=1}/dist\//{print; if(++n>=20) exit}' <<< "$ASAR_LIST" || echo "(none)"
             exit 1
           fi
 
