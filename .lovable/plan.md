@@ -1,42 +1,53 @@
 
-Problema real (reformulado):
-- O `app.asar` já está sendo encontrado corretamente.
-- A falha atual (`exit code 141`) é **SIGPIPE** no shell do GitHub Actions (`bash -eo pipefail`), causada por pipelines que cortam saída com `head`/`grep -q`.
-- Ou seja: o pipeline está quebrando no **comando de diagnóstico/validação**, não no empacotamento.
+Objetivo: eliminar de vez o atraso de -3h no Dashboard Desktop (mantendo Web como referência correta).
 
-Do I know what the issue is?
-- Sim. É um falso fail de shell por `pipefail` + comandos que encerram leitura antes do produtor terminar.
+Diagnóstico confirmado (com base no código atual):
+- O Web está correto porque lê direto da nuvem.
+- O Desktop usa prioritariamente o caminho local (`/api/projects/:id/workers-on-board`), cuja lógica de data/hora diverge da web.
+- Há risco de inconsistência local por reconciliação incompleta de logs:
+  - `upsertAccessLogFromCloud` ignora registros já existentes (não corrige timestamp local antigo).
+  - Isso pode manter horário “velho/errado” no SQLite mesmo com horário correto na nuvem.
 
-Arquivos a corrigir:
-- `.github/workflows/desktop-release.yml` (principal e suficiente para destravar).
+Plano de implementação (curto e direto):
 
-Plano objetivo de correção:
-1) Remover comandos propensos a SIGPIPE no step `Validate Desktop asar contents`
-- Trocar padrões como:
-  - `echo "$ASAR_LIST" | head -50`
-  - `echo "$ASAR_LIST" | grep -qE ...`
-  - `... | grep ... | head -20`
-- Por versões sem pipe frágil, usando here-string/awk/grep direto:
-  - `awk 'NR<=50{print}' <<< "$ASAR_LIST"`
-  - `grep -qE '(^|/)dist/index\.html$' <<< "$ASAR_LIST"`
-  - `awk 'BEGIN{IGNORECASE=1}/dist\//{print; if(++n==20) exit}' <<< "$ASAR_LIST"`
+1) Hotfix imediato de paridade Web/Desktop
+- Arquivo: `src/hooks/useSupabase.ts`
+- Ajustar `useWorkersOnBoard` para usar a mesma consulta da nuvem como caminho principal quando houver conexão.
+- Manter o endpoint local apenas como fallback offline.
+- Resultado esperado: Desktop online passa a mostrar exatamente o mesmo horário da Web.
 
-2) Aplicar o mesmo hardening nos outros pontos de preview de saída do workflow
-- Substituir usos de `| head` em logs diagnósticos por alternativas sem SIGPIPE.
-- Manter comportamento idêntico (somente robustez).
+2) Correção estrutural do runtime local (UTC)
+- Arquivo: `electron/database.js`
+- Reescrever `getWorkersOnBoard` para alinhar 1:1 com a semântica da web:
+  - início do dia em horário local convertido para UTC (sem `toISOString().split('T')[0]` ingênuo),
+  - teto temporal de +2 min (igual web),
+  - normalização única de timestamp antes de retornar `entryTime`.
+- Isso remove o drift local em cenários offline.
 
-3) Preservar gate de integridade (sem afrouxar qualidade)
-- Continuar exigindo:
-  - `app.asar` encontrado.
-  - `dist/index.html` presente dentro do asar.
-- Falhar apenas quando o artefato realmente estiver inválido.
+3) Reconciliação correta dos logs baixados da nuvem
+- Arquivo: `electron/database.js`
+- Em `upsertAccessLogFromCloud`, quando o ID já existir:
+  - atualizar campos canônicos (incluindo `timestamp`) em vez de simplesmente “return”.
+- Resultado esperado: registros locais antigos/errados são autocorrigidos pelo dado canônico da nuvem.
 
-4) Validação final esperada
-- Nova tag (`v1.3.17` ou próxima):
-  - build desktop conclui;
-  - validação do asar passa sem `141`;
-  - pipeline segue para Local Server e upload normal.
+4) Evitar divergência futura por duplicidade/identidade de log
+- Arquivos:
+  - `electron/sync.js` (manter `id` no payload de upload de logs),
+  - `supabase/functions/agent-sync/index.ts` (upsert por `id` no upload).
+- Objetivo: mesma identidade de evento ponta a ponta, evitando pares duplicados com horários diferentes.
 
-Detalhe técnico curto:
-- `141 = 128 + 13 (SIGPIPE)`.
-- Em Actions com `pipefail`, isso vira falha do step mesmo com artefato correto.
+5) Validação final (obrigatória)
+- Testar entrada real no dispositivo e comparar:
+  - Dashboard Web vs Desktop (mesmo trabalhador, mesma hora),
+  - exportação CSV do Desktop,
+  - janela próxima da meia-noite (virada de dia),
+  - modo offline (fallback local ainda consistente).
+- Critério de aceite: diferença máxima de 0 min entre Web e Desktop no mesmo evento.
+
+Detalhes técnicos (resumo):
+- Arquivos-alvo principais:
+  - `src/hooks/useSupabase.ts`
+  - `electron/database.js`
+  - `electron/sync.js`
+  - `supabase/functions/agent-sync/index.ts`
+- Causa técnica central: divergência entre pipeline local e canônico (nuvem) no tratamento de timestamps + reconciliação incompleta do SQLite.
