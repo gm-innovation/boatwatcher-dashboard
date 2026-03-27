@@ -118,19 +118,26 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
     queryFn: async () => {
       if (!projectId) return [];
 
-      // ALWAYS use cloud query as primary source of truth (correct UTC timestamps).
-      // Local server is only used as offline fallback.
+      // Desktop with local server: local-first for instant offline response
+      if (usesLocalServer()) {
+        if (dateFilter === 'today') {
+          const localWorkersOnBoard = await fetchProjectWorkersOnBoard(projectId);
+          if (localWorkersOnBoard !== null) {
+            return localWorkersOnBoard;
+          }
+        }
+        // Local failed or non-today filter: try cloud as fallback
+        const cloudResult = await fetchWorkersOnBoardFromCloud(projectId, startTimestamp, dateFilter);
+        if (cloudResult !== null) {
+          return cloudResult;
+        }
+        return [];
+      }
+
+      // Web: cloud-first (primary source of truth)
       const cloudResult = await fetchWorkersOnBoardFromCloud(projectId, startTimestamp, dateFilter);
       if (cloudResult !== null) {
         return cloudResult;
-      }
-
-      // Offline fallback: use local server (Desktop only, today only)
-      if (dateFilter === 'today') {
-        const localWorkersOnBoard = await fetchProjectWorkersOnBoard(projectId);
-        if (localWorkersOnBoard !== null) {
-          return localWorkersOnBoard;
-        }
       }
 
       return [];
