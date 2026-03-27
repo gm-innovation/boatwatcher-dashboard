@@ -83,6 +83,30 @@ jobs:
           copy public\favicon-512.png build\icon.png
         shell: cmd
 
+      # ── Validate dist assets (prevent white-screen releases) ──
+      - name: Validate dist/index.html asset paths
+        shell: bash
+        run: |
+          INDEX="dist/index.html"
+          if [ ! -f "$INDEX" ]; then
+            echo "::error::dist/index.html not found after build!"
+            exit 1
+          fi
+          # Check for absolute paths like src="/assets/..." (should be "./assets/...")
+          if grep -qE '(src|href)="/' "$INDEX"; then
+            echo "::error::dist/index.html contains absolute asset paths (must be relative for Electron file:// protocol)!"
+            echo "--- Offending lines ---"
+            grep -nE '(src|href)="/' "$INDEX"
+            exit 1
+          fi
+          # Check that at least one JS bundle exists
+          JS_BUNDLE=$(grep -oE 'src="[^"]*\.js"' "$INDEX" | head -1)
+          if [ -z "$JS_BUNDLE" ]; then
+            echo "::error::No JS bundle reference found in dist/index.html!"
+            exit 1
+          fi
+          echo "✅ dist/index.html asset paths are relative and JS bundle is present."
+
       # ── Desktop ──────────────────────────────────────────────
       - name: Build and publish Desktop release
         if: startsWith(github.ref, 'refs/tags/v')

@@ -1,9 +1,12 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
+let rendererReady = false;
+let startupWatchdog = null;
+const WATCHDOG_TIMEOUT_MS = 15000;
 let localServerUrl = 'http://localhost:3001';
 const devServerUrl = process.env.DOCKCHECK_DESKTOP_DEV_URL || 'http://localhost:8080';
 let updateHandlersRegistered = false;
@@ -77,6 +80,45 @@ async function apiCall(method, endpoint, body) {
   return res.json();
 }
 
+function getAppVersion() {
+  try { return app.getVersion(); } catch { return 'desconhecida'; }
+}
+
+function getLogPath() {
+  return path.join(app.getPath('userData'), 'renderer-errors.log');
+}
+
+function appendLog(message) {
+  try {
+    const line = `[${new Date().toISOString()}] ${message}\n`;
+    fs.appendFileSync(getLogPath(), line);
+  } catch { /* best effort */ }
+}
+
+function loadFallback(reason) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  appendLog('Loading fallback: ' + reason);
+  const fallbackPath = path.join(__dirname, 'fallback.html');
+  const encodedReason = encodeURIComponent(reason);
+  const version = getAppVersion();
+  mainWindow.loadFile(fallbackPath, {
+    hash: encodedReason,
+    query: { version },
+  }).catch(() => {});
+}
+
+function startWatchdog() {
+  rendererReady = false;
+  if (startupWatchdog) clearTimeout(startupWatchdog);
+  startupWatchdog = setTimeout(() => {
+    if (!rendererReady) {
+      console.error('[desktop] Renderer did not signal ready within', WATCHDOG_TIMEOUT_MS, 'ms');
+      appendLog('Watchdog timeout – renderer not ready after ' + WATCHDOG_TIMEOUT_MS + 'ms');
+      loadFallback('O aplicativo não sinalizou prontidão em ' + (WATCHDOG_TIMEOUT_MS / 1000) + 's. Possível erro de inicialização.');
+    }
+  }, WATCHDOG_TIMEOUT_MS);
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -98,29 +140,44 @@ function createWindow() {
 
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (!isMainFrame) return;
-    console.error('[desktop] renderer failed to load', {
-      errorCode,
-      errorDescription,
-      validatedURL,
-    });
+    const msg = `did-fail-load: code=${errorCode} desc=${errorDescription} url=${validatedURL}`;
+    console.error('[desktop]', msg);
+    appendLog(msg);
+    loadFallback(`Falha ao carregar: ${errorDescription} (código ${errorCode})`);
   });
 
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
-    console.error('[desktop] renderer process gone', details);
+    const msg = `render-process-gone: reason=${details.reason} exitCode=${details.exitCode}`;
+    console.error('[desktop]', msg);
+    appendLog(msg);
+    loadFallback(`Processo de renderização encerrado: ${details.reason}`);
+  });
+
+  mainWindow.webContents.on('unresponsive', () => {
+    appendLog('Renderer became unresponsive');
   });
 
   mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (level >= 3) {
+      appendLog(`[renderer error] ${message} (${sourceId}:${line})`);
+    }
     if (level < 2) return;
     const log = level >= 3 ? console.error : console.warn;
     log('[renderer]', { message, line, sourceId });
   });
+
+  // Start the watchdog before loading
+  startWatchdog();
 
   const loadPromise = app.isPackaged
     ? mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
     : mainWindow.loadURL(devServerUrl);
 
   loadPromise.catch((error) => {
-    console.error('[desktop] failed to start renderer', error);
+    const msg = `Failed to start renderer: ${error?.message || error}`;
+    console.error('[desktop]', msg);
+    appendLog(msg);
+    loadFallback(error?.message || 'Falha ao carregar a aplicação');
   });
 
   if (!app.isPackaged) {
@@ -360,6 +417,17 @@ function registerIpcHandlers() {
     } catch {
       return false;
     }
+  });
+
+  // === Renderer ready handshake ===
+  ipcMain.on('app:renderer-ready', () => {
+    rendererReady = true;
+    if (startupWatchdog) {
+      clearTimeout(startupWatchdog);
+      startupWatchdog = null;
+    }
+    console.log('[desktop] Renderer signalled ready');
+    appendLog('Renderer ready');
   });
 }
 
