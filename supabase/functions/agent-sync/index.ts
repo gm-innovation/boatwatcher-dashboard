@@ -366,6 +366,7 @@ serve(async (req) => {
           }
 
           accepted.push({
+            ...(l.id ? { id: l.id } : {}),
             worker_id: workerId,
             device_id: deviceId,
             timestamp: tsCheck.timestamp,
