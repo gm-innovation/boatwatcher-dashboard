@@ -110,9 +110,9 @@ async function controlIDRequest(
     } catch {
       return { success: true, data: text }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('ControlID Request Error:', error)
-    return { success: false, error: error.message }
+    return { success: false, error: (error as Error).message }
   }
 }
 
@@ -158,9 +158,9 @@ async function controlIDRequestBinary(
     } catch {
       return { success: true, data: text }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('ControlID Binary Request Error:', error)
-    return { success: false, error: error.message }
+    return { success: false, error: (error as Error).message }
   }
 }
 
@@ -246,8 +246,8 @@ async function enrollUser(
         const errors = (photoResult.data.errors || []).map((e: any) => e.message).join('; ')
         console.warn('Photo rejected by device:', errors)
       }
-    } catch (photoErr) {
-      console.warn('Photo enrollment error:', photoErr.message)
+    } catch (photoErr: unknown) {
+      console.warn('Photo enrollment error:', (photoErr as Error).message)
     }
   }
 
@@ -257,8 +257,8 @@ async function enrollUser(
 async function removeUser(device: DeviceCredentials, userId: number): Promise<ControlIDResponse> {
   try {
     await controlIDRequest(device, 'user_destroy_image.fcgi', 'POST', { user_id: userId })
-  } catch (err) {
-    console.warn('Failed to remove photo:', err.message)
+  } catch (err: unknown) {
+    console.warn('Failed to remove photo:', (err as Error).message)
   }
 
   return await controlIDRequest(device, 'destroy_objects.fcgi', 'POST', {
@@ -393,10 +393,10 @@ serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('ControlID API Error:', error)
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ success: false, error: (error as Error).message }),
       {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

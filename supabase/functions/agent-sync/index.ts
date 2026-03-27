@@ -113,7 +113,7 @@ async function getAuthenticatedUser(accessToken: string) {
   return data.user
 }
 
-async function resolveBootstrapProjectId(supabase: ReturnType<typeof createClient>, userId: string) {
+async function resolveBootstrapProjectId(supabase: any, userId: string) {
   const { data: roleRow } = await supabase
     .from('user_roles')
     .select('role')
@@ -733,7 +733,7 @@ serve(async (req) => {
 
       console.log(`[agent-sync/download-workers] agent=${agent.id} project=${agent.project_id} filter=all-active found=${(workers || []).length}`)
 
-      const workersWithPhotos = await Promise.all((workers || []).map((worker) => attachWorkerPhotoSignedUrl(supabase, worker)))
+      const workersWithPhotos = await Promise.all((workers || []).map((worker: any) => attachWorkerPhotoSignedUrl(supabase as any, worker)))
       return new Response(JSON.stringify({ workers: workersWithPhotos, timestamp: new Date().toISOString() }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
@@ -1135,8 +1135,8 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-  } catch (e) {
+  } catch (e: unknown) {
     console.error('agent-sync error:', e)
-    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }
 })
