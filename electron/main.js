@@ -1,9 +1,12 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
+let rendererReady = false;
+let startupWatchdog = null;
+const WATCHDOG_TIMEOUT_MS = 15000;
 let localServerUrl = 'http://localhost:3001';
 const devServerUrl = process.env.DOCKCHECK_DESKTOP_DEV_URL || 'http://localhost:8080';
 let updateHandlersRegistered = false;
