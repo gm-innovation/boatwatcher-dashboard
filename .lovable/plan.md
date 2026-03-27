@@ -1,57 +1,40 @@
 
-Diagnóstico objetivo (sem rodeio):
-- O erro não é “horário” nem “version bump”.
-- O build de release está saindo em `dist/` (ex.: `dist/win-unpacked`) e não em `electron-dist/`.
-- Evidência: o log mostra `loaded configuration file=...electron-builder.release.yml` (apenas o arquivo de release foi carregado), então as opções do `electron-builder.yml` (incluindo `directories.output: electron-dist`) não entram.
-- Resultado: a etapa de validação procura `electron-dist` e falha, mesmo com build tendo rodado.
+Objetivo: parar o falso negativo no CI (“dist/index.html NOT found inside app.asar”) e destravar os releases.
 
 Do I know what the issue is?
-- Sim. É configuração de CI/build: uso de `--config` duplicado no `electron-builder` causando perda da config base no publish.
+- Sim.
+
+Diagnóstico confirmado:
+- O `app.asar` está sendo encontrado corretamente em `electron-dist/win-unpacked/resources/app.asar`.
+- O `npx asar list` no runner Windows imprime caminhos com `\` (backslash), mas a validação atual procura apenas `dist/index.html` com `/`.
+- Resultado: o arquivo pode existir como `\dist\index.html`, mas o `grep` falha e derruba o pipeline.
 
 Plano de correção (implementação):
 
-1) Corrigir a composição de config do Electron Builder
-- Arquivo: `electron-builder.release.yml`
-  - Adicionar `extends: ./electron-builder.yml`
-- Arquivo: `electron-builder.release.server.yml`
-  - Adicionar `extends: ./electron-builder.server.yml`
-- Motivo: manter arquivos de release separados, mas herdando 100% da config base (output dir, files, nsis, etc.).
-
-2) Ajustar scripts de publish para usar um único `--config`
-- Arquivo: `package.json`
-  - `build:electron:publish`:
-    - de: `electron-builder --config electron-builder.yml --config electron-builder.release.yml --publish always`
-    - para: `electron-builder --config electron-builder.release.yml --publish always`
-  - `build:local-server:publish`:
-    - de: `electron-builder --config electron-builder.server.yml --config electron-builder.release.server.yml --publish always`
-    - para: `electron-builder --config electron-builder.release.server.yml --publish always`
-- Motivo: evitar override inesperado; usar fluxo suportado e determinístico.
-
-3) Endurecer validação do asar no workflow para não mascarar causa real
+1) Corrigir validação de caminho no passo “Validate Desktop asar contents”
 - Arquivo: `.github/workflows/desktop-release.yml`
-- No passo `Validate Desktop asar contents`:
-  - Remover hard fail imediato em “electron-dist não existe”.
-  - Buscar `app.asar` em caminhos esperados e logar contexto claro:
-    - primeiro `electron-dist/**/app.asar`
-    - fallback `dist/**/app.asar`
-  - Se achar em `dist` mas não em `electron-dist`, emitir warning explicando mismatch de output.
-  - Só falhar de fato se nenhum `app.asar` for encontrado.
-- Motivo: evitar “falso negativo” e melhorar diagnóstico em qualquer regressão futura.
+- No bloco de validação do asar:
+  - Capturar saída completa do `npx asar list "$ASAR"` em variável.
+  - Normalizar separadores para formato Unix antes do grep:
+    - converter `\` -> `/`
+    - remover `\r` (CRLF) se necessário.
+  - Validar com regex robusta (`(^|/)dist/index\.html$`) após normalização.
 
-4) Preservar gate de integridade (não relaxar qualidade)
-- Manter check obrigatório: `app.asar` deve conter `dist/index.html`.
-- Manter checks do Local Server (existência, tamanho mínimo, SHA512) como estão.
+2) Melhorar diagnóstico (sem mascarar erro real)
+- Ainda no mesmo passo:
+  - Exibir as primeiras linhas normalizadas.
+  - Se falhar, imprimir linhas que contenham `index.html` e `dist/` para deixar claro se é problema de path, empacotamento ou ausência real do arquivo.
 
-5) Validação final esperada
-- Rodar tag nova (`v1.3.15` ou próxima):
-  - `Build and publish Desktop release` gera artefato no diretório correto.
-  - `Validate Desktop asar contents` encontra `app.asar` e valida `dist/index.html`.
-  - Pipeline segue para Local Server sem bloqueio artificial.
+3) Preservar gate de integridade
+- Manter bloqueio obrigatório se `dist/index.html` realmente não existir dentro do asar.
+- Não relaxar checks de Local Server (exe, tamanho mínimo, SHA512).
 
-Detalhes técnicos (resumo):
-- Causa raiz: estratégia de CLI/config do electron-builder no publish.
-- Arquivos-alvo da correção:
-  - `electron-builder.release.yml`
-  - `electron-builder.release.server.yml`
-  - `package.json`
-  - `.github/workflows/desktop-release.yml`
+4) Verificação final esperada
+- Rodar nova tag (`v1.3.16` ou próxima):
+  - `Build and publish Desktop release` gera artefatos;
+  - `Validate Desktop asar contents` passa com paths normalizados;
+  - Pipeline segue para build/upload do Local Server.
+
+Detalhes técnicos:
+- Causa raiz é compatibilidade de validação entre separadores de caminho no Windows (`\`) vs regex atual (`/`), não version bump e não horário.
+- Arquivo único de ajuste: `.github/workflows/desktop-release.yml`.
