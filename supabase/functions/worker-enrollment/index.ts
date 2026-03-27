@@ -241,10 +241,10 @@ serve(async (req) => {
 
     // (bulk logic handled above)
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Worker Enrollment Error:', error)
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ success: false, error: (error as Error).message }),
       { 
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

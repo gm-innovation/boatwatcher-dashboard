@@ -161,12 +161,18 @@ jobs:
           fi
 
           echo "✅ Found asar: $ASAR"
-          npx asar list "$ASAR" | head -50
-          if ! npx asar list "$ASAR" | grep -q 'dist/index.html'; then
+          ASAR_LIST=$(npx asar list "$ASAR" | tr '\\' '/' | tr -d '\r')
+          echo "$ASAR_LIST" | head -50
+          if echo "$ASAR_LIST" | grep -qE '(^|/)dist/index\.html$'; then
+            echo "✅ dist/index.html confirmed inside app.asar"
+          else
             echo "::error::dist/index.html NOT found inside app.asar!"
+            echo "--- Lines containing index.html ---"
+            echo "$ASAR_LIST" | grep -i 'index.html' || echo "(none)"
+            echo "--- Lines containing dist/ ---"
+            echo "$ASAR_LIST" | grep -i 'dist/' | head -20 || echo "(none)"
             exit 1
           fi
-          echo "✅ dist/index.html confirmed inside app.asar"
 
       # ── Local Server (build once → verify → upload) ────────
       - name: Build Local Server (package only, no publish)

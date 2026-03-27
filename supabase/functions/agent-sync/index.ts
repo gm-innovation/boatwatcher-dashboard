@@ -733,7 +733,7 @@ serve(async (req) => {
 
       console.log(`[agent-sync/download-workers] agent=${agent.id} project=${agent.project_id} filter=all-active found=${(workers || []).length}`)
 
-      const workersWithPhotos = await Promise.all((workers || []).map((worker) => attachWorkerPhotoSignedUrl(supabase, worker)))
+      const workersWithPhotos = await Promise.all((workers || []).map((worker: any) => attachWorkerPhotoSignedUrl(supabase as any, worker)))
       return new Response(JSON.stringify({ workers: workersWithPhotos, timestamp: new Date().toISOString() }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 

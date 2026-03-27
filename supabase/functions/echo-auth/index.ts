@@ -53,8 +53,8 @@ serve(async (req) => {
       } else {
         console.log(`[echo-auth] Token does not have 3 parts (not a valid JWT format)`);
       }
-    } catch (e) {
-      console.log(`[echo-auth] Failed to decode JWT:`, e.message);
+    } catch (e: unknown) {
+      console.log(`[echo-auth] Failed to decode JWT:`, (e as Error).message);
     }
     
     return new Response(

@@ -171,10 +171,10 @@ serve(async (req) => {
       JSON.stringify({ access: accessGranted, reason, message: accessGranted ? 'Acesso Liberado' : getAccessDeniedMessage(reason) }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Webhook Error:', error)
     return new Response(
-      JSON.stringify({ access: false, reason: 'system_error', message: 'Erro do Sistema', error: error.message }),
+      JSON.stringify({ access: false, reason: 'system_error', message: 'Erro do Sistema', error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
