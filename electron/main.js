@@ -143,7 +143,7 @@ function createWindow() {
     const msg = `did-fail-load: code=${errorCode} desc=${errorDescription} url=${validatedURL}`;
     console.error('[desktop]', msg);
     appendLog(msg);
-    loadFallback(`Falha ao carregar: ${errorDescription} (código ${errorCode})`);
+    loadFallback(`Falha ao carregar: ${errorDescription} (código ${errorCode}) | URL: ${validatedURL}`);
   });
 
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
