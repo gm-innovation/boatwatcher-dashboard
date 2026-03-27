@@ -104,7 +104,7 @@ jobs:
             exit 1
           fi
           # Check that at least one JS bundle exists
-          JS_BUNDLE=$(grep -oE 'src="[^"]*\.js"' "$INDEX" | head -1)
+          JS_BUNDLE=$(grep -oE 'src="[^"]*\.js"' "$INDEX" | awk 'NR==1{print; exit}')
           if [ -z "$JS_BUNDLE" ]; then
             echo "::error::No JS bundle reference found in dist/index.html!"
             exit 1
