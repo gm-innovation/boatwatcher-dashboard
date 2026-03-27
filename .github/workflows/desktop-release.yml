@@ -125,11 +125,26 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: |
-          ASAR=$(find electron-dist -name 'app.asar' -type f 2>/dev/null | head -1)
-          if [ -z "$ASAR" ]; then
-            echo "::warning::app.asar not found (dry-run or different output dir). Skipping."
-            exit 0
+          echo "--- Diagnosing electron-dist structure ---"
+          if [ ! -d "electron-dist" ]; then
+            echo "::error::electron-dist directory does not exist after build!"
+            ls -la
+            exit 1
           fi
+          ls -R electron-dist | head -80
+
+          ASAR=""
+          for f in $(find electron-dist -name 'app.asar' -type f 2>/dev/null || true); do
+            ASAR="$f"
+            break
+          done
+
+          if [ -z "$ASAR" ]; then
+            echo "::error::app.asar not found inside electron-dist. Full listing:"
+            find electron-dist -type f 2>/dev/null | head -50 || true
+            exit 1
+          fi
+
           echo "Found asar: $ASAR"
           npx asar list "$ASAR" | head -50
           if ! npx asar list "$ASAR" | grep -q 'dist/index.html'; then
