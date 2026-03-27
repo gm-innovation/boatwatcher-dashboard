@@ -1147,8 +1147,9 @@ function createDatabaseAPI(db, startCode) {
         // Just ensure proper ISO format for the frontend.
         let entryTime = r.entry_time;
         if (entryTime && !entryTime.includes('Z') && !entryTime.includes('+')) {
-          // Treat as UTC already (all data paths now normalize to UTC before storage)
-          entryTime = entryTime.endsWith('Z') ? entryTime : entryTime + 'Z';
+          // Timestamps without timezone marker are legacy BRT data — tag as -03:00
+          // so the frontend interprets them correctly as local time
+          entryTime = entryTime + '-03:00';
         }
         return {
           id: r.worker_id,
