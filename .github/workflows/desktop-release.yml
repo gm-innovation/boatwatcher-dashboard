@@ -227,7 +227,7 @@ jobs:
           echo "✅ SHA512 integrity check passed."
 
       - name: Upload Local Server artifacts to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: success() && startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: |
           TAG="${{ github.ref_name }}"
