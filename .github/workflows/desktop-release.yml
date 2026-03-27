@@ -111,6 +111,24 @@ jobs:
           fi
           echo "✅ dist/index.html asset paths are relative and JS bundle is present."
 
+      # ── Validate Desktop asar contents ─────────────────────
+      - name: Validate Desktop asar contents
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          ASAR=$(find electron-dist -name 'app.asar' -type f 2>/dev/null | head -1)
+          if [ -z "$ASAR" ]; then
+            echo "::warning::app.asar not found (dry-run or different output dir). Skipping."
+            exit 0
+          fi
+          echo "Found asar: $ASAR"
+          npx asar list "$ASAR" | head -50
+          if ! npx asar list "$ASAR" | grep -q 'dist/index.html'; then
+            echo "::error::dist/index.html NOT found inside app.asar!"
+            exit 1
+          fi
+          echo "✅ dist/index.html confirmed inside app.asar"
+
       # ── Desktop ──────────────────────────────────────────────
       - name: Build and publish Desktop release
         if: startsWith(github.ref, 'refs/tags/v')
