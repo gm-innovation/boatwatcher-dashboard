@@ -256,7 +256,7 @@ jobs:
           echo "Uploading Local Server artifacts to release $TAG..."
 
           # Upload .exe
-          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | head -1 || true)"
+          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | awk 'NR==1{print; exit}' || true)"
           echo "Uploading: $EXE"
           gh release upload "$TAG" "$EXE" --clobber
 
