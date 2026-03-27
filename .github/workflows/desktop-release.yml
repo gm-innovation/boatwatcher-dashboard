@@ -202,7 +202,7 @@ jobs:
       - name: Generate server.yml update metadata
         shell: bash
         run: |
-          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | head -1 || true)"
+          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | awk 'NR==1{print; exit}' || true)"
           EXE_NAME=$(basename "$EXE")
           SIZE=$(stat --printf='%s' "$EXE" 2>/dev/null || stat -f%z "$EXE" 2>/dev/null)
           SHA512=$(openssl dgst -sha512 -binary "$EXE" | openssl base64 -A)
