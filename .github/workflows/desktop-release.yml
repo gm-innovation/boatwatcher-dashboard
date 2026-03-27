@@ -252,7 +252,7 @@ jobs:
           echo "✅ All Local Server artifacts uploaded successfully."
 
       - name: Verify release assets on GitHub
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: success() && startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: |
           TAG="${{ github.ref_name }}"
