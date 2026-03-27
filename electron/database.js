@@ -1557,14 +1557,36 @@ function createDatabaseAPI(db, startCode) {
 
     upsertAccessLogFromCloud(data) {
       if (!data.id) return;
-      const existing = db.prepare('SELECT id FROM access_logs WHERE id = ?').get(data.id);
-      if (existing) return; // already exists, skip
 
       // Resolve worker_id FK — use null if worker not found locally
       let localWorkerId = data.worker_id || null;
       if (localWorkerId) {
         const workerExists = db.prepare('SELECT id FROM workers WHERE id = ? OR cloud_id = ?').get(localWorkerId, localWorkerId);
         if (!workerExists) localWorkerId = null;
+      }
+
+      const existing = db.prepare('SELECT id FROM access_logs WHERE id = ?').get(data.id);
+      if (existing) {
+        // UPDATE canonical fields from cloud (fixes timestamp drift)
+        db.prepare(`
+          UPDATE access_logs SET
+            worker_id = ?, device_id = ?, timestamp = ?, access_status = ?, direction = ?,
+            reason = ?, score = ?, worker_name = ?, worker_document = ?, device_name = ?, synced = 1
+          WHERE id = ?
+        `).run(
+          localWorkerId,
+          data.device_id || null,
+          data.timestamp || new Date().toISOString(),
+          data.access_status || 'granted',
+          data.direction || 'unknown',
+          data.reason || null,
+          data.score || null,
+          data.worker_name || null,
+          data.worker_document || null,
+          data.device_name || null,
+          data.id,
+        );
+        return;
       }
 
       db.prepare(`
