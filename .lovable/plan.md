@@ -1,53 +1,51 @@
 
-Objetivo: eliminar de vez o atraso de -3h no Dashboard Desktop (mantendo Web como referência correta).
 
-Diagnóstico confirmado (com base no código atual):
-- O Web está correto porque lê direto da nuvem.
-- O Desktop usa prioritariamente o caminho local (`/api/projects/:id/workers-on-board`), cuja lógica de data/hora diverge da web.
-- Há risco de inconsistência local por reconciliação incompleta de logs:
-  - `upsertAccessLogFromCloud` ignora registros já existentes (não corrige timestamp local antigo).
-  - Isso pode manter horário “velho/errado” no SQLite mesmo com horário correto na nuvem.
+## Problema
 
-Plano de implementação (curto e direto):
+A correção de UTC anterior inverteu a prioridade: `useWorkersOnBoard` agora tenta a **nuvem primeiro** e só cai no local se falhar. Sem internet, a chamada à nuvem vai travar (timeout do Supabase ~30s) antes de usar o servidor local, quebrando a experiência offline do Desktop.
 
-1) Hotfix imediato de paridade Web/Desktop
-- Arquivo: `src/hooks/useSupabase.ts`
-- Ajustar `useWorkersOnBoard` para usar a mesma consulta da nuvem como caminho principal quando houver conexão.
-- Manter o endpoint local apenas como fallback offline.
-- Resultado esperado: Desktop online passa a mostrar exatamente o mesmo horário da Web.
+Além disso, outros hooks do Dashboard (`useLastAccessLog`, `useRealtimeAccessLogs`) não têm fallback local e falharão silenciosamente offline.
 
-2) Correção estrutural do runtime local (UTC)
-- Arquivo: `electron/database.js`
-- Reescrever `getWorkersOnBoard` para alinhar 1:1 com a semântica da web:
-  - início do dia em horário local convertido para UTC (sem `toISOString().split('T')[0]` ingênuo),
-  - teto temporal de +2 min (igual web),
-  - normalização única de timestamp antes de retornar `entryTime`.
-- Isso remove o drift local em cenários offline.
+## Correção
 
-3) Reconciliação correta dos logs baixados da nuvem
-- Arquivo: `electron/database.js`
-- Em `upsertAccessLogFromCloud`, quando o ID já existir:
-  - atualizar campos canônicos (incluindo `timestamp`) em vez de simplesmente “return”.
-- Resultado esperado: registros locais antigos/errados são autocorrigidos pelo dado canônico da nuvem.
+### 1. `useWorkersOnBoard` — Local primeiro no Desktop, nuvem primeiro na Web
+**Arquivo:** `src/hooks/useSupabase.ts`
 
-4) Evitar divergência futura por duplicidade/identidade de log
-- Arquivos:
-  - `electron/sync.js` (manter `id` no payload de upload de logs),
-  - `supabase/functions/agent-sync/index.ts` (upsert por `id` no upload).
-- Objetivo: mesma identidade de evento ponta a ponta, evitando pares duplicados com horários diferentes.
+- Importar `usesLocalServer` (já importado) e `isElectron` de `dataProvider`
+- Inverter a lógica: se `usesLocalServer()` retorna `true`, tentar o servidor local **primeiro**; se falhar, tentar nuvem como fallback
+- Se não é Desktop ou servidor local indisponível, usar nuvem como primário (comportamento web normal)
+- Isso mantém a paridade UTC na web e garante resposta instantânea offline no Desktop
 
-5) Validação final (obrigatória)
-- Testar entrada real no dispositivo e comparar:
-  - Dashboard Web vs Desktop (mesmo trabalhador, mesma hora),
-  - exportação CSV do Desktop,
-  - janela próxima da meia-noite (virada de dia),
-  - modo offline (fallback local ainda consistente).
-- Critério de aceite: diferença máxima de 0 min entre Web e Desktop no mesmo evento.
+```
+queryFn: if usesLocalServer() → local first, cloud fallback
+         else              → cloud first (web behavior)
+```
 
-Detalhes técnicos (resumo):
-- Arquivos-alvo principais:
-  - `src/hooks/useSupabase.ts`
-  - `electron/database.js`
-  - `electron/sync.js`
-  - `supabase/functions/agent-sync/index.ts`
-- Causa técnica central: divergência entre pipeline local e canônico (nuvem) no tratamento de timestamps + reconciliação incompleta do SQLite.
+### 2. Garantir que `fetchWorkersOnBoardFromCloud` tenha timeout curto
+**Arquivo:** `src/hooks/useSupabase.ts`
+
+- Sem alteração estrutural necessária — a função já retorna `null` em caso de erro
+- O Supabase client em ambiente offline geralmente falha rápido (rede indisponível → erro imediato)
+- Se necessário, podemos adicionar `AbortController` com timeout de 5s no futuro
+
+### 3. Garantir que o `executeWithDesktopFallback` continua funcionando para os demais hooks
+**Arquivo:** `src/hooks/useDataProvider.ts` — sem alterações necessárias, já usa local-first corretamente
+
+### 4. Dashboard offline: `useLastAccessLog` 
+**Arquivo:** `src/hooks/useSupabase.ts`
+
+- Envolver com `executeWithDesktopFallback` para que use dados locais no Desktop offline
+- Na web, manter comportamento atual
+
+### Resumo de alterações
+
+| Arquivo | Mudança |
+|---|---|
+| `src/hooks/useSupabase.ts` | `useWorkersOnBoard`: local-first no Desktop, cloud-first na Web. `useLastAccessLog`: adicionar fallback local |
+
+### Resultado esperado
+- Desktop **com internet**: usa local (rápido), dados já sincronizados
+- Desktop **sem internet**: usa local, funciona normalmente
+- Web: usa nuvem diretamente (sem mudança)
+- UTC correto em ambos os cenários (a lógica de UTC no `electron/database.js` já foi corrigida na mensagem anterior)
+
