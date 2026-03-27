@@ -104,7 +104,7 @@ jobs:
             exit 1
           fi
           # Check that at least one JS bundle exists
-          JS_BUNDLE=$(grep -oE 'src="[^"]*\.js"' "$INDEX" | head -1)
+          JS_BUNDLE=$(grep -oE 'src="[^"]*\.js"' "$INDEX" | awk 'NR==1{print; exit}')
           if [ -z "$JS_BUNDLE" ]; then
             echo "::error::No JS bundle reference found in dist/index.html!"
             exit 1
@@ -125,13 +125,14 @@ jobs:
         if: success() && startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: |
+          set +o pipefail
           echo "--- Searching for app.asar ---"
           ASAR=""
 
           # Primary: expected output directory
           if [ -d "electron-dist" ]; then
             echo "electron-dist/ exists. Contents:"
-            ls -R electron-dist | head -80
+            ls -R electron-dist | awk 'NR<=80{print}'
             for f in $(find electron-dist -name 'app.asar' -type f 2>/dev/null || true); do
               ASAR="$f"
               break
@@ -154,23 +155,23 @@ jobs:
             echo "::error::app.asar not found in electron-dist/ or dist/. Full workspace listing:"
             ls -la
             echo "--- electron-dist contents (if any) ---"
-            find electron-dist -type f 2>/dev/null | head -50 || echo "(directory absent)"
+            find electron-dist -type f 2>/dev/null | awk 'NR<=50{print}' || echo "(directory absent)"
             echo "--- dist contents (if any) ---"
-            find dist -type f 2>/dev/null | head -50 || echo "(directory absent)"
+            find dist -type f 2>/dev/null | awk 'NR<=50{print}' || echo "(directory absent)"
             exit 1
           fi
 
           echo "✅ Found asar: $ASAR"
           ASAR_LIST=$(npx asar list "$ASAR" | tr '\\' '/' | tr -d '\r')
-          echo "$ASAR_LIST" | head -50
-          if echo "$ASAR_LIST" | grep -qE '(^|/)dist/index\.html$'; then
+          awk 'NR<=50{print}' <<< "$ASAR_LIST"
+          if grep -qE '(^|/)dist/index\.html$' <<< "$ASAR_LIST"; then
             echo "✅ dist/index.html confirmed inside app.asar"
           else
             echo "::error::dist/index.html NOT found inside app.asar!"
             echo "--- Lines containing index.html ---"
-            echo "$ASAR_LIST" | grep -i 'index.html' || echo "(none)"
+            grep -i 'index.html' <<< "$ASAR_LIST" || echo "(none)"
             echo "--- Lines containing dist/ ---"
-            echo "$ASAR_LIST" | grep -i 'dist/' | head -20 || echo "(none)"
+            awk 'BEGIN{IGNORECASE=1}/dist\//{print; if(++n>=20) exit}' <<< "$ASAR_LIST" || echo "(none)"
             exit 1
           fi
 
@@ -182,7 +183,7 @@ jobs:
         shell: bash
         run: |
           echo "--- Checking for Local Server installer ---"
-          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | head -1 || true)"
+          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | awk 'NR==1{print; exit}' || true)"
           if [ -z "$EXE" ]; then
             echo "::error::Local Server .exe was NOT generated! The NSIS packaging likely failed."
             echo "Contents of local-server-dist/:"
@@ -201,7 +202,7 @@ jobs:
       - name: Generate server.yml update metadata
         shell: bash
         run: |
-          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | head -1 || true)"
+          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | awk 'NR==1{print; exit}' || true)"
           EXE_NAME=$(basename "$EXE")
           SIZE=$(stat --printf='%s' "$EXE" 2>/dev/null || stat -f%z "$EXE" 2>/dev/null)
           SHA512=$(openssl dgst -sha512 -binary "$EXE" | openssl base64 -A)
@@ -234,8 +235,8 @@ jobs:
             exit 1
           fi
 
-          YML_SHA=$(grep 'sha512:' "$SERVER_YML" | head -1 | sed 's/.*sha512:[[:space:]]*//' | tr -d '[:space:]')
-          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | head -1 || true)"
+          YML_SHA=$(grep 'sha512:' "$SERVER_YML" | awk 'NR==1{print; exit}' | sed 's/.*sha512:[[:space:]]*//' | tr -d '[:space:]')
+          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | awk 'NR==1{print; exit}' || true)"
           ACTUAL_SHA=$(openssl dgst -sha512 -binary "$EXE" | openssl base64 -A)
 
           echo "server.yml sha512: $YML_SHA"
@@ -255,7 +256,7 @@ jobs:
           echo "Uploading Local Server artifacts to release $TAG..."
 
           # Upload .exe
-          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | head -1 || true)"
+          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | awk 'NR==1{print; exit}' || true)"
           echo "Uploading: $EXE"
           gh release upload "$TAG" "$EXE" --clobber
 
@@ -264,7 +265,7 @@ jobs:
           gh release upload "$TAG" "local-server-dist/server.yml" --clobber
 
           # Upload blockmap if exists
-          BLOCKMAP="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe.blockmap' -type f 2>/dev/null | head -1 || true)"
+          BLOCKMAP="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe.blockmap' -type f 2>/dev/null | awk 'NR==1{print; exit}' || true)"
           if [ -n "$BLOCKMAP" ]; then
             echo "Uploading: $BLOCKMAP"
             gh release upload "$TAG" "$BLOCKMAP" --clobber
