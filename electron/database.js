@@ -1091,7 +1091,12 @@ function createDatabaseAPI(db, startCode) {
 
     // === Workers On Board ===
     getWorkersOnBoard(projectId) {
-      const today = new Date().toISOString().split('T')[0];
+      // Compute local midnight in UTC (matches web: new Date(y,m,d).toISOString())
+      const now = new Date();
+      const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const startTimestamp = localMidnight.toISOString();
+      // Temporal ceiling: ignore timestamps more than 2 min in the future (matches web)
+      const maxTimestamp = new Date(Date.now() + 2 * 60 * 1000).toISOString();
       
       // Filter by project devices when projectId is provided
       const deviceFilter = projectId
@@ -1101,8 +1106,8 @@ function createDatabaseAPI(db, startCode) {
         ? 'AND ex.device_id IN (SELECT id FROM devices WHERE project_id = ?)'
         : '';
       const params = projectId
-        ? [today, projectId, today, projectId]
-        : [today, today];
+        ? [startTimestamp, maxTimestamp, projectId, startTimestamp, maxTimestamp, projectId]
+        : [startTimestamp, maxTimestamp, startTimestamp, maxTimestamp];
 
       const rows = db.prepare(`
         WITH first_entries AS (
@@ -1112,7 +1117,8 @@ function createDatabaseAPI(db, startCode) {
               ORDER BY al.timestamp ASC
             ) as rn
           FROM access_logs al
-          WHERE al.timestamp >= ? || 'T00:00:00'
+          WHERE al.timestamp >= ?
+            AND al.timestamp <= ?
             AND al.access_status = 'granted'
             AND al.direction = 'entry'
             AND al.worker_id IS NOT NULL
@@ -1129,18 +1135,20 @@ function createDatabaseAPI(db, startCode) {
             WHERE (ex.worker_name = fe.worker_name OR ex.worker_id = fe.worker_id)
               AND ex.direction = 'exit'
               AND ex.timestamp > fe.timestamp
-              AND ex.timestamp >= ? || 'T00:00:00'
+              AND ex.timestamp >= ?
+              AND ex.timestamp <= ?
               ${exitDeviceFilter}
           )
       `).all(...params);
 
       return rows.map((r) => {
+        // Timestamps from cloud sync are already in UTC (ISO with Z).
+        // Timestamps from local agent capture are also stored in UTC after +3h normalization.
+        // Just ensure proper ISO format for the frontend.
         let entryTime = r.entry_time;
-        // Normalize BRT → UTC (+3h) for timestamps without timezone indicator
         if (entryTime && !entryTime.includes('Z') && !entryTime.includes('+')) {
-          const d = new Date(entryTime);
-          d.setHours(d.getHours() + 3);
-          entryTime = d.toISOString();
+          // Treat as UTC already (all data paths now normalize to UTC before storage)
+          entryTime = entryTime.endsWith('Z') ? entryTime : entryTime + 'Z';
         }
         return {
           id: r.worker_id,
