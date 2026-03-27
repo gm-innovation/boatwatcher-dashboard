@@ -118,19 +118,26 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
     queryFn: async () => {
       if (!projectId) return [];
 
-      // ALWAYS use cloud query as primary source of truth (correct UTC timestamps).
-      // Local server is only used as offline fallback.
+      // Desktop with local server: local-first for instant offline response
+      if (usesLocalServer()) {
+        if (dateFilter === 'today') {
+          const localWorkersOnBoard = await fetchProjectWorkersOnBoard(projectId);
+          if (localWorkersOnBoard !== null) {
+            return localWorkersOnBoard;
+          }
+        }
+        // Local failed or non-today filter: try cloud as fallback
+        const cloudResult = await fetchWorkersOnBoardFromCloud(projectId, startTimestamp, dateFilter);
+        if (cloudResult !== null) {
+          return cloudResult;
+        }
+        return [];
+      }
+
+      // Web: cloud-first (primary source of truth)
       const cloudResult = await fetchWorkersOnBoardFromCloud(projectId, startTimestamp, dateFilter);
       if (cloudResult !== null) {
         return cloudResult;
-      }
-
-      // Offline fallback: use local server (Desktop only, today only)
-      if (dateFilter === 'today') {
-        const localWorkersOnBoard = await fetchProjectWorkersOnBoard(projectId);
-        if (localWorkersOnBoard !== null) {
-          return localWorkersOnBoard;
-        }
       }
 
       return [];
@@ -248,6 +255,23 @@ export const useLastAccessLog = (projectId: string | null) => {
   return useQuery({
     queryKey: ['last-access-log', projectId],
     queryFn: async () => {
+      // Desktop with local server: try local first
+      if (usesLocalServer()) {
+        try {
+          const { fetchAccessLogs } = await import('@/hooks/useDataProvider');
+          const logs = await fetchAccessLogs({ limit: 1 });
+          if (logs && logs.length > 0) {
+            // Sort locally to get latest
+            const sorted = [...logs].sort((a: any, b: any) => 
+              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            );
+            return sorted[0].timestamp || null;
+          }
+        } catch {
+          // fall through to cloud
+        }
+      }
+
       const { data, error } = await supabase
         .from('access_logs')
         .select('timestamp')
