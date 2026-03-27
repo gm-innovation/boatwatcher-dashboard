@@ -255,6 +255,19 @@ export const useLastAccessLog = (projectId: string | null) => {
   return useQuery({
     queryKey: ['last-access-log', projectId],
     queryFn: async () => {
+      // Desktop with local server: try local first
+      if (usesLocalServer()) {
+        try {
+          const { fetchAccessLogs } = await import('@/hooks/useDataProvider');
+          const logs = await fetchAccessLogs({ limit: 1, orderBy: 'timestamp', order: 'desc' });
+          if (logs && logs.length > 0) {
+            return logs[0].timestamp || null;
+          }
+        } catch {
+          // fall through to cloud
+        }
+      }
+
       const { data, error } = await supabase
         .from('access_logs')
         .select('timestamp')
