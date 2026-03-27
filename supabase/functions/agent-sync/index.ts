@@ -366,6 +366,7 @@ serve(async (req) => {
           }
 
           accepted.push({
+            ...(l.id ? { id: l.id } : {}),
             worker_id: workerId,
             device_id: deviceId,
             timestamp: tsCheck.timestamp,
@@ -439,9 +440,9 @@ serve(async (req) => {
 
       let insertedCount = 0
       if (accepted.length > 0) {
-        const { error } = await supabase.from('access_logs').insert(accepted)
+        const { error } = await supabase.from('access_logs').upsert(accepted, { onConflict: 'id' })
         if (error) {
-          console.error(`[agent-sync/upload-logs] Insert error:`, error)
+          console.error(`[agent-sync/upload-logs] Upsert error:`, error)
           throw error
         }
         insertedCount = accepted.length

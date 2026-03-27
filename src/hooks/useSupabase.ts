@@ -118,7 +118,14 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
     queryFn: async () => {
       if (!projectId) return [];
 
-      // Local server mode only works for today
+      // ALWAYS use cloud query as primary source of truth (correct UTC timestamps).
+      // Local server is only used as offline fallback.
+      const cloudResult = await fetchWorkersOnBoardFromCloud(projectId, startTimestamp, dateFilter);
+      if (cloudResult !== null) {
+        return cloudResult;
+      }
+
+      // Offline fallback: use local server (Desktop only, today only)
       if (dateFilter === 'today') {
         const localWorkersOnBoard = await fetchProjectWorkersOnBoard(projectId);
         if (localWorkersOnBoard !== null) {
@@ -126,102 +133,116 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
         }
       }
 
-      // First, get device IDs for this project
-      const { data: projectDevices, error: devicesError } = await supabase
-        .from('devices')
-        .select('id')
-        .eq('project_id', projectId);
-
-      if (devicesError) throw devicesError;
-
-      const deviceIds = (projectDevices || []).map(d => d.id);
-      if (deviceIds.length === 0) return [];
-
-      // Temporal ceiling: ignore timestamps more than 2 min in the future
-      const maxTimestamp = new Date(Date.now() + 2 * 60 * 1000).toISOString();
-
-      const { data: entryLogs, error: entryError } = await supabase
-        .from('access_logs')
-        .select('worker_id, worker_name, device_name, timestamp')
-        .eq('direction', 'entry')
-        .eq('access_status', 'granted')
-        .in('device_id', deviceIds)
-        .gte('timestamp', startTimestamp)
-        .lte('timestamp', maxTimestamp)
-        .order('timestamp', { ascending: true });
-
-      if (entryError) throw entryError;
-
-      const { data: exitLogs, error: exitError } = await supabase
-        .from('access_logs')
-        .select('worker_id, worker_name, timestamp')
-        .eq('direction', 'exit')
-        .in('device_id', deviceIds)
-        .gte('timestamp', startTimestamp)
-        .lte('timestamp', maxTimestamp);
-
-      if (exitError) throw exitError;
-
-      // Use worker_name as the primary key for matching entries/exits (handles UUID mismatch)
-      const workersOnBoard = new Map<string, any>();
-
-      for (const entry of entryLogs || []) {
-        const key = entry.worker_name || entry.worker_id || '';
-        if (!key) continue;
-
-        // Match exit by worker_name first, fallback to worker_id
-        const hasExit = exitLogs?.some(exit => {
-          const nameMatch = entry.worker_name && exit.worker_name && exit.worker_name === entry.worker_name;
-          const idMatch = exit.worker_id === entry.worker_id;
-          return (nameMatch || idMatch) && new Date(exit.timestamp) > new Date(entry.timestamp);
-        });
-
-        if (!hasExit && !workersOnBoard.has(key)) {
-          workersOnBoard.set(key, {
-            worker_id: entry.worker_id,
-            worker_name: entry.worker_name,
-            device_name: entry.device_name,
-            entry_time: entry.timestamp,
-          });
-        }
-      }
-
-      if (workersOnBoard.size === 0) return [];
-
-      // Enrich by worker_name (handles UUID mismatch)
-      const workerNames = Array.from(workersOnBoard.values())
-        .map(w => w.worker_name)
-        .filter(Boolean);
-
-      const { data: workers } = workerNames.length > 0
-        ? await supabase
-            .from('workers')
-            .select('id, name, role, company_id, companies(name)')
-            .in('name', workerNames)
-        : { data: [] };
-
-      const workersByName = new Map<string, any>();
-      for (const w of workers || []) {
-        workersByName.set(w.name, w);
-      }
-
-      return Array.from(workersOnBoard.entries()).map(([key, onBoard]) => {
-        const enriched = workersByName.get(onBoard.worker_name);
-        return {
-          id: enriched?.id || onBoard.worker_id || key,
-          name: enriched?.name || onBoard.worker_name || 'Desconhecido',
-          location: onBoard.device_name || null,
-          role: enriched?.role || null,
-          company: enriched?.companies?.name || 'N/A',
-          company_id: enriched?.company_id || null,
-          entryTime: onBoard.entry_time,
-        };
-      });
+      return [];
     },
     enabled: !!projectId,
     refetchInterval: 10000,
   });
 };
+
+/** Cloud query for workers on board — extracted for reuse and clarity */
+async function fetchWorkersOnBoardFromCloud(
+  projectId: string,
+  startTimestamp: string,
+  _dateFilter: DateFilter,
+): Promise<any[] | null> {
+  try {
+    // First, get device IDs for this project
+    const { data: projectDevices, error: devicesError } = await supabase
+      .from('devices')
+      .select('id')
+      .eq('project_id', projectId);
+
+    if (devicesError) throw devicesError;
+
+    const deviceIds = (projectDevices || []).map(d => d.id);
+    if (deviceIds.length === 0) return [];
+
+    // Temporal ceiling: ignore timestamps more than 2 min in the future
+    const maxTimestamp = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+
+    const { data: entryLogs, error: entryError } = await supabase
+      .from('access_logs')
+      .select('worker_id, worker_name, device_name, timestamp')
+      .eq('direction', 'entry')
+      .eq('access_status', 'granted')
+      .in('device_id', deviceIds)
+      .gte('timestamp', startTimestamp)
+      .lte('timestamp', maxTimestamp)
+      .order('timestamp', { ascending: true });
+
+    if (entryError) throw entryError;
+
+    const { data: exitLogs, error: exitError } = await supabase
+      .from('access_logs')
+      .select('worker_id, worker_name, timestamp')
+      .eq('direction', 'exit')
+      .in('device_id', deviceIds)
+      .gte('timestamp', startTimestamp)
+      .lte('timestamp', maxTimestamp);
+
+    if (exitError) throw exitError;
+
+    // Use worker_name as the primary key for matching entries/exits (handles UUID mismatch)
+    const workersOnBoard = new Map<string, any>();
+
+    for (const entry of entryLogs || []) {
+      const key = entry.worker_name || entry.worker_id || '';
+      if (!key) continue;
+
+      // Match exit by worker_name first, fallback to worker_id
+      const hasExit = exitLogs?.some(exit => {
+        const nameMatch = entry.worker_name && exit.worker_name && exit.worker_name === entry.worker_name;
+        const idMatch = exit.worker_id === entry.worker_id;
+        return (nameMatch || idMatch) && new Date(exit.timestamp) > new Date(entry.timestamp);
+      });
+
+      if (!hasExit && !workersOnBoard.has(key)) {
+        workersOnBoard.set(key, {
+          worker_id: entry.worker_id,
+          worker_name: entry.worker_name,
+          device_name: entry.device_name,
+          entry_time: entry.timestamp,
+        });
+      }
+    }
+
+    if (workersOnBoard.size === 0) return [];
+
+    // Enrich by worker_name (handles UUID mismatch)
+    const workerNames = Array.from(workersOnBoard.values())
+      .map(w => w.worker_name)
+      .filter(Boolean);
+
+    const { data: workers } = workerNames.length > 0
+      ? await supabase
+          .from('workers')
+          .select('id, name, role, company_id, companies(name)')
+          .in('name', workerNames)
+      : { data: [] };
+
+    const workersByName = new Map<string, any>();
+    for (const w of workers || []) {
+      workersByName.set(w.name, w);
+    }
+
+    return Array.from(workersOnBoard.entries()).map(([key, onBoard]) => {
+      const enriched = workersByName.get(onBoard.worker_name);
+      return {
+        id: enriched?.id || onBoard.worker_id || key,
+        name: enriched?.name || onBoard.worker_name || 'Desconhecido',
+        location: onBoard.device_name || null,
+        role: enriched?.role || null,
+        company: enriched?.companies?.name || 'N/A',
+        company_id: enriched?.company_id || null,
+        entryTime: onBoard.entry_time,
+      };
+    });
+  } catch (err) {
+    console.warn('[useWorkersOnBoard] Cloud query failed, will try local fallback:', err);
+    return null;
+  }
+}
 
 export const useLastAccessLog = (projectId: string | null) => {
   return useQuery({
