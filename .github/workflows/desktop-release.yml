@@ -183,7 +183,7 @@ jobs:
         shell: bash
         run: |
           echo "--- Checking for Local Server installer ---"
-          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | head -1 || true)"
+          EXE="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe' -type f 2>/dev/null | awk 'NR==1{print; exit}' || true)"
           if [ -z "$EXE" ]; then
             echo "::error::Local Server .exe was NOT generated! The NSIS packaging likely failed."
             echo "Contents of local-server-dist/:"
