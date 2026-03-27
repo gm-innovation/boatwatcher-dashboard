@@ -1,78 +1,71 @@
 
+Objetivo: eliminar a tela branca no Desktop pós-update com um hotfix que **nunca** deixa o app “mudo”, mesmo se houver erro no bootstrap do renderer.
 
-# Corrigir horário de entrada no Desktop (normalização UTC)
+1) Blindar o bootstrap do Desktop (anti-tela-branca)
+- Arquivo: `electron/main.js`
+- Implementar um “watchdog” de inicialização:
+  - ao criar a janela, iniciar timeout (ex.: 10–15s);
+  - esperar um evento explícito de “renderer pronto”;
+  - se não chegar no prazo, renderizar uma tela de fallback HTML local com:
+    - mensagem de falha de inicialização,
+    - versão do app,
+    - botão “Recarregar”,
+    - botão “Abrir logs”.
+- Manter logs detalhados de `did-fail-load`, `render-process-gone`, `unresponsive` e erros de console do renderer em arquivo local (`userData`).
 
-## Problema
-Web mostra **17:56** (correto), Desktop mostra **14:56** — diferença de exatamente 3 horas. O SQLite local armazena timestamps em BRT (horário do dispositivo), mas o frontend espera UTC.
+2) Adicionar handshake de “renderer pronto”
+- Arquivos: `electron/preload.js`, `src/main.tsx`
+- Expor no preload um método seguro (`electronAPI.appReady()`).
+- No `src/main.tsx`, disparar esse método logo após montar o React root.
+- Isso permite distinguir “carregou de verdade” de “janela abriu mas app quebrou”.
 
-## Solução
+3) Evitar crash silencioso do React
+- Arquivos: `src/main.tsx` + novo componente de fallback (ex.: `src/components/desktop/DesktopFatalErrorBoundary.tsx`)
+- Envolver `<App />` em Error Boundary global.
+- Se houver erro fatal no render/hook:
+  - mostrar fallback visual (não tela branca),
+  - logar stack no console e no canal IPC de erro.
 
-### Arquivo: `electron/database.js` — função `getWorkersOnBoard` (linhas 1093-1129)
+4) Tornar detecção Desktop mais resiliente
+- Arquivos: `src/lib/runtimeProfile.ts`, `src/App.tsx`
+- Hoje o roteador depende de `window.electronAPI`.
+- Ajustar para considerar também protocolo `file:` como ambiente desktop (além de `electronAPI`), garantindo `HashRouter` mesmo se preload atrasar/falhar parcialmente.
+- Isso reduz risco de quebra de navegação no build empacotado.
 
-Duas correções:
+5) Trava de segurança no pipeline de release
+- Arquivo: `.github/workflows/desktop-release.yml`
+- Após `build:desktop`, validar `dist/index.html`:
+  - assets com caminho relativo (não absoluto),
+  - bundle principal presente.
+- Se validação falhar, abortar release para não publicar versão com risco de tela branca.
 
-**A. Inverter ordenação para pegar primeira entrada (consistência com a Web)**
-- Mudar `ORDER BY al.timestamp DESC` para `ASC`
-- Filtrar apenas `direction = 'entry'` na CTE
-- Adicionar `NOT EXISTS` para excluir trabalhadores que já saíram
+6) Plano de rollout e recuperação
+- Gerar hotfix de versão (ex.: `1.3.8`) com mudanças mínimas focadas no bootstrap.
+- Publicar release via tag.
+- Para quem já está na versão quebrada (tela branca sem UI), disponibilizar instalador manual dessa hotfix (update in-app pode ficar inacessível quando a UI não sobe).
 
-**B. Normalizar timestamp BRT → UTC no retorno**
-No `rows.map`, converter `entry_time` adicionando +3h quando não contém indicador de fuso:
+Detalhes técnicos (resumo)
+- Arquitetura alvo:
+  - Main process com watchdog + fallback local + logging persistente.
+  - Renderer com Error Boundary e sinal de “ready”.
+  - Runtime profile robusto para escolher roteador corretamente no `file://`.
+- Arquivos impactados:
+  - `electron/main.js`
+  - `electron/preload.js`
+  - `src/main.tsx`
+  - `src/lib/runtimeProfile.ts`
+  - `src/App.tsx`
+  - `.github/workflows/desktop-release.yml`
+  - (novo) componente de fallback de erro fatal.
 
-```javascript
-rows.map((r) => {
-  let entryTime = r.entry_time;
-  if (entryTime && !entryTime.includes('Z') && !entryTime.includes('+')) {
-    const d = new Date(entryTime);
-    d.setHours(d.getHours() + 3);
-    entryTime = d.toISOString();
-  }
-  return {
-    id: r.worker_id,
-    name: r.name || r.worker_name,
-    location: r.device_name,
-    role: r.role,
-    company: r.company_name || 'N/A',
-    company_id: r.company_id,
-    entryTime,
-  };
-})
-```
-
-### Query SQL reescrita
-
-```sql
-WITH first_entries AS (
-  SELECT al.worker_id, al.worker_name, al.device_name, al.timestamp,
-    ROW_NUMBER() OVER (
-      PARTITION BY COALESCE(al.worker_name, al.worker_id) 
-      ORDER BY al.timestamp ASC
-    ) as rn
-  FROM access_logs al
-  WHERE al.timestamp >= ? || 'T00:00:00'
-    AND al.access_status = 'granted'
-    AND al.direction = 'entry'
-    AND al.worker_id IS NOT NULL
-    ${deviceFilter}
-)
-SELECT fe.worker_id, fe.worker_name, fe.device_name, fe.timestamp as entry_time,
-  w.name, w.role, w.company_id, c.name as company_name
-FROM first_entries fe
-LEFT JOIN workers w ON fe.worker_id = w.id
-LEFT JOIN companies c ON w.company_id = c.id
-WHERE fe.rn = 1
-  AND NOT EXISTS (
-    SELECT 1 FROM access_logs ex
-    WHERE (ex.worker_name = fe.worker_name OR ex.worker_id = fe.worker_id)
-      AND ex.direction = 'exit'
-      AND ex.timestamp > fe.timestamp
-      AND ex.timestamp >= ? || 'T00:00:00'
-      ${deviceFilter ? 'AND ex.device_id IN (SELECT id FROM devices WHERE project_id = ?)' : ''}
-  )
-```
-
-Os `params` precisam ser ajustados para incluir o `today` e `projectId` extras na subquery de `NOT EXISTS`.
-
-### Arquivo alterado
-- `electron/database.js` — reescrever query + normalizar timestamp no retorno
-
+Validação (obrigatória, ponta a ponta)
+- Teste E2E do Desktop empacotado:
+  1) abrir app recém-instalado,
+  2) login,
+  3) navegar dashboard/admin/relatórios,
+  4) confirmar ausência de tela branca.
+- Teste de update:
+  - atualizar da versão anterior funcional para hotfix,
+  - abrir e repetir fluxo completo.
+- Teste de falha forçada:
+  - simular erro de renderer e confirmar que aparece fallback (não branco) + log acessível.
