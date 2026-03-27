@@ -1,40 +1,42 @@
 
-Objetivo: parar o falso negativo no CI (“dist/index.html NOT found inside app.asar”) e destravar os releases.
+Problema real (reformulado):
+- O `app.asar` já está sendo encontrado corretamente.
+- A falha atual (`exit code 141`) é **SIGPIPE** no shell do GitHub Actions (`bash -eo pipefail`), causada por pipelines que cortam saída com `head`/`grep -q`.
+- Ou seja: o pipeline está quebrando no **comando de diagnóstico/validação**, não no empacotamento.
 
 Do I know what the issue is?
-- Sim.
+- Sim. É um falso fail de shell por `pipefail` + comandos que encerram leitura antes do produtor terminar.
 
-Diagnóstico confirmado:
-- O `app.asar` está sendo encontrado corretamente em `electron-dist/win-unpacked/resources/app.asar`.
-- O `npx asar list` no runner Windows imprime caminhos com `\` (backslash), mas a validação atual procura apenas `dist/index.html` com `/`.
-- Resultado: o arquivo pode existir como `\dist\index.html`, mas o `grep` falha e derruba o pipeline.
+Arquivos a corrigir:
+- `.github/workflows/desktop-release.yml` (principal e suficiente para destravar).
 
-Plano de correção (implementação):
+Plano objetivo de correção:
+1) Remover comandos propensos a SIGPIPE no step `Validate Desktop asar contents`
+- Trocar padrões como:
+  - `echo "$ASAR_LIST" | head -50`
+  - `echo "$ASAR_LIST" | grep -qE ...`
+  - `... | grep ... | head -20`
+- Por versões sem pipe frágil, usando here-string/awk/grep direto:
+  - `awk 'NR<=50{print}' <<< "$ASAR_LIST"`
+  - `grep -qE '(^|/)dist/index\.html$' <<< "$ASAR_LIST"`
+  - `awk 'BEGIN{IGNORECASE=1}/dist\//{print; if(++n==20) exit}' <<< "$ASAR_LIST"`
 
-1) Corrigir validação de caminho no passo “Validate Desktop asar contents”
-- Arquivo: `.github/workflows/desktop-release.yml`
-- No bloco de validação do asar:
-  - Capturar saída completa do `npx asar list "$ASAR"` em variável.
-  - Normalizar separadores para formato Unix antes do grep:
-    - converter `\` -> `/`
-    - remover `\r` (CRLF) se necessário.
-  - Validar com regex robusta (`(^|/)dist/index\.html$`) após normalização.
+2) Aplicar o mesmo hardening nos outros pontos de preview de saída do workflow
+- Substituir usos de `| head` em logs diagnósticos por alternativas sem SIGPIPE.
+- Manter comportamento idêntico (somente robustez).
 
-2) Melhorar diagnóstico (sem mascarar erro real)
-- Ainda no mesmo passo:
-  - Exibir as primeiras linhas normalizadas.
-  - Se falhar, imprimir linhas que contenham `index.html` e `dist/` para deixar claro se é problema de path, empacotamento ou ausência real do arquivo.
+3) Preservar gate de integridade (sem afrouxar qualidade)
+- Continuar exigindo:
+  - `app.asar` encontrado.
+  - `dist/index.html` presente dentro do asar.
+- Falhar apenas quando o artefato realmente estiver inválido.
 
-3) Preservar gate de integridade
-- Manter bloqueio obrigatório se `dist/index.html` realmente não existir dentro do asar.
-- Não relaxar checks de Local Server (exe, tamanho mínimo, SHA512).
+4) Validação final esperada
+- Nova tag (`v1.3.17` ou próxima):
+  - build desktop conclui;
+  - validação do asar passa sem `141`;
+  - pipeline segue para Local Server e upload normal.
 
-4) Verificação final esperada
-- Rodar nova tag (`v1.3.16` ou próxima):
-  - `Build and publish Desktop release` gera artefatos;
-  - `Validate Desktop asar contents` passa com paths normalizados;
-  - Pipeline segue para build/upload do Local Server.
-
-Detalhes técnicos:
-- Causa raiz é compatibilidade de validação entre separadores de caminho no Windows (`\`) vs regex atual (`/`), não version bump e não horário.
-- Arquivo único de ajuste: `.github/workflows/desktop-release.yml`.
+Detalhe técnico curto:
+- `141 = 128 + 13 (SIGPIPE)`.
+- Em Actions com `pipefail`, isso vira falha do step mesmo com artefato correto.
