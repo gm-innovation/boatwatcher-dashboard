@@ -243,7 +243,7 @@ jobs:
           gh release upload "$TAG" "local-server-dist/server.yml" --clobber
 
           # Upload blockmap if exists
-          BLOCKMAP=$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe.blockmap' -type f | head -1)
+          BLOCKMAP="$(find local-server-dist -maxdepth 1 -name 'DockCheck-Local-Server-Setup-*.exe.blockmap' -type f 2>/dev/null | head -1 || true)"
           if [ -n "$BLOCKMAP" ]; then
             echo "Uploading: $BLOCKMAP"
             gh release upload "$TAG" "$BLOCKMAP" --clobber
