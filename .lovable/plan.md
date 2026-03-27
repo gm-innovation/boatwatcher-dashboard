@@ -1,51 +1,39 @@
 
 
-## Problema
+## Diagnóstico: causa raiz do -3h no Desktop
 
-A correção de UTC anterior inverteu a prioridade: `useWorkersOnBoard` agora tenta a **nuvem primeiro** e só cai no local se falhar. Sem internet, a chamada à nuvem vai travar (timeout do Supabase ~30s) antes de usar o servidor local, quebrando a experiência offline do Desktop.
+**O problema está na regex de detecção de timezone no `normalizeTimestamp` do `electron/agent.js` (linha 53).**
 
-Além disso, outros hooks do Dashboard (`useLastAccessLog`, `useRealtimeAccessLogs`) não têm fallback local e falharão silenciosamente offline.
+A regex `/[Zz+\-]\d{2}/` deveria detectar se o timestamp já contém informação de timezone (como `Z`, `+03:00`, `-03:00`). Porém, ela faz match com os **hifens da data** — por exemplo, em `"2025-03-27 16:31:00"`, ela encontra `-27` (o hífen antes do dia seguido de dois dígitos) e conclui incorretamente que o timestamp já tem timezone.
 
-## Correção
+**Resultado**: a correção de +3h (BRT→UTC) é **pulada**, e o timestamp BRT é armazenado como se fosse UTC, causando o atraso de -3h no display.
 
-### 1. `useWorkersOnBoard` — Local primeiro no Desktop, nuvem primeiro na Web
-**Arquivo:** `src/hooks/useSupabase.ts`
+Agravante: `Date.parse("2025-03-27 16:31:00")` com separador espaço é tratado como UTC por Node.js (não como horário local), reforçando o erro.
 
-- Importar `usesLocalServer` (já importado) e `isElectron` de `dataProvider`
-- Inverter a lógica: se `usesLocalServer()` retorna `true`, tentar o servidor local **primeiro**; se falhar, tentar nuvem como fallback
-- Se não é Desktop ou servidor local indisponível, usar nuvem como primário (comportamento web normal)
-- Isso mantém a paridade UTC na web e garante resposta instantânea offline no Desktop
+## Plano de correção
 
-```
-queryFn: if usesLocalServer() → local first, cloud fallback
-         else              → cloud first (web behavior)
-```
+### 1. Corrigir `normalizeTimestamp` no agent (`electron/agent.js`)
 
-### 2. Garantir que `fetchWorkersOnBoardFromCloud` tenha timeout curto
-**Arquivo:** `src/hooks/useSupabase.ts`
+Reescrever a função para parsing determinístico — sem depender de `Date.parse` para strings ambíguas:
+- Extrair componentes da data via regex manual
+- Tratar strings sem timezone como BRT (UTC-3) → somar 3h explicitamente via `Date.UTC`
+- Manter lógica numérica existente
+- Usar regex de timezone correta que busca apenas no FINAL da string: `/[Zz]$|[+-]\d{2}:?\d{2}$/`
 
-- Sem alteração estrutural necessária — a função já retorna `null` em caso de erro
-- O Supabase client em ambiente offline geralmente falha rápido (rede indisponível → erro imediato)
-- Se necessário, podemos adicionar `AbortController` com timeout de 5s no futuro
+### 2. Corrigir fallback de timezone no `getWorkersOnBoard` (`electron/database.js`)
 
-### 3. Garantir que o `executeWithDesktopFallback` continua funcionando para os demais hooks
-**Arquivo:** `src/hooks/useDataProvider.ts` — sem alterações necessárias, já usa local-first corretamente
+Linhas 1149-1151: quando o timestamp não tem `Z` nem `+`, em vez de adicionar `Z` (tratar como UTC), adicionar `-03:00` (tratar como BRT). Isso protege dados antigos que já estão no SQLite com timestamp BRT sem marcador.
 
-### 4. Dashboard offline: `useLastAccessLog` 
-**Arquivo:** `src/hooks/useSupabase.ts`
-
-- Envolver com `executeWithDesktopFallback` para que use dados locais no Desktop offline
-- Na web, manter comportamento atual
-
-### Resumo de alterações
+### Arquivos alterados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/hooks/useSupabase.ts` | `useWorkersOnBoard`: local-first no Desktop, cloud-first na Web. `useLastAccessLog`: adicionar fallback local |
+| `electron/agent.js` | Reescrever `normalizeTimestamp` com parsing determinístico |
+| `electron/database.js` | `getWorkersOnBoard`: timestamps sem timezone → `-03:00` em vez de `Z` |
 
 ### Resultado esperado
-- Desktop **com internet**: usa local (rápido), dados já sincronizados
-- Desktop **sem internet**: usa local, funciona normalmente
-- Web: usa nuvem diretamente (sem mudança)
-- UTC correto em ambos os cenários (a lógica de UTC no `electron/database.js` já foi corrigida na mensagem anterior)
+
+- Novos eventos capturados pelo agent serão armazenados em UTC correto
+- Dados antigos no SQLite sem timezone serão interpretados como BRT no display
+- Desktop e Web mostrarão o mesmo horário
 
