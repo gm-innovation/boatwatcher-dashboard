@@ -83,6 +83,10 @@ jobs:
           copy public\favicon-512.png build\icon.png
         shell: cmd
 
+      # ── Build web assets ──
+      - name: Build web assets (Vite)
+        run: npm run build:desktop
+
       # ── Validate dist assets (prevent white-screen releases) ──
       - name: Validate dist/index.html asset paths
         shell: bash
