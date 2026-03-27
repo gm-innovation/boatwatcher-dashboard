@@ -418,6 +418,17 @@ function registerIpcHandlers() {
       return false;
     }
   });
+
+  // === Renderer ready handshake ===
+  ipcMain.on('app:renderer-ready', () => {
+    rendererReady = true;
+    if (startupWatchdog) {
+      clearTimeout(startupWatchdog);
+      startupWatchdog = null;
+    }
+    console.log('[desktop] Renderer signalled ready');
+    appendLog('Renderer ready');
+  });
 }
 
 app.whenReady().then(async () => {

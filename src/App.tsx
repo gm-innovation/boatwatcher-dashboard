@@ -37,7 +37,8 @@ const ProtectedPage = ({ children, requiredRole }: { children: React.ReactNode; 
 );
 
 const App = () => {
-  const Router = getRuntimeProfile().isDesktop ? HashRouter : BrowserRouter;
+  const isDesktop = getRuntimeProfile().isDesktop || window.location.protocol === 'file:';
+  const Router = isDesktop ? HashRouter : BrowserRouter;
 
   return (
     <QueryClientProvider client={queryClient}>
