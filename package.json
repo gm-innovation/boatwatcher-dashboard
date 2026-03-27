@@ -24,7 +24,7 @@
     "prebuild:local-server": "node scripts/verify-local-server-deps.cjs",
     "build:local-server": "electron-builder --config electron-builder.server.yml --publish never",
     "build:local-server:dir": "electron-builder --config electron-builder.server.yml --dir --publish never",
-    "build:local-server:publish": "electron-builder --config electron-builder.server.yml --config electron-builder.release.server.yml --publish always",
+    "build:local-server:publish": "electron-builder --config electron-builder.release.server.yml --publish always",
     "local-server:uninstall": "powershell -ExecutionPolicy Bypass -File scripts/uninstall-local-server.ps1"
   },
   "dependencies": {

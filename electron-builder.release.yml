@@ -1,3 +1,5 @@
+extends: ./electron-builder.yml
+
 publish:
   provider: github
   owner: ${env.GH_OWNER}
