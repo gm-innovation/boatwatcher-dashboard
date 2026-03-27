@@ -57,6 +57,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isOnline: () => navigator.onLine,
   checkServer: () => ipcRenderer.invoke('app:isOnline'),
 
+  // Renderer ready handshake
+  appReady: () => ipcRenderer.send('app:renderer-ready'),
+
   // Event listeners
   onSyncStatusChange: (callback) => {
     ipcRenderer.on('sync-status-changed', (_, status) => callback(status));

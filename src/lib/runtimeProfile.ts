@@ -1,4 +1,8 @@
-import { isElectron } from '@/lib/dataProvider';
+import { isElectron as isElectronAPI } from '@/lib/dataProvider';
+
+/** Detect desktop even if preload hasn't injected electronAPI yet (file:// protocol). */
+const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:';
+const isElectron = (): boolean => isElectronAPI() || isFileProtocol;
 import { getLocalServerAvailabilitySnapshot, refreshLocalServerAvailability } from '@/lib/localServerProvider';
 
 export type RuntimeTarget = 'web' | 'desktop';
