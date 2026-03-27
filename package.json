@@ -20,11 +20,11 @@
     "electron:dev": "wait-on tcp:8080 && electron .",
     "desktop:dev": "concurrently -k \"npm run server:dev\" \"npm run dev\" \"npm run electron:dev\"",
     "build:electron": "npm run build:desktop && electron-builder --publish never",
-    "build:electron:publish": "npm run build:desktop && electron-builder --config electron-builder.yml --config electron-builder.release.yml --publish always",
+    "build:electron:publish": "npm run build:desktop && electron-builder --config electron-builder.release.yml --publish always",
     "prebuild:local-server": "node scripts/verify-local-server-deps.cjs",
     "build:local-server": "electron-builder --config electron-builder.server.yml --publish never",
     "build:local-server:dir": "electron-builder --config electron-builder.server.yml --dir --publish never",
-    "build:local-server:publish": "electron-builder --config electron-builder.server.yml --config electron-builder.release.server.yml --publish always",
+    "build:local-server:publish": "electron-builder --config electron-builder.release.server.yml --publish always",
     "local-server:uninstall": "powershell -ExecutionPolicy Bypass -File scripts/uninstall-local-server.ps1"
   },
   "dependencies": {
