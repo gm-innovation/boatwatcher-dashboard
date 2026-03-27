@@ -95,9 +95,9 @@ serve(async (req) => {
           .eq('id', schedule.id);
 
         results.push({ schedule_id: schedule.id, name: schedule.name, success: true, records: reportData.total_records, next_run: nextRun.toISOString() });
-      } catch (err) {
+      } catch (err: unknown) {
         console.error(`[scheduled-reports] Error: ${schedule.id}`, err);
-        results.push({ schedule_id: schedule.id, name: schedule.name, success: false, error: err.message });
+        results.push({ schedule_id: schedule.id, name: schedule.name, success: false, error: (err as Error).message });
       }
     }
 
