@@ -113,7 +113,7 @@ async function getAuthenticatedUser(accessToken: string) {
   return data.user
 }
 
-async function resolveBootstrapProjectId(supabase: ReturnType<typeof createClient>, userId: string) {
+async function resolveBootstrapProjectId(supabase: any, userId: string) {
   const { data: roleRow } = await supabase
     .from('user_roles')
     .select('role')
