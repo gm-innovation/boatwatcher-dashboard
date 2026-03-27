@@ -246,8 +246,8 @@ async function enrollUser(
         const errors = (photoResult.data.errors || []).map((e: any) => e.message).join('; ')
         console.warn('Photo rejected by device:', errors)
       }
-    } catch (photoErr) {
-      console.warn('Photo enrollment error:', photoErr.message)
+    } catch (photoErr: unknown) {
+      console.warn('Photo enrollment error:', (photoErr as Error).message)
     }
   }
 
