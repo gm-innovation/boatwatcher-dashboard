@@ -143,7 +143,7 @@ function createWindow() {
     const msg = `did-fail-load: code=${errorCode} desc=${errorDescription} url=${validatedURL}`;
     console.error('[desktop]', msg);
     appendLog(msg);
-    loadFallback(`Falha ao carregar: ${errorDescription} (código ${errorCode})`);
+    loadFallback(`Falha ao carregar: ${errorDescription} (código ${errorCode}) | URL: ${validatedURL}`);
   });
 
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
@@ -169,8 +169,33 @@ function createWindow() {
   // Start the watchdog before loading
   startWatchdog();
 
+  // Runtime diagnostics: verify dist/index.html exists before loading
+  const indexPath = path.join(__dirname, '../dist/index.html');
+  if (app.isPackaged) {
+    appendLog(`Attempting to load: ${indexPath}`);
+    appendLog(`File exists: ${fs.existsSync(indexPath)}`);
+    try {
+      const parentDir = path.join(__dirname, '..');
+      const contents = fs.readdirSync(parentDir);
+      appendLog(`App root contents: ${contents.join(', ')}`);
+    } catch (e) {
+      appendLog(`Cannot list app root: ${e.message}`);
+    }
+    try {
+      const distDir = path.join(__dirname, '../dist');
+      if (fs.existsSync(distDir)) {
+        const distContents = fs.readdirSync(distDir);
+        appendLog(`dist/ contents: ${distContents.join(', ')}`);
+      } else {
+        appendLog('dist/ directory does NOT exist');
+      }
+    } catch (e) {
+      appendLog(`Cannot list dist/: ${e.message}`);
+    }
+  }
+
   const loadPromise = app.isPackaged
-    ? mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+    ? mainWindow.loadFile(indexPath)
     : mainWindow.loadURL(devServerUrl);
 
   loadPromise.catch((error) => {
