@@ -1,31 +1,15 @@
 
 
-## Adicionar campo de Logo Rotacionada (Etiquetas) separado da Logo Dark
+## Corrigir exibição da logo na tabela de clientes
 
-### Problema
-O campo `logo_url_dark` está sendo usado para a "Logo Rotacionada (Etiquetas)" em vez da logo dark mode real. O sistema precisa de 3 logos distintas:
-1. **Logo Normal** (light mode) — `logo_url_light`
-2. **Logo Dark** (dark mode) — `logo_url_dark` (será corrigido para este propósito)
-3. **Logo Rotacionada** (etiquetas) — novo campo `logo_url_rotated`
+O Avatar circular (`rounded-full`) está cortando a logo do cliente. Logos de empresas geralmente são retangulares e não devem ser exibidas em formato circular.
 
-### Alterações
+### Alteração
 
-**1. Migração de banco de dados**
-- Adicionar coluna `logo_url_rotated TEXT` na tabela `companies`
-- Migrar dados existentes: copiar `logo_url_dark` para `logo_url_rotated` (pois o conteúdo atual é a logo rotacionada, não a dark)
-- Limpar `logo_url_dark` (pois contém dados errados)
+**`src/components/admin/ClientsManagement.tsx`** linhas 355-365:
 
-**2. `src/components/admin/ClientsManagement.tsx`**
-- Adicionar estado `logoUrlRotated` e ref `rotatedLogoRef`
-- Reorganizar o bloco de logos para 3 colunas:
-  - Logo Normal — `logo_url_light`
-  - Logo Dark Mode — `logo_url_dark`
-  - Logo Rotacionada (Etiquetas) — `logo_url_rotated`
-- Incluir `logo_url_rotated` no payload de submit
+Substituir o componente `Avatar` por uma `div` simples com `img`, mantendo o fallback com ícone:
 
-**3. `src/types/supabase.ts`**
-- Adicionar `logo_url_rotated` ao tipo `Company` (o types.ts do Supabase será atualizado automaticamente pela migração)
-
-**4. `src/components/settings/CompanyForm.tsx`**
-- Atualizar formulário para ter 3 campos de logo separados (Normal, Dark, Rotacionada)
+- Quando há logo: exibir `<img>` com `h-10 object-contain` (sem recorte circular)
+- Quando não há logo: manter o ícone `Building2` dentro de uma div com fundo `bg-muted rounded`
 
