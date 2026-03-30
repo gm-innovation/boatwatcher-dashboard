@@ -13,8 +13,14 @@ import { useToast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppRole } from "@/types/supabase";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useClients } from "@/hooks/useSupabase";
+import { ChevronDown } from "lucide-react";
 
 const UserManagement = () => {
   const [email, setEmail] = useState("");
@@ -202,24 +208,32 @@ const UserManagement = () => {
 
         <div className="space-y-2">
           <Label>Clientes</Label>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border rounded-lg p-4">
-            {clients.length === 0 ? (
-              <p className="text-sm text-muted-foreground col-span-2">Nenhum cliente encontrado</p>
-            ) : (
-              clients.map(client => (
-                <div key={client.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`client-${client.id}`}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full justify-between">
+                {selectedClients.length === 0
+                  ? "Selecione os clientes"
+                  : `${selectedClients.length} cliente(s) selecionado(s)`}
+                <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)]">
+              {clients.length === 0 ? (
+                <p className="px-2 py-1.5 text-sm text-muted-foreground">Nenhum cliente encontrado</p>
+              ) : (
+                clients.map(client => (
+                  <DropdownMenuCheckboxItem
+                    key={client.id}
                     checked={selectedClients.includes(client.id)}
                     onCheckedChange={() => handleToggleClient(client.id)}
-                  />
-                  <Label htmlFor={`client-${client.id}`} className="cursor-pointer">
+                    onSelect={(e) => e.preventDefault()}
+                  >
                     {client.name || 'Cliente sem nome'}
-                  </Label>
-                </div>
-              ))
-            )}
-          </div>
+                  </DropdownMenuCheckboxItem>
+                ))
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <Button type="submit" disabled={loading}>
