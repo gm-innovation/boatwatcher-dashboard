@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +32,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { InterLayerConnectivityCard } from './InterLayerConnectivityCard';
+import { ProjectDiagnosticsSection } from './ProjectDiagnosticsSection';
 import { getSessionDiagnostics, forceLogout } from '@/utils/ensureValidSession';
 import { toast } from '@/hooks/use-toast';
 import { localAgent, localHealth, localSync } from '@/lib/localServerProvider';
@@ -72,6 +73,13 @@ export const DiagnosticsPanel = () => {
   const [isTestingAuth, setIsTestingAuth] = useState(false);
   const isLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
   const isDesktopFallback = runtimeProfile.isDesktop && runtimeProfile.fallbackActive;
+
+  const [projectDiagCounts, setProjectDiagCounts] = useState({ ok: 0, warning: 0, error: 0 });
+  const [projectDiagRefreshKey, setProjectDiagRefreshKey] = useState(0);
+
+  const handleProjectDiagnosticsReady = useCallback((counts: { ok: number; warning: number; error: number }) => {
+    setProjectDiagCounts(counts);
+  }, []);
 
   const [authPingResult, setAuthPingResult] = useState<EdgeFunctionTestResult>({ status: 'pending' });
   const [echoAuthResult, setEchoAuthResult] = useState<EdgeFunctionTestResult>({ status: 'pending' });
@@ -604,8 +612,10 @@ export const DiagnosticsPanel = () => {
       } catch { /* ignore */ }
     }
 
+    setProjectDiagRefreshKey(k => k + 1);
     setDiagnostics(results);
     setLastRunTime(new Date());
+    setIsRunning(false);
     setIsRunning(false);
   };
 
@@ -644,9 +654,9 @@ export const DiagnosticsPanel = () => {
     }
   };
 
-  const okCount = diagnostics.filter(d => d.status === 'ok').length;
-  const warningCount = diagnostics.filter(d => d.status === 'warning').length;
-  const errorCount = diagnostics.filter(d => d.status === 'error').length;
+  const okCount = diagnostics.filter(d => d.status === 'ok').length + projectDiagCounts.ok;
+  const warningCount = diagnostics.filter(d => d.status === 'warning').length + projectDiagCounts.warning;
+  const errorCount = diagnostics.filter(d => d.status === 'error').length + projectDiagCounts.error;
 
   const getTimeRemaining = (expiresAt: Date | null) => {
     if (!expiresAt) return 'N/A';
@@ -1112,6 +1122,14 @@ export const DiagnosticsPanel = () => {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Per-Project Diagnostics */}
+      {!isLocalRuntime && (
+        <ProjectDiagnosticsSection
+          onDiagnosticsReady={handleProjectDiagnosticsReady}
+          refreshKey={projectDiagRefreshKey}
+        />
       )}
 
       {/* Inter-Layer Connectivity Tests */}
