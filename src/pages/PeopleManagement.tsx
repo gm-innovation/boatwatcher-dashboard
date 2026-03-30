@@ -4,7 +4,8 @@ import { CompanyManagement } from "@/components/people/CompanyManagement";
 import { JobFunctionManagement } from "@/components/people/JobFunctionManagement";
 import { PendingRegistrations } from "@/components/people/PendingRegistrations";
 import UserManagement from "@/components/UserManagement";
-import { Users, Building2, Briefcase, UserPlus, UserCog } from "lucide-react";
+import { DocumentExpirationCheck } from "@/components/admin/DocumentExpirationCheck";
+import { Users, Building2, Briefcase, UserPlus, UserCog, FileWarning } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
