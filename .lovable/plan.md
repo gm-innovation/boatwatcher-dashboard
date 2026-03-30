@@ -1,26 +1,11 @@
 
 
-## Ajustar StatisticsCards para corresponder ao design de referência
-
-### Diferenças identificadas (atual vs referência)
-
-O print mostra cards com:
-- **Layout vertical**: ícone no topo à esquerda, label abaixo, valor embaixo — em coluna, não em linha
-- **Fundo branco** (não colorido) com borda sutil e sombra leve
-- **Ícone** dentro de um círculo com fundo colorido suave (azul, verde, púrpura)
-- **Label** em cinza escuro/muted, fonte pequena
-- **Valor** em preto/escuro, fonte grande e bold
-- **Sem cores de fundo** nos cards — fundo neutro (bg-white / bg-card)
+## Alterar cor de fundo das páginas para rgb(249, 250, 252)
 
 ### Alteração
 
-**`src/components/dashboard/StatisticsCards.tsx`**
+**`src/index.css`** — Atualizar a variável `--background` no tema claro:
+- De `0 0% 100%` (branco puro) para `228 33% 98.4%` (equivalente HSL de rgb(249, 250, 252))
 
-Refatorar o `StatCard` para layout vertical:
-- Card: `bg-white dark:bg-card rounded-xl border shadow-sm p-6`
-- Layout: `flex flex-col gap-3` (vertical)
-- Ícone: círculo colorido no topo (`p-3 rounded-full` com cor de fundo suave)
-- Label: `text-sm text-muted-foreground`
-- Valor: `text-3xl font-bold text-foreground`
-- Remover props `bgColor`, `textColor` — simplificar para apenas `iconBgColor`
+Isso afeta automaticamente todas as páginas via `bg-background` aplicado no `body`.
 
