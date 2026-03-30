@@ -130,7 +130,7 @@ const COLOR_OFFLINE = '#ef4444';
 const COLOR_PARTIAL = '#eab308';
 
 // Ship silhouette path centered at (0,0), ~20x10 units
-const SHIP_PATH = 'M-10,4 C-10,6 10,6 10,4 L8,-1 L6,-1 L6,-5 L2,-5 L2,-1 L-6,-1 L-8,0 Z';
+const SHIP_PATH = 'M-9,6 C-9,8 9,8 9,6 L8,2 L6,2 L6,0 L8,0 L8,-2 L4,-2 L4,-6 L2,-6 L2,-8 L-2,-8 L-2,-6 L-4,-6 L-4,-2 L-8,-2 L-8,0 L-6,0 L-6,2 L-8,2 Z';
 
 export type MapProjectData = {
   id: string;
