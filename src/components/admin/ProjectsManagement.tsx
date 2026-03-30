@@ -288,30 +288,36 @@ export const ProjectsManagement = () => {
           <p className="text-sm text-muted-foreground">{filteredProjects.length} projetos</p>
         </div>
         <div className="flex items-center gap-3">
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => setEditingProject(null)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Projeto
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{editingProject ? 'Editar Projeto' : 'Novo Projeto'}</DialogTitle>
-            </DialogHeader>
-            <ProjectForm 
-              project={editingProject} 
-              onSuccess={() => {
-                setIsDialogOpen(false);
-                setEditingProject(null);
-              }}
-              onCancel={() => {
-                setIsDialogOpen(false);
-                setEditingProject(null);
-              }}
-            />
-          </DialogContent>
-        </Dialog>
+          <AdminProjectFilter
+            selectedClientId={selectedClientId}
+            onClientChange={setSelectedClientId}
+            showProjectFilter={false}
+          />
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => setEditingProject(null)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Projeto
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>{editingProject ? 'Editar Projeto' : 'Novo Projeto'}</DialogTitle>
+              </DialogHeader>
+              <ProjectForm 
+                project={editingProject} 
+                onSuccess={() => {
+                  setIsDialogOpen(false);
+                  setEditingProject(null);
+                }}
+                onCancel={() => {
+                  setIsDialogOpen(false);
+                  setEditingProject(null);
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {isLoading ? (
