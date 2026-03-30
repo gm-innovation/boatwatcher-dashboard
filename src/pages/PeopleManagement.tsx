@@ -80,6 +80,10 @@ const PeopleManagement = () => {
         <TabsContent value="job-functions">
           <JobFunctionManagement />
         </TabsContent>
+
+        <TabsContent value="documents">
+          <DocumentExpirationCheck />
+        </TabsContent>
       </Tabs>
     </div>
   );

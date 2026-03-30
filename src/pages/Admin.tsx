@@ -31,13 +31,11 @@ const Admin = () => {
   const tabs: AdminTab[] = [
     { value: 'projects', label: 'Projetos', icon: FolderKanban, content: <ProjectsManagement /> },
     { value: 'clients', label: 'Clientes', icon: Building2, content: <ClientsManagement /> },
-    { value: 'schedules', label: 'Agendamentos', icon: Calendar, content: <ReportScheduler /> },
     { value: 'devices', label: 'Dispositivos', icon: Server, content: <DeviceManagement /> },
     { value: 'users', label: 'Usuários', icon: Shield, content: <UserManagement /> },
     { value: 'settings', label: 'Configurações', icon: Cog, content: <GlobalSettings /> },
     { value: 'diagnostics', label: 'Diagnóstico', icon: Stethoscope, content: <DiagnosticsPanel /> },
     { value: 'audit', label: 'Auditoria', icon: Activity, content: <AuditLog /> },
-    { value: 'documents', label: 'Documentos', icon: FileWarning, content: <DocumentExpirationCheck /> },
     { value: 'agents', label: 'Agentes', icon: Bot, content: <AgentManagement /> },
     { value: 'connectivity', label: 'Conectividade', icon: Wifi, content: <ConnectivityDashboard /> },
     ...(isDesktop ? [{ value: 'desktop-update', label: 'Atualização', icon: MonitorDown, content: <DesktopUpdater /> } as AdminTab] : []),

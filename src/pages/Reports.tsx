@@ -113,6 +113,10 @@ const Reports = () => {
         <TabsContent value="overnight">
           <OvernightControl projectId={selectedProject} startDate={startDate} endDate={endDate} />
         </TabsContent>
+
+        <TabsContent value="schedules">
+          <ReportScheduler />
+        </TabsContent>
       </Tabs>
     </div>
   );
