@@ -60,7 +60,9 @@ export const WorkersOnBoardTable = ({ workers }: WorkersOnBoardTableProps) => {
                     {!isMobile && <TableCell>{worker.role || '-'}</TableCell>}
                     <TableCell>{worker.company}</TableCell>
                     <TableCell className="text-right">
-                      {format(new Date(worker.entryTime), 'HH:mm')}
+                      <Badge variant="outline" className="text-primary border-primary">
+                        {format(new Date(worker.entryTime), 'dd/MM HH:mm')}
+                      </Badge>
                     </TableCell>
                   </TableRow>
                 ))
