@@ -248,6 +248,7 @@ export const CompanyForm = () => {
                 )}
               </div>
             </div>
+          </div>
 
           <div>
             <Label htmlFor="companyName">Nome da Empresa (Armador)</Label>
