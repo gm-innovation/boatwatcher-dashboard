@@ -1,21 +1,23 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import {
   Wifi, WifiOff, Server, AlertTriangle, CheckCircle2, Clock, Activity,
-  RefreshCw, Monitor, Radio, ShieldAlert, BarChart3
+  RefreshCw, Monitor, Radio, ShieldAlert, BarChart3, Maximize2, Minimize2
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 
 const REFRESH_INTERVAL = 30000;
+const COLOR_ONLINE = '#22c55e';
+const COLOR_OFFLINE = '#ef4444';
+const COLOR_PARTIAL = '#eab308';
 
 const isAgentOnline = (agent: { status: string; last_seen_at: string | null }) => {
   if (agent.status !== 'online') return false;
@@ -33,6 +35,16 @@ type ProjectWithClient = {
 
 export function ConnectivityDashboard() {
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  // Escape to exit fullscreen
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isMaximized) setIsMaximized(false);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isMaximized]);
 
   const { data: projects = [], refetch: refetchProjects } = useQuery({
     queryKey: ['monitoring-projects'],
@@ -71,7 +83,6 @@ export function ConnectivityDashboard() {
     setLastRefresh(new Date());
   };
 
-  // Group by project
   const devicesByProject = useMemo(() => {
     const map: Record<string, typeof devices> = {};
     for (const d of devices) {
@@ -92,7 +103,6 @@ export function ConnectivityDashboard() {
     return map;
   }, [agents]);
 
-  // Global stats
   const stats = useMemo(() => {
     const onlineDevices = devices.filter(d => d.status === 'online').length;
     const onlineAgents = agents.filter(isAgentOnline).length;
@@ -108,14 +118,13 @@ export function ConnectivityDashboard() {
       offlineAgents,
       alerts: offlineDevices + offlineAgents,
       healthPct: devices.length > 0 ? Math.round((onlineDevices / devices.length) * 100) : 100,
+      agentPct: agents.length > 0 ? Math.round((onlineAgents / agents.length) * 100) : 100,
     };
   }, [projects, devices, agents]);
 
-  // Health color
-  const globalHealthColor = stats.healthPct === 100 ? 'bg-green-500' : stats.healthPct >= 50 ? 'bg-yellow-500' : 'bg-red-500';
+  const globalHealthColor = stats.healthPct === 100 ? COLOR_ONLINE : stats.healthPct >= 50 ? COLOR_PARTIAL : COLOR_OFFLINE;
   const globalHealthText = stats.healthPct === 100 ? 'Sistema Operacional' : stats.healthPct >= 50 ? 'Atenção Necessária' : 'Sistema Crítico';
 
-  // Bar chart data
   const barChartData = useMemo(() => {
     return projects.map(p => {
       const pDevices = devicesByProject[p.id] || [];
@@ -127,13 +136,11 @@ export function ConnectivityDashboard() {
     });
   }, [projects, devicesByProject]);
 
-  // Pie chart data
   const pieChartData = useMemo(() => [
-    { name: 'Online', value: stats.onlineDevices, fill: 'hsl(var(--chart-2))' },
-    { name: 'Offline', value: stats.offlineDevices, fill: 'hsl(var(--chart-5))' },
+    { name: 'Online', value: stats.onlineDevices, fill: COLOR_ONLINE },
+    { name: 'Offline', value: stats.offlineDevices, fill: COLOR_OFFLINE },
   ].filter(d => d.value > 0), [stats]);
 
-  // Device table sorted offline first
   const sortedDevices = useMemo(() => {
     return [...devices].sort((a, b) => {
       if (a.status === 'online' && b.status !== 'online') return 1;
@@ -142,7 +149,6 @@ export function ConnectivityDashboard() {
     });
   }, [devices]);
 
-  // Project cards sorted by health (worst first)
   const sortedProjects = useMemo(() => {
     return [...projects].sort((a, b) => {
       const aDevices = devicesByProject[a.id] || [];
@@ -153,8 +159,7 @@ export function ConnectivityDashboard() {
     });
   }, [projects, devicesByProject]);
 
-  // Alerts list
-  const alerts = useMemo(() => {
+  const alertsList = useMemo(() => {
     const items: { type: 'device' | 'agent'; name: string; project: string; detail: string }[] = [];
     for (const d of devices) {
       if (d.status !== 'online') {
@@ -196,211 +201,319 @@ export function ConnectivityDashboard() {
   };
 
   const barChartConfig = {
-    online: { label: 'Online', color: 'hsl(var(--chart-2))' },
-    offline: { label: 'Offline', color: 'hsl(var(--chart-5))' },
+    online: { label: 'Online', color: COLOR_ONLINE },
+    offline: { label: 'Offline', color: COLOR_OFFLINE },
   };
 
   const pieChartConfig = {
-    Online: { label: 'Online', color: 'hsl(var(--chart-2))' },
-    Offline: { label: 'Offline', color: 'hsl(var(--chart-5))' },
+    Online: { label: 'Online', color: COLOR_ONLINE },
+    Offline: { label: 'Offline', color: COLOR_OFFLINE },
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Global Health Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className={`w-3 h-3 rounded-full ${globalHealthColor} animate-pulse`} />
-          <div>
-            <h2 className="text-xl font-bold">{globalHealthText}</h2>
-            <p className="text-xs text-muted-foreground">
-              Atualizado {formatDistanceToNow(lastRefresh, { addSuffix: true, locale: ptBR })}
-              {' · Auto-refresh a cada 30s'}
-            </p>
-          </div>
+  const progressColor = (pct: number) =>
+    pct >= 80 ? COLOR_ONLINE : pct >= 50 ? COLOR_PARTIAL : COLOR_OFFLINE;
+
+  // ─── Shared sub-components ───
+
+  const renderHeader = (compact = false) => (
+    <div className={`flex items-center justify-between ${compact ? 'px-4 py-3 border-b border-border/50 bg-muted/50' : ''}`}>
+      <div className="flex items-center gap-3">
+        <div className="w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: globalHealthColor }} />
+        <div>
+          <h2 className={`${compact ? 'text-base' : 'text-xl'} font-bold`}>{globalHealthText}</h2>
+          <p className="text-xs text-muted-foreground">
+            Atualizado {formatDistanceToNow(lastRefresh, { addSuffix: true, locale: ptBR })}
+            {' · Auto-refresh 30s'}
+          </p>
         </div>
+      </div>
+      <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={handleRefresh}>
-          <RefreshCw className="h-4 w-4 mr-2" />
+          <RefreshCw className="h-4 w-4 mr-1" />
           Atualizar
         </Button>
+        <Button variant="outline" size="sm" onClick={() => setIsMaximized(!isMaximized)}>
+          {isMaximized ? <Minimize2 className="h-4 w-4 mr-1" /> : <Maximize2 className="h-4 w-4 mr-1" />}
+          {isMaximized ? 'Minimizar' : 'Maximizar'}
+        </Button>
       </div>
+    </div>
+  );
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-1"><Monitor className="h-3.5 w-3.5" /> Projetos</CardDescription>
-            <CardTitle className="text-2xl">{stats.totalProjects}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">monitorados</p>
-          </CardContent>
-        </Card>
+  const renderSummaryCards = (compact = false) => (
+    <div className={`grid grid-cols-2 ${compact ? 'lg:grid-cols-4 gap-3' : 'lg:grid-cols-4 gap-4'}`}>
+      {/* Projects */}
+      <Card className="shadow-sm border-0">
+        <CardContent className={`${compact ? 'p-3' : 'p-4'} flex items-center gap-3`}>
+          <div className="rounded-full p-2 bg-green-100 dark:bg-green-900/30">
+            <Monitor className="h-5 w-5" style={{ color: COLOR_ONLINE }} />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Projetos</p>
+            <p className="text-xl font-bold">{stats.totalProjects}</p>
+          </div>
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-1"><Wifi className="h-3.5 w-3.5" /> Dispositivos</CardDescription>
-            <CardTitle className="text-2xl flex items-center gap-2">
-              <span className="text-green-500">{stats.onlineDevices}</span>
-              <span className="text-muted-foreground text-base">/ {stats.totalDevices}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Progress value={stats.healthPct} className="h-2" />
-            <p className="text-xs text-muted-foreground mt-1">{stats.healthPct}% online</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-1"><Server className="h-3.5 w-3.5" /> Agentes</CardDescription>
-            <CardTitle className="text-2xl flex items-center gap-2">
-              <span className="text-green-500">{stats.onlineAgents}</span>
-              <span className="text-muted-foreground text-base">/ {stats.totalAgents}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Progress
-              value={stats.totalAgents > 0 ? Math.round((stats.onlineAgents / stats.totalAgents) * 100) : 100}
-              className="h-2"
-            />
-          </CardContent>
-        </Card>
-
-        <Card className={stats.alerts > 0 ? 'border-destructive/50 bg-destructive/5' : ''}>
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-1">
-              <ShieldAlert className="h-3.5 w-3.5" /> Alertas
-            </CardDescription>
-            <CardTitle className={`text-2xl ${stats.alerts > 0 ? 'text-destructive' : 'text-green-500'}`}>
-              {stats.alerts}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              {stats.alerts > 0 ? 'requerem atenção' : 'tudo operacional'}
+      {/* Devices */}
+      <Card className="shadow-sm border-0">
+        <CardContent className={`${compact ? 'p-3' : 'p-4'} flex items-center gap-3`}>
+          <div className="rounded-full p-2 bg-blue-100 dark:bg-blue-900/30">
+            <Wifi className="h-5 w-5 text-blue-500" />
+          </div>
+          <div className="flex-1">
+            <p className="text-xs text-muted-foreground">Dispositivos</p>
+            <p className="text-xl font-bold">
+              <span style={{ color: COLOR_ONLINE }}>{stats.onlineDevices}</span>
+              <span className="text-muted-foreground text-sm">/{stats.totalDevices}</span>
             </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charts Row */}
-      {(stats.totalDevices > 0 || projects.length > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Bar Chart */}
-          <Card className="lg:col-span-2">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <BarChart3 className="h-4 w-4" />
-                Dispositivos por Projeto
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {barChartData.length > 0 ? (
-                <ChartContainer config={barChartConfig} className="h-[250px] w-full">
-                  <BarChart data={barChartData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-                    <XAxis dataKey="name" className="text-xs" />
-                    <YAxis allowDecimals={false} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="online" stackId="a" fill="var(--color-online)" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="offline" stackId="a" fill="var(--color-offline)" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ChartContainer>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-8">Nenhum projeto com dispositivos</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Pie Chart */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Activity className="h-4 w-4" />
-                Distribuição Geral
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex items-center justify-center">
-              {pieChartData.length > 0 ? (
-                <ChartContainer config={pieChartConfig} className="h-[250px] w-full">
-                  <PieChart>
-                    <Pie
-                      data={pieChartData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={80}
-                      dataKey="value"
-                      nameKey="name"
-                      label={({ name, value }) => `${name}: ${value}`}
-                    >
-                      {pieChartData.map((entry, i) => (
-                        <Cell key={i} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                  </PieChart>
-                </ChartContainer>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-8">Sem dispositivos</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Device Table */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Radio className="h-4 w-4" />
-            Todos os Dispositivos
-          </CardTitle>
-          <CardDescription>{devices.length} dispositivos em {projects.length} projetos</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {sortedDevices.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">Nenhum dispositivo cadastrado</p>
-          ) : (
-            <div className="overflow-auto max-h-[400px]">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">Status</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>IP</TableHead>
-                    <TableHead>Projeto</TableHead>
-                    <TableHead>Agente</TableHead>
-                    <TableHead>Último Evento</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedDevices.map(device => (
-                    <TableRow key={device.id}>
-                      <TableCell>
-                        <div className={`w-2.5 h-2.5 rounded-full ${device.status === 'online' ? 'bg-green-500' : device.status === 'error' ? 'bg-red-500' : 'bg-muted-foreground/40'}`} />
-                      </TableCell>
-                      <TableCell className="font-medium">{device.name}</TableCell>
-                      <TableCell className="text-muted-foreground font-mono text-xs">{device.controlid_ip_address}</TableCell>
-                      <TableCell>{getProjectName(device.project_id)}</TableCell>
-                      <TableCell>{getAgentName(device.agent_id)}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {device.last_event_timestamp ? (
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {formatDistanceToNow(new Date(device.last_event_timestamp), { addSuffix: true, locale: ptBR })}
-                          </span>
-                        ) : 'Nunca'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <div className="w-full h-1.5 bg-muted rounded-full mt-1 overflow-hidden">
+              <div className="h-full rounded-full transition-all" style={{ width: `${stats.healthPct}%`, backgroundColor: progressColor(stats.healthPct) }} />
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Agents */}
+      <Card className="shadow-sm border-0">
+        <CardContent className={`${compact ? 'p-3' : 'p-4'} flex items-center gap-3`}>
+          <div className="rounded-full p-2 bg-purple-100 dark:bg-purple-900/30">
+            <Server className="h-5 w-5 text-purple-500" />
+          </div>
+          <div className="flex-1">
+            <p className="text-xs text-muted-foreground">Agentes</p>
+            <p className="text-xl font-bold">
+              <span style={{ color: COLOR_ONLINE }}>{stats.onlineAgents}</span>
+              <span className="text-muted-foreground text-sm">/{stats.totalAgents}</span>
+            </p>
+            <div className="w-full h-1.5 bg-muted rounded-full mt-1 overflow-hidden">
+              <div className="h-full rounded-full transition-all" style={{ width: `${stats.agentPct}%`, backgroundColor: progressColor(stats.agentPct) }} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Alerts */}
+      <Card className={`shadow-sm border-0 ${stats.alerts > 0 ? 'bg-red-50 dark:bg-red-950/20' : 'bg-green-50 dark:bg-green-950/20'}`}>
+        <CardContent className={`${compact ? 'p-3' : 'p-4'} flex items-center gap-3`}>
+          <div className={`rounded-full p-2 ${stats.alerts > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30'}`}>
+            {stats.alerts > 0
+              ? <ShieldAlert className="h-5 w-5" style={{ color: COLOR_OFFLINE }} />
+              : <CheckCircle2 className="h-5 w-5" style={{ color: COLOR_ONLINE }} />
+            }
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Alertas</p>
+            <p className="text-xl font-bold" style={{ color: stats.alerts > 0 ? COLOR_OFFLINE : COLOR_ONLINE }}>
+              {stats.alerts}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const renderCharts = (height = 250) => (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <Card className="lg:col-span-2 shadow-sm border-0">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" style={{ color: COLOR_ONLINE }} />
+            Dispositivos por Projeto
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-3">
+          {barChartData.length > 0 ? (
+            <ChartContainer config={barChartConfig} className="w-full" style={{ height }}>
+              <BarChart data={barChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Bar dataKey="online" stackId="a" fill={COLOR_ONLINE} radius={[0, 0, 0, 0]} />
+                <Bar dataKey="offline" stackId="a" fill={COLOR_OFFLINE} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-8">Nenhum projeto com dispositivos</p>
           )}
         </CardContent>
       </Card>
+
+      <Card className="shadow-sm border-0">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Activity className="h-4 w-4" style={{ color: '#3b82f6' }} />
+            Distribuição Geral
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center px-4 pb-3">
+          {pieChartData.length > 0 ? (
+            <ChartContainer config={pieChartConfig} className="w-full" style={{ height }}>
+              <PieChart>
+                <Pie
+                  data={pieChartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={height * 0.2}
+                  outerRadius={height * 0.35}
+                  dataKey="value"
+                  nameKey="name"
+                  label={({ name, value }) => `${name}: ${value}`}
+                  stroke="none"
+                >
+                  {pieChartData.map((entry, i) => (
+                    <Cell key={i} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <ChartTooltip content={<ChartTooltipContent />} />
+              </PieChart>
+            </ChartContainer>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-8">Sem dispositivos</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const renderDeviceTable = (maxH?: string) => (
+    <Card className="shadow-sm border-0 flex flex-col" style={maxH ? {} : { flex: 1, minHeight: 0 }}>
+      <CardHeader className="pb-2 pt-3 px-4">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Radio className="h-4 w-4" style={{ color: '#3b82f6' }} />
+          Todos os Dispositivos
+        </CardTitle>
+        <CardDescription className="text-xs">{devices.length} dispositivos · {projects.length} projetos</CardDescription>
+      </CardHeader>
+      <CardContent className={`px-4 pb-3 ${maxH ? '' : 'flex-1 overflow-auto min-h-0'}`}>
+        {sortedDevices.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">Nenhum dispositivo cadastrado</p>
+        ) : (
+          <div className={maxH ? `overflow-auto ${maxH}` : 'overflow-auto h-full'}>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">Status</TableHead>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>IP</TableHead>
+                  <TableHead>Projeto</TableHead>
+                  <TableHead>Agente</TableHead>
+                  <TableHead>Último Evento</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedDevices.map(device => (
+                  <TableRow key={device.id}>
+                    <TableCell>
+                      <div
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{
+                          backgroundColor: device.status === 'online' ? COLOR_ONLINE
+                            : device.status === 'error' ? COLOR_OFFLINE
+                            : '#9ca3af'
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">{device.name}</TableCell>
+                    <TableCell className="text-muted-foreground font-mono text-xs">{device.controlid_ip_address}</TableCell>
+                    <TableCell className="whitespace-nowrap">{getProjectName(device.project_id)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{getAgentName(device.agent_id)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                      {device.last_event_timestamp ? (
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {formatDistanceToNow(new Date(device.last_event_timestamp), { addSuffix: true, locale: ptBR })}
+                        </span>
+                      ) : 'Nunca'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const renderAlerts = () => {
+    if (alertsList.length > 0) {
+      return (
+        <Card className="shadow-sm border-0" style={{ borderLeft: `3px solid ${COLOR_OFFLINE}` }}>
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-sm flex items-center gap-2" style={{ color: COLOR_OFFLINE }}>
+              <AlertTriangle className="h-4 w-4" />
+              Alertas ({alertsList.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <div className="space-y-1.5 max-h-[200px] overflow-auto">
+              {alertsList.map((alert, i) => (
+                <div key={i} className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    {alert.type === 'device'
+                      ? <WifiOff className="h-3.5 w-3.5" style={{ color: COLOR_OFFLINE }} />
+                      : <Server className="h-3.5 w-3.5" style={{ color: COLOR_OFFLINE }} />
+                    }
+                    <span className="font-medium">{alert.name}</span>
+                    <span className="text-muted-foreground">({alert.project})</span>
+                  </div>
+                  <span className="text-muted-foreground">{alert.detail}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+    if (stats.totalDevices > 0) {
+      return (
+        <Card className="shadow-sm border-0" style={{ borderLeft: `3px solid ${COLOR_ONLINE}` }}>
+          <CardContent className="py-3 px-4 flex items-center gap-2 text-sm" style={{ color: COLOR_ONLINE }}>
+            <CheckCircle2 className="h-4 w-4" />
+            <span className="font-medium">Todos os dispositivos e agentes estão operacionais</span>
+          </CardContent>
+        </Card>
+      );
+    }
+    return null;
+  };
+
+  // ─── MAXIMIZED LAYOUT ───
+  if (isMaximized) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-background flex flex-col overflow-hidden">
+        {/* Monitor Header */}
+        {renderHeader(true)}
+
+        {/* Body: 2-column grid */}
+        <div className="flex-1 min-h-0 grid grid-cols-[1fr_1fr] gap-3 p-4 overflow-hidden">
+          {/* Left column */}
+          <div className="flex flex-col gap-3 overflow-auto min-h-0">
+            {renderSummaryCards(true)}
+            {renderCharts(180)}
+          </div>
+
+          {/* Right column */}
+          <div className="flex flex-col gap-3 min-h-0 overflow-hidden">
+            <div className="flex-1 min-h-0 flex flex-col">
+              {renderDeviceTable()}
+            </div>
+            {renderAlerts()}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── NORMAL LAYOUT ───
+  return (
+    <div className="space-y-6">
+      {renderHeader()}
+      {renderSummaryCards()}
+      {(stats.totalDevices > 0 || projects.length > 0) && renderCharts()}
+      {renderDeviceTable('max-h-[400px]')}
 
       {/* Project Cards Grid */}
       <div>
@@ -417,23 +530,25 @@ export function ConnectivityDashboard() {
               const pAgents = agentsByProject[project.id] || [];
               const onlineCount = pDevices.filter(d => d.status === 'online').length;
               const health = pDevices.length === 0 ? 'none' : onlineCount === pDevices.length ? 'green' : onlineCount > 0 ? 'yellow' : 'red';
+
               const healthBadge = health === 'green'
-                ? <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">Operacional</Badge>
+                ? <Badge variant="outline" className="text-xs" style={{ backgroundColor: `${COLOR_ONLINE}15`, color: COLOR_ONLINE, borderColor: `${COLOR_ONLINE}40` }}>Operacional</Badge>
                 : health === 'yellow'
-                ? <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">Parcial</Badge>
+                ? <Badge variant="outline" className="text-xs" style={{ backgroundColor: `${COLOR_PARTIAL}15`, color: COLOR_PARTIAL, borderColor: `${COLOR_PARTIAL}40` }}>Parcial</Badge>
                 : health === 'red'
-                ? <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/30">Crítico</Badge>
-                : <Badge variant="outline" className="text-muted-foreground">Sem dispositivos</Badge>;
+                ? <Badge variant="outline" className="text-xs" style={{ backgroundColor: `${COLOR_OFFLINE}15`, color: COLOR_OFFLINE, borderColor: `${COLOR_OFFLINE}40` }}>Crítico</Badge>
+                : <Badge variant="outline" className="text-xs text-muted-foreground">Sem dispositivos</Badge>;
 
               const lastEvent = pDevices
                 .filter(d => d.last_event_timestamp)
                 .sort((a, b) => new Date(b.last_event_timestamp!).getTime() - new Date(a.last_event_timestamp!).getTime())[0];
 
               return (
-                <Card key={project.id} className={
-                  health === 'red' ? 'border-red-500/30' :
-                  health === 'yellow' ? 'border-yellow-500/30' : ''
-                }>
+                <Card key={project.id} className="shadow-sm" style={{
+                  borderLeft: health === 'red' ? `3px solid ${COLOR_OFFLINE}` :
+                    health === 'yellow' ? `3px solid ${COLOR_PARTIAL}` :
+                    health === 'green' ? `3px solid ${COLOR_ONLINE}` : undefined
+                }}>
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
                       <div>
@@ -447,7 +562,6 @@ export function ConnectivityDashboard() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {/* Devices mini list */}
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-1">
                         Dispositivos ({onlineCount}/{pDevices.length})
@@ -458,7 +572,7 @@ export function ConnectivityDashboard() {
                         <div className="space-y-1">
                           {pDevices.map(d => (
                             <div key={d.id} className="flex items-center gap-2 text-xs">
-                              <div className={`w-1.5 h-1.5 rounded-full ${d.status === 'online' ? 'bg-green-500' : 'bg-red-500'}`} />
+                              <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: d.status === 'online' ? COLOR_ONLINE : COLOR_OFFLINE }} />
                               <span>{d.name}</span>
                               <span className="text-muted-foreground font-mono">{d.controlid_ip_address}</span>
                             </div>
@@ -467,7 +581,6 @@ export function ConnectivityDashboard() {
                       )}
                     </div>
 
-                    {/* Agent status */}
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-1">Agente Local</p>
                       {pAgents.length === 0 ? (
@@ -477,7 +590,7 @@ export function ConnectivityDashboard() {
                         return (
                           <div key={a.id} className="flex items-center justify-between text-xs">
                             <div className="flex items-center gap-2">
-                              <div className={`w-1.5 h-1.5 rounded-full ${online ? 'bg-green-500' : 'bg-red-500'}`} />
+                              <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: online ? COLOR_ONLINE : COLOR_OFFLINE }} />
                               <span>{a.name}</span>
                               {a.version && <span className="text-muted-foreground">v{a.version}</span>}
                             </div>
@@ -491,7 +604,6 @@ export function ConnectivityDashboard() {
                       })}
                     </div>
 
-                    {/* Last event */}
                     {lastEvent && (
                       <div className="text-xs text-muted-foreground flex items-center gap-1 pt-1 border-t border-border/50">
                         <Clock className="h-3 w-3" />
@@ -506,41 +618,7 @@ export function ConnectivityDashboard() {
         )}
       </div>
 
-      {/* Alerts Panel */}
-      {alerts.length > 0 && (
-        <Card className="border-destructive/30 bg-destructive/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-4 w-4" />
-              Alertas de Conectividade ({alerts.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {alerts.map((alert, i) => (
-                <div key={i} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    {alert.type === 'device' ? <WifiOff className="h-3.5 w-3.5 text-destructive" /> : <Server className="h-3.5 w-3.5 text-destructive" />}
-                    <span className="font-medium">{alert.name}</span>
-                    <span className="text-muted-foreground">({alert.project})</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">{alert.detail}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* All clear */}
-      {alerts.length === 0 && stats.totalDevices > 0 && (
-        <Card className="border-green-500/30 bg-green-500/5">
-          <CardContent className="py-4 flex items-center justify-center gap-2 text-green-600">
-            <CheckCircle2 className="h-5 w-5" />
-            <span className="font-medium">Todos os dispositivos e agentes estão operacionais</span>
-          </CardContent>
-        </Card>
-      )}
+      {renderAlerts()}
     </div>
   );
 }
