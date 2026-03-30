@@ -174,12 +174,12 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
                           <animate attributeName="r" from={String(cr)} to={String(cr + 10 / Math.sqrt(scale))} dur="2s" repeatCount="indefinite" />
                           <animate attributeName="opacity" from="0.4" to="0" dur="2s" repeatCount="indefinite" />
                         </circle>
-                        <path
-                          d={SHIP_PATH}
-                          transform={`translate(${m.x},${m.y}) scale(${cr / 8})`}
-                          fill={m.color}
-                          stroke="hsl(var(--background))"
-                          strokeWidth={compensatedStroke / (cr / 8)}
+                        <image
+                          href="/ship-icon.png"
+                          x={m.x - cr}
+                          y={m.y - cr}
+                          width={cr * 2}
+                          height={cr * 2}
                         />
                         <text
                           x={m.x + cr + 3 / Math.sqrt(scale)}

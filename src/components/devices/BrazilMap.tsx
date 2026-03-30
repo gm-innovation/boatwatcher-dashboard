@@ -227,12 +227,12 @@ export function BrazilMap({ projects, onExpandClick, compact = false }: BrazilMa
                       <animate attributeName="r" from={String(m.radius)} to={String(m.radius + 12)} dur="2s" repeatCount="indefinite" />
                       <animate attributeName="opacity" from="0.4" to="0" dur="2s" repeatCount="indefinite" />
                     </circle>
-                    <path
-                      d={SHIP_PATH}
-                      transform={`translate(${m.x},${m.y}) scale(${m.radius / 8})`}
-                      fill={m.color}
-                      stroke="hsl(var(--background))"
-                      strokeWidth={2 / (m.radius / 8)}
+                    <image
+                      href="/ship-icon.png"
+                      x={m.x - m.radius}
+                      y={m.y - m.radius}
+                      width={m.radius * 2}
+                      height={m.radius * 2}
                     />
                     {!compact && (
                       <text x={m.x + m.radius + 4} y={m.y + 3} fontSize="9" fill="hsl(var(--foreground))" fontWeight="500" opacity={0.8}>
