@@ -612,8 +612,10 @@ export const DiagnosticsPanel = () => {
       } catch { /* ignore */ }
     }
 
+    setProjectDiagRefreshKey(k => k + 1);
     setDiagnostics(results);
     setLastRunTime(new Date());
+    setIsRunning(false);
     setIsRunning(false);
   };
 
