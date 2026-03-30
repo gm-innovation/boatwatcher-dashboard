@@ -1,29 +1,31 @@
 
 
-## Alinhar dashboard com o sistema em produção
+## Alinhar estilo visual dos cards com produção (sem toolbar)
 
-Três diferenças visuais identificadas entre as imagens:
+Apenas mudanças de estilo CSS nos dois componentes. Sem adicionar busca, filtros ou botão de exportação.
 
 ### Alterações
 
 **1. `src/components/dashboard/WorkersOnBoardTable.tsx`**
-- Formato da entrada: mudar de `format(..., 'HH:mm')` para `format(..., 'dd/MM HH:mm')` com badge colorido (azul/outline)
-- Coluna "Local": renderizar como `<Badge>` colorido (verde para "Bordo", outline para outros) em vez de texto simples
-- Manter o Nº sequencial (produção mostra ID real, mas usaremos index+1 por consistência com dados disponíveis — ou podemos usar worker.id se numérico)
+- Card: `bg-card rounded-lg` → `bg-white dark:bg-card rounded-xl shadow-sm`
+- Header padding: `p-4` → `p-6`
+- Título: `text-lg` → `text-xl`
+- Badge contador: trocar `variant="secondary"` por classes manuais `bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full border-0`
+- Badge "Local" (Bordo): trocar `bg-emerald-*` por `bg-green-100 text-green-800` (valor do location vem automaticamente do dispositivo, sem mudança de lógica)
+- Badge hora entrada: trocar `variant="outline" text-primary border-primary` por `bg-blue-100 text-blue-800 text-xs rounded-md border-0`
+- Linhas da tabela: adicionar `hover:bg-gray-50`
 
 **2. `src/components/dashboard/CompaniesOnBoardList.tsx`**
-- Substituir layout de cards com ícone por uma **tabela** com 3 colunas: Empresa, Equipe, Entrada
-- Adicionar `entryTime` à interface `CompanyOnBoard`
-- Renderizar equipe como número simples e entrada como horário `HH:mm` com badge azul
-
-**3. `src/hooks/useSupabase.ts` (`useCompaniesOnBoard`)**
-- Capturar o `entryTime` mais antigo (primeira entrada) de cada empresa para popular a coluna "Entrada" na tabela de empresas
+- Card: mesmas mudanças (`bg-white rounded-xl shadow-sm`)
+- Header: `p-4` → `p-6`, título `text-lg` → `text-xl`
+- Badge contador: mesmas classes azuis
+- Badge hora: `bg-blue-100 text-blue-800 text-xs rounded-md border-0`
+- Linhas: `hover:bg-gray-50`
 
 ### Arquivos alterados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/dashboard/WorkersOnBoardTable.tsx` | Badge no Local, formato dd/MM HH:mm com badge na Entrada |
-| `src/components/dashboard/CompaniesOnBoardList.tsx` | Trocar cards por tabela (Empresa, Equipe, Entrada) |
-| `src/hooks/useSupabase.ts` | Adicionar `entryTime` ao retorno de `useCompaniesOnBoard` |
+| `WorkersOnBoardTable.tsx` | Estilo card, badges (azul/verde), hover nas linhas |
+| `CompaniesOnBoardList.tsx` | Estilo card, badges azuis, hover nas linhas |
 
