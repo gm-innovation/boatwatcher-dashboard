@@ -66,6 +66,7 @@ const LOCATION_COORDS: Record<string, { x: number; y: number; label: string }> =
   'atlantico sul':    { x: 593, y: 210, label: 'Estaleiro Atlântico Sul' },
   'eas':              { x: 593, y: 210, label: 'EAS' },
   'jurong':           { x: 518, y: 385, label: 'Estaleiro Jurong Aracruz' },
+
   'osx':              { x: 538, y: 285, label: 'Estaleiro OSX' },
   'enseada':          { x: 538, y: 285, label: 'Enseada Paraguaçu' },
   'paraguacu':        { x: 538, y: 285, label: 'Enseada Paraguaçu' },
