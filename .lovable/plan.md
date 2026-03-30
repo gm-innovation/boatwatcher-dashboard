@@ -1,113 +1,62 @@
 
 
-## Monitoramento de Disponibilidade e Diagnóstico de Conectividade
+## Diagnóstico de Instabilidade de Conectividade
 
-### Problema
-O sistema só armazena o status **atual** de dispositivos e agentes (`status` + `last_seen_at`). Não há histórico de desconexões, impossibilitando calcular: quantos incidentes ocorreram, duração média de cada queda, e padrões de falha. Também não há visibilidade sobre os diferentes tipos de conexão (servidor local → nuvem, servidor local → dispositivo, navegador → nuvem).
+### Causa raiz identificada
 
-### Solução
+Analisando os dados de `connectivity_events` da última hora, o dispositivo **Engenharia - Entrada** (`81f1c377`) apresenta um padrão claro de **flapping** — 14 transições offline→online em ~50 minutos. Cada desconexão dura exatamente ~35 segundos antes de recuperar. O dispositivo **Engenharia - Saída** (`b9e59f45`) está estável.
 
-#### 1. Nova tabela `connectivity_events` (migração SQL)
-
-Registra cada mudança de status de dispositivos e agentes:
-
-```sql
-CREATE TABLE public.connectivity_events (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  entity_type text NOT NULL, -- 'device' ou 'agent'
-  entity_id uuid NOT NULL,
-  project_id uuid REFERENCES public.projects(id) ON DELETE SET NULL,
-  previous_status text,
-  new_status text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_connectivity_events_entity ON connectivity_events(entity_type, entity_id);
-CREATE INDEX idx_connectivity_events_created ON connectivity_events(created_at DESC);
-
-ALTER TABLE connectivity_events ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Authenticated users can read" ON connectivity_events FOR SELECT TO authenticated USING (true);
-CREATE POLICY "System can insert" ON connectivity_events FOR INSERT TO authenticated WITH CHECK (true);
-```
-
-#### 2. Triggers automáticos para capturar mudanças de status
-
-Triggers em `devices` e `local_agents` que inserem um registro em `connectivity_events` sempre que o `status` mudar:
-
-```sql
-CREATE OR REPLACE FUNCTION log_device_status_change()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-  IF OLD.status IS DISTINCT FROM NEW.status THEN
-    INSERT INTO connectivity_events (entity_type, entity_id, project_id, previous_status, new_status)
-    VALUES ('device', NEW.id, NEW.project_id, OLD.status::text, NEW.status::text);
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER trg_device_status_change
-  AFTER UPDATE OF status ON devices
-  FOR EACH ROW EXECUTE FUNCTION log_device_status_change();
-
--- Análogo para local_agents
-CREATE OR REPLACE FUNCTION log_agent_status_change()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-  IF OLD.status IS DISTINCT FROM NEW.status THEN
-    INSERT INTO connectivity_events (entity_type, entity_id, project_id, previous_status, new_status)
-    VALUES ('agent', NEW.id, NEW.project_id, OLD.status::text, NEW.status::text);
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER trg_agent_status_change
-  AFTER UPDATE OF status ON local_agents
-  FOR EACH ROW EXECUTE FUNCTION log_agent_status_change();
-```
-
-#### 3. Atualizar `ConnectivityDashboard.tsx`
-
-Adicionar uma nova seção **"Disponibilidade"** com:
-
-- **Nova query**: buscar `connectivity_events` dos últimos 7 dias agrupados por entidade
-- **Cards de disponibilidade** (por dispositivo/agente):
-  - Total de incidentes de desconexão (transições para offline)
-  - Tempo médio de cada desconexão (calculado pela diferença entre evento offline e próximo online)
-  - Uptime % dos últimos 7 dias
-- **Gráfico de timeline** (Recharts `AreaChart`):
-  - Eixo X: últimos 7 dias
-  - Eixo Y: quantidade de incidentes por dia
-  - Separado por dispositivos vs agentes
-- **Seção "Diagnóstico de Conexões"**: cards mostrando o status de cada camada de conectividade:
-  - **Navegador → Nuvem**: verificação de latência via `supabase.from('projects').select('id').limit(1)` com timestamp
-  - **Agente → Nuvem**: baseado no `last_seen_at` do agente (heartbeat a cada 60s)
-  - **Agente → Dispositivo**: baseado no campo `status` de cada device (atualizado pelo heartbeat)
-  - Cada camada mostra: status (online/offline), latência/tempo desde último contato, e contagem de falhas recentes
-
-#### 4. Layout no dashboard
-
-No **modo normal**, a seção de Disponibilidade aparece entre os gráficos e a tabela de dispositivos. No **modo maximizado**, ela ocupa uma terceira linha compacta abaixo dos gráficos na coluna esquerda.
+A causa é um **loop de feedback entre 3 escritores concorrentes de status**:
 
 ```text
-┌─ Disponibilidade (7 dias) ────────────────────────────────────┐
-│  ┌────────┬──────────┬──────────┐  ┌─ Incidentes/Dia ───────┐ │
-│  │Uptime  │Incidentes│Tempo Méd.│  │  ▄  ▄▄    ▄            │ │
-│  │ 94.2%  │   8      │  23 min  │  │ ██▄██████▄██           │ │
-│  └────────┴──────────┴──────────┘  └─────────────────────────┘ │
-├─ Diagnóstico de Conexões ─────────────────────────────────────┤
-│  [🟢 Web→Nuvem 45ms] [🟢 Agente→Nuvem 30s] [🟡 Agente→Disp] │
-│                                      2/3 dispositivos ok      │
+┌─ Agent Poll (5s) ─────────────────────────────────────────────┐
+│ Falha 3x consecutivas (15s) → marca offline na memória/SQLite │
+└───────────────────────────────┬────────────────────────────────┘
+                                ↓
+┌─ Heartbeat (60s) ─────────────────────────────────────────────┐
+│ Envia status do dispositivo para nuvem                        │
+│ Cloud escreve devices.status = 'offline'                      │
+│ Trigger grava connectivity_event                              │
+└───────────────────────────────┬────────────────────────────────┘
+                                ↓
+┌─ Download Devices (60s) ──────────────────────────────────────┐
+│ Baixa devices da nuvem com status='offline'                   │
+│ upsertDeviceFromCloud() SOBRESCREVE status local!             │
+│ → Mesmo que dispositivo já tenha recuperado localmente,       │
+│   o status baixado da nuvem reseta para offline               │
+│ → Próximo heartbeat reporta offline de novo                   │
 └───────────────────────────────────────────────────────────────┘
 ```
 
-### Detalhes Técnicos
+### Problemas específicos
 
-- Query de eventos: `supabase.from('connectivity_events').select('*').gte('created_at', 7daysAgo).order('created_at')`
-- Cálculo de uptime: soma dos intervalos online / período total × 100
-- Cálculo de tempo médio: para cada par offline→online, diferença em minutos, depois média
-- Gráfico usa `AreaChart` do Recharts (já disponível)
-- Teste de latência web→nuvem: `performance.now()` antes/depois da query
-- Refresh a cada 30s junto com as outras queries
+1. **`FAILURE_THRESHOLD = 3`** — com poll de 5s, basta 15 segundos sem resposta (dispositivo ocupado com reconhecimento facial, latência de rede) para marcar offline. Muito agressivo.
+
+2. **`upsertDeviceFromCloud()` sobrescreve `status` local** (database.js linha 1238) — o download de devices da nuvem traz o `status` que foi setado pelo heartbeat anterior, criando um ciclo: nuvem diz offline → local aceita → heartbeat confirma offline → ciclo reinicia.
+
+3. **Frontend `isAgentOnline` usa threshold de 60s** — com heartbeat de 60s, qualquer atraso de rede faz o agente aparecer como offline no dashboard.
+
+4. **Sem histerese** — o sistema marca online imediatamente após 1 poll bem-sucedido, sem exigir estabilidade.
+
+### Correções propostas
+
+**1. `electron/agent.js`** — Aumentar resiliência do polling:
+- `FAILURE_THRESHOLD`: 3 → 6 (30s antes de declarar offline)
+- Adicionar `RECOVERY_THRESHOLD = 2`: exigir 2 polls consecutivos com sucesso para voltar a marcar online (histerese)
+- Reduzir timeout HTTP de 10s → 5s para liberar a thread mais rápido
+
+**2. `electron/database.js`** — Não sobrescrever status local com dados da nuvem:
+- Em `upsertDeviceFromCloud()`, ignorar o campo `status` vindo da nuvem (o agente local é a fonte de verdade para conectividade)
+
+**3. `src/components/devices/ConnectivityDashboard.tsx`** — Relaxar threshold do agente:
+- `isAgentOnline`: threshold de 60s → 150s (2.5 ciclos de heartbeat)
+
+**4. Migração SQL** — Debounce no trigger de conectividade:
+- Alterar `log_device_status_change()` para ignorar eventos se o último evento para o mesmo dispositivo foi há menos de 60s (evita registrar flapping como dezenas de incidentes)
+
+### Impacto esperado
+
+- Eliminação de ~90% dos falsos positivos de desconexão
+- Redução do ruído nos gráficos de disponibilidade
+- Agente permanece "online" no dashboard mesmo com heartbeats ligeiramente atrasados
 
