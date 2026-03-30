@@ -9,6 +9,8 @@ import { spreadOverlappingMarkers } from './mapUtils';
 
 const COLOR_ONLINE = '#22c55e';
 const COLOR_OFFLINE = '#ef4444';
+
+const SHIP_PATH = 'M-10,4 C-10,6 10,6 10,4 L8,-1 L6,-1 L6,-5 L2,-5 L2,-1 L-6,-1 L-8,0 Z';
 const COLOR_PARTIAL = '#eab308';
 
 const MIN_SCALE = 0.8;
@@ -172,7 +174,13 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
                           <animate attributeName="r" from={String(cr)} to={String(cr + 10 / Math.sqrt(scale))} dur="2s" repeatCount="indefinite" />
                           <animate attributeName="opacity" from="0.4" to="0" dur="2s" repeatCount="indefinite" />
                         </circle>
-                        <circle cx={m.x} cy={m.y} r={cr} fill={m.color} stroke="hsl(var(--background))" strokeWidth={compensatedStroke} />
+                        <path
+                          d={SHIP_PATH}
+                          transform={`translate(${m.x},${m.y}) scale(${cr / 8})`}
+                          fill={m.color}
+                          stroke="hsl(var(--background))"
+                          strokeWidth={compensatedStroke / (cr / 8)}
+                        />
                         <text
                           x={m.x + cr + 3 / Math.sqrt(scale)}
                           y={m.y + compensatedFontSize / 3}
