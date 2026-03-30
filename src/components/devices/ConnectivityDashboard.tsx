@@ -11,6 +11,8 @@ import {
   RefreshCw, Monitor, Radio, ShieldAlert, BarChart3, Maximize2, Minimize2,
   TrendingDown, Timer, ArrowRightLeft, Globe, HardDrive
 } from 'lucide-react';
+import { BrazilMap, type MapProjectData } from './BrazilMap';
+import { BrazilMapModal } from './BrazilMapModal';
 import { formatDistanceToNow, subDays, format, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, AreaChart, Area, ResponsiveContainer } from 'recharts';
