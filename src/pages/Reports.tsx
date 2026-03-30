@@ -88,6 +88,10 @@ const Reports = () => {
             <Moon className="h-4 w-4" />
             Controle de Pernoite
           </TabsTrigger>
+          <TabsTrigger value="schedules" className="gap-2">
+            <Calendar className="h-4 w-4" />
+            Agendamentos
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="workers">
