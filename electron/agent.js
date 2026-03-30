@@ -113,7 +113,8 @@ class AgentController {
     this.deviceConnectivity = new Map();
     this.sessionCache = new Map();
     this.SESSION_TTL_MS = 10 * 60 * 1000;
-    this.FAILURE_THRESHOLD = 3; // consecutive failures before marking offline
+    this.FAILURE_THRESHOLD = 6; // consecutive failures before marking offline (30s at 5s poll)
+    this.RECOVERY_THRESHOLD = 2; // consecutive successes before marking online (hysteresis)
 
     // Telemetry
     this._capturedCount = 0;
