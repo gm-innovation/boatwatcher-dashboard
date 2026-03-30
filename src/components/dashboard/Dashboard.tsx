@@ -75,10 +75,7 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
         <div className="xl:col-span-3">
-          <WorkersOnBoardTable 
-            workers={formattedWorkers}
-            onExport={handleExport}
-          />
+          <WorkersOnBoardTable workers={formattedWorkers} />
         </div>
         <div className="xl:col-span-2">
           <CompaniesOnBoardList companies={companiesOnBoard} />
