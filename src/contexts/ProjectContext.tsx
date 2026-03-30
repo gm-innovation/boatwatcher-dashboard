@@ -63,6 +63,10 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     setIsFullscreenMode((prev) => !prev);
   };
 
+  const toggleHeaderCollapsed = () => {
+    setIsHeaderCollapsed((prev) => !prev);
+  };
+
   const handleRefresh = useCallback(() => {
     refreshCallbacksRef.current.forEach((cb) => cb());
     setLastUpdate(new Date());
