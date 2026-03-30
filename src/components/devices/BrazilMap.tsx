@@ -103,12 +103,23 @@ function findCityCoords(location: string | null): { x: number; y: number; label:
   const normalized = normalizeString(location);
   
   // Exact match
-  if (CITY_COORDS[normalized]) return CITY_COORDS[normalized];
+  if (LOCATION_COORDS[normalized]) return LOCATION_COORDS[normalized];
   
-  // Partial match — check if location contains or is contained by a city name
-  for (const [key, coords] of Object.entries(CITY_COORDS)) {
+  // Check if location contains a known key (e.g. "Estaleiro Renave" contains "renave")
+  for (const [key, coords] of Object.entries(LOCATION_COORDS)) {
     if (normalized.includes(key) || key.includes(normalized)) {
       return coords;
+    }
+  }
+  
+  // Word-level match: check each word of location against dictionary keys
+  const words = normalized.split(/[\s,\-\/]+/).filter(w => w.length > 2);
+  for (const word of words) {
+    if (LOCATION_COORDS[word]) return LOCATION_COORDS[word];
+    for (const [key, coords] of Object.entries(LOCATION_COORDS)) {
+      if (key.includes(word) || word.includes(key)) {
+        return coords;
+      }
     }
   }
   
