@@ -157,7 +157,7 @@ async function fetchWorkersOnBoardFromCloud(
     // First, get device IDs for this project
     const { data: projectDevices, error: devicesError } = await supabase
       .from('devices')
-      .select('id')
+      .select('id, configuration')
       .eq('project_id', projectId);
 
     if (devicesError) throw devicesError;
@@ -165,12 +165,20 @@ async function fetchWorkersOnBoardFromCloud(
     const deviceIds = (projectDevices || []).map(d => d.id);
     if (deviceIds.length === 0) return [];
 
+    // Build device location map from configuration.access_location
+    const deviceLocationMap = new Map<string, string>();
+    for (const d of projectDevices || []) {
+      const config = d.configuration as Record<string, any> | null;
+      const loc = config?.access_location || 'bordo';
+      deviceLocationMap.set(d.id, loc);
+    }
+
     // Temporal ceiling: ignore timestamps more than 2 min in the future
     const maxTimestamp = new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
     const { data: entryLogs, error: entryError } = await supabase
       .from('access_logs')
-      .select('worker_id, worker_name, device_name, timestamp')
+      .select('worker_id, worker_name, device_name, device_id, timestamp')
       .eq('direction', 'entry')
       .eq('access_status', 'granted')
       .in('device_id', deviceIds)
@@ -209,6 +217,7 @@ async function fetchWorkersOnBoardFromCloud(
           worker_id: entry.worker_id,
           worker_name: entry.worker_name,
           device_name: entry.device_name,
+          device_id: entry.device_id,
           entry_time: entry.timestamp,
         });
       }
@@ -235,10 +244,13 @@ async function fetchWorkersOnBoardFromCloud(
 
     return Array.from(workersOnBoard.entries()).map(([key, onBoard]) => {
       const enriched = workersByName.get(onBoard.worker_name);
+      // Map device access_location to display label
+      const accessLocation = onBoard.device_id ? deviceLocationMap.get(onBoard.device_id) || 'bordo' : 'bordo';
+      const locationLabel = accessLocation === 'dique' ? 'Dique' : 'Bordo';
       return {
         id: enriched?.id || onBoard.worker_id || key,
         name: enriched?.name || onBoard.worker_name || 'Desconhecido',
-        location: onBoard.device_name || null,
+        location: locationLabel,
         role: enriched?.role || null,
         company: enriched?.companies?.name || 'N/A',
         company_id: enriched?.company_id || null,
