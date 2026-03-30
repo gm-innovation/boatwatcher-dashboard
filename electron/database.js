@@ -1233,14 +1233,15 @@ function createDatabaseAPI(db, startCode) {
       }
       const existing = db.prepare('SELECT id FROM devices WHERE id = ?').get(data.id);
       if (existing) {
+        // NOTE: Do NOT overwrite `status` from cloud — local agent polling is the source of truth
         db.prepare(`
           UPDATE devices SET name = ?, controlid_serial_number = ?, controlid_ip_address = ?,
-          type = ?, status = ?, location = ?, project_id = ?, agent_id = ?,
+          type = ?, location = ?, project_id = ?, agent_id = ?,
           api_credentials = ?, configuration = ?, updated_at = datetime('now')
           WHERE id = ?
         `).run(
           data.name, data.controlid_serial_number || null, data.controlid_ip_address || null,
-          data.type || 'facial_reader', data.status || 'offline', data.location || null,
+          data.type || 'facial_reader', data.location || null,
           safeProjectId, data.agent_id || null,
           JSON.stringify(data.api_credentials || {}), JSON.stringify(data.configuration || {}),
           data.id
