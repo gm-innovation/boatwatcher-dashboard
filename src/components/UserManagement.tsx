@@ -234,10 +234,10 @@ const UserManagement = () => {
         <div className="space-y-2">
           <Label>Projetos</Label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border rounded-lg p-4">
-            {projects.length === 0 ? (
-              <p className="text-sm text-muted-foreground col-span-2">Nenhum projeto cadastrado</p>
+            {filteredProjects.length === 0 ? (
+              <p className="text-sm text-muted-foreground col-span-2">Nenhum projeto encontrado</p>
             ) : (
-              projects.map(project => (
+              filteredProjects.map(project => (
                 <div key={project.id} className="flex items-center space-x-2">
                   <Checkbox
                     id={`project-${project.id}`}
