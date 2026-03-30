@@ -35,19 +35,24 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
     }
   }, [open]);
 
-  const markers = projects
-    .map(p => {
-      const coords = findCityCoords(p.location);
-      if (!coords) return null;
-      const health = p.totalDevices === 0 ? 'none'
-        : p.onlineDevices === p.totalDevices ? 'online'
-        : p.onlineDevices > 0 ? 'partial'
-        : 'offline';
-      const color = health === 'online' ? COLOR_ONLINE : health === 'partial' ? COLOR_PARTIAL : COLOR_OFFLINE;
-      const radius = Math.max(6, Math.min(14, 4 + p.totalDevices * 2));
-      return { ...p, ...coords, health, color, radius };
-    })
-    .filter(Boolean) as (MapProjectData & { x: number; y: number; label: string; health: string; color: string; radius: number })[];
+  const spreadDist = Math.max(15, 20 / Math.sqrt(scale));
+
+  const markers = (() => {
+    const raw = projects
+      .map(p => {
+        const coords = findCityCoords(p.location);
+        if (!coords) return null;
+        const health = p.totalDevices === 0 ? 'none'
+          : p.onlineDevices === p.totalDevices ? 'online'
+          : p.onlineDevices > 0 ? 'partial'
+          : 'offline';
+        const color = health === 'online' ? COLOR_ONLINE : health === 'partial' ? COLOR_PARTIAL : COLOR_OFFLINE;
+        const radius = Math.max(6, Math.min(14, 4 + p.totalDevices * 2));
+        return { ...p, ...coords, health, color, radius };
+      })
+      .filter(Boolean) as (MapProjectData & { x: number; y: number; label: string; health: string; color: string; radius: number })[];
+    return spreadOverlappingMarkers(raw, spreadDist);
+  })();
 
   const vbWidth = SVG_WIDTH / scale;
   const vbHeight = SVG_HEIGHT / scale;
