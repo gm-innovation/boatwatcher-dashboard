@@ -1,35 +1,25 @@
 
 
-## Substituir círculo por ícone de navio nos marcadores do mapa
+## Trocar o path do navio por ícone de navio visto de frente
 
-### Resumo
-Trocar apenas o `<circle>` sólido (marcador principal) por um path SVG de navio, mantendo o `<circle>` de pulso animado atrás como efeito de destaque.
+### Problema
+O path atual (`SHIP_PATH`) parece um submarino visto de cima. O usuário quer um ícone de navio visto de frente, como na imagem enviada — casco largo embaixo, cabine/ponte de comando em cima.
+
+### Solução
+Substituir o valor de `SHIP_PATH` nos dois arquivos por um novo path SVG que represente um navio de frente: casco arredondado na base, superestrutura com ponte de comando, e uma chaminé/mastro no topo.
+
+### Novo path (navio de frente, centrado em 0,0, ~20x18 unidades)
+```
+M-9,6 C-9,8 9,8 9,6 L8,2 L6,2 L6,0 L8,0 L8,-2 L4,-2 L4,-6 L2,-6 L2,-8 L-2,-8 L-2,-6 L-4,-6 L-4,-2 L-8,-2 L-8,0 L-6,0 L-6,2 L-8,2 Z
+```
+Descrição visual:
+- Base curva (casco) de -9 a 9
+- Corpo retangular (superestrutura) com degraus
+- Ponte de comando estreita no topo (cabine)
 
 ### Alterações
+1. **`src/components/devices/BrazilMap.tsx`** linha 133 — atualizar `SHIP_PATH`
+2. **`src/components/devices/BrazilMapModal.tsx`** linha 13 — atualizar `SHIP_PATH`
 
-**1. `src/components/devices/BrazilMap.tsx`**
-- Manter o `<circle>` animado (pulso) como está
-- Substituir o segundo `<circle>` (marcador sólido) por um `<path>` de silhueta de navio, centralizado via `transform="translate(x,y) scale(s)"`, com `fill={m.color}` e `stroke="hsl(var(--background))"`
-- O scale base será proporcional ao radius atual (como já funciona)
-
-**2. `src/components/devices/BrazilMapModal.tsx`**
-- Mesma substituição, com scale compensado pelo zoom (`scale / sqrt(zoom)`)
-
-### Path do navio
-Uma silhueta simples de cargo ship centrada em (0,0), ~24x16 unidades:
-```
-M-10,4 C-10,6 10,6 10,4 L8,-1 L6,-1 L6,-5 L2,-5 L2,-1 L-6,-1 L-8,0 Z
-```
-(casco arredondado embaixo + cabine retangular em cima)
-
-### O que NÃO muda
-- Pulso animado (continua sendo circle)
-- Cores de status (verde/amarelo/vermelho)
-- Labels de texto
-- Linhas de conexão para marcadores dispersos
-- Lógica de clustering/spread
-
-### Arquivos afetados
-- `src/components/devices/BrazilMap.tsx`
-- `src/components/devices/BrazilMapModal.tsx`
+Nenhuma outra mudança necessária — cores, pulso, scale e labels continuam iguais.
 
