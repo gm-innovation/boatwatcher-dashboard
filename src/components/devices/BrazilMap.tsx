@@ -85,11 +85,11 @@ const LOCATION_COORDS: Record<string, { x: number; y: number; label: string }> =
   'navship':          { x: 373, y: 512, label: 'Estaleiro Navship' },
   'detroit':          { x: 375, y: 510, label: 'Estaleiro Detroit' },
   'oceana':           { x: 376, y: 511, label: 'Estaleiro Oceana' },
-  'verolme':          { x: 474, y: 440, label: 'Damen Verolme' },
-  'damen':            { x: 474, y: 440, label: 'Damen Verolme' },
-  'thomaz':           { x: 493, y: 428, label: 'Estaleiro Thomaz' },
-  'porto do acu':     { x: 515, y: 405, label: 'Porto do Açu' },
-  'acu':              { x: 515, y: 405, label: 'Porto do Açu' },
+  'verolme':          { x: 469, y: 449, label: 'Damen Verolme' },
+  'damen':            { x: 469, y: 449, label: 'Damen Verolme' },
+  'thomaz':           { x: 496, y: 424, label: 'Estaleiro Thomaz' },
+  'porto do acu':     { x: 502, y: 412, label: 'Porto do Açu' },
+  'acu':              { x: 502, y: 412, label: 'Porto do Açu' },
   'rio tiete':        { x: 355, y: 440, label: 'Estaleiro Rio Tietê' },
 };
 
