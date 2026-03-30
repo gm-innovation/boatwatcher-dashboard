@@ -230,9 +230,11 @@ export const Header = () => {
         </div>
       </div>
 
-      <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 transition-all duration-300 overflow-hidden ${isHeaderCollapsed ? 'max-h-0 py-0' : 'max-h-24'}`}>
-        <ProjectSelector selectedProjectId={selectedProjectId} onProjectSelect={setSelectedProjectId} />
-      </div>
+      {!isHeaderCollapsed && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+          <ProjectSelector selectedProjectId={selectedProjectId} onProjectSelect={setSelectedProjectId} />
+        </div>
+      )}
     </header>
   );
 };
