@@ -44,6 +44,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [syncRefreshKey, setSyncRefreshKey] = useState(0);
