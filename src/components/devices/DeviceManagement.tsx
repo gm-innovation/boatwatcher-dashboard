@@ -65,13 +65,22 @@ export const DeviceManagement = () => {
   const [sendingCommand, setSendingCommand] = useState<string | null>(null);
   const [listedUsers, setListedUsers] = useState<any[]>([]);
   const [isUsersDialogOpen, setIsUsersDialogOpen] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
-  const { selectedProjectId } = useProject();
   const { data: devices = [], isLoading, refetch } = useDevices(selectedProjectId);
   const { data: projects = [] } = useProjects();
   const { agents } = useLocalAgents(selectedProjectId);
   const queryClient = useQueryClient();
   const isLocalRuntime = usesLocalAuth() || usesLocalServer();
+
+  // Filter devices by client when no specific project is selected
+  const filteredDevices = selectedClientId && !selectedProjectId
+    ? devices.filter((d) => {
+        const project = projects.find((p) => p.id === d.project_id);
+        return project?.client_id === selectedClientId;
+      })
+    : devices;
 
   const createForm = useForm<DeviceFormData>({
     resolver: zodResolver(deviceSchema),
