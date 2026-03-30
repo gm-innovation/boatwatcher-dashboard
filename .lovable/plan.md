@@ -1,48 +1,35 @@
 
 
-## Resolver sobreposição de marcadores próximos com clustering e dispersão automática
+## Substituir círculo por ícone de navio nos marcadores do mapa
 
-### Problema
-Estaleiros na mesma região (ex: Renave, Mauá, Mac Laren, Arsenal da Marinha em Niterói/Rio) têm coordenadas com diferença de 1-3 pixels. Mesmo com zoom máximo de 600%, os marcadores ficam sobrepostos e impossíveis de distinguir.
-
-### Solução
-Implementar **dispersão automática em leque** para marcadores que se sobrepõem, distribuindo-os em círculo ao redor do centroide do grupo. Quanto mais zoom, mais próximos do ponto real; no zoom padrão, ficam espaçados o suficiente para serem clicáveis individualmente.
+### Resumo
+Trocar apenas o `<circle>` sólido (marcador principal) por um path SVG de navio, mantendo o `<circle>` de pulso animado atrás como efeito de destaque.
 
 ### Alterações
 
-**1. `src/components/devices/BrazilMap.tsx` e `BrazilMapModal.tsx`**
+**1. `src/components/devices/BrazilMap.tsx`**
+- Manter o `<circle>` animado (pulso) como está
+- Substituir o segundo `<circle>` (marcador sólido) por um `<path>` de silhueta de navio, centralizado via `transform="translate(x,y) scale(s)"`, com `fill={m.color}` e `stroke="hsl(var(--background))"`
+- O scale base será proporcional ao radius atual (como já funciona)
 
-Adicionar lógica de **spread de marcadores sobrepostos**:
-- Após calcular os marcadores, agrupar os que estão a menos de `threshold` pixels de distância (ex: 20px no viewBox)
-- Para cada grupo com 2+ marcadores, redistribuí-los em círculo ao redor do centroide com raio proporcional ao número de itens
-- No modal, o raio de dispersão é compensado pelo zoom (diminui conforme zoom aumenta, pois o zoom já separa visualmente)
-- Adicionar linhas finas conectando cada marcador disperso ao ponto real (centroide), para indicar a localização original
+**2. `src/components/devices/BrazilMapModal.tsx`**
+- Mesma substituição, com scale compensado pelo zoom (`scale / sqrt(zoom)`)
 
-```text
-Sem dispersão (atual):     Com dispersão:
-     ●●●                    ╱ ● Renave
-   (sobrepostos)           ● Mauá ─── ✕ (ponto real)
-                            ╲ ● Mac Laren
+### Path do navio
+Uma silhueta simples de cargo ship centrada em (0,0), ~24x16 unidades:
 ```
-
-**2. Lógica de clustering (função utilitária)**
-
-```typescript
-function spreadOverlappingMarkers(markers, minDistance) {
-  // Agrupar marcadores próximos
-  // Para cada grupo, distribuir em círculo com raio = minDistance
-  // Retornar marcadores com posições ajustadas + campo originalX/originalY
-}
+M-10,4 C-10,6 10,6 10,4 L8,-1 L6,-1 L6,-5 L2,-5 L2,-1 L-6,-1 L-8,0 Z
 ```
+(casco arredondado embaixo + cabine retangular em cima)
 
-- `minDistance` no card compacto: ~25px (viewBox coords)
-- `minDistance` no modal: ~20px, compensado por `1/sqrt(scale)`
-
-**3. Renderização das linhas de conexão**
-
-Para cada marcador disperso, desenhar uma `<line>` fina e translúcida do marcador ao ponto original, para o usuário saber a localização real.
+### O que NÃO muda
+- Pulso animado (continua sendo circle)
+- Cores de status (verde/amarelo/vermelho)
+- Labels de texto
+- Linhas de conexão para marcadores dispersos
+- Lógica de clustering/spread
 
 ### Arquivos afetados
-- `src/components/devices/BrazilMap.tsx` — adicionar spread logic e linhas
-- `src/components/devices/BrazilMapModal.tsx` — mesma lógica com compensação de zoom
+- `src/components/devices/BrazilMap.tsx`
+- `src/components/devices/BrazilMapModal.tsx`
 
