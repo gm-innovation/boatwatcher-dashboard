@@ -324,7 +324,7 @@ export const ProjectsManagement = () => {
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
-      ) : projects.length > 0 ? (
+      ) : filteredProjects.length > 0 ? (
         <ScrollArea className="h-[500px] border rounded-lg">
           <table className="w-full">
             <thead className="sticky top-0 bg-card border-b">
