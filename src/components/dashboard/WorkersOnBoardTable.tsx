@@ -1,6 +1,5 @@
 import { useIsMobile } from '@/hooks/use-mobile';
 import { format } from 'date-fns';
-import { Badge } from '@/components/ui/badge';
 import {
   Table,
   TableBody,
@@ -28,9 +27,9 @@ export const WorkersOnBoardTable = ({ workers }: WorkersOnBoardTableProps) => {
 
   return (
     <div className="bg-white dark:bg-card rounded-xl border shadow-sm h-full flex flex-col">
-      <div className="p-6 border-b">
+      <div className="p-4 border-b">
         <div className="flex items-center gap-2">
-          <h3 className="font-semibold text-xl">Trabalhadores</h3>
+          <h3 className="font-semibold text-base">Trabalhadores</h3>
           <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full font-semibold">
             {workers.length}
           </span>
@@ -38,52 +37,50 @@ export const WorkersOnBoardTable = ({ workers }: WorkersOnBoardTableProps) => {
       </div>
 
       <div className="flex-1 overflow-x-auto">
-        <div className="min-w-[600px]">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">Nº</TableHead>
-                <TableHead>Nome</TableHead>
-                {!isMobile && <TableHead>Local</TableHead>}
-                {!isMobile && <TableHead>Função</TableHead>}
-                <TableHead>Empresa</TableHead>
-                <TableHead className="text-right">Entrada</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {workers.length > 0 ? (
-                workers.map((worker, index) => (
-                <TableRow key={worker.id} className="hover:bg-gray-50 dark:hover:bg-muted/50">
-                    <TableCell className="font-medium">{index + 1}</TableCell>
-                    <TableCell className="font-medium">{worker.name}</TableCell>
-                    {!isMobile && (
-                      <TableCell>
-                        {worker.location ? (
-                          <span className="inline-flex items-center bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full font-semibold">
-                            {worker.location}
-                          </span>
-                        ) : '-'}
-                      </TableCell>
-                    )}
-                    {!isMobile && <TableCell>{worker.role || '-'}</TableCell>}
-                    <TableCell>{worker.company}</TableCell>
-                    <TableCell className="text-right">
-                      <span className="inline-flex items-center bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-md font-semibold">
-                        {format(new Date(worker.entryTime), 'dd/MM HH:mm')}
-                      </span>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-12 py-2 px-3 text-xs whitespace-nowrap">Nº</TableHead>
+              <TableHead className="py-2 px-3 text-xs whitespace-nowrap">Nome</TableHead>
+              {!isMobile && <TableHead className="py-2 px-3 text-xs whitespace-nowrap">Local</TableHead>}
+              {!isMobile && <TableHead className="py-2 px-3 text-xs whitespace-nowrap">Função</TableHead>}
+              <TableHead className="py-2 px-3 text-xs whitespace-nowrap">Empresa</TableHead>
+              <TableHead className="text-right py-2 px-3 text-xs whitespace-nowrap">Entrada</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {workers.length > 0 ? (
+              workers.map((worker, index) => (
+              <TableRow key={worker.id} className="hover:bg-gray-50 dark:hover:bg-muted/50">
+                  <TableCell className="font-medium py-2 px-3 text-sm whitespace-nowrap">{index + 1}</TableCell>
+                  <TableCell className="font-medium py-2 px-3 text-sm whitespace-nowrap">{worker.name}</TableCell>
+                  {!isMobile && (
+                    <TableCell className="py-2 px-3 text-sm whitespace-nowrap">
+                      {worker.location ? (
+                        <span className="inline-flex items-center bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full font-semibold">
+                          {worker.location}
+                        </span>
+                      ) : '-'}
                     </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={isMobile ? 4 : 6} className="text-center py-8 text-muted-foreground">
-                    Nenhum trabalhador a bordo
+                  )}
+                  {!isMobile && <TableCell className="py-2 px-3 text-sm whitespace-nowrap">{worker.role || '-'}</TableCell>}
+                  <TableCell className="py-2 px-3 text-sm whitespace-nowrap">{worker.company}</TableCell>
+                  <TableCell className="text-right py-2 px-3 text-sm whitespace-nowrap">
+                    <span className="inline-flex items-center bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-md font-semibold">
+                      {format(new Date(worker.entryTime), 'dd/MM HH:mm')}
+                    </span>
                   </TableCell>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={isMobile ? 4 : 6} className="text-center py-8 text-muted-foreground">
+                  Nenhum trabalhador a bordo
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
