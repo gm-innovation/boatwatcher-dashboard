@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,16 +8,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import {
   Wifi, WifiOff, Server, AlertTriangle, CheckCircle2, Clock, Activity,
-  RefreshCw, Monitor, Radio, ShieldAlert, BarChart3, Maximize2, Minimize2
+  RefreshCw, Monitor, Radio, ShieldAlert, BarChart3, Maximize2, Minimize2,
+  TrendingDown, Timer, ArrowRightLeft, Globe, HardDrive
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, subDays, format, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, AreaChart, Area, ResponsiveContainer } from 'recharts';
 
 const REFRESH_INTERVAL = 30000;
 const COLOR_ONLINE = '#22c55e';
 const COLOR_OFFLINE = '#ef4444';
 const COLOR_PARTIAL = '#eab308';
+const COLOR_BLUE = '#3b82f6';
 
 const isAgentOnline = (agent: { status: string; last_seen_at: string | null }) => {
   if (agent.status !== 'online') return false;
@@ -33,9 +35,100 @@ type ProjectWithClient = {
   companies: { name: string; logo_url_light: string | null } | null;
 };
 
+type ConnectivityEvent = {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  project_id: string | null;
+  previous_status: string | null;
+  new_status: string;
+  created_at: string;
+};
+
+// ─── Availability calculations ───
+
+function computeAvailabilityMetrics(events: ConnectivityEvent[]) {
+  const now = new Date();
+  const periodStart = subDays(now, 7);
+  const periodMs = now.getTime() - periodStart.getTime();
+
+  // Group events by entity
+  const byEntity = new Map<string, ConnectivityEvent[]>();
+  for (const e of events) {
+    const key = `${e.entity_type}:${e.entity_id}`;
+    if (!byEntity.has(key)) byEntity.set(key, []);
+    byEntity.get(key)!.push(e);
+  }
+
+  let totalIncidents = 0;
+  let totalDowntimeMs = 0;
+  let recoveredCount = 0;
+  let totalOnlineMs = 0;
+  let entityCount = 0;
+
+  for (const [, entityEvents] of byEntity) {
+    entityCount++;
+    const sorted = [...entityEvents].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    let lastOfflineAt: Date | null = null;
+
+    for (const ev of sorted) {
+      if (ev.new_status === 'offline' || ev.new_status === 'error') {
+        totalIncidents++;
+        lastOfflineAt = new Date(ev.created_at);
+      } else if (ev.new_status === 'online' && lastOfflineAt) {
+        const downtime = new Date(ev.created_at).getTime() - lastOfflineAt.getTime();
+        totalDowntimeMs += downtime;
+        recoveredCount++;
+        lastOfflineAt = null;
+      }
+    }
+
+    // If still offline, count time until now
+    if (lastOfflineAt) {
+      totalDowntimeMs += now.getTime() - lastOfflineAt.getTime();
+    }
+  }
+
+  if (entityCount > 0) {
+    totalOnlineMs = (periodMs * entityCount) - totalDowntimeMs;
+  }
+
+  const uptimePct = entityCount > 0
+    ? Math.max(0, Math.min(100, (totalOnlineMs / (periodMs * entityCount)) * 100))
+    : 100;
+
+  const avgDowntimeMin = recoveredCount > 0
+    ? Math.round(totalDowntimeMs / recoveredCount / 60000)
+    : 0;
+
+  return { uptimePct: Math.round(uptimePct * 10) / 10, totalIncidents, avgDowntimeMin };
+}
+
+function computeIncidentsByDay(events: ConnectivityEvent[]) {
+  const days: Record<string, { devices: number; agents: number }> = {};
+  for (let i = 6; i >= 0; i--) {
+    const day = format(subDays(new Date(), i), 'dd/MM');
+    days[day] = { devices: 0, agents: 0 };
+  }
+
+  for (const ev of events) {
+    if (ev.new_status !== 'offline' && ev.new_status !== 'error') continue;
+    const day = format(new Date(ev.created_at), 'dd/MM');
+    if (days[day]) {
+      if (ev.entity_type === 'device') days[day].devices++;
+      else days[day].agents++;
+    }
+  }
+
+  return Object.entries(days).map(([day, counts]) => ({ day, ...counts }));
+}
+
 export function ConnectivityDashboard() {
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [isMaximized, setIsMaximized] = useState(false);
+  const [webLatency, setWebLatency] = useState<number | null>(null);
+  const [webLatencyStatus, setWebLatencyStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
   // Escape to exit fullscreen
   useEffect(() => {
@@ -45,6 +138,27 @@ export function ConnectivityDashboard() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [isMaximized]);
+
+  // Web → Cloud latency check
+  const checkWebLatency = useCallback(async () => {
+    setWebLatencyStatus('checking');
+    try {
+      const start = performance.now();
+      await supabase.from('projects').select('id').limit(1);
+      const ms = Math.round(performance.now() - start);
+      setWebLatency(ms);
+      setWebLatencyStatus('online');
+    } catch {
+      setWebLatency(null);
+      setWebLatencyStatus('offline');
+    }
+  }, []);
+
+  useEffect(() => {
+    checkWebLatency();
+    const interval = setInterval(checkWebLatency, REFRESH_INTERVAL);
+    return () => clearInterval(interval);
+  }, [checkWebLatency]);
 
   const { data: projects = [], refetch: refetchProjects } = useQuery({
     queryKey: ['monitoring-projects'],
@@ -76,10 +190,25 @@ export function ConnectivityDashboard() {
     refetchInterval: REFRESH_INTERVAL,
   });
 
+  const { data: connectivityEvents = [] } = useQuery({
+    queryKey: ['connectivity-events'],
+    queryFn: async () => {
+      const sevenDaysAgo = subDays(new Date(), 7).toISOString();
+      const { data } = await supabase
+        .from('connectivity_events')
+        .select('*')
+        .gte('created_at', sevenDaysAgo)
+        .order('created_at', { ascending: true });
+      return (data || []) as ConnectivityEvent[];
+    },
+    refetchInterval: REFRESH_INTERVAL,
+  });
+
   const handleRefresh = () => {
     refetchProjects();
     refetchDevices();
     refetchAgents();
+    checkWebLatency();
     setLastRefresh(new Date());
   };
 
@@ -121,6 +250,9 @@ export function ConnectivityDashboard() {
       agentPct: agents.length > 0 ? Math.round((onlineAgents / agents.length) * 100) : 100,
     };
   }, [projects, devices, agents]);
+
+  const availability = useMemo(() => computeAvailabilityMetrics(connectivityEvents), [connectivityEvents]);
+  const incidentsByDay = useMemo(() => computeIncidentsByDay(connectivityEvents), [connectivityEvents]);
 
   const globalHealthColor = stats.healthPct === 100 ? COLOR_ONLINE : stats.healthPct >= 50 ? COLOR_PARTIAL : COLOR_OFFLINE;
   const globalHealthText = stats.healthPct === 100 ? 'Sistema Operacional' : stats.healthPct >= 50 ? 'Atenção Necessária' : 'Sistema Crítico';
@@ -190,6 +322,50 @@ export function ConnectivityDashboard() {
     return items;
   }, [devices, agents, projects]);
 
+  // Connection diagnostics
+  const connectionDiagnostics = useMemo(() => {
+    // Agent → Cloud
+    const agentCloudStatus = agents.length === 0
+      ? 'none'
+      : agents.some(isAgentOnline)
+        ? agents.every(isAgentOnline) ? 'online' : 'partial'
+        : 'offline';
+
+    const latestAgentSeen = agents
+      .filter(a => a.last_seen_at)
+      .sort((a, b) => new Date(b.last_seen_at!).getTime() - new Date(a.last_seen_at!).getTime())[0];
+
+    const agentCloudDetail = latestAgentSeen?.last_seen_at
+      ? `${formatDistanceToNow(new Date(latestAgentSeen.last_seen_at), { locale: ptBR })} atrás`
+      : 'sem dados';
+
+    // Agent → Devices
+    const devicesWithAgent = devices.filter(d => d.agent_id);
+    const devicesOnline = devicesWithAgent.filter(d => d.status === 'online').length;
+    const agentDeviceStatus = devicesWithAgent.length === 0
+      ? 'none'
+      : devicesOnline === devicesWithAgent.length ? 'online'
+      : devicesOnline > 0 ? 'partial'
+      : 'offline';
+
+    const agentDeviceDetail = devicesWithAgent.length > 0
+      ? `${devicesOnline}/${devicesWithAgent.length} dispositivos`
+      : 'sem dispositivos';
+
+    // Recent failures (last 24h)
+    const last24h = subDays(new Date(), 1).getTime();
+    const recentFailures = connectivityEvents.filter(
+      e => (e.new_status === 'offline' || e.new_status === 'error') && new Date(e.created_at).getTime() > last24h
+    ).length;
+
+    return {
+      webCloud: { status: webLatencyStatus, detail: webLatency ? `${webLatency}ms` : '—' },
+      agentCloud: { status: agentCloudStatus, detail: agentCloudDetail },
+      agentDevice: { status: agentDeviceStatus, detail: agentDeviceDetail },
+      recentFailures,
+    };
+  }, [agents, devices, connectivityEvents, webLatencyStatus, webLatency]);
+
   const getProjectName = (projectId: string | null) => {
     if (!projectId) return '—';
     return projects.find(p => p.id === projectId)?.name || '—';
@@ -210,8 +386,20 @@ export function ConnectivityDashboard() {
     Offline: { label: 'Offline', color: COLOR_OFFLINE },
   };
 
+  const incidentChartConfig = {
+    devices: { label: 'Dispositivos', color: COLOR_OFFLINE },
+    agents: { label: 'Agentes', color: COLOR_PARTIAL },
+  };
+
   const progressColor = (pct: number) =>
     pct >= 80 ? COLOR_ONLINE : pct >= 50 ? COLOR_PARTIAL : COLOR_OFFLINE;
+
+  const connStatusColor = (status: string) =>
+    status === 'online' ? COLOR_ONLINE : status === 'partial' ? COLOR_PARTIAL : status === 'offline' ? COLOR_OFFLINE : '#9ca3af';
+
+  const connStatusLabel = (status: string) =>
+    status === 'online' ? 'Online' : status === 'partial' ? 'Parcial' : status === 'offline' ? 'Offline'
+    : status === 'checking' ? 'Verificando...' : 'N/A';
 
   // ─── Shared sub-components ───
 
@@ -242,7 +430,6 @@ export function ConnectivityDashboard() {
 
   const renderSummaryCards = (compact = false) => (
     <div className={`grid grid-cols-2 ${compact ? 'lg:grid-cols-4 gap-3' : 'lg:grid-cols-4 gap-4'}`}>
-      {/* Projects */}
       <Card className="shadow-sm border-0">
         <CardContent className={`${compact ? 'p-3' : 'p-4'} flex items-center gap-3`}>
           <div className="rounded-full p-2 bg-green-100 dark:bg-green-900/30">
@@ -255,7 +442,6 @@ export function ConnectivityDashboard() {
         </CardContent>
       </Card>
 
-      {/* Devices */}
       <Card className="shadow-sm border-0">
         <CardContent className={`${compact ? 'p-3' : 'p-4'} flex items-center gap-3`}>
           <div className="rounded-full p-2 bg-blue-100 dark:bg-blue-900/30">
@@ -274,7 +460,6 @@ export function ConnectivityDashboard() {
         </CardContent>
       </Card>
 
-      {/* Agents */}
       <Card className="shadow-sm border-0">
         <CardContent className={`${compact ? 'p-3' : 'p-4'} flex items-center gap-3`}>
           <div className="rounded-full p-2 bg-purple-100 dark:bg-purple-900/30">
@@ -293,7 +478,6 @@ export function ConnectivityDashboard() {
         </CardContent>
       </Card>
 
-      {/* Alerts */}
       <Card className={`shadow-sm border-0 ${stats.alerts > 0 ? 'bg-red-50 dark:bg-red-950/20' : 'bg-green-50 dark:bg-green-950/20'}`}>
         <CardContent className={`${compact ? 'p-3' : 'p-4'} flex items-center gap-3`}>
           <div className={`rounded-full p-2 ${stats.alerts > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30'}`}>
@@ -343,7 +527,7 @@ export function ConnectivityDashboard() {
       <Card className="shadow-sm border-0">
         <CardHeader className="pb-2 pt-3 px-4">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Activity className="h-4 w-4" style={{ color: '#3b82f6' }} />
+            <Activity className="h-4 w-4" style={{ color: COLOR_BLUE }} />
             Distribuição Geral
           </CardTitle>
         </CardHeader>
@@ -377,11 +561,130 @@ export function ConnectivityDashboard() {
     </div>
   );
 
+  const renderAvailabilitySection = (compact = false) => (
+    <Card className="shadow-sm border-0">
+      <CardHeader className={`${compact ? 'pb-2 pt-3 px-4' : 'pb-3'}`}>
+        <CardTitle className="text-sm flex items-center gap-2">
+          <TrendingDown className="h-4 w-4" style={{ color: COLOR_BLUE }} />
+          Disponibilidade (7 dias)
+        </CardTitle>
+      </CardHeader>
+      <CardContent className={`${compact ? 'px-4 pb-3' : ''}`}>
+        <div className={`grid ${compact ? 'grid-cols-[auto_1fr] gap-4' : 'grid-cols-1 lg:grid-cols-[auto_1fr] gap-6'}`}>
+          {/* Metrics cards */}
+          <div className="flex gap-3">
+            <div className="text-center p-3 rounded-lg bg-muted/50 min-w-[90px]">
+              <p className="text-2xl font-bold" style={{ color: progressColor(availability.uptimePct) }}>
+                {availability.uptimePct}%
+              </p>
+              <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Uptime</p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-muted/50 min-w-[90px]">
+              <p className="text-2xl font-bold" style={{ color: availability.totalIncidents > 0 ? COLOR_OFFLINE : COLOR_ONLINE }}>
+                {availability.totalIncidents}
+              </p>
+              <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Incidentes</p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-muted/50 min-w-[90px]">
+              <p className="text-2xl font-bold text-foreground">
+                {availability.avgDowntimeMin > 0 ? `${availability.avgDowntimeMin}m` : '—'}
+              </p>
+              <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Tempo Médio</p>
+            </div>
+          </div>
+
+          {/* Incidents timeline */}
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground mb-1">Incidentes por dia</p>
+            <ChartContainer config={incidentChartConfig} className="w-full" style={{ height: compact ? 80 : 100 }}>
+              <AreaChart data={incidentsByDay}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 10 }} width={20} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Area type="monotone" dataKey="devices" stackId="1" stroke={COLOR_OFFLINE} fill={COLOR_OFFLINE} fillOpacity={0.3} />
+                <Area type="monotone" dataKey="agents" stackId="1" stroke={COLOR_PARTIAL} fill={COLOR_PARTIAL} fillOpacity={0.3} />
+              </AreaChart>
+            </ChartContainer>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const renderConnectionDiagnostics = (compact = false) => {
+    const layers = [
+      {
+        icon: Globe,
+        label: 'Web → Nuvem',
+        status: connectionDiagnostics.webCloud.status,
+        detail: connectionDiagnostics.webCloud.detail,
+      },
+      {
+        icon: Server,
+        label: 'Agente → Nuvem',
+        status: connectionDiagnostics.agentCloud.status,
+        detail: connectionDiagnostics.agentCloud.detail,
+      },
+      {
+        icon: HardDrive,
+        label: 'Agente → Dispositivos',
+        status: connectionDiagnostics.agentDevice.status,
+        detail: connectionDiagnostics.agentDevice.detail,
+      },
+    ];
+
+    return (
+      <Card className="shadow-sm border-0">
+        <CardHeader className={`${compact ? 'pb-2 pt-3 px-4' : 'pb-3'}`}>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <ArrowRightLeft className="h-4 w-4" style={{ color: COLOR_BLUE }} />
+              Diagnóstico de Conexões
+            </CardTitle>
+            {connectionDiagnostics.recentFailures > 0 && (
+              <Badge variant="outline" className="text-xs" style={{ color: COLOR_OFFLINE, borderColor: `${COLOR_OFFLINE}40` }}>
+                {connectionDiagnostics.recentFailures} falhas (24h)
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className={`${compact ? 'px-4 pb-3' : ''}`}>
+          <div className={`grid ${compact ? 'grid-cols-3' : 'grid-cols-1 sm:grid-cols-3'} gap-3`}>
+            {layers.map((layer, i) => {
+              const Icon = layer.icon;
+              const color = connStatusColor(layer.status);
+              return (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-border/50"
+                  style={{ borderLeftColor: color, borderLeftWidth: 3 }}
+                >
+                  <div className="rounded-full p-1.5" style={{ backgroundColor: `${color}15` }}>
+                    <Icon className="h-4 w-4" style={{ color }} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium truncate">{layer.label}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+                      <span className="text-[10px] text-muted-foreground">{connStatusLabel(layer.status)}</span>
+                      <span className="text-[10px] text-muted-foreground">· {layer.detail}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   const renderDeviceTable = (maxH?: string) => (
     <Card className="shadow-sm border-0 flex flex-col" style={maxH ? {} : { flex: 1, minHeight: 0 }}>
       <CardHeader className="pb-2 pt-3 px-4">
         <CardTitle className="text-sm flex items-center gap-2">
-          <Radio className="h-4 w-4" style={{ color: '#3b82f6' }} />
+          <Radio className="h-4 w-4" style={{ color: COLOR_BLUE }} />
           Todos os Dispositivos
         </CardTitle>
         <CardDescription className="text-xs">{devices.length} dispositivos · {projects.length} projetos</CardDescription>
@@ -484,15 +787,15 @@ export function ConnectivityDashboard() {
   if (isMaximized) {
     return (
       <div className="fixed inset-0 z-[100] bg-background flex flex-col overflow-hidden">
-        {/* Monitor Header */}
         {renderHeader(true)}
 
-        {/* Body: 2-column grid */}
         <div className="flex-1 min-h-0 grid grid-cols-[1fr_1fr] gap-3 p-4 overflow-hidden">
           {/* Left column */}
           <div className="flex flex-col gap-3 overflow-auto min-h-0">
             {renderSummaryCards(true)}
-            {renderCharts(180)}
+            {renderCharts(160)}
+            {renderAvailabilitySection(true)}
+            {renderConnectionDiagnostics(true)}
           </div>
 
           {/* Right column */}
@@ -513,6 +816,10 @@ export function ConnectivityDashboard() {
       {renderHeader()}
       {renderSummaryCards()}
       {(stats.totalDevices > 0 || projects.length > 0) && renderCharts()}
+
+      {renderAvailabilitySection()}
+      {renderConnectionDiagnostics()}
+
       {renderDeviceTable('max-h-[400px]')}
 
       {/* Project Cards Grid */}
