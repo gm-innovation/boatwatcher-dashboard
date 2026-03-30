@@ -1,31 +1,23 @@
 
 
-## Alinhar estilo visual dos cards com produção (sem toolbar)
+## Reduzir fonte e padding para caber em uma linha
 
-Apenas mudanças de estilo CSS nos dois componentes. Sem adicionar busca, filtros ou botão de exportação.
+O problema principal: o componente `Table` base usa `p-4` (16px) nas células e `h-12` nos cabeçalhos. Isso causa quebra de linha. Na imagem de produção, tudo é compacto e cabe em uma linha.
 
 ### Alterações
 
 **1. `src/components/dashboard/WorkersOnBoardTable.tsx`**
-- Card: `bg-card rounded-lg` → `bg-white dark:bg-card rounded-xl shadow-sm`
-- Header padding: `p-4` → `p-6`
-- Título: `text-lg` → `text-xl`
-- Badge contador: trocar `variant="secondary"` por classes manuais `bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full border-0`
-- Badge "Local" (Bordo): trocar `bg-emerald-*` por `bg-green-100 text-green-800` (valor do location vem automaticamente do dispositivo, sem mudança de lógica)
-- Badge hora entrada: trocar `variant="outline" text-primary border-primary` por `bg-blue-100 text-blue-800 text-xs rounded-md border-0`
-- Linhas da tabela: adicionar `hover:bg-gray-50`
+- Header do card: `p-6` → `p-4`
+- Título: `text-xl` → `text-base`
+- Todas as `TableHead`: adicionar `py-2 px-3 text-xs whitespace-nowrap`
+- Todas as `TableCell`: adicionar `py-2 px-3 text-sm whitespace-nowrap`
+- Remover `min-w-[600px]` (desnecessário com nowrap)
 
 **2. `src/components/dashboard/CompaniesOnBoardList.tsx`**
-- Card: mesmas mudanças (`bg-white rounded-xl shadow-sm`)
-- Header: `p-4` → `p-6`, título `text-lg` → `text-xl`
-- Badge contador: mesmas classes azuis
-- Badge hora: `bg-blue-100 text-blue-800 text-xs rounded-md border-0`
-- Linhas: `hover:bg-gray-50`
+- Header do card: `p-6` → `p-4`
+- Título: `text-xl` → `text-base`
+- Todas as `TableHead`: adicionar `py-2 px-3 text-xs whitespace-nowrap`
+- Todas as `TableCell`: adicionar `py-2 px-3 text-sm whitespace-nowrap`
 
-### Arquivos alterados
-
-| Arquivo | Mudança |
-|---|---|
-| `WorkersOnBoardTable.tsx` | Estilo card, badges (azul/verde), hover nas linhas |
-| `CompaniesOnBoardList.tsx` | Estilo card, badges azuis, hover nas linhas |
+Não mexer no `table.tsx` global — apenas override local via className.
 
