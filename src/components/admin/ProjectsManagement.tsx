@@ -338,7 +338,7 @@ export const ProjectsManagement = () => {
               </tr>
             </thead>
             <tbody>
-              {projects.map((project) => (
+              {filteredProjects.map((project) => (
                 <tr key={project.id} className="border-b hover:bg-muted/50">
                   <td className="p-4">
                     <div className="flex items-center gap-3">
