@@ -28,15 +28,14 @@ const Admin = () => {
   const isDesktop = isElectron();
 
   const tabs: AdminTab[] = [
-    { value: 'projects', label: 'Projetos', icon: FolderKanban, content: <ProjectsManagement /> },
     { value: 'clients', label: 'Clientes', icon: Building2, content: <ClientsManagement /> },
+    { value: 'projects', label: 'Projetos', icon: FolderKanban, content: <ProjectsManagement /> },
     { value: 'devices', label: 'Dispositivos', icon: Server, content: <DeviceManagement /> },
     { value: 'users', label: 'Usuários', icon: Shield, content: <UserManagement /> },
-    { value: 'settings', label: 'Configurações', icon: Cog, content: <GlobalSettings /> },
+    { value: 'connectivity', label: 'Conectividade', icon: Wifi, content: <ConnectivityDashboard /> },
     { value: 'diagnostics', label: 'Diagnóstico', icon: Stethoscope, content: <DiagnosticsPanel /> },
     { value: 'audit', label: 'Auditoria', icon: Activity, content: <AuditLog /> },
-    
-    { value: 'connectivity', label: 'Conectividade', icon: Wifi, content: <ConnectivityDashboard /> },
+    { value: 'settings', label: 'Configurações', icon: Cog, content: <GlobalSettings /> },
     ...(isDesktop ? [{ value: 'desktop-update', label: 'Atualização', icon: MonitorDown, content: <DesktopUpdater /> } as AdminTab] : []),
   ];
 
