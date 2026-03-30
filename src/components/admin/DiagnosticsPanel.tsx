@@ -74,6 +74,13 @@ export const DiagnosticsPanel = () => {
   const isLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
   const isDesktopFallback = runtimeProfile.isDesktop && runtimeProfile.fallbackActive;
 
+  const [projectDiagCounts, setProjectDiagCounts] = useState({ ok: 0, warning: 0, error: 0 });
+  const [projectDiagRefreshKey, setProjectDiagRefreshKey] = useState(0);
+
+  const handleProjectDiagnosticsReady = useCallback((counts: { ok: number; warning: number; error: number }) => {
+    setProjectDiagCounts(counts);
+  }, []);
+
   const [authPingResult, setAuthPingResult] = useState<EdgeFunctionTestResult>({ status: 'pending' });
   const [echoAuthResult, setEchoAuthResult] = useState<EdgeFunctionTestResult>({ status: 'pending' });
   const [isTestingAuthPing, setIsTestingAuthPing] = useState(false);
