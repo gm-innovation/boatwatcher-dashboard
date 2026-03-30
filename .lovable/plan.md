@@ -1,54 +1,37 @@
 
 
-## Expandir Dicionário de Localizações com Estaleiros Offshore
+## Substituir o path genérico pelo mapa real do Brasil com estados
 
 ### Problema
-
-O campo `location` dos projetos contém nomes de **estaleiros** (ex: "Estaleiro Renave"), não cidades. O dicionário atual (`CITY_COORDS`) só tem cidades, por isso o matching falha e o mapa mostra 0 projetos.
+O `BRAZIL_PATH` atual é um contorno oval genérico que não se parece com o Brasil. O usuário precisa de um mapa reconhecível do Brasil.
 
 ### Solução
+Substituir o path único por **27 paths SVG reais** (um por estado), extraídos do repositório open-source `felipeduardo/mapa-brasil-svg` (viewBox `0 0 450 460`, licença livre).
 
-Expandir o dicionário em `BrazilMap.tsx` com os principais estaleiros utilizados na indústria offshore brasileira, mapeados para suas coordenadas geográficas reais no SVG. Também melhorar o algoritmo de matching para lidar com variações de nome.
+### Alterações
 
-### Estaleiros a adicionar (~25 estaleiros offshore)
+**1. `src/components/devices/BrazilMap.tsx`**
 
-| Estaleiro | Localização Real | Coordenadas SVG (aprox.) |
-|---|---|---|
-| Estaleiro Renave (Renave Dockyard) | Niterói, RJ | ~315, 245 |
-| EBR (Estaleiro Brasfels) | Angra dos Reis, RJ | ~295, 248 |
-| Estaleiro Mauá | Niterói, RJ | ~315, 243 |
-| Estaleiro Inhaúma | Rio de Janeiro, RJ | ~310, 240 |
-| Estaleiro Brasa | Rio de Janeiro, RJ | ~312, 242 |
-| Estaleiro Atlântico Sul (EAS) | Suape/Ipojuca, PE | ~362, 112 |
-| Estaleiro Jurong Aracruz | Aracruz, ES | ~338, 210 |
-| Estaleiro OSX / Enseada Paraguaçu | Maragogipe, BA | ~335, 158 |
-| Estaleiro Rio Grande (ERG/QGI) | Rio Grande, RS | ~195, 345 |
-| Estaleiro Wilson Sons | Guarujá, SP | ~275, 262 |
-| Estaleiro Vard Promar | Suape, PE | ~362, 114 |
-| Estaleiro UTC / Triunfo | Niterói, RJ | ~316, 244 |
-| Estaleiro Mac Laren | Niterói, RJ | ~314, 246 |
-| Keppel Fels (BrasFELS) | Angra dos Reis, RJ | ~293, 250 |
-| Estaleiro Aliança | Niterói, RJ | ~317, 244 |
-| Porto de Macaé | Macaé, RJ | ~330, 225 |
-| Base de Imbetiba | Macaé, RJ | ~332, 223 |
-| SERMETAL | Barcarena, PA | ~215, 55 |
-| Estaleiro Navship | Navegantes, SC | ~238, 287 |
-| Estaleiro Detroit | Itajaí, SC | ~240, 285 |
-| Estaleiro Oceana | Itajaí, SC | ~241, 286 |
-| Damen Verolme | Angra dos Reis, RJ | ~294, 249 |
-| Estaleiro Thomaz | São Gonçalo, RJ | ~313, 241 |
-| Porto do Açu | São João da Barra, RJ | ~335, 220 |
-| Estaleiro Rio Tietê | Araçatuba, SP | ~205, 240 |
+- Substituir `BRAZIL_PATH` (string única) por um array/objeto `BRAZIL_STATES` contendo os 27 paths SVG reais dos estados brasileiros
+- Atualizar `SVG_HEIGHT` de 400 para 460 (para corresponder ao viewBox real)
+- Atualizar as coordenadas de `LOCATION_COORDS` para corresponder ao novo sistema de coordenadas do mapa real. As coordenadas precisam ser recalculadas com base nos paths reais dos estados:
+  - Niterói/Rio: ~355, 330 (antes 315, 245)
+  - Angra dos Reis: ~340, 340 (antes 295, 248)
+  - Manaus: ~98, 119 (antes 105, 85)
+  - Salvador: ~360, 210 (antes 340, 155)
+  - etc.
+- No render do SVG, ao invés de um único `<path d={BRAZIL_PATH}>`, renderizar todos os states como `<path>` individuais com fill muted e stroke de borda
 
-### Alterações em `BrazilMap.tsx`
+**2. `src/components/devices/BrazilMapModal.tsx`**
 
-1. Adicionar todos os estaleiros acima ao dicionário `CITY_COORDS` (renomear conceitualmente para `LOCATION_COORDS`)
-2. Melhorar `findCityCoords` para fazer matching mais inteligente:
-   - Buscar por palavras-chave (ex: "renave" encontra "estaleiro renave")
-   - Buscar cada palavra do location no dicionário separadamente
-3. Adicionar cidades offshore relevantes que faltam: Macaé, Aracruz, Suape, Navegantes, São Gonçalo, Maragogipe, Barcarena
+- Importar `BRAZIL_STATES` ao invés de `BRAZIL_PATH`
+- Renderizar múltiplos paths ao invés de um único
+- Atualizar `SVG_HEIGHT` reference
 
-### Arquivo afetado
+### Detalhes técnicos
 
-- `src/components/devices/BrazilMap.tsx` — expandir dicionário e matching
+- Os paths SVG dos estados vêm do repositório open-source (CC0/atribuição)
+- O viewBox muda de `0 0 450 400` para `0 0 450 460`
+- Todas as coordenadas do dicionário de localizações serão recalculadas baseadas nas posições reais dos estados no SVG (ex: RJ está ~x:350, y:330; PE está ~x:410, y:165)
+- O texto de sigla dos estados (TO, BA, SE, etc.) não será renderizado para manter o mapa limpo — apenas os contornos
 
