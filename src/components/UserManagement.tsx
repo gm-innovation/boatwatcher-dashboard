@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -12,36 +12,25 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { Project, AppRole } from "@/types/supabase";
+import { AppRole } from "@/types/supabase";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useProjects } from "@/hooks/useSupabase";
-import { AdminProjectFilter } from "@/components/admin/AdminProjectFilter";
+import { useClients } from "@/hooks/useSupabase";
 
 const UserManagement = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<AppRole>("user");
   const [loading, setLoading] = useState(false);
-  const { data: projects = [] } = useProjects();
-  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
-  const [filterClientId, setFilterClientId] = useState<string | null>(null);
-  const [filterProjectId, setFilterProjectId] = useState<string | null>(null);
+  const { data: clients = [] } = useClients();
+  const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const { toast } = useToast();
 
-  const filteredProjects = projects.filter((p) => {
-    if (filterProjectId) return p.id === filterProjectId;
-    if (filterClientId) return p.client_id === filterClientId;
-    return true;
-  });
-
-  const handleToggleProject = (projectId: string) => {
-    setSelectedProjects(prev => {
-      if (prev.includes(projectId)) {
-        return prev.filter(id => id !== projectId);
-      } else {
-        return [...prev, projectId];
-      }
-    });
+  const handleToggleClient = (clientId: string) => {
+    setSelectedClients(prev =>
+      prev.includes(clientId)
+        ? prev.filter(id => id !== clientId)
+        : [...prev, clientId]
+    );
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -49,49 +38,43 @@ const UserManagement = () => {
     setLoading(true);
 
     try {
-      // Create user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          emailRedirectTo: window.location.origin
-        }
+        options: { emailRedirectTo: window.location.origin },
       });
 
       if (authError) throw authError;
 
       if (authData.user) {
-        // Add user role
         const { error: roleError } = await supabase
           .from('user_roles')
           .insert([{ user_id: authData.user.id, role }]);
 
         if (roleError) throw roleError;
 
-        // Link user to selected projects
-        if (selectedProjects.length > 0) {
-          const projectAssignments = selectedProjects.map(projectId => ({
-            user_id: authData.user.id,
-            project_id: projectId
+        if (selectedClients.length > 0) {
+          const assignments = selectedClients.map(companyId => ({
+            user_id: authData.user!.id,
+            company_id: companyId,
           }));
 
-          const { error: projectError } = await supabase
-            .from('user_projects')
-            .insert(projectAssignments);
+          const { error: companyError } = await supabase
+            .from('user_companies')
+            .insert(assignments);
 
-          if (projectError) throw projectError;
+          if (companyError) throw companyError;
         }
 
         toast({
           title: "Usuário criado com sucesso",
-          description: `O usuário ${email} foi criado com a role ${role} e vinculado a ${selectedProjects.length} projeto(s).`,
+          description: `O usuário ${email} foi criado com a role ${role} e vinculado a ${selectedClients.length} cliente(s).`,
         });
 
-        // Clear form
         setEmail("");
         setPassword("");
         setRole("user");
-        setSelectedProjects([]);
+        setSelectedClients([]);
       }
     } catch (error: any) {
       toast({
@@ -108,7 +91,6 @@ const UserManagement = () => {
     setLoading(true);
 
     try {
-      // Check if admin user already exists
       const { data: existingAdmin } = await supabase
         .from('user_roles')
         .select('*')
@@ -124,29 +106,24 @@ const UserManagement = () => {
         return;
       }
 
-      // Create initial admin user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: "admin@admin.com",
         password: "admin123",
-        options: {
-          emailRedirectTo: window.location.origin,
-        }
+        options: { emailRedirectTo: window.location.origin },
       });
 
       if (authError) throw authError;
 
       if (authData.user) {
-        // Add admin role
         const { error: roleError } = await supabase
           .from('user_roles')
           .insert([{ user_id: authData.user.id, role: 'admin' as AppRole }]);
 
         if (roleError) throw roleError;
 
-        // Auto login with admin user
         const { error: loginError } = await supabase.auth.signInWithPassword({
           email: "admin@admin.com",
-          password: "admin123"
+          password: "admin123",
         });
 
         if (loginError) throw loginError;
@@ -169,24 +146,16 @@ const UserManagement = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">Gerenciamento de Usuários</h2>
-          <p className="text-sm text-muted-foreground">
-            Crie e gerencie os usuários que terão acesso ao sistema.
-          </p>
-        </div>
-        <AdminProjectFilter
-          selectedClientId={filterClientId}
-          selectedProjectId={filterProjectId}
-          onClientChange={setFilterClientId}
-          onProjectChange={setFilterProjectId}
-        />
+      <div>
+        <h2 className="text-lg font-semibold text-foreground">Gerenciamento de Usuários</h2>
+        <p className="text-sm text-muted-foreground">
+          Crie e gerencie os usuários que terão acesso ao sistema.
+        </p>
       </div>
 
-      <Button 
-        onClick={createInitialAdmin} 
-        variant="outline" 
+      <Button
+        onClick={createInitialAdmin}
+        variant="outline"
         disabled={loading}
         className="mb-4"
       >
@@ -205,7 +174,7 @@ const UserManagement = () => {
             required
           />
         </div>
-        
+
         <div className="space-y-2">
           <Label htmlFor="password">Senha</Label>
           <Input
@@ -232,20 +201,20 @@ const UserManagement = () => {
         </div>
 
         <div className="space-y-2">
-          <Label>Projetos</Label>
+          <Label>Clientes</Label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border rounded-lg p-4">
-            {filteredProjects.length === 0 ? (
-              <p className="text-sm text-muted-foreground col-span-2">Nenhum projeto encontrado</p>
+            {clients.length === 0 ? (
+              <p className="text-sm text-muted-foreground col-span-2">Nenhum cliente encontrado</p>
             ) : (
-              filteredProjects.map(project => (
-                <div key={project.id} className="flex items-center space-x-2">
+              clients.map(client => (
+                <div key={client.id} className="flex items-center space-x-2">
                   <Checkbox
-                    id={`project-${project.id}`}
-                    checked={selectedProjects.includes(project.id)}
-                    onCheckedChange={() => handleToggleProject(project.id)}
+                    id={`client-${client.id}`}
+                    checked={selectedClients.includes(client.id)}
+                    onCheckedChange={() => handleToggleClient(client.id)}
                   />
-                  <Label htmlFor={`project-${project.id}`} className="cursor-pointer">
-                    {project.name || 'Projeto sem nome'}
+                  <Label htmlFor={`client-${client.id}`} className="cursor-pointer">
+                    {client.name || 'Cliente sem nome'}
                   </Label>
                 </div>
               ))
