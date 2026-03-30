@@ -165,6 +165,14 @@ async function fetchWorkersOnBoardFromCloud(
     const deviceIds = (projectDevices || []).map(d => d.id);
     if (deviceIds.length === 0) return [];
 
+    // Build device location map from configuration.access_location
+    const deviceLocationMap = new Map<string, string>();
+    for (const d of projectDevices || []) {
+      const config = d.configuration as Record<string, any> | null;
+      const loc = config?.access_location || 'bordo';
+      deviceLocationMap.set(d.id, loc);
+    }
+
     // Temporal ceiling: ignore timestamps more than 2 min in the future
     const maxTimestamp = new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
