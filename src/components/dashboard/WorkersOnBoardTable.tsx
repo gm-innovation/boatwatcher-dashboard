@@ -53,24 +53,24 @@ export const WorkersOnBoardTable = ({ workers }: WorkersOnBoardTableProps) => {
             <TableBody>
               {workers.length > 0 ? (
                 workers.map((worker, index) => (
-                  <TableRow key={worker.id}>
+                <TableRow key={worker.id} className="hover:bg-gray-50 dark:hover:bg-muted/50">
                     <TableCell className="font-medium">{index + 1}</TableCell>
                     <TableCell className="font-medium">{worker.name}</TableCell>
                     {!isMobile && (
                       <TableCell>
                         {worker.location ? (
-                          <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0">
+                          <span className="inline-flex items-center bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full font-semibold">
                             {worker.location}
-                          </Badge>
+                          </span>
                         ) : '-'}
                       </TableCell>
                     )}
                     {!isMobile && <TableCell>{worker.role || '-'}</TableCell>}
                     <TableCell>{worker.company}</TableCell>
                     <TableCell className="text-right">
-                      <Badge variant="outline" className="text-primary border-primary">
+                      <span className="inline-flex items-center bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-md font-semibold">
                         {format(new Date(worker.entryTime), 'dd/MM HH:mm')}
-                      </Badge>
+                      </span>
                     </TableCell>
                   </TableRow>
                 ))

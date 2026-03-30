@@ -44,14 +44,14 @@ export const CompaniesOnBoardList = ({ companies }: CompaniesOnBoardListProps) =
           <TableBody>
             {companies.length > 0 ? (
               companies.map((company) => (
-                <TableRow key={company.id}>
+                <TableRow key={company.id} className="hover:bg-gray-50 dark:hover:bg-muted/50">
                   <TableCell className="font-medium">{company.name}</TableCell>
                   <TableCell className="text-center">{company.workersCount}</TableCell>
                   <TableCell className="text-right">
                     {company.entryTime ? (
-                      <Badge variant="outline" className="text-primary border-primary">
+                      <span className="inline-flex items-center bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-md font-semibold">
                         {format(new Date(company.entryTime), 'HH:mm')}
-                      </Badge>
+                      </span>
                     ) : '-'}
                   </TableCell>
                 </TableRow>
