@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Maximize2, MapPin } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { BRAZIL_STATES, SVG_VIEWBOX } from './brazilStatesData';
+import { spreadOverlappingMarkers } from './mapUtils';
 
 // Re-export for backward compat
 export { BRAZIL_STATES, SVG_VIEWBOX };
