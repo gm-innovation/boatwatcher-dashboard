@@ -1,6 +1,6 @@
 /**
  * Utility to spread overlapping map markers so they don't stack on top of each other.
- * Groups markers within `minDistance` pixels and redistributes them in a circle.
+ * Groups markers within `minDistance` pixels and redistributes them in a seaward fan.
  */
 
 export interface MarkerWithCoords {
@@ -14,6 +14,27 @@ export interface SpreadMarker<T extends MarkerWithCoords> extends MarkerWithCoor
   originalX: number;
   originalY: number;
   wasSpread: boolean;
+}
+
+/**
+ * For coastal markers, determines the preferred spread direction (toward the ocean).
+ * Returns an angle in radians pointing "seaward".
+ * Brazil's coast is roughly on the east/southeast side, so we bias east (0 rad)
+ * or southeast (+π/4). For specific regions we can be more precise.
+ */
+function getSeawardAngle(cx: number, cy: number): number {
+  // Southern coast (RS, SC, PR, SP) – ocean is to the east/southeast
+  if (cy > 450) return Math.PI / 6;       // ~30° (east-southeast)
+  // RJ / ES region – ocean is to the east
+  if (cy > 360 && cx > 450) return 0;      // east
+  // BA coast – ocean is to the east
+  if (cy > 240 && cx > 500) return 0;      // east
+  // NE coast – ocean is to the east/northeast
+  if (cy < 240 && cx > 540) return -Math.PI / 6; // ~-30° (east-northeast)
+  // North (AM/PA) – default south
+  if (cy < 150) return Math.PI / 2;        // south
+  // Default: east
+  return 0;
 }
 
 export function spreadOverlappingMarkers<T extends MarkerWithCoords>(
@@ -61,10 +82,12 @@ export function spreadOverlappingMarkers<T extends MarkerWithCoords>(
     cx /= group.length;
     cy /= group.length;
 
-    // Spread in circle around centroid
+    // Spread in a SEAWARD FAN (≤180°) instead of a full circle
+    const seawardAngle = getSeawardAngle(cx, cy);
     const radius = Math.max(minDistance * 0.8, group.length * 6);
-    const angleStep = (2 * Math.PI) / group.length;
-    const startAngle = -Math.PI / 2; // start from top
+    const fanSpan = Math.min(Math.PI, group.length * 0.4); // up to 180°
+    const angleStep = group.length > 1 ? fanSpan / (group.length - 1) : 0;
+    const startAngle = seawardAngle - fanSpan / 2;
 
     group.forEach((idx, i) => {
       const angle = startAngle + i * angleStep;
