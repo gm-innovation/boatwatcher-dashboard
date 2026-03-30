@@ -1,23 +1,34 @@
 
 
-## Remover elementos do header da tabela WorkersOnBoardTable
+## Corrigir logo e adicionar header colapsável
 
-Remover os três elementos selecionados do header da tabela de trabalhadores:
-1. Botão "Exportar"
-2. Campo de busca (input)
-3. Filtro de localização (select)
+### Problema da logo
+A seção de logos (linhas 99-111) exibe a logo do **cliente** à esquerda e um placeholder "Sistema" à direita. O correto é: logo do **sistema** à esquerda, sem a logo do cliente nessa seção.
 
-### Alterações
+### Plano
 
-**Arquivo:** `src/components/dashboard/WorkersOnBoardTable.tsx`
-- Remover todo o bloco de filtros (linhas 62-94): botão Exportar, input de busca e select de localização
-- Remover imports não utilizados: `Search`, `Download`, `Filter`, `Input`, `Select*`
-- Remover states `searchTerm` e `locationFilter`
-- Remover lógica de filtragem (`locations`, `filteredWorkers`) — usar `workers` diretamente
-- Remover prop `onExport` da interface
-- Manter apenas o título "Trabalhadores" com o badge de contagem
+**1. Corrigir logo do sistema (`src/components/Header.tsx`)**
+- Remover a logo do cliente (lado esquerdo) e o placeholder "Sistema" (lado direito)
+- Colocar apenas a logo do sistema no canto esquerdo — usar `localStorage.getItem('company_light')` / `company_dark` conforme o tema (mesma lógica do `SystemSettings.tsx`)
+- Se não houver logo configurada, mostrar placeholder "DockCheck" ou texto do sistema
 
-**Arquivo:** `src/components/dashboard/Dashboard.tsx`
-- Remover `handleExport` e a prop `onExport` passada ao componente
-- Remover import de `format` se não for mais usado em outro lugar
+**2. Header colapsável (`src/contexts/ProjectContext.tsx`)**
+- Adicionar `isHeaderCollapsed` (boolean) e `toggleHeaderCollapsed` ao contexto
+
+**3. Header colapsável (`src/components/Header.tsx`)**
+- Quando colapsado: ocultar seção de navegação (segunda div), manter logo + seletor de projeto numa barra compacta
+- Botão `ChevronUp`/`ChevronDown` para alternar
+- Transição suave com `transition-all duration-300`
+
+**4. Ajustar padding (`src/components/layouts/MainLayout.tsx`)**
+- Consumir `isHeaderCollapsed` do contexto
+- Expandido: `pt-40` (atual) → Colapsado: `pt-24` (aprox.)
+
+### Arquivos alterados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/components/Header.tsx` | Corrigir logo (sistema no lugar do cliente) + toggle de colapso |
+| `src/contexts/ProjectContext.tsx` | Adicionar `isHeaderCollapsed` / `toggleHeaderCollapsed` |
+| `src/components/layouts/MainLayout.tsx` | Padding dinâmico baseado no estado colapsado |
 
