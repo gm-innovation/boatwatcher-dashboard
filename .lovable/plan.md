@@ -1,27 +1,45 @@
 
 
-## Consolidar Dispositivos e Agentes com suporte multi-cliente/projeto
+## Remover seletor global de projetos da Administração e adicionar filtros inline
 
-### Contexto
-Atualmente dispositivos e agentes são abas separadas na Administração, ambas já filtradas pelo `selectedProjectId`. A estrutura de dados já suporta múltiplos projetos por cliente (tabela `projects` com `client_id`). O que falta é unificar a gestão em um único local e garantir que a navegação por cliente/projeto seja clara.
+### Resumo
+Ocultar o `ProjectSelector` do header quando o admin está em `/admin`. Cada aba que precisa de filtragem (Clientes, Projetos, Dispositivos) terá seus próprios filtros contextuais de cliente/projeto no topo.
 
 ### Alterações
 
-**1. `src/components/devices/DeviceManagement.tsx`**
-- Adicionar sub-abas internas: "Dispositivos" (conteúdo atual) e "Agentes" (`<AgentManagement />`)
-- Importar `AgentManagement` e `Tabs`/`TabsList`/`TabsTrigger`/`TabsContent`
-- Envolver todo o conteúdo atual na sub-aba "Dispositivos"
+**1. Criar `src/components/admin/AdminProjectFilter.tsx`** (novo)
+- Componente controlado com dois `Select`: "Cliente" e "Projeto"
+- Usa `useClients()` para listar clientes e `useProjects()` para listar projetos
+- Ao selecionar um cliente, filtra os projetos por `client_id`
+- Ambos possuem opção "Todos"
+- Props: `selectedClientId`, `selectedProjectId`, `onClientChange`, `onProjectChange`
+- Layout horizontal compacto (inline com o título da seção)
 
-**2. `src/pages/Admin.tsx`**
-- Remover entrada `agents` do array `tabs`
-- Remover imports: `AgentManagement`, `Bot`
+**2. `src/components/Header.tsx`**
+- Ocultar o bloco do `ProjectSelector` (tanto desktop quanto mobile) quando `location.pathname.startsWith('/admin')`
+- Manter o comportamento normal em todas as outras rotas
 
-**3. `src/components/devices/ConnectivityDashboard.tsx`** (avaliar)
-- A aba "Conectividade" já é separada e pode permanecer como visão geral de saúde do sistema
+**3. `src/components/admin/ClientsManagement.tsx`**
+- Adicionar filtro de texto (busca por nome) no topo da lista de clientes
+- Filtrar a lista localmente pelo termo digitado
 
-### Sobre multi-cliente/projeto
-A filtragem já funciona via `ProjectContext` (`selectedProjectId`). Quando o operador troca de projeto no seletor global, tanto dispositivos quanto agentes se atualizam automaticamente. Cada dispositivo já possui `project_id` e `agent_id`, e cada agente já possui `project_id`. Nenhuma mudança de banco de dados é necessária -- a estrutura relacional já está preparada para N projetos por cliente.
+**4. `src/components/admin/ProjectsManagement.tsx`**
+- Adicionar o `AdminProjectFilter` no topo (apenas o select de Cliente)
+- Filtrar a lista de projetos pelo `client_id` selecionado
+- Opção "Todos" exibe todos os projetos
 
-### Resultado
-A aba "Dispositivos" passa a conter duas sub-abas -- "Dispositivos" e "Agentes" -- centralizando toda a gestão de hardware e conectividade de campo em um ponto único, já filtrado pelo projeto ativo.
+**5. `src/components/devices/DeviceManagement.tsx`**
+- Substituir `const { selectedProjectId } = useProject()` por estado local
+- Adicionar `AdminProjectFilter` (cliente + projeto) no topo
+- Filtrar `devices` e passar `selectedProjectId` local para `useDevices()` e `useLocalAgents()`
+- Sub-aba Agentes: passar o `selectedProjectId` local como prop ou contexto
+
+**6. `src/components/UserManagement.tsx`**
+- Adicionar o `AdminProjectFilter` no topo
+- Filtrar a listagem de usuários por projeto vinculado (via `user_projects`)
+
+### O que NÃO muda
+- O seletor global continua funcionando em Dashboard, Relatórios, Gestão de Pessoas, etc.
+- A aba Clientes permanece como aba na Administração
+- Nenhuma alteração de banco de dados
 
