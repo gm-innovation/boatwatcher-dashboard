@@ -1,37 +1,48 @@
 
 
-## Substituir o path genérico pelo mapa real do Brasil com estados
+## Resolver sobreposição de marcadores próximos com clustering e dispersão automática
 
 ### Problema
-O `BRAZIL_PATH` atual é um contorno oval genérico que não se parece com o Brasil. O usuário precisa de um mapa reconhecível do Brasil.
+Estaleiros na mesma região (ex: Renave, Mauá, Mac Laren, Arsenal da Marinha em Niterói/Rio) têm coordenadas com diferença de 1-3 pixels. Mesmo com zoom máximo de 600%, os marcadores ficam sobrepostos e impossíveis de distinguir.
 
 ### Solução
-Substituir o path único por **27 paths SVG reais** (um por estado), extraídos do repositório open-source `felipeduardo/mapa-brasil-svg` (viewBox `0 0 450 460`, licença livre).
+Implementar **dispersão automática em leque** para marcadores que se sobrepõem, distribuindo-os em círculo ao redor do centroide do grupo. Quanto mais zoom, mais próximos do ponto real; no zoom padrão, ficam espaçados o suficiente para serem clicáveis individualmente.
 
 ### Alterações
 
-**1. `src/components/devices/BrazilMap.tsx`**
+**1. `src/components/devices/BrazilMap.tsx` e `BrazilMapModal.tsx`**
 
-- Substituir `BRAZIL_PATH` (string única) por um array/objeto `BRAZIL_STATES` contendo os 27 paths SVG reais dos estados brasileiros
-- Atualizar `SVG_HEIGHT` de 400 para 460 (para corresponder ao viewBox real)
-- Atualizar as coordenadas de `LOCATION_COORDS` para corresponder ao novo sistema de coordenadas do mapa real. As coordenadas precisam ser recalculadas com base nos paths reais dos estados:
-  - Niterói/Rio: ~355, 330 (antes 315, 245)
-  - Angra dos Reis: ~340, 340 (antes 295, 248)
-  - Manaus: ~98, 119 (antes 105, 85)
-  - Salvador: ~360, 210 (antes 340, 155)
-  - etc.
-- No render do SVG, ao invés de um único `<path d={BRAZIL_PATH}>`, renderizar todos os states como `<path>` individuais com fill muted e stroke de borda
+Adicionar lógica de **spread de marcadores sobrepostos**:
+- Após calcular os marcadores, agrupar os que estão a menos de `threshold` pixels de distância (ex: 20px no viewBox)
+- Para cada grupo com 2+ marcadores, redistribuí-los em círculo ao redor do centroide com raio proporcional ao número de itens
+- No modal, o raio de dispersão é compensado pelo zoom (diminui conforme zoom aumenta, pois o zoom já separa visualmente)
+- Adicionar linhas finas conectando cada marcador disperso ao ponto real (centroide), para indicar a localização original
 
-**2. `src/components/devices/BrazilMapModal.tsx`**
+```text
+Sem dispersão (atual):     Com dispersão:
+     ●●●                    ╱ ● Renave
+   (sobrepostos)           ● Mauá ─── ✕ (ponto real)
+                            ╲ ● Mac Laren
+```
 
-- Importar `BRAZIL_STATES` ao invés de `BRAZIL_PATH`
-- Renderizar múltiplos paths ao invés de um único
-- Atualizar `SVG_HEIGHT` reference
+**2. Lógica de clustering (função utilitária)**
 
-### Detalhes técnicos
+```typescript
+function spreadOverlappingMarkers(markers, minDistance) {
+  // Agrupar marcadores próximos
+  // Para cada grupo, distribuir em círculo com raio = minDistance
+  // Retornar marcadores com posições ajustadas + campo originalX/originalY
+}
+```
 
-- Os paths SVG dos estados vêm do repositório open-source (CC0/atribuição)
-- O viewBox muda de `0 0 450 400` para `0 0 450 460`
-- Todas as coordenadas do dicionário de localizações serão recalculadas baseadas nas posições reais dos estados no SVG (ex: RJ está ~x:350, y:330; PE está ~x:410, y:165)
-- O texto de sigla dos estados (TO, BA, SE, etc.) não será renderizado para manter o mapa limpo — apenas os contornos
+- `minDistance` no card compacto: ~25px (viewBox coords)
+- `minDistance` no modal: ~20px, compensado por `1/sqrt(scale)`
+
+**3. Renderização das linhas de conexão**
+
+Para cada marcador disperso, desenhar uma `<line>` fina e translúcida do marcador ao ponto original, para o usuário saber a localização real.
+
+### Arquivos afetados
+- `src/components/devices/BrazilMap.tsx` — adicionar spread logic e linhas
+- `src/components/devices/BrazilMapModal.tsx` — mesma lógica com compensação de zoom
 
