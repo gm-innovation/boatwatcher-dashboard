@@ -33,7 +33,6 @@ const Admin = () => {
 
   const tabs: AdminTab[] = [
     { value: 'projects', label: 'Projetos', icon: FolderKanban, content: <ProjectsManagement /> },
-    { value: 'projects', label: 'Projetos', icon: FolderKanban, content: <ProjectsManagement /> },
     { value: 'clients', label: 'Clientes', icon: Building2, content: <ClientsManagement /> },
     { value: 'schedules', label: 'Agendamentos', icon: Calendar, content: <ReportScheduler /> },
     { value: 'devices', label: 'Dispositivos', icon: Server, content: <DeviceManagement /> },
