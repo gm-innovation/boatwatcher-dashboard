@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useProjects, useCompanies } from '@/hooks/useSupabase';
+import { AdminProjectFilter } from './AdminProjectFilter';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
