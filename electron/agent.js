@@ -259,26 +259,35 @@ class AgentController {
   async pollDeviceWithRetry(device) {
     try {
       await this.pollDevice(device);
-      // Success — clear errors and failure counter
-      device._lastError = null;
+      // Success — increment consecutive successes, clear errors
+      device._consecutiveSuccesses = (device._consecutiveSuccesses || 0) + 1;
       device._consecutiveFailures = 0;
+      device._lastError = null;
       device._lastPollAt = new Date().toISOString();
-      if (device.controlid_serial_number) {
-        this.deviceConnectivity.set(device.controlid_serial_number, { online: true });
+
+      // Hysteresis: only mark online after RECOVERY_THRESHOLD consecutive successes
+      if (device._consecutiveSuccesses >= this.RECOVERY_THRESHOLD) {
+        if (device.controlid_serial_number) {
+          this.deviceConnectivity.set(device.controlid_serial_number, { online: true });
+        }
+        this.persistDeviceStatus(device, 'online');
       }
-      this.persistDeviceStatus(device, 'online');
     } catch (firstErr) {
       // Retry once before counting as failure
       try {
         this.invalidateSession(device);
         await this.pollDevice(device);
-        device._lastError = null;
+        device._consecutiveSuccesses = (device._consecutiveSuccesses || 0) + 1;
         device._consecutiveFailures = 0;
+        device._lastError = null;
         device._lastPollAt = new Date().toISOString();
-        if (device.controlid_serial_number) {
-          this.deviceConnectivity.set(device.controlid_serial_number, { online: true });
+
+        if (device._consecutiveSuccesses >= this.RECOVERY_THRESHOLD) {
+          if (device.controlid_serial_number) {
+            this.deviceConnectivity.set(device.controlid_serial_number, { online: true });
+          }
+          this.persistDeviceStatus(device, 'online');
         }
-        this.persistDeviceStatus(device, 'online');
       } catch (retryErr) {
         device._consecutiveFailures = (device._consecutiveFailures || 0) + 1;
         device._lastError = retryErr.message;
