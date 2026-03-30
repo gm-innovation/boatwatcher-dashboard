@@ -99,9 +99,9 @@ export const Header = () => {
   return (
     <header className="fixed top-0 left-0 right-0 w-full bg-background/95 backdrop-blur-sm border-b border-border animate-fade-in z-50">
       <div className="w-full border-b border-border/50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 py-2">
+        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 py-1">
           {systemLogo ? (
-            <img src={systemLogo} alt="Logo do Sistema" className="h-24 w-80 object-contain object-left -ml-2" />
+            <img src={systemLogo} alt="Logo do Sistema" className="h-[72px] w-60 object-contain object-left -ml-3" />
           ) : (
             <span className="text-lg font-bold text-foreground">DockCheck</span>
           )}
