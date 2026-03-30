@@ -26,14 +26,17 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
   const [status, setStatus] = useState(client?.status || 'active');
   const [logoUrlLight, setLogoUrlLight] = useState(client?.logo_url_light || '');
   const [logoUrlDark, setLogoUrlDark] = useState(client?.logo_url_dark || '');
+  const [logoUrlRotated, setLogoUrlRotated] = useState((client as any)?.logo_url_rotated || '');
   const [cnpj, setCnpj] = useState(client?.cnpj || '');
   const [contactEmail, setContactEmail] = useState(client?.contact_email || '');
   const [isLoading, setIsLoading] = useState(false);
   const [uploadingLight, setUploadingLight] = useState(false);
   const [uploadingDark, setUploadingDark] = useState(false);
+  const [uploadingRotated, setUploadingRotated] = useState(false);
   
   const lightLogoRef = useRef<HTMLInputElement>(null);
   const darkLogoRef = useRef<HTMLInputElement>(null);
+  const rotatedLogoRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
   const handleLogoUpload = async (file: File, type: 'light' | 'dark') => {
