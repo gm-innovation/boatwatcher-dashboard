@@ -163,6 +163,7 @@ export type Database = {
           id: string
           logo_url_dark: string | null
           logo_url_light: string | null
+          logo_url_rotated: string | null
           name: string
           phone: string | null
           project_managers: string[] | null
@@ -182,6 +183,7 @@ export type Database = {
           id?: string
           logo_url_dark?: string | null
           logo_url_light?: string | null
+          logo_url_rotated?: string | null
           name: string
           phone?: string | null
           project_managers?: string[] | null
@@ -201,6 +203,7 @@ export type Database = {
           id?: string
           logo_url_dark?: string | null
           logo_url_light?: string | null
+          logo_url_rotated?: string | null
           name?: string
           phone?: string | null
           project_managers?: string[] | null
