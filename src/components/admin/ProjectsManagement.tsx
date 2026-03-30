@@ -282,10 +282,11 @@ export const ProjectsManagement = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex items-center gap-4">
           <h2 className="text-xl font-semibold">Projetos</h2>
-          <p className="text-sm text-muted-foreground">{projects.length} projetos cadastrados</p>
+          <p className="text-sm text-muted-foreground">{filteredProjects.length} projetos</p>
         </div>
+        <div className="flex items-center gap-3">
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={() => setEditingProject(null)}>
