@@ -1,54 +1,92 @@
 
 
-## Diagnóstico Global + Por Projeto
+## Centro de Monitoramento Multi-Projeto
 
-### Problema atual
-As queries de dispositivos, documentos, trabalhadores, agentes e access_logs no DiagnosticsPanel consultam todas as tabelas sem filtro de `project_id`. Com múltiplos projetos, os números ficam misturados e a telemetria de agente mostra apenas o último agente (sem contexto de qual projeto).
+Reescrever `ConnectivityDashboard.tsx` como uma tela completa de monitoramento com visual de "control center", incluindo gráficos, tabelas detalhadas e indicadores visuais por projeto.
 
 ### Alteração
 
-**`src/components/admin/DiagnosticsPanel.tsx`**
+**`src/components/devices/ConnectivityDashboard.tsx`** — reescrita completa:
 
-1. **Manter seção global** (ambiente, autenticação, edge functions, banco de dados, storage) sem alterações — esses testes são independentes de projeto.
+1. **Dados globais via queries diretas** (sem depender do `selectedProjectId`):
+   - `projects` com join em `companies` (nome do cliente)
+   - `devices` (todos)
+   - `local_agents` (todos)
+   - Auto-refresh a cada 30s
 
-2. **Adicionar seção "Diagnóstico por Projeto"** após os cards globais:
-   - Buscar todos os projetos com seus clientes (`projects` + join `companies`)
-   - Renderizar uma lista de cards colapsáveis (`Collapsible`), um por projeto, mostrando:
-     - **Dispositivos**: query `devices` filtrada por `project_id` — contagem online/offline/erro
-     - **Agente local**: query `local_agents` filtrada por `project_id` — status, versão, última sincronização, telemetria do pipeline
-     - **Trabalhadores**: contagem de `workers` cujo `allowed_project_ids` contém o projeto
-     - **Documentos a vencer**: query `worker_documents` via join com `workers` filtrados pelo projeto — contagem nos próximos 30 dias
-     - **Último acesso**: query `access_logs` via join `devices.project_id` — último evento registrado
+2. **Header com indicador de saúde global**:
+   - Barra de status pulsante (verde/amarelo/vermelho) baseada na % de dispositivos online
+   - Timestamp do último refresh
+   - Botão de refresh manual
 
-3. **Pipeline de Eventos e Telemetria** — quando em modo cloud, iterar sobre todos os agentes (não só o primeiro) agrupando por `project_id`, exibindo métricas de pipeline e telemetria de dispositivos dentro do card do projeto correspondente.
+3. **Cards de resumo global** (4 colunas):
+   - Projetos monitorados (total)
+   - Dispositivos online/total com Progress bar
+   - Agentes online/total
+   - Alertas ativos (offline count) com destaque vermelho
 
-4. **Contadores de resumo** — manter os cards globais de Funcionando/Atenção/Erros, mas somar os diagnósticos por projeto junto com os globais.
+4. **Gráfico de barras** (Recharts via `ChartContainer`):
+   - Um gráfico de barras empilhadas mostrando por projeto: dispositivos online (verde) vs offline (vermelho)
+   - Usa os componentes `ChartContainer`, `ChartTooltip`, `ChartTooltipContent` já existentes
 
-### Estrutura visual
+5. **Gráfico de rosca/pie** (Recharts):
+   - Distribuição geral: dispositivos online, offline, sem agente
+   - Visual compacto ao lado do gráfico de barras (grid 2 colunas)
 
-```text
-┌─ Informações do Ambiente (global) ─────────────────┐
-├─ Autenticação (global) ────────────────────────────┤
-├─ Edge Functions (global) ──────────────────────────┤
-├─ Diagnóstico por Projeto ──────────────────────────┤
-│  ▸ Projeto A — Cliente X   [2 disp, 1 agente, OK]  │
-│  ▸ Projeto B — Cliente Y   [1 disp, 0 agente, ⚠]  │
-│  ▾ Projeto C — Cliente Z   (expandido)              │
-│    ├ Dispositivos: 3/3 online                       │
-│    ├ Agente: v1.2.3, online, 45 eventos             │
-│    ├ Trabalhadores: 12 autorizados                  │
-│    ├ Docs a vencer: 2 nos próximos 30 dias          │
-│    └ Pipeline: 45 capturados, 0 pendentes           │
-├─ Conectividade Inter-Camadas (global) ─────────────┤
-├─ Resumo (global + por projeto) ────────────────────┤
-└─ Resultados Detalhados ────────────────────────────┘
-```
+6. **Tabela de dispositivos completa**:
+   - Colunas: Status (dot colorido), Nome, IP, Projeto, Agente vinculado, Último evento (relativo)
+   - Ordenável por status (offline primeiro)
+   - Todos os projetos juntos, com coluna identificando o projeto
+
+7. **Grid de cards por projeto** (seção inferior):
+   - Card compacto por projeto com:
+     - Nome do projeto + cliente
+     - Badge de saúde (verde/amarelo/vermelho)
+     - Mini lista de dispositivos com dots de status
+     - Status do agente com last_seen_at relativo
+   - Projetos com problemas aparecem primeiro (sort by health)
+
+8. **Painel de alertas** (rodapé):
+   - Lista consolidada de todos os dispositivos offline e agentes inativos
+   - Identificação do projeto de cada alerta
+   - Ícone de severidade e tempo desde a última comunicação
 
 ### Detalhes Técnicos
 
-- Queries cloud: `supabase.from('devices').select('*').eq('project_id', pid)`, `supabase.from('local_agents').select('*').eq('project_id', pid)`
-- Trabalhadores por projeto: `supabase.from('workers').select('id').contains('allowed_project_ids', [pid])`
-- Documentos: subquery via worker_ids do projeto
-- Agentes cloud: buscar todos `local_agents` e agrupar por `project_id` em vez de `limit(1)`
-- Cada projeto gera `DiagnosticItem[]` locais que alimentam o resumo total
+- Queries diretas: `supabase.from('devices').select('*')`, `supabase.from('local_agents').select('*')`, `supabase.from('projects').select('*, companies!client_id(name, logo_url_light)')`
+- Agrupamento client-side por `project_id` usando `useMemo`
+- Gráficos via `recharts` (já instalado) com `ChartContainer` de `@/components/ui/chart`
+- `isAgentOnline` mantém regra de 60s no `last_seen_at`
+- `refetchInterval: 30000` em todas as queries
+- Saúde do projeto: verde (100% online), amarelo (parcial), vermelho (tudo offline ou sem dispositivos)
+
+```text
+┌─ 🟢 Sistema Operacional — Atualizado há 15s ──── [↻ Refresh] ─┐
+├────────────┬────────────┬────────────┬─────────────────────────┤
+│ 3 Projetos │ 5/7 Online │ 2/3 Agents │ 2 Alertas ⚠            │
+│ monitorados│ ████░ 71%  │ ████░ 67%  │                         │
+├────────────┴────────────┴────────────┴─────────────────────────┤
+│                                                                 │
+│  [Gráfico Barras por Projeto]    [Gráfico Rosca Geral]         │
+│  Proj A: ████████ 3/3            Online: 71%                   │
+│  Proj B: ██████░░ 2/3            Offline: 29%                  │
+│  Proj C: ░░░░░░░░ 0/1                                         │
+│                                                                 │
+├─ Todos os Dispositivos ───────────────────────────────────────┤
+│ ● Leitor Proa    | 192.168.1.10 | Proj A | Agente-1 | 2min   │
+│ ● Leitor Popa    | 192.168.1.11 | Proj A | Agente-1 | 5min   │
+│ ○ Leitor Dique   | 192.168.1.20 | Proj B | —        | 3h     │
+│                                                                 │
+├─ Projetos ────────────────────────────────────────────────────┤
+│ ┌─ Proj A 🟢─┐  ┌─ Proj B 🟡─┐  ┌─ Proj C 🔴─┐            │
+│ │ Cliente X   │  │ Cliente Y   │  │ Cliente Z   │            │
+│ │ 3/3 disp    │  │ 2/3 disp    │  │ 0/1 disp    │            │
+│ │ Agent: ✓    │  │ Agent: ✓    │  │ Sem agente  │            │
+│ └─────────────┘  └─────────────┘  └─────────────┘            │
+│                                                                 │
+│ ⚠ Alertas                                                      │
+│  • Leitor Dique (Proj B) — offline há 3h                       │
+│  • Leitor Porto (Proj C) — nunca conectado                     │
+└─────────────────────────────────────────────────────────────────┘
+```
 
