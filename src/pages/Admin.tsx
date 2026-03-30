@@ -32,7 +32,7 @@ const Admin = () => {
   const isDesktop = isElectron();
 
   const tabs: AdminTab[] = [
-    { value: 'pending', label: 'Aprovações', icon: UserCheck, content: <PendingRegistrations /> },
+    { value: 'projects', label: 'Projetos', icon: FolderKanban, content: <ProjectsManagement /> },
     { value: 'projects', label: 'Projetos', icon: FolderKanban, content: <ProjectsManagement /> },
     { value: 'clients', label: 'Clientes', icon: Building2, content: <ClientsManagement /> },
     { value: 'schedules', label: 'Agendamentos', icon: Calendar, content: <ReportScheduler /> },
