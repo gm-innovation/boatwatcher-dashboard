@@ -80,7 +80,7 @@ export const useProcessEvents = () => {
       const isExit = log.direction === 'exit';
       const timestamp = new Date(log.timestamp);
 
-      // Get location from device
+      // Get location from device configuration.access_location
       const location = log.device_id ? (deviceLocations[log.device_id] || 'bordo') : 'bordo';
 
       // Get worker info
