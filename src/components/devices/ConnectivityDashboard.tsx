@@ -836,6 +836,9 @@ export function ConnectivityDashboard() {
       {renderAvailabilitySection()}
       {renderConnectionDiagnostics()}
 
+      <BrazilMap projects={mapProjectData} onExpandClick={() => setMapModalOpen(true)} />
+      <BrazilMapModal open={mapModalOpen} onOpenChange={setMapModalOpen} projects={mapProjectData} />
+
       {renderDeviceTable('max-h-[400px]')}
 
       {/* Project Cards Grid */}
