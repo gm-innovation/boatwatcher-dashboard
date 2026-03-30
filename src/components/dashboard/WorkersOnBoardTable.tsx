@@ -27,13 +27,13 @@ export const WorkersOnBoardTable = ({ workers }: WorkersOnBoardTableProps) => {
   const isMobile = useIsMobile();
 
   return (
-    <div className="bg-card rounded-lg border h-full flex flex-col">
-      <div className="p-4 border-b">
+    <div className="bg-white dark:bg-card rounded-xl border shadow-sm h-full flex flex-col">
+      <div className="p-6 border-b">
         <div className="flex items-center gap-2">
-          <h3 className="font-semibold text-lg">Trabalhadores</h3>
-          <Badge variant="secondary" className="rounded-full">
+          <h3 className="font-semibold text-xl">Trabalhadores</h3>
+          <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full font-semibold">
             {workers.length}
-          </Badge>
+          </span>
         </div>
       </div>
 
