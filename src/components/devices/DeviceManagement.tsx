@@ -16,9 +16,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DeviceSetupInstructions } from './DeviceSetupInstructions';
+import { AgentManagement } from './AgentManagement';
 import {
-  Plus, Wifi, WifiOff, Trash2, RefreshCw, DoorOpen, Camera, Server, Loader2, Users, Pencil, Ship, Anchor, MoreHorizontal
+  Plus, Wifi, WifiOff, Trash2, RefreshCw, DoorOpen, Camera, Server, Loader2, Users, Pencil, Ship, Anchor, MoreHorizontal, Bot
 } from 'lucide-react';
 import type { Device, DeviceType } from '@/types/supabase';
 import { useQueryClient } from '@tanstack/react-query';
@@ -404,7 +406,24 @@ export const DeviceManagement = () => {
   );
 
   return (
-    <div className="space-y-6">
+    <Tabs defaultValue="devices" className="space-y-6">
+      <TabsList>
+        <TabsTrigger value="devices" className="gap-2">
+          <Server className="h-4 w-4" />
+          Dispositivos
+        </TabsTrigger>
+        <TabsTrigger value="agents" className="gap-2">
+          <Bot className="h-4 w-4" />
+          Agentes
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="agents">
+        <AgentManagement />
+      </TabsContent>
+
+      <TabsContent value="devices">
+      <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold">Dispositivos</h2>
@@ -588,5 +607,7 @@ export const DeviceManagement = () => {
         </DialogContent>
       </Dialog>
     </div>
+      </TabsContent>
+    </Tabs>
   );
 };

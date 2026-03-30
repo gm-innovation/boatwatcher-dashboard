@@ -7,9 +7,8 @@ import { AuditLog } from "@/components/admin/AuditLog";
 import { ClientsManagement } from "@/components/admin/ClientsManagement";
 import { ProjectsManagement } from "@/components/admin/ProjectsManagement";
 import { DiagnosticsPanel } from "@/components/admin/DiagnosticsPanel";
-import { AgentManagement } from "@/components/devices/AgentManagement";
 import { ConnectivityDashboard } from "@/components/devices/ConnectivityDashboard";
-import { Server, FolderKanban, Shield, Cog, Activity, Building2, Stethoscope, Bot, Wifi, MonitorDown } from "lucide-react";
+import { Server, FolderKanban, Shield, Cog, Activity, Building2, Stethoscope, Wifi, MonitorDown } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { usesLocalServer } from "@/lib/runtimeProfile";
@@ -36,7 +35,7 @@ const Admin = () => {
     { value: 'settings', label: 'Configurações', icon: Cog, content: <GlobalSettings /> },
     { value: 'diagnostics', label: 'Diagnóstico', icon: Stethoscope, content: <DiagnosticsPanel /> },
     { value: 'audit', label: 'Auditoria', icon: Activity, content: <AuditLog /> },
-    { value: 'agents', label: 'Agentes', icon: Bot, content: <AgentManagement /> },
+    
     { value: 'connectivity', label: 'Conectividade', icon: Wifi, content: <ConnectivityDashboard /> },
     ...(isDesktop ? [{ value: 'desktop-update', label: 'Atualização', icon: MonitorDown, content: <DesktopUpdater /> } as AdminTab] : []),
   ];
