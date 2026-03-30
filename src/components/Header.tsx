@@ -18,7 +18,7 @@ export const Header = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const { theme, setTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { selectedProject, selectedProjectId, setSelectedProjectId, lastUpdate, autoRefresh, setAutoRefresh, handleRefresh } = useProject();
+  const { selectedProject, selectedProjectId, setSelectedProjectId, lastUpdate, autoRefresh, setAutoRefresh, handleRefresh, isHeaderCollapsed, toggleHeaderCollapsed } = useProject();
   const { role, signOut, hasCloudSession } = useAuthContext();
   const runtimeProfile = useRuntimeProfile();
 
