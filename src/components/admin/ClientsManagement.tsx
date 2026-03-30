@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Edit2, Trash2, Building2, Upload, Loader2 } from 'lucide-react';
 import type { Company } from '@/types/supabase';
@@ -68,7 +69,6 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
     }
   };
 
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -108,9 +108,49 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
     }
   };
 
+  const LogoUploadBlock = ({ label, description, logoUrl, uploading, inputRef, type }: {
+    label: string;
+    description: string;
+    logoUrl: string;
+    uploading: boolean;
+    inputRef: React.RefObject<HTMLInputElement>;
+    type: 'light' | 'dark' | 'rotated';
+  }) => (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <input
+        type="file"
+        ref={inputRef}
+        className="hidden"
+        accept="image/*"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleLogoUpload(file, type);
+        }}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full gap-2"
+        onClick={() => inputRef.current?.click()}
+        disabled={uploading}
+      >
+        {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+        Enviar Logo
+      </Button>
+      <p className="text-xs text-muted-foreground">{description}</p>
+      <div className="min-h-[60px] flex items-center justify-center rounded border border-dashed border-border bg-muted/30">
+        {logoUrl ? (
+          <img src={logoUrl} alt={label} className="h-12 max-w-full object-contain p-1" />
+        ) : (
+          <span className="text-xs text-muted-foreground/50">Sem logo</span>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Row 1: Nome e Status */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="name">Nome do Cliente *</Label>
@@ -136,98 +176,33 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
         </div>
       </div>
 
-      {/* Row 2: Logos */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="space-y-2">
-          <Label>Logo Normal</Label>
-          <input
-            type="file"
-            ref={lightLogoRef}
-            className="hidden"
-            accept="image/*"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleLogoUpload(file, 'light');
-            }}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            className="w-auto gap-2"
-            onClick={() => lightLogoRef.current?.click()}
-            disabled={uploadingLight}
-          >
-            {uploadingLight ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Enviar Logo
-          </Button>
-          <p className="text-xs text-muted-foreground">Logo usada no modo claro</p>
-          {logoUrlLight && (
-            <div className="mt-2">
-              <img src={logoUrlLight} alt="Logo Normal" className="h-12 object-contain rounded border p-1" />
-            </div>
-          )}
-        </div>
-        <div className="space-y-2">
-          <Label>Logo Dark Mode</Label>
-          <input
-            type="file"
-            ref={darkLogoRef}
-            className="hidden"
-            accept="image/*"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleLogoUpload(file, 'dark');
-            }}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            className="w-auto gap-2"
-            onClick={() => darkLogoRef.current?.click()}
-            disabled={uploadingDark}
-          >
-            {uploadingDark ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Enviar Logo
-          </Button>
-          <p className="text-xs text-muted-foreground">Logo usada no modo escuro</p>
-          {logoUrlDark && (
-            <div className="mt-2">
-              <img src={logoUrlDark} alt="Logo Dark" className="h-12 object-contain rounded border p-1" />
-            </div>
-          )}
-        </div>
-        <div className="space-y-2">
-          <Label>Logo Rotacionada (Etiquetas)</Label>
-          <input
-            type="file"
-            ref={rotatedLogoRef}
-            className="hidden"
-            accept="image/*"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleLogoUpload(file, 'rotated');
-            }}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            className="w-auto gap-2"
-            onClick={() => rotatedLogoRef.current?.click()}
-            disabled={uploadingRotated}
-          >
-            {uploadingRotated ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Enviar Logo
-          </Button>
-          <p className="text-xs text-muted-foreground">Logo já rotacionada para etiquetas</p>
-          {logoUrlRotated && (
-            <div className="mt-2">
-              <img src={logoUrlRotated} alt="Logo Rotacionada" className="h-12 object-contain rounded border p-1" />
-            </div>
-          )}
-        </div>
+        <LogoUploadBlock
+          label="Logo Normal"
+          description="Logo usada no modo claro"
+          logoUrl={logoUrlLight}
+          uploading={uploadingLight}
+          inputRef={lightLogoRef}
+          type="light"
+        />
+        <LogoUploadBlock
+          label="Logo Dark Mode"
+          description="Logo usada no modo escuro"
+          logoUrl={logoUrlDark}
+          uploading={uploadingDark}
+          inputRef={darkLogoRef}
+          type="dark"
+        />
+        <LogoUploadBlock
+          label="Logo Rotacionada"
+          description="Logo já rotacionada para etiquetas"
+          logoUrl={logoUrlRotated}
+          uploading={uploadingRotated}
+          inputRef={rotatedLogoRef}
+          type="rotated"
+        />
       </div>
 
-      {/* Row 3: CNPJ e Email de Contato */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="cnpj">CNPJ</Label>
@@ -250,7 +225,6 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
         </div>
       </div>
 
-      {/* Footer */}
       <div className="flex justify-end gap-2 pt-4 border-t">
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancelar
@@ -293,21 +267,20 @@ export const ClientsManagement = () => {
     return <Badge className="bg-green-500/10 text-green-500 hover:bg-green-500/20">Ativo</Badge>;
   };
 
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">Gerenciar Clientes</h2>
-          <p className="text-sm text-muted-foreground">{companies.length} clientes cadastrados</p>
+          <h2 className="text-base font-semibold">Gerenciar Clientes</h2>
+          <p className="text-xs text-muted-foreground">{companies.length} clientes cadastrados</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button variant="outline" size="sm">
             Alterar Logo da Aplicação
           </Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => setEditingClient(null)}>
+              <Button size="sm" onClick={() => setEditingClient(null)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Cliente
               </Button>
@@ -337,63 +310,78 @@ export const ClientsManagement = () => {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
       ) : companies.length > 0 ? (
-        <ScrollArea className="h-[500px] border rounded-lg">
-          <table className="w-full">
-            <thead className="sticky top-0 bg-card border-b">
-              <tr>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Logo</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Nome</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">CNPJ</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Contato</th>
-                <th className="text-center p-4 text-sm font-medium text-muted-foreground">Status</th>
-                <th className="text-center p-4 text-sm font-medium text-muted-foreground">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {companies.map((company) => (
-                <tr key={company.id} className="border-b hover:bg-muted/50">
-                  <td className="p-4">
-                    {getClientLogo(company) ? (
-                      <img src={getClientLogo(company)!} alt={company.name} className="h-10 w-20 object-contain" />
-                    ) : (
-                      <div className="h-10 w-10 flex items-center justify-center rounded bg-muted">
-                        <Building2 className="h-5 w-5 text-muted-foreground" />
+        <TooltipProvider>
+          <ScrollArea className="h-[500px] border rounded-lg">
+            <Table>
+              <TableHeader className="sticky top-0 bg-card z-10">
+                <TableRow>
+                  <TableHead className="text-xs py-2 px-3 w-[100px]">Logo</TableHead>
+                  <TableHead className="text-xs py-2 px-3">Nome</TableHead>
+                  <TableHead className="text-xs py-2 px-3">CNPJ</TableHead>
+                  <TableHead className="text-xs py-2 px-3">Contato</TableHead>
+                  <TableHead className="text-xs py-2 px-3 text-center w-[90px]">Status</TableHead>
+                  <TableHead className="text-xs py-2 px-3 text-center w-[100px]">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {companies.map((company) => (
+                  <TableRow key={company.id}>
+                    <TableCell className="py-2 px-3 align-middle">
+                      <div className="h-8 w-16 flex items-center justify-center">
+                        {getClientLogo(company) ? (
+                          <img src={getClientLogo(company)!} alt={company.name} className="h-8 w-16 object-contain" />
+                        ) : (
+                          <div className="h-8 w-8 flex items-center justify-center rounded bg-muted">
+                            <Building2 className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </td>
-                  <td className="p-4 font-medium">{company.name}</td>
-                  <td className="p-4 text-sm text-muted-foreground">{company.cnpj || '-'}</td>
-                  <td className="p-4 text-sm text-muted-foreground">{company.contact_email || '-'}</td>
-                  <td className="p-4 text-center">
-                    {getStatusBadge(company.status)}
-                  </td>
-                  <td className="p-4">
-                    <div className="flex justify-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setEditingClient(company);
-                          setIsDialogOpen(true);
-                        }}
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive"
-                        onClick={() => handleDelete(company)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollArea>
+                    </TableCell>
+                    <TableCell className="py-2 px-3 text-sm font-medium align-middle whitespace-nowrap">{company.name}</TableCell>
+                    <TableCell className="py-2 px-3 text-sm text-muted-foreground align-middle whitespace-nowrap">{company.cnpj || '-'}</TableCell>
+                    <TableCell className="py-2 px-3 text-sm text-muted-foreground align-middle whitespace-nowrap">{company.contact_email || '-'}</TableCell>
+                    <TableCell className="py-2 px-3 text-center align-middle">
+                      {getStatusBadge(company.status)}
+                    </TableCell>
+                    <TableCell className="py-2 px-3 align-middle">
+                      <div className="flex justify-center gap-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => {
+                                setEditingClient(company);
+                                setIsDialogOpen(true);
+                              }}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Editar</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={() => handleDelete(company)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Excluir</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </TooltipProvider>
       ) : (
         <div className="text-center py-12 text-muted-foreground border rounded-lg">
           <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
