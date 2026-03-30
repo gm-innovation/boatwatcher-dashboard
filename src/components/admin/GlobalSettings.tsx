@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useSystemSettings, useUpdateSystemSetting } from '@/hooks/useSystemSettings';
+import { useState, useEffect, useRef } from 'react';
+import { useSystemSettings, useUpdateSystemSetting, useSystemSetting } from '@/hooks/useSystemSettings';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,11 +7,66 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
-import { Settings, Save, RefreshCw } from 'lucide-react';
+import { Settings, Save, RefreshCw, ImagePlus, Trash2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/components/ui/use-toast';
 
 export const GlobalSettings = () => {
   const { data: settings = [], isLoading, refetch } = useSystemSettings();
   const updateSetting = useUpdateSystemSetting();
+  const { data: logoSetting } = useSystemSetting('system_logo');
+
+  const [lightLogoUrl, setLightLogoUrl] = useState<string | null>(null);
+  const [darkLogoUrl, setDarkLogoUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const lightInputRef = useRef<HTMLInputElement>(null);
+  const darkInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (logoSetting?.value) {
+      const val = logoSetting.value as any;
+      if (val.light_url) setLightLogoUrl(val.light_url);
+      if (val.dark_url) setDarkLogoUrl(val.dark_url);
+    }
+  }, [logoSetting]);
+
+  const handleLogoUpload = async (mode: 'light' | 'dark', file: File) => {
+    setUploading(true);
+    try {
+      const ext = file.name.split('.').pop() || 'png';
+      const path = `system/logo_${mode}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('company-logos')
+        .upload(path, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('company-logos')
+        .getPublicUrl(path);
+
+      const url = urlData.publicUrl + '?t=' + Date.now();
+
+      const newLight = mode === 'light' ? url : lightLogoUrl;
+      const newDark = mode === 'dark' ? url : darkLogoUrl;
+
+      if (mode === 'light') setLightLogoUrl(url);
+      else setDarkLogoUrl(url);
+
+      updateSetting.mutate({
+        key: 'system_logo',
+        value: { light_url: newLight, dark_url: newDark },
+        description: 'Logo do sistema (modo claro e escuro)',
+      });
+
+      localStorage.setItem(mode === 'light' ? 'company_light' : 'company_dark', url);
+    } catch (err: any) {
+      toast({ title: 'Erro ao fazer upload', description: err.message, variant: 'destructive' });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const [facialThreshold, setFacialThreshold] = useState(0.7);
   const [logRetentionDays, setLogRetentionDays] = useState(365);
