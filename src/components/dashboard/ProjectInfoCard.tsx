@@ -30,7 +30,7 @@ export const ProjectInfoCard = ({ project }: ProjectInfoCardProps) => {
   
   if (!project) {
     return (
-      <div className="bg-card rounded-lg border p-6">
+      <div className="bg-card rounded-lg shadow-sm p-6">
         <p className="text-muted-foreground text-center">Selecione um projeto</p>
       </div>
     );
@@ -45,7 +45,7 @@ export const ProjectInfoCard = ({ project }: ProjectInfoCardProps) => {
     : null;
 
   return (
-    <div className="bg-card rounded-lg border">
+    <div className="bg-card rounded-lg shadow-sm">
       {/* Top section: Logo + Project name */}
       <div className="flex items-center gap-4 p-5 pb-4">
         <div className="flex-shrink-0">

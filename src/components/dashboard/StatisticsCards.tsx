@@ -14,12 +14,12 @@ interface StatCardProps {
 }
 
 const StatCard = ({ icon, label, value, iconBgColor }: StatCardProps) => (
-  <div className="bg-card rounded-xl shadow-sm p-6 flex flex-col gap-3">
-    <div className={`p-3 rounded-full ${iconBgColor} w-fit`}>
+  <div className="bg-card rounded-xl shadow-sm p-4 flex flex-col gap-2">
+    <div className={`p-2 rounded-full ${iconBgColor} w-fit`}>
       {icon}
     </div>
     <p className="text-sm text-muted-foreground">{label}</p>
-    <p className="text-3xl font-bold text-foreground">{value}</p>
+    <p className="text-2xl font-bold text-foreground">{value}</p>
   </div>
 );
 
