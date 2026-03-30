@@ -253,6 +253,44 @@ export type Database = {
           },
         ]
       }
+      connectivity_events: {
+        Row: {
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          new_status: string
+          previous_status: string | null
+          project_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          new_status: string
+          previous_status?: string | null
+          project_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          new_status?: string
+          previous_status?: string | null
+          project_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connectivity_events_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       device_api_tokens: {
         Row: {
           created_at: string
