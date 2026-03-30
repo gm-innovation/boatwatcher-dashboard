@@ -56,7 +56,15 @@ export const WorkersOnBoardTable = ({ workers }: WorkersOnBoardTableProps) => {
                   <TableRow key={worker.id}>
                     <TableCell className="font-medium">{index + 1}</TableCell>
                     <TableCell className="font-medium">{worker.name}</TableCell>
-                    {!isMobile && <TableCell>{worker.location || '-'}</TableCell>}
+                    {!isMobile && (
+                      <TableCell>
+                        {worker.location ? (
+                          <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0">
+                            {worker.location}
+                          </Badge>
+                        ) : '-'}
+                      </TableCell>
+                    )}
                     {!isMobile && <TableCell>{worker.role || '-'}</TableCell>}
                     <TableCell>{worker.company}</TableCell>
                     <TableCell className="text-right">

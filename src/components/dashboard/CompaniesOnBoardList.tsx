@@ -1,11 +1,19 @@
-import { Building } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { format } from 'date-fns';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 export interface CompanyOnBoard {
   id: string;
   name: string;
   workersCount: number;
+  entryTime?: string;
 }
 
 interface CompaniesOnBoardListProps {
@@ -15,7 +23,6 @@ interface CompaniesOnBoardListProps {
 export const CompaniesOnBoardList = ({ companies }: CompaniesOnBoardListProps) => {
   return (
     <div className="bg-card rounded-lg border h-full flex flex-col">
-      {/* Header */}
       <div className="p-4 border-b">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-lg">Empresas a Bordo</h3>
@@ -25,33 +32,40 @@ export const CompaniesOnBoardList = ({ companies }: CompaniesOnBoardListProps) =
         </div>
       </div>
 
-      {/* List */}
-      <ScrollArea className="flex-1">
-        <div className="p-4 space-y-2">
-          {companies.length > 0 ? (
-            companies.map((company) => (
-              <div
-                key={company.id}
-                className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/30">
-                    <Building className="h-4 w-4 text-blue-600" />
-                  </div>
-                  <span className="font-medium">{company.name}</span>
-                </div>
-                <Badge variant="secondary">
-                  {company.workersCount} {company.workersCount === 1 ? 'pessoa' : 'pessoas'}
-                </Badge>
-              </div>
-            ))
-          ) : (
-            <p className="text-center text-muted-foreground py-8">
-              Nenhuma empresa no momento
-            </p>
-          )}
-        </div>
-      </ScrollArea>
+      <div className="flex-1 overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Empresa</TableHead>
+              <TableHead className="text-center">Equipe</TableHead>
+              <TableHead className="text-right">Entrada</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {companies.length > 0 ? (
+              companies.map((company) => (
+                <TableRow key={company.id}>
+                  <TableCell className="font-medium">{company.name}</TableCell>
+                  <TableCell className="text-center">{company.workersCount}</TableCell>
+                  <TableCell className="text-right">
+                    {company.entryTime ? (
+                      <Badge variant="outline" className="text-primary border-primary">
+                        {format(new Date(company.entryTime), 'HH:mm')}
+                      </Badge>
+                    ) : '-'}
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                  Nenhuma empresa no momento
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 };

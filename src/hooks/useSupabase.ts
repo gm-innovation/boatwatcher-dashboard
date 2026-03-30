@@ -286,18 +286,23 @@ export const useLastAccessLog = (projectId: string | null) => {
 };
 
 export const useCompaniesOnBoard = (workersOnBoard: any[]) => {
-  const companiesMap = new Map<string, { id: string; name: string; count: number }>();
+  const companiesMap = new Map<string, { id: string; name: string; count: number; entryTime: string | null }>();
 
   for (const worker of workersOnBoard) {
     if (!worker.company_id) continue;
 
-    if (companiesMap.has(worker.company_id)) {
-      companiesMap.get(worker.company_id)!.count++;
+    const existing = companiesMap.get(worker.company_id);
+    if (existing) {
+      existing.count++;
+      if (worker.entryTime && (!existing.entryTime || worker.entryTime < existing.entryTime)) {
+        existing.entryTime = worker.entryTime;
+      }
     } else {
       companiesMap.set(worker.company_id, {
         id: worker.company_id,
         name: worker.company,
-        count: 1
+        count: 1,
+        entryTime: worker.entryTime || null,
       });
     }
   }
@@ -305,6 +310,7 @@ export const useCompaniesOnBoard = (workersOnBoard: any[]) => {
   return Array.from(companiesMap.values()).map(c => ({
     id: c.id,
     name: c.name,
-    workersCount: c.count
+    workersCount: c.count,
+    entryTime: c.entryTime || undefined,
   }));
 };
