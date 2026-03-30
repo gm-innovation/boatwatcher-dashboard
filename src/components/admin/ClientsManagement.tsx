@@ -268,14 +268,24 @@ export const ClientsManagement = () => {
     return <Badge className="bg-green-500/10 text-green-500 hover:bg-green-500/20">Ativo</Badge>;
   };
 
+  const filteredCompanies = companies.filter((c) =>
+    c.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold">Gerenciar Clientes</h2>
-          <p className="text-xs text-muted-foreground">{companies.length} clientes cadastrados</p>
+          <p className="text-xs text-muted-foreground">{filteredCompanies.length} clientes</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <Input
+            placeholder="Buscar cliente..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-[200px] h-9 text-sm"
+          />
           <Button variant="outline" size="sm">
             Alterar Logo da Aplicação
           </Button>
