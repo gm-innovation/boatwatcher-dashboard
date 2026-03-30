@@ -62,6 +62,7 @@ const LOCATION_COORDS: Record<string, { x: number; y: number; label: string }> =
   'vitoria':          { ...MARITIME_HUBS.vitoria,   label: 'Vitória' },
   'santos':           { ...MARITIME_HUBS.santos,    label: 'Santos' },
   'guaruja':          { ...MARITIME_HUBS.santos,    label: 'Guarujá' },
+  'sao paulo':        { x: 400, y: 440, label: 'São Paulo' },
   'paranagua':        { x: 380, y: 475, label: 'Paranaguá' },
   'itajai':           { ...MARITIME_HUBS.itajai,    label: 'Itajaí' },
   'navegantes':       { ...MARITIME_HUBS.itajai,    label: 'Navegantes' },
