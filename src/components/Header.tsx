@@ -98,16 +98,14 @@ export const Header = () => {
     <header className="fixed top-0 left-0 right-0 w-full bg-background/95 backdrop-blur-sm border-b border-border animate-fade-in z-50">
       <div className="w-full border-b border-border/50">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 py-2">
-          {clientLogo ? (
-            <img src={clientLogo} alt="Logo do Cliente" className="h-8 w-28 object-contain" />
+          {systemLogo ? (
+            <img src={systemLogo} alt="Logo do Sistema" className="h-8 w-28 object-contain" />
           ) : (
-            <div className="h-8 w-28 bg-muted rounded flex items-center justify-center">
-              <span className="text-xs text-muted-foreground">Cliente</span>
-            </div>
+            <span className="text-lg font-bold text-foreground">DockCheck</span>
           )}
-          <div className="h-8 w-28 bg-muted rounded flex items-center justify-center">
-            <span className="text-xs text-muted-foreground">Sistema</span>
-          </div>
+          <Button variant="ghost" size="icon" onClick={toggleHeaderCollapsed} className="h-7 w-7">
+            {isHeaderCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+          </Button>
         </div>
       </div>
 
