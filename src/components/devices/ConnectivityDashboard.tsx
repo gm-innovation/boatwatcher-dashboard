@@ -260,6 +260,19 @@ export function ConnectivityDashboard() {
   const globalHealthColor = stats.healthPct === 100 ? COLOR_ONLINE : stats.healthPct >= 50 ? COLOR_PARTIAL : COLOR_OFFLINE;
   const globalHealthText = stats.healthPct === 100 ? 'Sistema Operacional' : stats.healthPct >= 50 ? 'Atenção Necessária' : 'Sistema Crítico';
 
+  const mapProjectData: MapProjectData[] = useMemo(() => {
+    return projects.map(p => {
+      const pDevices = devicesByProject[p.id] || [];
+      return {
+        id: p.id,
+        name: p.name,
+        location: p.location,
+        onlineDevices: pDevices.filter(d => d.status === 'online').length,
+        totalDevices: pDevices.length,
+      };
+    }).filter(p => p.totalDevices > 0);
+  }, [projects, devicesByProject]);
+
   const barChartData = useMemo(() => {
     return projects.map(p => {
       const pDevices = devicesByProject[p.id] || [];
