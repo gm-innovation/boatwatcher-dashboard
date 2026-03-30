@@ -217,6 +217,7 @@ async function fetchWorkersOnBoardFromCloud(
           worker_id: entry.worker_id,
           worker_name: entry.worker_name,
           device_name: entry.device_name,
+          device_id: entry.device_id,
           entry_time: entry.timestamp,
         });
       }
