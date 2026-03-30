@@ -8,7 +8,7 @@ import { ClientsManagement } from "@/components/admin/ClientsManagement";
 import { ProjectsManagement } from "@/components/admin/ProjectsManagement";
 import { ReportScheduler } from "@/components/reports/ReportScheduler";
 import { DiagnosticsPanel } from "@/components/admin/DiagnosticsPanel";
-import { PendingRegistrations } from "@/components/people/PendingRegistrations";
+
 import { DocumentExpirationCheck } from "@/components/admin/DocumentExpirationCheck";
 import { AgentManagement } from "@/components/devices/AgentManagement";
 import { ConnectivityDashboard } from "@/components/devices/ConnectivityDashboard";
