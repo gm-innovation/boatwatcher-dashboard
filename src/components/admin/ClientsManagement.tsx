@@ -26,19 +26,22 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
   const [status, setStatus] = useState(client?.status || 'active');
   const [logoUrlLight, setLogoUrlLight] = useState(client?.logo_url_light || '');
   const [logoUrlDark, setLogoUrlDark] = useState(client?.logo_url_dark || '');
+  const [logoUrlRotated, setLogoUrlRotated] = useState((client as any)?.logo_url_rotated || '');
   const [cnpj, setCnpj] = useState(client?.cnpj || '');
   const [contactEmail, setContactEmail] = useState(client?.contact_email || '');
   const [isLoading, setIsLoading] = useState(false);
   const [uploadingLight, setUploadingLight] = useState(false);
   const [uploadingDark, setUploadingDark] = useState(false);
+  const [uploadingRotated, setUploadingRotated] = useState(false);
   
   const lightLogoRef = useRef<HTMLInputElement>(null);
   const darkLogoRef = useRef<HTMLInputElement>(null);
+  const rotatedLogoRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
-  const handleLogoUpload = async (file: File, type: 'light' | 'dark') => {
-    const setUploading = type === 'light' ? setUploadingLight : setUploadingDark;
-    const setLogoUrl = type === 'light' ? setLogoUrlLight : setLogoUrlDark;
+  const handleLogoUpload = async (file: File, type: 'light' | 'dark' | 'rotated') => {
+    const setUploading = type === 'light' ? setUploadingLight : type === 'dark' ? setUploadingDark : setUploadingRotated;
+    const setLogoUrl = type === 'light' ? setLogoUrlLight : type === 'dark' ? setLogoUrlDark : setLogoUrlRotated;
     
     setUploading(true);
     try {
@@ -78,7 +81,8 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
         cnpj: cnpj || null,
         contact_email: contactEmail || null,
         logo_url_light: logoUrlLight || null,
-        logo_url_dark: logoUrlDark || null
+        logo_url_dark: logoUrlDark || null,
+        logo_url_rotated: logoUrlRotated || null
       };
 
       if (client) {
@@ -133,7 +137,7 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
       </div>
 
       {/* Row 2: Logos */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label>Logo Normal</Label>
           <input
@@ -156,7 +160,7 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
             {uploadingLight ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             Enviar Logo
           </Button>
-          <p className="text-xs text-muted-foreground">Logo usada no sistema</p>
+          <p className="text-xs text-muted-foreground">Logo usada no modo claro</p>
           {logoUrlLight && (
             <div className="mt-2">
               <img src={logoUrlLight} alt="Logo Normal" className="h-12 object-contain rounded border p-1" />
@@ -164,7 +168,7 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
           )}
         </div>
         <div className="space-y-2">
-          <Label>Logo Rotacionada (Etiquetas)</Label>
+          <Label>Logo Dark Mode</Label>
           <input
             type="file"
             ref={darkLogoRef}
@@ -185,10 +189,39 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
             {uploadingDark ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             Enviar Logo
           </Button>
-          <p className="text-xs text-muted-foreground">Logo já rotacionada para etiquetas</p>
+          <p className="text-xs text-muted-foreground">Logo usada no modo escuro</p>
           {logoUrlDark && (
             <div className="mt-2">
-              <img src={logoUrlDark} alt="Logo Rotacionada" className="h-12 object-contain rounded border p-1" />
+              <img src={logoUrlDark} alt="Logo Dark" className="h-12 object-contain rounded border p-1" />
+            </div>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label>Logo Rotacionada (Etiquetas)</Label>
+          <input
+            type="file"
+            ref={rotatedLogoRef}
+            className="hidden"
+            accept="image/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleLogoUpload(file, 'rotated');
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className="w-auto gap-2"
+            onClick={() => rotatedLogoRef.current?.click()}
+            disabled={uploadingRotated}
+          >
+            {uploadingRotated ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            Enviar Logo
+          </Button>
+          <p className="text-xs text-muted-foreground">Logo já rotacionada para etiquetas</p>
+          {logoUrlRotated && (
+            <div className="mt-2">
+              <img src={logoUrlRotated} alt="Logo Rotacionada" className="h-12 object-contain rounded border p-1" />
             </div>
           )}
         </div>

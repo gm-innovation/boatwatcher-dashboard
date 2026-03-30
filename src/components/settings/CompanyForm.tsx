@@ -114,9 +114,11 @@ export const CompanyForm = () => {
 
       let logoUrlLight = null;
       let logoUrlDark = null;
+      let logoUrlRotated = null;
       
       const logoLightInput = document.querySelector<HTMLInputElement>('input[name="logo-light"]');
       const logoDarkInput = document.querySelector<HTMLInputElement>('input[name="logo-dark"]');
+      const logoRotatedInput = document.querySelector<HTMLInputElement>('input[name="logo-rotated"]');
 
       if (logoLightInput?.files?.length) {
         logoUrlLight = await handleLogoUpload(logoLightInput.files[0], false);
@@ -124,6 +126,10 @@ export const CompanyForm = () => {
 
       if (logoDarkInput?.files?.length) {
         logoUrlDark = await handleLogoUpload(logoDarkInput.files[0], true);
+      }
+
+      if (logoRotatedInput?.files?.length) {
+        logoUrlRotated = await handleLogoUpload(logoRotatedInput.files[0], false);
       }
 
       const companyData = {
@@ -135,6 +141,7 @@ export const CompanyForm = () => {
         address: address || null,
         ...(logoUrlLight && { logo_url_light: logoUrlLight }),
         ...(logoUrlDark && { logo_url_dark: logoUrlDark }),
+        ...(logoUrlRotated && { logo_url_rotated: logoUrlRotated }),
       };
 
       if (selectedCompanyId && selectedCompanyId !== "new") {
@@ -216,6 +223,24 @@ export const CompanyForm = () => {
                   <img
                     src={companies?.find(c => c.id === selectedCompanyId)?.logo_url_dark || ''}
                     alt="Logo da Empresa (Dark)"
+                    className="max-h-24 max-w-full object-contain"
+                  />
+                ) : (
+                  <p className="text-muted-foreground">Nenhuma logo definida</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label>Logo Rotacionada (Etiquetas)</Label>
+              <Input type="file" name="logo-rotated" accept="image/*" className="mt-2" />
+              <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-muted mt-2">
+                {selectedCompanyId && selectedCompanyId !== "new" ? (
+                  <img
+                    src={(companies?.find(c => c.id === selectedCompanyId) as any)?.logo_url_rotated || ''}
+                    alt="Logo Rotacionada"
                     className="max-h-24 max-w-full object-contain"
                   />
                 ) : (
