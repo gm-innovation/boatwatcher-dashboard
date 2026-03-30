@@ -225,6 +225,23 @@ export const CompanyForm = () => {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label>Logo Rotacionada (Etiquetas)</Label>
+              <Input type="file" name="logo-rotated" accept="image/*" className="mt-2" />
+              <div className="h-32 w-full border rounded-lg flex items-center justify-center bg-muted mt-2">
+                {selectedCompanyId && selectedCompanyId !== "new" ? (
+                  <img
+                    src={(companies?.find(c => c.id === selectedCompanyId) as any)?.logo_url_rotated || ''}
+                    alt="Logo Rotacionada"
+                    className="max-h-24 max-w-full object-contain"
+                  />
+                ) : (
+                  <p className="text-muted-foreground">Nenhuma logo definida</p>
+                )}
+              </div>
+            </div>
+
           <div>
             <Label htmlFor="companyName">Nome da Empresa (Armador)</Label>
             <Input
