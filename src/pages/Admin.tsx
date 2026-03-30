@@ -12,7 +12,7 @@ import { DiagnosticsPanel } from "@/components/admin/DiagnosticsPanel";
 import { DocumentExpirationCheck } from "@/components/admin/DocumentExpirationCheck";
 import { AgentManagement } from "@/components/devices/AgentManagement";
 import { ConnectivityDashboard } from "@/components/devices/ConnectivityDashboard";
-import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, UserCheck, FileWarning, Bot, Wifi, MonitorDown } from "lucide-react";
+import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, FileWarning, Bot, Wifi, MonitorDown } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { usesLocalServer } from "@/lib/runtimeProfile";
