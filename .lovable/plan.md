@@ -1,59 +1,63 @@
 
+Objetivo: corrigir de vez o posicionamento dos marcadores do RJ e evitar que futuros projetos “escapem” para dentro do continente.
 
-## Corrigir coordenadas usando o path SVG do RJ como referência
+1. Confirmar a causa raiz
+- O problema não é só a tabela `LOCATION_COORDS`.
+- No código atual, os pontos do RJ foram ajustados com base em trechos do path bruto, mas o resultado visual continua errado no mapa renderizado.
+- Além disso, `spreadOverlappingMarkers` em `src/components/devices/mapUtils.ts` espalha marcadores em círculo. Em áreas costeiras como Baía de Guanabara, isso inevitavelmente joga parte dos marcadores para dentro do estado quando houver vários projetos.
 
-### Diagnóstico
-Analisei os vértices do path SVG do estado `'RJ'`. A costa litorânea e a Baía de Guanabara são definidas por estes pontos-chave:
+2. Corrigir o modelo de coordenadas
+- Refatorar `LOCATION_COORDS` em `src/components/devices/BrazilMap.tsx` para usar âncoras marítimas/hubs, em vez de coordenadas soltas repetidas.
+- Exemplo de hubs:
+  - `guanabara_rio`
+  - `guanabara_niteroi`
+  - `angra`
+  - `macae`
+  - `acu`
+  - `vitoria`
+  - `aracruz`
+  - `santos`
+- Depois, cada alias (`renave`, `maua`, `brasa`, `thomaz`, `brasfels`, `imbetiba`, etc.) passa a apontar para um hub específico.
 
-```text
-Baía de Guanabara (reentrância no path):
-  495.72, 421.25  ← fundo da baía (norte)
-  493.83, 424.96  ← lado oeste (Rio)
-  495.18, 425.84  ← centro
-  495.25, 426.97  ← entrada da baía (sul)
-  492.72, 427.96  ← segue para costa oeste
+3. Recalibrar visualmente os pontos do RJ
+- Reposicionar todas as localizações do RJ usando a referência do mapa renderizado e os prints enviados, não apenas os números do path.
+- Ajustar especialmente:
+  - Baía de Guanabara: `rio de janeiro`, `niteroi`, `sao goncalo`, `renave`, `maua`, `inhauma`, `brasa`, `utc`, `triunfo`, `mac laren`, `maclaren`, `alianca`, `thomaz`
+  - Costa sul: `angra dos reis`, `brasfels`, `keppel`, `verolme`, `damen`
+  - Costa norte: `macae`, `imbetiba`, `sao joao da barra`, `porto do acu`, `acu`
+- A correção aqui será “o que bate no SVG final”, não “o que parece certo no path isolado”.
 
-Costa nordeste RJ:
-  501.68, 411.38  ← São João da Barra / divisa ES
-  498.08, 415.21  ← região de Macaé
+4. Corrigir a lógica de dispersão para futuros projetos
+- Substituir a dispersão circular genérica por uma dispersão direcional/em leque para hubs costeiros.
+- Em vez de abrir 360°, abrir só no sentido seguro:
+  - Guanabara: espalhar sobre a baía/litoral
+  - Angra: espalhar para a costa/baía local
+  - Macaé/Açu/Vitória/Santos: espalhar para o lado marítimo
+- Manter as linhas pontilhadas conectando cada marcador à sua coordenada real.
 
-Costa sudoeste RJ:
-  468.35, 450.28  ← Angra dos Reis / costa sul
-  463.24, 452.27  ← Ilha Grande
-```
+5. Aplicar a mesma lógica nos dois mapas
+- Garantir que o mapa compacto (`BrazilMap.tsx`) e o modal (`BrazilMapModal.tsx`) continuem consumindo a mesma fonte de verdade para coordenadas e dispersão.
+- Assim a posição não muda entre card e modal.
 
-As coordenadas atuais (`x:490-493, y:428-430`) caem na borda **interior** (fronteira RJ-MG), não na costa.
+6. Validação que farei após implementar
+- Testar o caso atual (`Estaleiro Renave`) no modal com zoom alto.
+- Verificar se o marcador cai dentro da Baía de Guanabara no ponto indicado pelos seus prints.
+- Validar também os grupos futuros:
+  - Guanabara com múltiplos estaleiros
+  - Angra
+  - Macaé/Açu
+  - Santos/Guarujá
+- Confirmar que nenhum marcador espalhado vai parar “em Minas Gerais” ou no interior do estado.
 
-### Correções
-
-**Arquivo:** `src/components/devices/BrazilMap.tsx` — dicionário `LOCATION_COORDS`
-
-| Local | Atual (x, y) | Corrigido (x, y) | Referência no path |
-|-------|--------------|-------------------|-------------------|
-| `rio de janeiro` | 490, 430 | 494, 426 | Lado oeste da baía |
-| `niteroi` | 493, 428 | 497, 424 | Lado leste da baía |
-| `sao goncalo` | 495, 426 | 496, 423 | Norte de Niterói |
-| `renave` | 493, 429 | 496, 425 | Dentro da baía |
-| `maua` | 492, 429 | 495, 425 | Dentro da baía |
-| `inhauma` | 490, 428 | 494, 425 | Lado oeste da baía |
-| `brasa` | 491, 429 | 495, 426 | Zona portuária Rio |
-| `utc` | 492, 430 | 495, 425 | Dentro da baía |
-| `triunfo` | 492, 430 | 495, 425 | Dentro da baía |
-| `mac laren` | 493, 430 | 496, 425 | Niterói |
-| `maclaren` | 493, 430 | 496, 425 | Niterói |
-| `alianca` | 492, 429 | 495, 425 | Dentro da baía |
-| `thomaz` | 493, 428 | 496, 424 | Niterói |
-| `angra dos reis` | 475, 440 | 469, 449 | Costa sudoeste RJ |
-| `brasfels` | 475, 440 | 469, 449 | Angra dos Reis |
-| `keppel` | 474, 441 | 469, 449 | Angra dos Reis |
-| `verolme` | 474, 440 | 469, 449 | Angra dos Reis |
-| `damen` | 474, 440 | 469, 449 | Angra dos Reis |
-| `macae` | 510, 410 | 499, 415 | Costa nordeste RJ |
-| `imbetiba` | 511, 409 | 499, 415 | Macaé |
-| `sao joao da barra` | 515, 405 | 502, 412 | Divisa RJ/ES |
-| `porto do acu` | 515, 405 | 502, 412 | São João da Barra |
-| `acu` | 515, 405 | 502, 412 | São João da Barra |
-
-### Método
-Todas as coordenadas derivadas diretamente dos vértices do path SVG `'RJ'`, garantindo que os marcadores caem **dentro** do contorno do estado e na posição geográfica correta.
-
+Detalhes técnicos
+- Arquivos principais:
+  - `src/components/devices/BrazilMap.tsx`
+  - `src/components/devices/mapUtils.ts`
+  - `src/components/devices/BrazilMapModal.tsx`
+- Mudanças centrais:
+  - trocar coordenadas avulsas por hubs reutilizáveis
+  - trocar spread circular por spread em arco/fan com direção preferencial por região
+- Benefício:
+  - corrige o caso atual
+  - deixa a entrada de novos projetos consistente e previsível
+  - evita regressão visual quando vários estaleiros compartilham a mesma área costeira
