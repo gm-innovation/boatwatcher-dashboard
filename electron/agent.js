@@ -205,7 +205,7 @@ class AgentController {
         port: creds.port,
         path: '/login.fcgi',
         method: 'POST',
-        timeout: 10000,
+        timeout: 5000,
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData),
