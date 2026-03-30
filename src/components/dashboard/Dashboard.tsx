@@ -73,7 +73,7 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
       <ProjectInfoCard project={project || null} />
 
       <StatisticsCards
-        crewSize={project?.crew_size || 0}
+        crewSize={crewOnBoard}
         workersOnBoard={formattedWorkers.length}
         companiesOnBoard={companiesOnBoard.length}
       />
