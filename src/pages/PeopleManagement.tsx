@@ -4,7 +4,8 @@ import { CompanyManagement } from "@/components/people/CompanyManagement";
 import { JobFunctionManagement } from "@/components/people/JobFunctionManagement";
 import { PendingRegistrations } from "@/components/people/PendingRegistrations";
 import UserManagement from "@/components/UserManagement";
-import { Users, Building2, Briefcase, UserPlus, UserCog } from "lucide-react";
+import { DocumentExpirationCheck } from "@/components/admin/DocumentExpirationCheck";
+import { Users, Building2, Briefcase, UserPlus, UserCog, FileWarning } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
@@ -54,6 +55,10 @@ const PeopleManagement = () => {
             <Briefcase className="h-4 w-4" />
             Requisitos por Cargo
           </TabsTrigger>
+          <TabsTrigger value="documents" className="gap-2">
+            <FileWarning className="h-4 w-4" />
+            Documentos
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="pending">
@@ -74,6 +79,10 @@ const PeopleManagement = () => {
 
         <TabsContent value="job-functions">
           <JobFunctionManagement />
+        </TabsContent>
+
+        <TabsContent value="documents">
+          <DocumentExpirationCheck />
         </TabsContent>
       </Tabs>
     </div>

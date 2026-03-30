@@ -5,7 +5,8 @@ import { PresenceReport } from "@/components/reports/PresenceReport";
 import { CompanyReport } from "@/components/reports/CompanyReport";
 import { OvernightControl } from "@/components/reports/OvernightControl";
 import { WorkerTimeReport } from "@/components/reports/WorkerTimeReport";
-import { Users, Building2, FileText, Clock, Moon } from "lucide-react";
+import { ReportScheduler } from "@/components/reports/ReportScheduler";
+import { Users, Building2, FileText, Clock, Moon, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -87,6 +88,10 @@ const Reports = () => {
             <Moon className="h-4 w-4" />
             Controle de Pernoite
           </TabsTrigger>
+          <TabsTrigger value="schedules" className="gap-2">
+            <Calendar className="h-4 w-4" />
+            Agendamentos
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="workers">
@@ -107,6 +112,10 @@ const Reports = () => {
 
         <TabsContent value="overnight">
           <OvernightControl projectId={selectedProject} startDate={startDate} endDate={endDate} />
+        </TabsContent>
+
+        <TabsContent value="schedules">
+          <ReportScheduler />
         </TabsContent>
       </Tabs>
     </div>
