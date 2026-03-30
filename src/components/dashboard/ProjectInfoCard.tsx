@@ -53,7 +53,7 @@ export const ProjectInfoCard = ({ project }: ProjectInfoCardProps) => {
             <img 
               src={clientLogo} 
               alt={project.client?.name || 'Logo'} 
-              className="h-16 w-20 object-contain rounded-lg bg-muted p-2"
+              className="h-16 w-20 object-contain"
             />
           ) : (
             <div className="h-16 w-20 bg-muted rounded-lg flex items-center justify-center">
