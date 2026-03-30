@@ -16,9 +16,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DeviceSetupInstructions } from './DeviceSetupInstructions';
+import { AgentManagement } from './AgentManagement';
 import {
-  Plus, Wifi, WifiOff, Trash2, RefreshCw, DoorOpen, Camera, Server, Loader2, Users, Pencil, Ship, Anchor, MoreHorizontal
+  Plus, Wifi, WifiOff, Trash2, RefreshCw, DoorOpen, Camera, Server, Loader2, Users, Pencil, Ship, Anchor, MoreHorizontal, Bot
 } from 'lucide-react';
 import type { Device, DeviceType } from '@/types/supabase';
 import { useQueryClient } from '@tanstack/react-query';
