@@ -54,7 +54,7 @@ const LOCATION_COORDS: Record<string, { x: number; y: number; label: string }> =
   'ipojuca':          { x: 593, y: 210, label: 'Ipojuca' },
   'maragogipe':       { x: 538, y: 285, label: 'Maragogipe' },
   'barcarena':        { x: 350, y: 115, label: 'Barcarena' },
-  'sao joao da barra':{ x: 515, y: 405, label: 'São João da Barra' },
+  'sao joao da barra':{ x: 502, y: 412, label: 'São João da Barra' },
   'aracatuba':        { x: 355, y: 440, label: 'Araçatuba' },
   // === Estaleiros offshore ===
   'renave':           { x: 493, y: 429, label: 'Estaleiro Renave' },
