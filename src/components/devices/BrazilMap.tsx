@@ -48,7 +48,7 @@ const LOCATION_COORDS: Record<string, { x: number; y: number; label: string }> =
   'brasilia':         { x: 410, y: 330, label: 'Brasília' },
   'belo horizonte':   { x: 460, y: 370, label: 'Belo Horizonte' },
   'campo grande':     { x: 280, y: 400, label: 'Campo Grande' },
-  'macae':            { x: 510, y: 410, label: 'Macaé' },
+  'macae':            { x: 499, y: 415, label: 'Macaé' },
   'aracruz':          { x: 518, y: 385, label: 'Aracruz' },
   'suape':            { x: 593, y: 210, label: 'Suape' },
   'ipojuca':          { x: 593, y: 210, label: 'Ipojuca' },
