@@ -30,7 +30,7 @@ export const ProjectInfoCard = ({ project }: ProjectInfoCardProps) => {
   
   if (!project) {
     return (
-      <div className="bg-card rounded-lg border p-6">
+      <div className="bg-card rounded-lg shadow-sm p-6">
         <p className="text-muted-foreground text-center">Selecione um projeto</p>
       </div>
     );
