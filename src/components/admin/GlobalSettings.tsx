@@ -147,6 +147,66 @@ export const GlobalSettings = () => {
         </Button>
       </div>
 
+      {/* System Logo */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Logo do Sistema</CardTitle>
+          <CardDescription>Defina a logo exibida no cabeçalho do sistema</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Light mode */}
+            <div className="space-y-2">
+              <Label>Modo Claro</Label>
+              <input
+                ref={lightInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleLogoUpload('light', file);
+                  e.target.value = '';
+                }}
+              />
+              <Button variant="outline" className="w-full gap-2" onClick={() => lightInputRef.current?.click()} disabled={uploading}>
+                <ImagePlus className="h-4 w-4" />
+                {uploading ? 'Enviando...' : 'Selecionar imagem'}
+              </Button>
+              {lightLogoUrl && (
+                <div className="border rounded-md p-4 bg-white flex items-center justify-center min-h-[80px]">
+                  <img src={lightLogoUrl} alt="Logo modo claro" className="max-h-16 max-w-full object-contain" />
+                </div>
+              )}
+            </div>
+            {/* Dark mode */}
+            <div className="space-y-2">
+              <Label>Modo Escuro</Label>
+              <input
+                ref={darkInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleLogoUpload('dark', file);
+                  e.target.value = '';
+                }}
+              />
+              <Button variant="outline" className="w-full gap-2" onClick={() => darkInputRef.current?.click()} disabled={uploading}>
+                <ImagePlus className="h-4 w-4" />
+                {uploading ? 'Enviando...' : 'Selecionar imagem'}
+              </Button>
+              {darkLogoUrl && (
+                <div className="border rounded-md p-4 bg-zinc-900 flex items-center justify-center min-h-[80px]">
+                  <img src={darkLogoUrl} alt="Logo modo escuro" className="max-h-16 max-w-full object-contain" />
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Facial Recognition */}
       <Card>
         <CardHeader>
