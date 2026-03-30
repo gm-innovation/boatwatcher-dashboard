@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Maximize2, MapPin } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { BRAZIL_STATES, SVG_VIEWBOX } from './brazilStatesData';
+import { spreadOverlappingMarkers } from './mapUtils';
 
 // Re-export for backward compat
 export { BRAZIL_STATES, SVG_VIEWBOX };
@@ -144,7 +145,7 @@ interface BrazilMapProps {
 
 export function BrazilMap({ projects, onExpandClick, compact = false }: BrazilMapProps) {
   const markers = useMemo(() => {
-    return projects
+    const raw = projects
       .map(p => {
         const coords = findCityCoords(p.location);
         if (!coords) return null;
@@ -157,6 +158,7 @@ export function BrazilMap({ projects, onExpandClick, compact = false }: BrazilMa
         return { ...p, ...coords, health, color, radius };
       })
       .filter(Boolean) as (MapProjectData & { x: number; y: number; label: string; health: string; color: string; radius: number })[];
+    return spreadOverlappingMarkers(raw, 25);
   }, [projects]);
 
   const height = compact ? 200 : 280;
@@ -196,6 +198,21 @@ export function BrazilMap({ projects, onExpandClick, compact = false }: BrazilMa
                 stroke="hsl(var(--border))"
                 strokeWidth="1"
                 opacity={0.7}
+              />
+            ))}
+            
+            {/* Connection lines for spread markers */}
+            {markers.filter(m => m.wasSpread).map((m) => (
+              <line
+                key={`line-${m.id}`}
+                x1={m.originalX}
+                y1={m.originalY}
+                x2={m.x}
+                y2={m.y}
+                stroke="hsl(var(--foreground))"
+                strokeWidth="0.8"
+                opacity={0.2}
+                strokeDasharray="3,2"
               />
             ))}
             

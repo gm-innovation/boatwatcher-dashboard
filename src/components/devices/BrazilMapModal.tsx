@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { BRAZIL_STATES, SVG_VIEWBOX } from './brazilStatesData';
 import { findCityCoords, SVG_WIDTH, SVG_HEIGHT, type MapProjectData } from './BrazilMap';
+import { spreadOverlappingMarkers } from './mapUtils';
 
 const COLOR_ONLINE = '#22c55e';
 const COLOR_OFFLINE = '#ef4444';
@@ -34,19 +35,24 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
     }
   }, [open]);
 
-  const markers = projects
-    .map(p => {
-      const coords = findCityCoords(p.location);
-      if (!coords) return null;
-      const health = p.totalDevices === 0 ? 'none'
-        : p.onlineDevices === p.totalDevices ? 'online'
-        : p.onlineDevices > 0 ? 'partial'
-        : 'offline';
-      const color = health === 'online' ? COLOR_ONLINE : health === 'partial' ? COLOR_PARTIAL : COLOR_OFFLINE;
-      const radius = Math.max(6, Math.min(14, 4 + p.totalDevices * 2));
-      return { ...p, ...coords, health, color, radius };
-    })
-    .filter(Boolean) as (MapProjectData & { x: number; y: number; label: string; health: string; color: string; radius: number })[];
+  const spreadDist = Math.max(15, 20 / Math.sqrt(scale));
+
+  const markers = (() => {
+    const raw = projects
+      .map(p => {
+        const coords = findCityCoords(p.location);
+        if (!coords) return null;
+        const health = p.totalDevices === 0 ? 'none'
+          : p.onlineDevices === p.totalDevices ? 'online'
+          : p.onlineDevices > 0 ? 'partial'
+          : 'offline';
+        const color = health === 'online' ? COLOR_ONLINE : health === 'partial' ? COLOR_PARTIAL : COLOR_OFFLINE;
+        const radius = Math.max(6, Math.min(14, 4 + p.totalDevices * 2));
+        return { ...p, ...coords, health, color, radius };
+      })
+      .filter(Boolean) as (MapProjectData & { x: number; y: number; label: string; health: string; color: string; radius: number })[];
+    return spreadOverlappingMarkers(raw, spreadDist);
+  })();
 
   const vbWidth = SVG_WIDTH / scale;
   const vbHeight = SVG_HEIGHT / scale;
@@ -137,6 +143,21 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
                   stroke="hsl(var(--border))"
                   strokeWidth={1 / Math.sqrt(scale)}
                   opacity={0.7}
+                />
+              ))}
+
+              {/* Connection lines for spread markers */}
+              {markers.filter(m => m.wasSpread).map((m) => (
+                <line
+                  key={`line-${m.id}`}
+                  x1={m.originalX}
+                  y1={m.originalY}
+                  x2={m.x}
+                  y2={m.y}
+                  stroke="hsl(var(--foreground))"
+                  strokeWidth={0.8 / Math.sqrt(scale)}
+                  opacity={0.25}
+                  strokeDasharray={`${3 / Math.sqrt(scale)},${2 / Math.sqrt(scale)}`}
                 />
               ))}
 
