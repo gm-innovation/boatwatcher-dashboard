@@ -1,15 +1,29 @@
 
 
-## Colapsar seção do seletor de projeto junto com o header
+## Alinhar dashboard com o sistema em produção
 
-A terceira seção do header (linhas 233-235) com o `ProjectSelector` ainda aparece quando colapsado porque usa `max-h-0` mas mantém padding residual. Basta escondê-la completamente quando colapsado.
+Três diferenças visuais identificadas entre as imagens:
 
-### Alteração
+### Alterações
 
-**`src/components/Header.tsx` (linha 233)**
-- Mudar a div do ProjectSelector para não renderizar quando colapsado, ou adicionar `hidden` condicional
-- De: `max-h-0 py-0` → Para: renderização condicional `{!isHeaderCollapsed && <div>...</div>}`
+**1. `src/components/dashboard/WorkersOnBoardTable.tsx`**
+- Formato da entrada: mudar de `format(..., 'HH:mm')` para `format(..., 'dd/MM HH:mm')` com badge colorido (azul/outline)
+- Coluna "Local": renderizar como `<Badge>` colorido (verde para "Bordo", outline para outros) em vez de texto simples
+- Manter o Nº sequencial (produção mostra ID real, mas usaremos index+1 por consistência com dados disponíveis — ou podemos usar worker.id se numérico)
 
-**`src/components/layouts/MainLayout.tsx`**
-- Ajustar padding colapsado de `pt-20` para `pt-14` (apenas a barra com logo + botão toggle)
+**2. `src/components/dashboard/CompaniesOnBoardList.tsx`**
+- Substituir layout de cards com ícone por uma **tabela** com 3 colunas: Empresa, Equipe, Entrada
+- Adicionar `entryTime` à interface `CompanyOnBoard`
+- Renderizar equipe como número simples e entrada como horário `HH:mm` com badge azul
+
+**3. `src/hooks/useSupabase.ts` (`useCompaniesOnBoard`)**
+- Capturar o `entryTime` mais antigo (primeira entrada) de cada empresa para popular a coluna "Entrada" na tabela de empresas
+
+### Arquivos alterados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/components/dashboard/WorkersOnBoardTable.tsx` | Badge no Local, formato dd/MM HH:mm com badge na Entrada |
+| `src/components/dashboard/CompaniesOnBoardList.tsx` | Trocar cards por tabela (Empresa, Equipe, Entrada) |
+| `src/hooks/useSupabase.ts` | Adicionar `entryTime` ao retorno de `useCompaniesOnBoard` |
 
