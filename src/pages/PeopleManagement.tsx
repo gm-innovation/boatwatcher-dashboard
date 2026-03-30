@@ -55,6 +55,10 @@ const PeopleManagement = () => {
             <Briefcase className="h-4 w-4" />
             Requisitos por Cargo
           </TabsTrigger>
+          <TabsTrigger value="documents" className="gap-2">
+            <FileWarning className="h-4 w-4" />
+            Documentos
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="pending">
