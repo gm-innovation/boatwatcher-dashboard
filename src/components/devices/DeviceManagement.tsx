@@ -406,7 +406,24 @@ export const DeviceManagement = () => {
   );
 
   return (
-    <div className="space-y-6">
+    <Tabs defaultValue="devices" className="space-y-6">
+      <TabsList>
+        <TabsTrigger value="devices" className="gap-2">
+          <Server className="h-4 w-4" />
+          Dispositivos
+        </TabsTrigger>
+        <TabsTrigger value="agents" className="gap-2">
+          <Bot className="h-4 w-4" />
+          Agentes
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="agents">
+        <AgentManagement />
+      </TabsContent>
+
+      <TabsContent value="devices">
+      <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold">Dispositivos</h2>
