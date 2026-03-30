@@ -439,7 +439,14 @@ export const DeviceManagement = () => {
             <h2 className="text-xl font-semibold">Dispositivos</h2>
             <p className="text-sm text-muted-foreground">
               {filteredDevices.length} dispositivos • {onlineCount} online • {offlineCount} offline
-          </p>
+            </p>
+          </div>
+          <AdminProjectFilter
+            selectedClientId={selectedClientId}
+            selectedProjectId={selectedProjectId}
+            onClientChange={setSelectedClientId}
+            onProjectChange={setSelectedProjectId}
+          />
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
