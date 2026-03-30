@@ -11,6 +11,7 @@ import { useProject } from '@/contexts/ProjectContext';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useRuntimeProfile } from '@/hooks/useRuntimeProfile';
+import { useSystemSetting } from '@/hooks/useSystemSettings';
 
 export const Header = () => {
   const navigate = useNavigate();
@@ -43,9 +44,10 @@ export const Header = () => {
     });
   }, [isDesktop]);
 
+  const { data: systemLogoSetting } = useSystemSetting('system_logo');
   const systemLogo = theme === 'dark'
-    ? localStorage.getItem('company_dark')
-    : localStorage.getItem('company_light');
+    ? (systemLogoSetting?.value as any)?.dark_url || localStorage.getItem('company_dark')
+    : (systemLogoSetting?.value as any)?.light_url || localStorage.getItem('company_light');
 
   useEffect(() => {
     const timer = setInterval(() => {
