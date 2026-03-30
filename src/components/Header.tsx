@@ -43,9 +43,9 @@ export const Header = () => {
     });
   }, [isDesktop]);
 
-  const clientLogo = theme === 'dark' 
-    ? selectedProject?.client?.logo_url_dark 
-    : selectedProject?.client?.logo_url_light;
+  const systemLogo = theme === 'dark'
+    ? localStorage.getItem('company_dark')
+    : localStorage.getItem('company_light');
 
   useEffect(() => {
     const timer = setInterval(() => {
