@@ -201,6 +201,21 @@ export function BrazilMap({ projects, onExpandClick, compact = false }: BrazilMa
               />
             ))}
             
+            {/* Connection lines for spread markers */}
+            {markers.filter(m => m.wasSpread).map((m) => (
+              <line
+                key={`line-${m.id}`}
+                x1={m.originalX}
+                y1={m.originalY}
+                x2={m.x}
+                y2={m.y}
+                stroke="hsl(var(--foreground))"
+                strokeWidth="0.8"
+                opacity={0.2}
+                strokeDasharray="3,2"
+              />
+            ))}
+            
             {/* Markers */}
             {markers.map((m) => (
               <Tooltip key={m.id}>

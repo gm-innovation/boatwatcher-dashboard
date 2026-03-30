@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { BRAZIL_STATES, SVG_VIEWBOX } from './brazilStatesData';
 import { findCityCoords, SVG_WIDTH, SVG_HEIGHT, type MapProjectData } from './BrazilMap';
+import { spreadOverlappingMarkers } from './mapUtils';
 
 const COLOR_ONLINE = '#22c55e';
 const COLOR_OFFLINE = '#ef4444';
