@@ -24,6 +24,8 @@ interface ProjectContextType {
   loading: boolean;
   isFullscreenMode: boolean;
   toggleFullscreen: () => void;
+  isHeaderCollapsed: boolean;
+  toggleHeaderCollapsed: () => void;
   lastUpdate: Date;
   autoRefresh: boolean;
   setAutoRefresh: (value: boolean) => void;
