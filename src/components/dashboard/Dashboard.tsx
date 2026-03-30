@@ -6,7 +6,7 @@ import { ProjectInfoCard } from './ProjectInfoCard';
 import { StatisticsCards } from './StatisticsCards';
 import { WorkersOnBoardTable, WorkerOnBoard } from './WorkersOnBoardTable';
 import { CompaniesOnBoardList } from './CompaniesOnBoardList';
-import { format } from 'date-fns';
+
 import { useQueryClient } from '@tanstack/react-query';
 
 interface DashboardProps {
@@ -53,20 +53,7 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
     entryTime: w.entryTime
   }));
 
-  const handleExport = () => {
-    const csvContent = [
-      ['Nº', 'Nome', 'Local', 'Função', 'Empresa', 'Entrada'].join(','),
-      ...formattedWorkers.map((w, i) => 
-        [i + 1, w.name, w.location || '', w.role || '', w.company, format(new Date(w.entryTime), 'HH:mm')].join(',')
-      )
-    ].join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `trabalhadores-a-bordo-${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    link.click();
-  };
 
   if (!projectId) {
     return (
@@ -88,10 +75,7 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
         <div className="xl:col-span-3">
-          <WorkersOnBoardTable 
-            workers={formattedWorkers}
-            onExport={handleExport}
-          />
+          <WorkersOnBoardTable workers={formattedWorkers} />
         </div>
         <div className="xl:col-span-2">
           <CompaniesOnBoardList companies={companiesOnBoard} />
