@@ -245,9 +245,14 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
 export const ProjectsManagement = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const { data: projects = [], isLoading } = useProjects();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
+
+  const filteredProjects = selectedClientId
+    ? projects.filter((p) => p.client_id === selectedClientId)
+    : projects;
 
   const handleDelete = async (project: Project) => {
     if (!confirm(`Tem certeza que deseja remover ${project.name}?`)) return;
