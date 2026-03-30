@@ -434,10 +434,11 @@ export const DeviceManagement = () => {
       <TabsContent value="devices">
       <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Dispositivos</h2>
-          <p className="text-sm text-muted-foreground">
-            {devices.length} dispositivos • {onlineCount} online • {offlineCount} offline
+        <div className="flex items-center gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">Dispositivos</h2>
+            <p className="text-sm text-muted-foreground">
+              {filteredDevices.length} dispositivos • {onlineCount} online • {offlineCount} offline
           </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
