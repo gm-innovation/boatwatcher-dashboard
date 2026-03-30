@@ -157,7 +157,7 @@ async function fetchWorkersOnBoardFromCloud(
     // First, get device IDs for this project
     const { data: projectDevices, error: devicesError } = await supabase
       .from('devices')
-      .select('id')
+      .select('id, configuration')
       .eq('project_id', projectId);
 
     if (devicesError) throw devicesError;
