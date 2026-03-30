@@ -465,7 +465,7 @@ export const DeviceManagement = () => {
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
-      ) : devices.length > 0 ? (
+      ) : filteredDevices.length > 0 ? (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
