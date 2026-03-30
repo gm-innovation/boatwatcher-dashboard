@@ -55,6 +55,11 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
 
 
 
+  const crewOnBoard = formattedWorkers.filter(w =>
+    w.company && project?.name &&
+    w.company.trim().toLowerCase() === project.name.trim().toLowerCase()
+  ).length;
+
   if (!projectId) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -68,7 +73,7 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
       <ProjectInfoCard project={project || null} />
 
       <StatisticsCards
-        crewSize={project?.crew_size || 0}
+        crewSize={crewOnBoard}
         workersOnBoard={formattedWorkers.length}
         companiesOnBoard={companiesOnBoard.length}
       />
