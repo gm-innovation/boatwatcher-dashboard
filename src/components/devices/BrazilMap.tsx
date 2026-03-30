@@ -13,9 +13,27 @@ export const SVG_HEIGHT = 648;
 // Keep BRAZIL_PATH export as empty (no longer a single path)
 export const BRAZIL_PATH = '';
 
+// Maritime hubs – anchor coordinates placed in the OCEAN near each cluster.
+// The SVG bay/coast features are only ~3 units wide; markers (12-28 units) must
+// sit OUTSIDE the land path so they don't visually land inland.
+const MARITIME_HUBS = {
+  guanabara:  { x: 522, y: 432, label: 'Baía de Guanabara' },   // ocean east of RJ coast (coast at x≈515)
+  angra:      { x: 458, y: 456, label: 'Angra dos Reis' },       // ocean south of Angra coast
+  macae:      { x: 512, y: 410, label: 'Macaé' },                // just off northeast RJ coast
+  acu:        { x: 508, y: 406, label: 'Porto do Açu' },         // São João da Barra coast
+  vitoria:    { x: 538, y: 378, label: 'Vitória' },              // ocean east of ES coast (coast at x≈535)
+  aracruz:    { x: 536, y: 385, label: 'Aracruz' },              // ES coast south of Vitória
+  santos:     { x: 438, y: 462, label: 'Santos' },               // ocean south of SP coast
+  suape:      { x: 598, y: 215, label: 'Suape' },                // PE coast
+  paraguacu:  { x: 540, y: 290, label: 'Paraguaçu' },            // BA coast
+  rio_grande: { x: 315, y: 618, label: 'Rio Grande' },           // RS coast
+  itajai:     { x: 382, y: 518, label: 'Itajaí / Navegantes' },  // SC coast
+  belem:      { x: 355, y: 110, label: 'Belém / Barcarena' },    // PA coast
+} as const;
+
 // Dictionary: normalized location name → SVG coordinates (raw viewBox coords)
 const LOCATION_COORDS: Record<string, { x: number; y: number; label: string }> = {
-  // === Cidades principais ===
+  // === Cidades principais (interior / capitais) ===
   'manaus':           { x: 120, y: 120, label: 'Manaus' },
   'belem':            { x: 355, y: 110, label: 'Belém' },
   'sao luis':         { x: 430, y: 140, label: 'São Luís' },
@@ -26,21 +44,6 @@ const LOCATION_COORDS: Record<string, { x: number; y: number; label: string }> =
   'maceio':           { x: 600, y: 225, label: 'Maceió' },
   'aracaju':          { x: 580, y: 248, label: 'Aracaju' },
   'salvador':         { x: 545, y: 280, label: 'Salvador' },
-  'vitoria':          { x: 520, y: 390, label: 'Vitória' },
-  'rio de janeiro':   { x: 494, y: 426, label: 'Rio de Janeiro' },
-  'niteroi':          { x: 497, y: 424, label: 'Niterói' },
-  'sao goncalo':      { x: 496, y: 423, label: 'São Gonçalo' },
-  'angra dos reis':   { x: 469, y: 449, label: 'Angra dos Reis' },
-  'santos':           { x: 430, y: 455, label: 'Santos' },
-  'sao paulo':        { x: 400, y: 445, label: 'São Paulo' },
-  'guaruja':          { x: 432, y: 457, label: 'Guarujá' },
-  'paranagua':        { x: 380, y: 475, label: 'Paranaguá' },
-  'curitiba':         { x: 360, y: 470, label: 'Curitiba' },
-  'florianopolis':    { x: 370, y: 520, label: 'Florianópolis' },
-  'itajai':           { x: 375, y: 510, label: 'Itajaí' },
-  'navegantes':       { x: 373, y: 512, label: 'Navegantes' },
-  'porto alegre':     { x: 335, y: 560, label: 'Porto Alegre' },
-  'rio grande':       { x: 310, y: 610, label: 'Rio Grande' },
   'macapa':           { x: 320, y: 40, label: 'Macapá' },
   'porto velho':      { x: 140, y: 210, label: 'Porto Velho' },
   'cuiaba':           { x: 270, y: 310, label: 'Cuiabá' },
@@ -48,48 +51,84 @@ const LOCATION_COORDS: Record<string, { x: number; y: number; label: string }> =
   'brasilia':         { x: 410, y: 330, label: 'Brasília' },
   'belo horizonte':   { x: 460, y: 370, label: 'Belo Horizonte' },
   'campo grande':     { x: 280, y: 400, label: 'Campo Grande' },
-  'macae':            { x: 499, y: 415, label: 'Macaé' },
-  'aracruz':          { x: 518, y: 385, label: 'Aracruz' },
-  'suape':            { x: 593, y: 210, label: 'Suape' },
-  'ipojuca':          { x: 593, y: 210, label: 'Ipojuca' },
-  'maragogipe':       { x: 538, y: 285, label: 'Maragogipe' },
-  'barcarena':        { x: 350, y: 115, label: 'Barcarena' },
-  'sao joao da barra':{ x: 502, y: 412, label: 'São João da Barra' },
-  'aracatuba':        { x: 355, y: 440, label: 'Araçatuba' },
-  // === Estaleiros offshore ===
-  'renave':           { x: 496, y: 425, label: 'Estaleiro Renave' },
-  'brasfels':         { x: 469, y: 449, label: 'Estaleiro Brasfels' },
-  'keppel':           { x: 469, y: 449, label: 'Keppel Fels' },
-  'maua':             { x: 495, y: 425, label: 'Estaleiro Mauá' },
-  'inhauma':          { x: 494, y: 425, label: 'Estaleiro Inhaúma' },
-  'brasa':            { x: 495, y: 426, label: 'Estaleiro Brasa' },
-  'atlantico sul':    { x: 593, y: 210, label: 'Estaleiro Atlântico Sul' },
-  'eas':              { x: 593, y: 210, label: 'EAS' },
-  'jurong':           { x: 518, y: 385, label: 'Estaleiro Jurong Aracruz' },
+  'curitiba':         { x: 360, y: 470, label: 'Curitiba' },
+  'florianopolis':    { x: 370, y: 520, label: 'Florianópolis' },
+  'porto alegre':     { x: 335, y: 560, label: 'Porto Alegre' },
 
-  'osx':              { x: 538, y: 285, label: 'Estaleiro OSX' },
-  'enseada':          { x: 538, y: 285, label: 'Enseada Paraguaçu' },
-  'paraguacu':        { x: 538, y: 285, label: 'Enseada Paraguaçu' },
-  'erg':              { x: 310, y: 610, label: 'Estaleiro Rio Grande' },
-  'qgi':              { x: 310, y: 610, label: 'QGI Rio Grande' },
-  'wilson sons':      { x: 432, y: 457, label: 'Estaleiro Wilson Sons' },
-  'vard':             { x: 595, y: 212, label: 'Estaleiro Vard Promar' },
-  'promar':           { x: 595, y: 212, label: 'Vard Promar' },
-  'utc':              { x: 495, y: 425, label: 'Estaleiro UTC' },
-  'triunfo':          { x: 495, y: 425, label: 'Estaleiro Triunfo' },
-  'mac laren':        { x: 496, y: 425, label: 'Estaleiro Mac Laren' },
-  'maclaren':         { x: 496, y: 425, label: 'Estaleiro Mac Laren' },
-  'alianca':          { x: 495, y: 425, label: 'Estaleiro Aliança' },
-  'imbetiba':         { x: 499, y: 415, label: 'Base de Imbetiba' },
-  'sermetal':         { x: 350, y: 115, label: 'SERMETAL' },
-  'navship':          { x: 373, y: 512, label: 'Estaleiro Navship' },
-  'detroit':          { x: 375, y: 510, label: 'Estaleiro Detroit' },
-  'oceana':           { x: 376, y: 511, label: 'Estaleiro Oceana' },
-  'verolme':          { x: 469, y: 449, label: 'Damen Verolme' },
-  'damen':            { x: 469, y: 449, label: 'Damen Verolme' },
-  'thomaz':           { x: 496, y: 424, label: 'Estaleiro Thomaz' },
-  'porto do acu':     { x: 502, y: 412, label: 'Porto do Açu' },
-  'acu':              { x: 502, y: 412, label: 'Porto do Açu' },
+  // === Cidades costeiras / portuárias (coordenadas marítimas) ===
+  'rio de janeiro':   { ...MARITIME_HUBS.guanabara, label: 'Rio de Janeiro' },
+  'niteroi':          { ...MARITIME_HUBS.guanabara, label: 'Niterói' },
+  'sao goncalo':      { ...MARITIME_HUBS.guanabara, label: 'São Gonçalo' },
+  'vitoria':          { ...MARITIME_HUBS.vitoria,   label: 'Vitória' },
+  'santos':           { ...MARITIME_HUBS.santos,    label: 'Santos' },
+  'guaruja':          { ...MARITIME_HUBS.santos,    label: 'Guarujá' },
+  'paranagua':        { x: 380, y: 475, label: 'Paranaguá' },
+  'itajai':           { ...MARITIME_HUBS.itajai,    label: 'Itajaí' },
+  'navegantes':       { ...MARITIME_HUBS.itajai,    label: 'Navegantes' },
+  'rio grande':       { ...MARITIME_HUBS.rio_grande, label: 'Rio Grande' },
+  'barcarena':        { ...MARITIME_HUBS.belem,     label: 'Barcarena' },
+  'angra dos reis':   { ...MARITIME_HUBS.angra,     label: 'Angra dos Reis' },
+  'macae':            { ...MARITIME_HUBS.macae,     label: 'Macaé' },
+  'aracruz':          { ...MARITIME_HUBS.aracruz,   label: 'Aracruz' },
+  'suape':            { ...MARITIME_HUBS.suape,     label: 'Suape' },
+  'ipojuca':          { ...MARITIME_HUBS.suape,     label: 'Ipojuca' },
+  'maragogipe':       { ...MARITIME_HUBS.paraguacu, label: 'Maragogipe' },
+  'sao joao da barra':{ ...MARITIME_HUBS.acu,      label: 'São João da Barra' },
+  'aracatuba':        { x: 355, y: 440, label: 'Araçatuba' },
+
+  // === Estaleiros – Baía de Guanabara ===
+  'renave':           { ...MARITIME_HUBS.guanabara, label: 'Estaleiro Renave' },
+  'brasfels':         { ...MARITIME_HUBS.angra,     label: 'Estaleiro Brasfels' },
+  'keppel':           { ...MARITIME_HUBS.angra,     label: 'Keppel Fels' },
+  'maua':             { ...MARITIME_HUBS.guanabara, label: 'Estaleiro Mauá' },
+  'inhauma':          { ...MARITIME_HUBS.guanabara, label: 'Estaleiro Inhaúma' },
+  'brasa':            { ...MARITIME_HUBS.guanabara, label: 'Estaleiro Brasa' },
+  'utc':              { ...MARITIME_HUBS.guanabara, label: 'Estaleiro UTC' },
+  'triunfo':          { ...MARITIME_HUBS.guanabara, label: 'Estaleiro Triunfo' },
+  'mac laren':        { ...MARITIME_HUBS.guanabara, label: 'Estaleiro Mac Laren' },
+  'maclaren':         { ...MARITIME_HUBS.guanabara, label: 'Estaleiro Mac Laren' },
+  'alianca':          { ...MARITIME_HUBS.guanabara, label: 'Estaleiro Aliança' },
+  'thomaz':           { ...MARITIME_HUBS.guanabara, label: 'Estaleiro Thomaz' },
+
+  // === Estaleiros – Angra dos Reis ===
+  'verolme':          { ...MARITIME_HUBS.angra,     label: 'Damen Verolme' },
+  'damen':            { ...MARITIME_HUBS.angra,     label: 'Damen Verolme' },
+
+  // === Estaleiros – Suape / PE ===
+  'atlantico sul':    { ...MARITIME_HUBS.suape,     label: 'Estaleiro Atlântico Sul' },
+  'eas':              { ...MARITIME_HUBS.suape,     label: 'EAS' },
+  'vard':             { ...MARITIME_HUBS.suape,     label: 'Estaleiro Vard Promar' },
+  'promar':           { ...MARITIME_HUBS.suape,     label: 'Vard Promar' },
+
+  // === Estaleiros – ES ===
+  'jurong':           { ...MARITIME_HUBS.aracruz,   label: 'Estaleiro Jurong Aracruz' },
+
+  // === Estaleiros – BA ===
+  'osx':              { ...MARITIME_HUBS.paraguacu, label: 'Estaleiro OSX' },
+  'enseada':          { ...MARITIME_HUBS.paraguacu, label: 'Enseada Paraguaçu' },
+  'paraguacu':        { ...MARITIME_HUBS.paraguacu, label: 'Enseada Paraguaçu' },
+
+  // === Estaleiros – RS ===
+  'erg':              { ...MARITIME_HUBS.rio_grande, label: 'Estaleiro Rio Grande' },
+  'qgi':              { ...MARITIME_HUBS.rio_grande, label: 'QGI Rio Grande' },
+
+  // === Estaleiros – SP ===
+  'wilson sons':      { ...MARITIME_HUBS.santos,    label: 'Estaleiro Wilson Sons' },
+
+  // === Estaleiros – SC ===
+  'navship':          { ...MARITIME_HUBS.itajai,    label: 'Estaleiro Navship' },
+  'detroit':          { ...MARITIME_HUBS.itajai,    label: 'Estaleiro Detroit' },
+  'oceana':           { ...MARITIME_HUBS.itajai,    label: 'Estaleiro Oceana' },
+
+  // === Estaleiros – Macaé / Norte RJ ===
+  'imbetiba':         { ...MARITIME_HUBS.macae,     label: 'Base de Imbetiba' },
+  'porto do acu':     { ...MARITIME_HUBS.acu,       label: 'Porto do Açu' },
+  'acu':              { ...MARITIME_HUBS.acu,       label: 'Porto do Açu' },
+
+  // === Belém / PA ===
+  'sermetal':         { ...MARITIME_HUBS.belem,     label: 'SERMETAL' },
+
+  // === Araçatuba / SP interior ===
   'rio tiete':        { x: 355, y: 440, label: 'Estaleiro Rio Tietê' },
 };
 
