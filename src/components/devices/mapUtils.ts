@@ -1,6 +1,7 @@
 /**
  * Utility to spread overlapping map markers so they don't stack on top of each other.
- * Groups markers within `minDistance` pixels and redistributes them in a seaward fan.
+ * Groups markers within `minDistance` pixels and redistributes them in a directional fan
+ * based on the geographic region (coastal areas spread along the coast, not inland).
  */
 
 export interface MarkerWithCoords {
@@ -17,24 +18,46 @@ export interface SpreadMarker<T extends MarkerWithCoords> extends MarkerWithCoor
 }
 
 /**
- * For coastal markers, determines the preferred spread direction (toward the ocean).
- * Returns an angle in radians pointing "seaward".
- * Brazil's coast is roughly on the east/southeast side, so we bias east (0 rad)
- * or southeast (+π/4). For specific regions we can be more precise.
+ * Returns a preferred spread angle (radians) and optional constraints for a given region.
+ * Angles: 0 = right (east), π/2 = down (south), -π/2 = up (north), π = left (west).
+ *
+ * For Guanabara Bay: spread north-south within the bay (avoid going east into ocean
+ * or west into land). Bay runs roughly y=425→432 between x=494 and x=515.
  */
-function getSeawardAngle(cx: number, cy: number): number {
-  // Southern coast (RS, SC, PR, SP) – ocean is to the east/southeast
-  if (cy > 450) return Math.PI / 6;       // ~30° (east-southeast)
-  // RJ / ES region – ocean is to the east
-  if (cy > 360 && cx > 450) return 0;      // east
-  // BA coast – ocean is to the east
-  if (cy > 240 && cx > 500) return 0;      // east
-  // NE coast – ocean is to the east/northeast
-  if (cy < 240 && cx > 540) return -Math.PI / 6; // ~-30° (east-northeast)
-  // North (AM/PA) – default south
-  if (cy < 150) return Math.PI / 2;        // south
+function getSpreadDirection(cx: number, cy: number): { angle: number; fanSpanMax: number } {
+  // Guanabara Bay region (x: 490-520, y: 420-435)
+  // Spread roughly south (downward in SVG) to stay inside the bay
+  if (cx > 490 && cx < 520 && cy > 420 && cy < 435) {
+    return { angle: Math.PI / 2, fanSpanMax: Math.PI * 0.6 }; // south, narrow fan
+  }
+
+  // Angra dos Reis (x: 450-470, y: 445-460) – spread southeast along coast
+  if (cx > 450 && cx < 470 && cy > 445 && cy < 460) {
+    return { angle: Math.PI / 3, fanSpanMax: Math.PI * 0.5 }; // ~60° (SE)
+  }
+
+  // Macaé / Açu / north RJ coast (x: 490-515, y: 410-420) – spread south
+  if (cx > 490 && cx < 515 && cy > 410 && cy < 420) {
+    return { angle: Math.PI / 2, fanSpanMax: Math.PI * 0.5 };
+  }
+
+  // ES coast (x: 510-540, y: 370-420) – spread east
+  if (cx > 510 && cx < 540 && cy > 370 && cy < 420) {
+    return { angle: 0, fanSpanMax: Math.PI * 0.6 };
+  }
+
+  // Southern coast (RS, SC, PR, SP) – spread east/southeast
+  if (cy > 450) return { angle: Math.PI / 6, fanSpanMax: Math.PI };
+  // RJ/ES general – spread east
+  if (cy > 360 && cx > 450) return { angle: 0, fanSpanMax: Math.PI };
+  // BA coast – spread east
+  if (cy > 240 && cx > 500) return { angle: 0, fanSpanMax: Math.PI };
+  // NE coast – spread east-northeast
+  if (cy < 240 && cx > 540) return { angle: -Math.PI / 6, fanSpanMax: Math.PI };
+  // North (AM/PA) – spread south
+  if (cy < 150) return { angle: Math.PI / 2, fanSpanMax: Math.PI };
   // Default: east
-  return 0;
+  return { angle: 0, fanSpanMax: Math.PI };
 }
 
 export function spreadOverlappingMarkers<T extends MarkerWithCoords>(
@@ -82,12 +105,12 @@ export function spreadOverlappingMarkers<T extends MarkerWithCoords>(
     cx /= group.length;
     cy /= group.length;
 
-    // Spread in a SEAWARD FAN (≤180°) instead of a full circle
-    const seawardAngle = getSeawardAngle(cx, cy);
+    // Get region-specific spread direction
+    const { angle: spreadAngle, fanSpanMax } = getSpreadDirection(cx, cy);
     const radius = Math.max(minDistance * 0.8, group.length * 6);
-    const fanSpan = Math.min(Math.PI, group.length * 0.4); // up to 180°
+    const fanSpan = Math.min(fanSpanMax, group.length * 0.4);
     const angleStep = group.length > 1 ? fanSpan / (group.length - 1) : 0;
-    const startAngle = seawardAngle - fanSpan / 2;
+    const startAngle = spreadAngle - fanSpan / 2;
 
     group.forEach((idx, i) => {
       const angle = startAngle + i * angleStep;

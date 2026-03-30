@@ -13,22 +13,22 @@ export const SVG_HEIGHT = 648;
 // Keep BRAZIL_PATH export as empty (no longer a single path)
 export const BRAZIL_PATH = '';
 
-// Maritime hubs – anchor coordinates placed in the OCEAN near each cluster.
-// The SVG bay/coast features are only ~3 units wide; markers (12-28 units) must
-// sit OUTSIDE the land path so they don't visually land inland.
+// Maritime hubs – anchor coordinates placed IN the coastal features.
+// Guanabara Bay: RJ path indent x≈494 y≈426 (west shore), east cape x≈515 y≈431.
+// Bay water center ≈ x:502 y:428.  Markers sit inside the bay reentrance.
 const MARITIME_HUBS = {
-  guanabara:  { x: 522, y: 432, label: 'Baía de Guanabara' },   // ocean east of RJ coast (coast at x≈515)
-  angra:      { x: 458, y: 456, label: 'Angra dos Reis' },       // ocean south of Angra coast
-  macae:      { x: 512, y: 410, label: 'Macaé' },                // just off northeast RJ coast
-  acu:        { x: 508, y: 406, label: 'Porto do Açu' },         // São João da Barra coast
-  vitoria:    { x: 538, y: 378, label: 'Vitória' },              // ocean east of ES coast (coast at x≈535)
-  aracruz:    { x: 536, y: 385, label: 'Aracruz' },              // ES coast south of Vitória
-  santos:     { x: 438, y: 462, label: 'Santos' },               // ocean south of SP coast
-  suape:      { x: 598, y: 215, label: 'Suape' },                // PE coast
-  paraguacu:  { x: 540, y: 290, label: 'Paraguaçu' },            // BA coast
-  rio_grande: { x: 315, y: 618, label: 'Rio Grande' },           // RS coast
-  itajai:     { x: 382, y: 518, label: 'Itajaí / Navegantes' },  // SC coast
-  belem:      { x: 355, y: 110, label: 'Belém / Barcarena' },    // PA coast
+  guanabara:  { x: 502, y: 428, label: 'Baía de Guanabara' },    // center of bay reentrance
+  angra:      { x: 457, y: 451, label: 'Angra dos Reis' },        // south RJ coast (path ≈457,450)
+  macae:      { x: 500, y: 418, label: 'Macaé' },                 // NE RJ coast (path ≈498-501,415)
+  acu:        { x: 498, y: 414, label: 'Porto do Açu' },          // São João da Barra (path ≈497,414)
+  vitoria:    { x: 521, y: 413, label: 'Vitória' },               // ES coast (path ≈520,412)
+  aracruz:    { x: 518, y: 416, label: 'Aracruz' },               // ES coast south of Vitória
+  santos:     { x: 438, y: 462, label: 'Santos' },                // SP coast
+  suape:      { x: 598, y: 215, label: 'Suape' },                 // PE coast
+  paraguacu:  { x: 540, y: 290, label: 'Paraguaçu' },             // BA coast
+  rio_grande: { x: 315, y: 618, label: 'Rio Grande' },            // RS coast
+  itajai:     { x: 382, y: 518, label: 'Itajaí / Navegantes' },   // SC coast
+  belem:      { x: 355, y: 110, label: 'Belém / Barcarena' },     // PA coast
 } as const;
 
 // Dictionary: normalized location name → SVG coordinates (raw viewBox coords)
@@ -62,6 +62,7 @@ const LOCATION_COORDS: Record<string, { x: number; y: number; label: string }> =
   'vitoria':          { ...MARITIME_HUBS.vitoria,   label: 'Vitória' },
   'santos':           { ...MARITIME_HUBS.santos,    label: 'Santos' },
   'guaruja':          { ...MARITIME_HUBS.santos,    label: 'Guarujá' },
+  'sao paulo':        { x: 400, y: 440, label: 'São Paulo' },
   'paranagua':        { x: 380, y: 475, label: 'Paranaguá' },
   'itajai':           { ...MARITIME_HUBS.itajai,    label: 'Itajaí' },
   'navegantes':       { ...MARITIME_HUBS.itajai,    label: 'Navegantes' },
