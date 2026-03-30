@@ -1,10 +1,11 @@
 
 
-## Aumentar tamanho da logo no Header
+## Aumentar logo e ajustar alinhamento à esquerda
 
-A logo atual usa `h-8 w-28` (32px altura, 112px largura). Vou aumentar para `h-12 w-40` (48px altura, 160px largura) para melhor visibilidade.
+A logo atual usa `h-12 w-40` (48px). Dobrar para `h-24 w-80` (96px altura, 320px largura). Para alinhar com o conteúdo da página, usar `object-contain object-left` e margem negativa à esquerda (`-ml-2`) para compensar o espaço vazio interno da imagem.
 
 ### Alteração
 
-**`src/components/Header.tsx`** linha 104: trocar `className="h-8 w-28 object-contain"` por `className="h-12 w-40 object-contain"`
+**`src/components/Header.tsx`** linha 104:
+- Trocar `className="h-12 w-40 object-contain"` por `className="h-24 w-80 object-contain object-left -ml-2"`
 
