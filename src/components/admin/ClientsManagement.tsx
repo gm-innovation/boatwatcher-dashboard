@@ -353,15 +353,13 @@ export const ClientsManagement = () => {
               {companies.map((company) => (
                 <tr key={company.id} className="border-b hover:bg-muted/50">
                   <td className="p-4">
-                    <Avatar className="h-10 w-10">
-                      {getClientLogo(company) ? (
-                        <AvatarImage src={getClientLogo(company)!} alt={company.name} />
-                      ) : (
-                        <AvatarFallback>
-                          <Building2 className="h-5 w-5" />
-                        </AvatarFallback>
-                      )}
-                    </Avatar>
+                    {getClientLogo(company) ? (
+                      <img src={getClientLogo(company)!} alt={company.name} className="h-10 w-20 object-contain" />
+                    ) : (
+                      <div className="h-10 w-10 flex items-center justify-center rounded bg-muted">
+                        <Building2 className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    )}
                   </td>
                   <td className="p-4 font-medium">{company.name}</td>
                   <td className="p-4 text-sm text-muted-foreground">{company.cnpj || '-'}</td>
