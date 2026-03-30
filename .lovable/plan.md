@@ -1,54 +1,59 @@
 
 
-## Revisão e correção de todas as coordenadas do mapa
+## Corrigir coordenadas usando o path SVG do RJ como referência
 
-### Problema
-As coordenadas foram colocadas de forma aproximada e vários locais estão deslocados. Exemplo: Renave (Baía de Guanabara) aparece na posição de Macaé. Isso vai causar erros em todos os projetos futuros que usarem essas localizações.
+### Diagnóstico
+Analisei os vértices do path SVG do estado `'RJ'`. A costa litorânea e a Baía de Guanabara são definidas por estes pontos-chave:
 
-### Método de correção
-Usar os paths SVG dos estados como referência geográfica para posicionar as cidades/estaleiros corretamente. Exemplo: o path do estado do RJ define seus limites — Rio, Niterói, Angra devem cair dentro dele, e Macaé deve ficar mais ao norte na costa.
+```text
+Baía de Guanabara (reentrância no path):
+  495.72, 421.25  ← fundo da baía (norte)
+  493.83, 424.96  ← lado oeste (Rio)
+  495.18, 425.84  ← centro
+  495.25, 426.97  ← entrada da baía (sul)
+  492.72, 427.96  ← segue para costa oeste
 
-### Coordenadas a corrigir
+Costa nordeste RJ:
+  501.68, 411.38  ← São João da Barra / divisa ES
+  498.08, 415.21  ← região de Macaé
 
-Analisando o mapa SVG e as posições relativas dos estados:
+Costa sudoeste RJ:
+  468.35, 450.28  ← Angra dos Reis / costa sul
+  463.24, 452.27  ← Ilha Grande
+```
 
-**Região RJ/ES (maioria dos problemas):**
-| Local | Atual | Corrigido | Motivo |
-|-------|-------|-----------|--------|
-| `rio de janeiro` | 500, 435 | 490, 430 | Ajustar para costa da Baía de Guanabara |
-| `niteroi` | 505, 432 | 493, 428 | Lado leste da Baía de Guanabara |
-| `sao goncalo` | 503, 430 | 495, 426 | Norte de Niterói |
-| `renave` | 505, 435 | 493, 429 | Baía de Guanabara (Niterói), não Macaé |
-| `maua` | 505, 433 | 492, 429 | Baía de Guanabara |
-| `inhauma` | 498, 430 | 490, 428 | Zona norte do Rio, na baía |
-| `brasa` | 500, 432 | 491, 429 | Zona portuária do Rio |
-| `utc` | 506, 434 | 492, 430 | Baía de Guanabara |
-| `triunfo` | 506, 434 | 492, 430 | Baía de Guanabara |
-| `mac laren` / `maclaren` | 504, 436 | 493, 430 | Niterói |
-| `alianca` | 507, 434 | 492, 429 | Baía de Guanabara |
-| `thomaz` | 503, 430 | 493, 428 | Niterói |
-| `angra dos reis` | 480, 445 | 475, 440 | Mais a oeste na costa sul do RJ |
-| `brasfels` | 480, 445 | 475, 440 | Angra dos Reis |
-| `keppel` | 478, 447 | 474, 441 | Angra dos Reis |
-| `verolme` / `damen` | 479, 446 | 474, 440 | Angra dos Reis |
-| `macae` | 520, 420 | 510, 410 | Costa norte RJ, ajustar para dentro do estado |
-| `imbetiba` | 522, 418 | 511, 409 | Macaé |
-| `sao joao da barra` | 525, 415 | 515, 405 | Norte de Macaé |
-| `porto do acu` / `acu` | 525, 415 | 515, 405 | São João da Barra |
+As coordenadas atuais (`x:490-493, y:428-430`) caem na borda **interior** (fronteira RJ-MG), não na costa.
 
-**Outras regiões (ajustes menores):**
-| Local | Atual | Corrigido | Motivo |
-|-------|-------|-----------|--------|
-| `vitoria` | 530, 395 | 520, 390 | Ajustar para costa do ES |
-| `aracruz` | 528, 400 | 518, 385 | Norte de Vitória no ES |
-| `jurong` | 528, 400 | 518, 385 | Aracruz, ES |
-| `santos` | 420, 460 | 430, 455 | Costa de SP |
-| `guaruja` | 425, 462 | 432, 457 | Ao lado de Santos |
-| `wilson sons` | 425, 462 | 432, 457 | Guarujá |
+### Correções
 
-### Arquivo afetado
-- `src/components/devices/BrazilMap.tsx` — atualizar o dicionário `LOCATION_COORDS`
+**Arquivo:** `src/components/devices/BrazilMap.tsx` — dicionário `LOCATION_COORDS`
 
-### Observação
-Após a correção, o sistema de spread automático (`spreadOverlappingMarkers`) vai separar visualmente os estaleiros que compartilham coordenadas próximas (como os vários estaleiros de Angra ou da Baía de Guanabara), mantendo linhas pontilhadas de conexão com a posição real.
+| Local | Atual (x, y) | Corrigido (x, y) | Referência no path |
+|-------|--------------|-------------------|-------------------|
+| `rio de janeiro` | 490, 430 | 494, 426 | Lado oeste da baía |
+| `niteroi` | 493, 428 | 497, 424 | Lado leste da baía |
+| `sao goncalo` | 495, 426 | 496, 423 | Norte de Niterói |
+| `renave` | 493, 429 | 496, 425 | Dentro da baía |
+| `maua` | 492, 429 | 495, 425 | Dentro da baía |
+| `inhauma` | 490, 428 | 494, 425 | Lado oeste da baía |
+| `brasa` | 491, 429 | 495, 426 | Zona portuária Rio |
+| `utc` | 492, 430 | 495, 425 | Dentro da baía |
+| `triunfo` | 492, 430 | 495, 425 | Dentro da baía |
+| `mac laren` | 493, 430 | 496, 425 | Niterói |
+| `maclaren` | 493, 430 | 496, 425 | Niterói |
+| `alianca` | 492, 429 | 495, 425 | Dentro da baía |
+| `thomaz` | 493, 428 | 496, 424 | Niterói |
+| `angra dos reis` | 475, 440 | 469, 449 | Costa sudoeste RJ |
+| `brasfels` | 475, 440 | 469, 449 | Angra dos Reis |
+| `keppel` | 474, 441 | 469, 449 | Angra dos Reis |
+| `verolme` | 474, 440 | 469, 449 | Angra dos Reis |
+| `damen` | 474, 440 | 469, 449 | Angra dos Reis |
+| `macae` | 510, 410 | 499, 415 | Costa nordeste RJ |
+| `imbetiba` | 511, 409 | 499, 415 | Macaé |
+| `sao joao da barra` | 515, 405 | 502, 412 | Divisa RJ/ES |
+| `porto do acu` | 515, 405 | 502, 412 | São João da Barra |
+| `acu` | 515, 405 | 502, 412 | São João da Barra |
+
+### Método
+Todas as coordenadas derivadas diretamente dos vértices do path SVG `'RJ'`, garantindo que os marcadores caem **dentro** do contorno do estado e na posição geográfica correta.
 
