@@ -178,7 +178,7 @@ async function fetchWorkersOnBoardFromCloud(
 
     const { data: entryLogs, error: entryError } = await supabase
       .from('access_logs')
-      .select('worker_id, worker_name, device_name, timestamp')
+      .select('worker_id, worker_name, device_name, device_id, timestamp')
       .eq('direction', 'entry')
       .eq('access_status', 'granted')
       .in('device_id', deviceIds)
