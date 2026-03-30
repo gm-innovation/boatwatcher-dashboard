@@ -1,62 +1,65 @@
 
 
-## Diagnóstico de Instabilidade de Conectividade
+## Mapa do Brasil com Zoom, Modal Expandido e Marcadores Pulsantes
 
-### Causa raiz identificada
+### Componentes
 
-Analisando os dados de `connectivity_events` da última hora, o dispositivo **Engenharia - Entrada** (`81f1c377`) apresenta um padrão claro de **flapping** — 14 transições offline→online em ~50 minutos. Cada desconexão dura exatamente ~35 segundos antes de recuperar. O dispositivo **Engenharia - Saída** (`b9e59f45`) está estável.
+**1. `src/components/devices/BrazilMap.tsx`** — Componente principal
 
-A causa é um **loop de feedback entre 3 escritores concorrentes de status**:
+- SVG inline simplificado do contorno do Brasil (~5KB path)
+- Dicionário de ~20 cidades/portos mapeando `location` normalizado → `{x, y}` no viewBox
+- Marcadores pulsantes (`<circle>` + CSS `animate-ping`) coloridos por health:
+  - Verde: todos online | Amarelo: parcial | Vermelho: todos offline
+- Tamanho proporcional ao número de dispositivos
+- Tooltip no hover com nome do projeto, dispositivos online/total
+- Props: `projects`, `devicesByProject`, `onExpandClick`
+- Versão compacta para o dashboard (altura fixa ~250px)
+
+**2. `src/components/devices/BrazilMapModal.tsx`** — Modal com zoom
+
+- Usa `Dialog` (max-w-4xl ou full-screen) para exibir o mapa em tamanho grande
+- **Zoom via scroll do mouse**: controla o `viewBox` do SVG para fazer zoom in/out
+  - `onWheel` → ajusta escala (min 0.5x, max 5x)
+  - Pan com drag (mousedown + mousemove) para navegar no mapa ampliado
+- Ao dar zoom, os marcadores próximos se separam visualmente, resolvendo sobreposição
+- Marcadores mantêm tamanho visual constante (compensam o zoom via `r={baseSize / scale}`)
+- Tooltip mais detalhado no modal: nome, location, contagem, uptime %
+- Botões de controle: zoom +, zoom −, resetar vista
+- Botão de fechar padrão do Dialog
+
+**3. Integração em `ConnectivityDashboard.tsx`**
+
+- Renderizar `<BrazilMap>` acima dos project cards com botão "Expandir" (ícone `Maximize2`)
+- Ao clicar em expandir, abre `<BrazilMapModal>`
+- Dados já disponíveis no componente (projects, devices) passados via props
+
+### Detalhes técnicos
+
+- Zoom implementado com estado `{ scale, translateX, translateY }` controlando o `viewBox` do SVG
+- `viewBox` dinâmico: `x y width height` onde width/height = baseSize/scale e x,y deslocados pelo pan
+- Sem dependências externas — SVG puro + CSS + estado React
+- Matching de location: `normalize(str)` remove acentos, lowercase, e busca no dicionário; fallback para centro do mapa
 
 ```text
-┌─ Agent Poll (5s) ─────────────────────────────────────────────┐
-│ Falha 3x consecutivas (15s) → marca offline na memória/SQLite │
-└───────────────────────────────┬────────────────────────────────┘
-                                ↓
-┌─ Heartbeat (60s) ─────────────────────────────────────────────┐
-│ Envia status do dispositivo para nuvem                        │
-│ Cloud escreve devices.status = 'offline'                      │
-│ Trigger grava connectivity_event                              │
-└───────────────────────────────┬────────────────────────────────┘
-                                ↓
-┌─ Download Devices (60s) ──────────────────────────────────────┐
-│ Baixa devices da nuvem com status='offline'                   │
-│ upsertDeviceFromCloud() SOBRESCREVE status local!             │
-│ → Mesmo que dispositivo já tenha recuperado localmente,       │
-│   o status baixado da nuvem reseta para offline               │
-│ → Próximo heartbeat reporta offline de novo                   │
-└───────────────────────────────────────────────────────────────┘
+Dashboard:
+┌─ Mapa de Operações ─────── [⤢ Expandir]─┐
+│        ╭──╮                               │
+│       ╱    ╲   ● Recife                   │
+│      │      │                             │
+│       ╲    ╱  ●● Santos/Rio               │
+│        ╰──╯                               │
+└───────────────────────────────────────────┘
+
+Modal (expandido, com zoom):
+┌─────────────────────────────────────────────────┐
+│  Mapa de Operações               [−] [+] [↺] X │
+│  ┌─────────────────────────────────────────────┐│
+│  │                                             ││
+│  │         (SVG ampliado, pan+zoom)            ││
+│  │              ●  Santos                      ││
+│  │           ●  Guarujá                        ││
+│  │                                             ││
+│  └─────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────┘
 ```
-
-### Problemas específicos
-
-1. **`FAILURE_THRESHOLD = 3`** — com poll de 5s, basta 15 segundos sem resposta (dispositivo ocupado com reconhecimento facial, latência de rede) para marcar offline. Muito agressivo.
-
-2. **`upsertDeviceFromCloud()` sobrescreve `status` local** (database.js linha 1238) — o download de devices da nuvem traz o `status` que foi setado pelo heartbeat anterior, criando um ciclo: nuvem diz offline → local aceita → heartbeat confirma offline → ciclo reinicia.
-
-3. **Frontend `isAgentOnline` usa threshold de 60s** — com heartbeat de 60s, qualquer atraso de rede faz o agente aparecer como offline no dashboard.
-
-4. **Sem histerese** — o sistema marca online imediatamente após 1 poll bem-sucedido, sem exigir estabilidade.
-
-### Correções propostas
-
-**1. `electron/agent.js`** — Aumentar resiliência do polling:
-- `FAILURE_THRESHOLD`: 3 → 6 (30s antes de declarar offline)
-- Adicionar `RECOVERY_THRESHOLD = 2`: exigir 2 polls consecutivos com sucesso para voltar a marcar online (histerese)
-- Reduzir timeout HTTP de 10s → 5s para liberar a thread mais rápido
-
-**2. `electron/database.js`** — Não sobrescrever status local com dados da nuvem:
-- Em `upsertDeviceFromCloud()`, ignorar o campo `status` vindo da nuvem (o agente local é a fonte de verdade para conectividade)
-
-**3. `src/components/devices/ConnectivityDashboard.tsx`** — Relaxar threshold do agente:
-- `isAgentOnline`: threshold de 60s → 150s (2.5 ciclos de heartbeat)
-
-**4. Migração SQL** — Debounce no trigger de conectividade:
-- Alterar `log_device_status_change()` para ignorar eventos se o último evento para o mesmo dispositivo foi há menos de 60s (evita registrar flapping como dezenas de incidentes)
-
-### Impacto esperado
-
-- Eliminação de ~90% dos falsos positivos de desconexão
-- Redução do ruído nos gráficos de disponibilidade
-- Agente permanece "online" no dashboard mesmo com heartbeats ligeiramente atrasados
 
