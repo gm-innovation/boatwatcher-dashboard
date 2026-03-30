@@ -24,7 +24,7 @@ const COLOR_BLUE = '#3b82f6';
 const isAgentOnline = (agent: { status: string; last_seen_at: string | null }) => {
   if (agent.status !== 'online') return false;
   if (!agent.last_seen_at) return true;
-  return new Date(agent.last_seen_at).getTime() > Date.now() - 60000;
+  return new Date(agent.last_seen_at).getTime() > Date.now() - 150000;
 };
 
 type ProjectWithClient = {
