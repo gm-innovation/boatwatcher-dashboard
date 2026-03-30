@@ -3,7 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
-import { BRAZIL_PATH, SVG_WIDTH, SVG_HEIGHT, findCityCoords, type MapProjectData } from './BrazilMap';
+import { BRAZIL_STATES, SVG_VIEWBOX } from './brazilStatesData';
+import { findCityCoords, SVG_WIDTH, SVG_HEIGHT, type MapProjectData } from './BrazilMap';
 
 const COLOR_ONLINE = '#22c55e';
 const COLOR_OFFLINE = '#ef4444';
@@ -26,7 +27,6 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
   const dragStart = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
   const svgRef = useRef<SVGSVGElement>(null);
 
-  // Reset on open
   useEffect(() => {
     if (open) {
       setScale(1);
@@ -48,11 +48,10 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
     })
     .filter(Boolean) as (MapProjectData & { x: number; y: number; label: string; health: string; color: string; radius: number })[];
 
-  // Compute viewBox from scale + translate
   const vbWidth = SVG_WIDTH / scale;
   const vbHeight = SVG_HEIGHT / scale;
-  const vbX = (SVG_WIDTH - vbWidth) / 2 + translate.x;
-  const vbY = (SVG_HEIGHT - vbHeight) / 2 + translate.y;
+  const vbX = -5 + (SVG_WIDTH - vbWidth) / 2 + translate.x;
+  const vbY = -5 + (SVG_HEIGHT - vbHeight) / 2 + translate.y;
   const viewBox = `${vbX} ${vbY} ${vbWidth} ${vbHeight}`;
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -82,7 +81,6 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
   const zoomOut = () => setScale(s => Math.max(MIN_SCALE, s - ZOOM_STEP));
   const resetView = () => { setScale(1); setTranslate({ x: 0, y: 0 }); };
 
-  // Compensate marker sizes for zoom so they stay visually consistent
   const compensatedRadius = (r: number) => Math.max(3, r / Math.sqrt(scale));
   const compensatedStroke = 2 / Math.sqrt(scale);
   const compensatedFontSize = 10 / Math.sqrt(scale);
@@ -130,18 +128,17 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
               style={{ userSelect: 'none' }}
               aria-label="Mapa do Brasil expandido com zoom"
             >
-              {/* Brazil contour */}
-              <path
-                d={BRAZIL_PATH}
-                fill="hsl(var(--muted))"
-                stroke="hsl(var(--border))"
-                strokeWidth={1.5 / Math.sqrt(scale)}
-                opacity={0.7}
-              />
-
-              {/* Grid */}
-              <line x1="50" y1="200" x2="400" y2="200" stroke="hsl(var(--border))" strokeWidth={0.3 / scale} opacity={0.3} />
-              <line x1="220" y1="30" x2="220" y2="370" stroke="hsl(var(--border))" strokeWidth={0.3 / scale} opacity={0.3} />
+              {/* Brazil states */}
+              {Object.entries(BRAZIL_STATES).map(([abbr, d]) => (
+                <path
+                  key={abbr}
+                  d={d}
+                  fill="hsl(var(--muted))"
+                  stroke="hsl(var(--border))"
+                  strokeWidth={1 / Math.sqrt(scale)}
+                  opacity={0.7}
+                />
+              ))}
 
               {/* Markers */}
               {markers.map((m) => {
@@ -150,35 +147,11 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
                   <Tooltip key={m.id}>
                     <TooltipTrigger asChild>
                       <g style={{ cursor: 'pointer' }}>
-                        {/* Pulse ring */}
                         <circle cx={m.x} cy={m.y} r={cr + 2} fill={m.color} opacity={0.3}>
-                          <animate
-                            attributeName="r"
-                            from={String(cr)}
-                            to={String(cr + 10 / Math.sqrt(scale))}
-                            dur="2s"
-                            repeatCount="indefinite"
-                          />
-                          <animate
-                            attributeName="opacity"
-                            from="0.4"
-                            to="0"
-                            dur="2s"
-                            repeatCount="indefinite"
-                          />
+                          <animate attributeName="r" from={String(cr)} to={String(cr + 10 / Math.sqrt(scale))} dur="2s" repeatCount="indefinite" />
+                          <animate attributeName="opacity" from="0.4" to="0" dur="2s" repeatCount="indefinite" />
                         </circle>
-                        
-                        {/* Main dot */}
-                        <circle
-                          cx={m.x}
-                          cy={m.y}
-                          r={cr}
-                          fill={m.color}
-                          stroke="hsl(var(--background))"
-                          strokeWidth={compensatedStroke}
-                        />
-                        
-                        {/* Label */}
+                        <circle cx={m.x} cy={m.y} r={cr} fill={m.color} stroke="hsl(var(--background))" strokeWidth={compensatedStroke} />
                         <text
                           x={m.x + cr + 3 / Math.sqrt(scale)}
                           y={m.y + compensatedFontSize / 3}
@@ -209,7 +182,6 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
           </TooltipProvider>
         </div>
 
-        {/* Legend */}
         <div className="px-6 py-3 border-t border-border/50 flex items-center gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLOR_ONLINE }} />
