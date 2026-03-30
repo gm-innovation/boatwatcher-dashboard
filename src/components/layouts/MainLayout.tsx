@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 
 const MainLayoutContent = ({ children }: { children: React.ReactNode }) => {
-  const { isFullscreenMode, toggleFullscreen } = useProject();
+  const { isFullscreenMode, toggleFullscreen, isHeaderCollapsed } = useProject();
 
   return (
     <div className="min-h-screen">
