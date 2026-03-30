@@ -11,6 +11,7 @@ import { useProject } from '@/contexts/ProjectContext';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useRuntimeProfile } from '@/hooks/useRuntimeProfile';
+import { useSystemSetting } from '@/hooks/useSystemSettings';
 
 export const Header = () => {
   const navigate = useNavigate();
