@@ -39,9 +39,9 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
   const rotatedLogoRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
-  const handleLogoUpload = async (file: File, type: 'light' | 'dark') => {
-    const setUploading = type === 'light' ? setUploadingLight : setUploadingDark;
-    const setLogoUrl = type === 'light' ? setLogoUrlLight : setLogoUrlDark;
+  const handleLogoUpload = async (file: File, type: 'light' | 'dark' | 'rotated') => {
+    const setUploading = type === 'light' ? setUploadingLight : type === 'dark' ? setUploadingDark : setUploadingRotated;
+    const setLogoUrl = type === 'light' ? setLogoUrlLight : type === 'dark' ? setLogoUrlDark : setLogoUrlRotated;
     
     setUploading(true);
     try {
