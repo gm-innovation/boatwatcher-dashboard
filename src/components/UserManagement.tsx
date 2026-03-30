@@ -13,8 +13,14 @@ import { useToast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppRole } from "@/types/supabase";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useClients } from "@/hooks/useSupabase";
+import { ChevronDown } from "lucide-react";
 
 const UserManagement = () => {
   const [email, setEmail] = useState("");
