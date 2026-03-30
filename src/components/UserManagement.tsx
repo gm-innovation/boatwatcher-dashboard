@@ -24,7 +24,15 @@ const UserManagement = () => {
   const [loading, setLoading] = useState(false);
   const { data: projects = [] } = useProjects();
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [filterClientId, setFilterClientId] = useState<string | null>(null);
+  const [filterProjectId, setFilterProjectId] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const filteredProjects = projects.filter((p) => {
+    if (filterProjectId) return p.id === filterProjectId;
+    if (filterClientId) return p.client_id === filterClientId;
+    return true;
+  });
 
   const handleToggleProject = (projectId: string) => {
     setSelectedProjects(prev => {
