@@ -290,6 +290,7 @@ class AgentController {
         }
       } catch (retryErr) {
         device._consecutiveFailures = (device._consecutiveFailures || 0) + 1;
+        device._consecutiveSuccesses = 0;
         device._lastError = retryErr.message;
         device._lastPollAt = new Date().toISOString();
 
