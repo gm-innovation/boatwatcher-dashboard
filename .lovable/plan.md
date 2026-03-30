@@ -1,92 +1,58 @@
 
 
-## Centro de Monitoramento Multi-Projeto
+## Painel de Monitoramento — Tela Cheia + Cores + Espaço Total
 
-Reescrever `ConnectivityDashboard.tsx` como uma tela completa de monitoramento com visual de "control center", incluindo gráficos, tabelas detalhadas e indicadores visuais por projeto.
+### Problema
+O `MainLayout` aplica `max-w-7xl mx-auto px-4` em todo conteúdo, limitando a largura útil. O dashboard de monitoramento precisa ocupar 100% da tela (horizontal e vertical) para funcionar como um centro de controle real.
 
-### Alteração
+### Alterações
 
-**`src/components/devices/ConnectivityDashboard.tsx`** — reescrita completa:
+**1. `src/components/devices/ConnectivityDashboard.tsx`** — estado `isMaximized` local:
 
-1. **Dados globais via queries diretas** (sem depender do `selectedProjectId`):
-   - `projects` com join em `companies` (nome do cliente)
-   - `devices` (todos)
-   - `local_agents` (todos)
-   - Auto-refresh a cada 30s
+- **Modo maximizado**: renderiza um overlay `fixed inset-0 z-[100] bg-background` que cobre tudo (header, sidebar, abas), usando `w-full h-screen p-4` — sem `max-w`, sem margem lateral
+- **Layout interno no fullscreen**: grid de 2 colunas (`grid-cols-[1fr_1fr]`) com altura fixa distribuída via flexbox:
+  - **Coluna esquerda**: Cards resumo (4 em linha) + gráfico de barras + gráfico de rosca lado a lado
+  - **Coluna direita**: Tabela de dispositivos com `flex-1 overflow-auto` + alertas no rodapé
+- **Header do monitor**: barra superior com indicador pulsante, status, timestamp, botões refresh e minimizar
+- **Escape** fecha o modo maximizado
 
-2. **Header com indicador de saúde global**:
-   - Barra de status pulsante (verde/amarelo/vermelho) baseada na % de dispositivos online
-   - Timestamp do último refresh
-   - Botão de refresh manual
+- **Cores vibrantes hardcoded**:
+  - Online: `#22c55e` (verde) nos gráficos, bars, dots, badges
+  - Offline: `#ef4444` (vermelho)
+  - Parcial: `#eab308` (amarelo)
+  - Cards com ícones em círculos coloridos (`bg-green-100 dark:bg-green-900/30`, etc.)
+  - Progress bars com cor dinâmica baseada na porcentagem
 
-3. **Cards de resumo global** (4 colunas):
-   - Projetos monitorados (total)
-   - Dispositivos online/total com Progress bar
-   - Agentes online/total
-   - Alertas ativos (offline count) com destaque vermelho
+- **Modo normal** (não maximizado): manter layout atual mas com cores corrigidas. Continua dentro do `max-w-7xl` do MainLayout.
 
-4. **Gráfico de barras** (Recharts via `ChartContainer`):
-   - Um gráfico de barras empilhadas mostrando por projeto: dispositivos online (verde) vs offline (vermelho)
-   - Usa os componentes `ChartContainer`, `ChartTooltip`, `ChartTooltipContent` já existentes
+**2. `src/components/layouts/MainLayout.tsx`** — nenhuma alteração necessária (o overlay `fixed` do dashboard já ignora o container pai).
 
-5. **Gráfico de rosca/pie** (Recharts):
-   - Distribuição geral: dispositivos online, offline, sem agente
-   - Visual compacto ao lado do gráfico de barras (grid 2 colunas)
-
-6. **Tabela de dispositivos completa**:
-   - Colunas: Status (dot colorido), Nome, IP, Projeto, Agente vinculado, Último evento (relativo)
-   - Ordenável por status (offline primeiro)
-   - Todos os projetos juntos, com coluna identificando o projeto
-
-7. **Grid de cards por projeto** (seção inferior):
-   - Card compacto por projeto com:
-     - Nome do projeto + cliente
-     - Badge de saúde (verde/amarelo/vermelho)
-     - Mini lista de dispositivos com dots de status
-     - Status do agente com last_seen_at relativo
-   - Projetos com problemas aparecem primeiro (sort by health)
-
-8. **Painel de alertas** (rodapé):
-   - Lista consolidada de todos os dispositivos offline e agentes inativos
-   - Identificação do projeto de cada alerta
-   - Ícone de severidade e tempo desde a última comunicação
-
-### Detalhes Técnicos
-
-- Queries diretas: `supabase.from('devices').select('*')`, `supabase.from('local_agents').select('*')`, `supabase.from('projects').select('*, companies!client_id(name, logo_url_light)')`
-- Agrupamento client-side por `project_id` usando `useMemo`
-- Gráficos via `recharts` (já instalado) com `ChartContainer` de `@/components/ui/chart`
-- `isAgentOnline` mantém regra de 60s no `last_seen_at`
-- `refetchInterval: 30000` em todas as queries
-- Saúde do projeto: verde (100% online), amarelo (parcial), vermelho (tudo offline ou sem dispositivos)
+### Layout maximizado
 
 ```text
-┌─ 🟢 Sistema Operacional — Atualizado há 15s ──── [↻ Refresh] ─┐
-├────────────┬────────────┬────────────┬─────────────────────────┤
-│ 3 Projetos │ 5/7 Online │ 2/3 Agents │ 2 Alertas ⚠            │
-│ monitorados│ ████░ 71%  │ ████░ 67%  │                         │
-├────────────┴────────────┴────────────┴─────────────────────────┤
+┌─ ● Sistema Operacional ── 15s ── [↻ Refresh] [✕ Minimizar] ──┐
 │                                                                 │
-│  [Gráfico Barras por Projeto]    [Gráfico Rosca Geral]         │
-│  Proj A: ████████ 3/3            Online: 71%                   │
-│  Proj B: ██████░░ 2/3            Offline: 29%                  │
-│  Proj C: ░░░░░░░░ 0/1                                         │
-│                                                                 │
-├─ Todos os Dispositivos ───────────────────────────────────────┤
-│ ● Leitor Proa    | 192.168.1.10 | Proj A | Agente-1 | 2min   │
-│ ● Leitor Popa    | 192.168.1.11 | Proj A | Agente-1 | 5min   │
-│ ○ Leitor Dique   | 192.168.1.20 | Proj B | —        | 3h     │
-│                                                                 │
-├─ Projetos ────────────────────────────────────────────────────┤
-│ ┌─ Proj A 🟢─┐  ┌─ Proj B 🟡─┐  ┌─ Proj C 🔴─┐            │
-│ │ Cliente X   │  │ Cliente Y   │  │ Cliente Z   │            │
-│ │ 3/3 disp    │  │ 2/3 disp    │  │ 0/1 disp    │            │
-│ │ Agent: ✓    │  │ Agent: ✓    │  │ Sem agente  │            │
-│ └─────────────┘  └─────────────┘  └─────────────┘            │
-│                                                                 │
-│ ⚠ Alertas                                                      │
-│  • Leitor Dique (Proj B) — offline há 3h                       │
-│  • Leitor Porto (Proj C) — nunca conectado                     │
+│  ┌────┬────┬────┬────┐  ┌─ Todos os Dispositivos ─────────────┐│
+│  │Proj│Disp│Agnt│Alrt│  │ ● Leitor A  192.168.1.10  ProjA 2m ││
+│  │ 3  │5/7 │2/3 │ 2  │  │ ● Leitor B  192.168.1.11  ProjA 5m ││
+│  └────┴────┴────┴────┘  │ ○ Leitor C  192.168.1.20  ProjB 3h ││
+│                          │ ...                                 ││
+│  ┌─ Barras ─┐ ┌─Rosca─┐ │                                     ││
+│  │██ ProjA  │ │ 🟢 🔴 │ │                                     ││
+│  │█░ ProjB  │ │       │ ├─ ⚠ Alertas ─────────────────────────┤│
+│  │░░ ProjC  │ │       │ │ • Leitor C (ProjB) offline 3h       ││
+│  └──────────┘ └───────┘ │ • Agente (ProjC) nunca visto         ││
+│                          └─────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+### Detalhes técnicos
+
+- `isMaximized` é estado local com `useState(false)`
+- Overlay usa `fixed inset-0 z-[100]` — não precisa alterar MainLayout
+- Gráficos: `fill="#22c55e"` e `fill="#ef4444"` direto nos `Bar` e `Cell`
+- Charts reduzidos para `h-[180px]` no fullscreen
+- Tabela com `max-h-none flex-1 overflow-auto` para usar espaço vertical restante
+- `useEffect` com listener de `Escape` para sair do fullscreen
+- Projetos grid (cards por projeto) ficam ocultos no modo maximizado para caber tudo sem scroll
 
