@@ -1,32 +1,29 @@
 
 
-## Adicionar upload de Logo do Sistema em Administração > Configurações
+## Adicionar card de Logo do Sistema em GlobalSettings
 
-O Header (linhas 46-48) lê a logo do sistema de `localStorage` (`company_light` / `company_dark`). Atualmente não existe nenhum campo em Administração > Configurações para definir essa logo. A logo dos Clientes é outra coisa (salva na tabela `companies`).
+O `GlobalSettings.tsx` não tem o card de logo. Precisa ser adicionado.
 
 ### Alteração
 
-**`src/components/admin/GlobalSettings.tsx`** — Novo card "Logo do Sistema" antes dos demais
+**`src/components/admin/GlobalSettings.tsx`**
 
-- Adicionar card com dois campos de upload de imagem (Modo Claro e Modo Escuro)
-- Ao fazer upload:
-  1. Upload para bucket `company-logos` com path `system/logo_light.{ext}` ou `system/logo_dark.{ext}` (upsert)
-  2. Obter URL pública
-  3. Salvar na tabela `system_settings` com key `system_logo`, value `{ light_url, dark_url }` via `updateSetting.mutate`
-  4. Atualizar `localStorage` (`company_light` / `company_dark`) para reflexo imediato no Header
-- Carregar URLs atuais da setting `system_logo` ao montar e exibir previews (fundo branco para claro, fundo escuro para escuro)
-- Imports adicionais: `supabase`, `ImagePlus` icon, `useSystemSetting`
+- Importar `supabase`, `useSystemSetting`, e ícone `ImagePlus`
+- Adicionar estados `lightLogoUrl` e `darkLogoUrl`, inicializados a partir da setting `system_logo`
+- Adicionar função `handleLogoUpload(mode: 'light' | 'dark')` que:
+  1. Faz upload para bucket `company-logos` com path `system/logo_light.{ext}` ou `system/logo_dark.{ext}` (upsert)
+  2. Obtém URL pública
+  3. Atualiza state local
+  4. Salva ambas URLs na `system_settings` key `system_logo` via `updateSetting.mutate`
+  5. Atualiza `localStorage` (`company_light` / `company_dark`)
+- Adicionar card "Logo do Sistema" antes do card de Reconhecimento Facial, com:
+  - Dois campos `<Input type="file" accept="image/*">` (Modo Claro e Modo Escuro)
+  - Preview da logo atual abaixo de cada input (fundo branco para claro, fundo zinc-900 para escuro)
 
-**`src/components/Header.tsx`** — Carregar logo persistida do banco
-
-- Usar `useSystemSetting('system_logo')` para buscar as URLs do banco
-- Priorizar a URL do banco sobre o `localStorage` (fallback para localStorage se a query ainda estiver carregando)
-- Isso garante que a logo persista entre sessões e dispositivos diferentes
-
-### Arquivos alterados
+**`src/components/Header.tsx`** — Verificar se já usa `useSystemSetting` (se não, adicionar)
 
 | Arquivo | Mudança |
 |---|---|
-| `GlobalSettings.tsx` | Novo card com upload de logo claro/escuro, persistência no banco + localStorage |
-| `Header.tsx` | Ler logo de `system_settings` via hook, com fallback para localStorage |
+| `GlobalSettings.tsx` | Novo card com upload de logo claro/escuro no topo |
+| `Header.tsx` | Confirmar integração com `system_logo` setting |
 
