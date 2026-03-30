@@ -32,6 +32,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { InterLayerConnectivityCard } from './InterLayerConnectivityCard';
+import { ProjectDiagnosticsSection } from './ProjectDiagnosticsSection';
 import { getSessionDiagnostics, forceLogout } from '@/utils/ensureValidSession';
 import { toast } from '@/hooks/use-toast';
 import { localAgent, localHealth, localSync } from '@/lib/localServerProvider';
