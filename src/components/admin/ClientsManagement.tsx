@@ -335,7 +335,7 @@ export const ClientsManagement = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {companies.map((company) => (
+                {filteredCompanies.map((company) => (
                   <TableRow key={company.id}>
                     <TableCell className="py-2 px-3 align-middle">
                       <div className="h-8 w-16 flex items-center justify-center">
