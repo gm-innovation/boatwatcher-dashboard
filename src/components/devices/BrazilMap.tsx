@@ -145,7 +145,7 @@ interface BrazilMapProps {
 
 export function BrazilMap({ projects, onExpandClick, compact = false }: BrazilMapProps) {
   const markers = useMemo(() => {
-    return projects
+    const raw = projects
       .map(p => {
         const coords = findCityCoords(p.location);
         if (!coords) return null;
@@ -158,6 +158,7 @@ export function BrazilMap({ projects, onExpandClick, compact = false }: BrazilMa
         return { ...p, ...coords, health, color, radius };
       })
       .filter(Boolean) as (MapProjectData & { x: number; y: number; label: string; health: string; color: string; radius: number })[];
+    return spreadOverlappingMarkers(raw, 25);
   }, [projects]);
 
   const height = compact ? 200 : 280;
