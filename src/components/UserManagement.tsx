@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Project, AppRole } from "@/types/supabase";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useProjects } from "@/hooks/useSupabase";
+import { AdminProjectFilter } from "@/components/admin/AdminProjectFilter";
 
 const UserManagement = () => {
   const [email, setEmail] = useState("");
@@ -23,7 +24,15 @@ const UserManagement = () => {
   const [loading, setLoading] = useState(false);
   const { data: projects = [] } = useProjects();
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [filterClientId, setFilterClientId] = useState<string | null>(null);
+  const [filterProjectId, setFilterProjectId] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const filteredProjects = projects.filter((p) => {
+    if (filterProjectId) return p.id === filterProjectId;
+    if (filterClientId) return p.client_id === filterClientId;
+    return true;
+  });
 
   const handleToggleProject = (projectId: string) => {
     setSelectedProjects(prev => {
@@ -160,11 +169,19 @@ const UserManagement = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-foreground">Gerenciamento de Usuários</h2>
-        <p className="text-sm text-muted-foreground">
-          Crie e gerencie os usuários que terão acesso ao sistema.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-foreground">Gerenciamento de Usuários</h2>
+          <p className="text-sm text-muted-foreground">
+            Crie e gerencie os usuários que terão acesso ao sistema.
+          </p>
+        </div>
+        <AdminProjectFilter
+          selectedClientId={filterClientId}
+          selectedProjectId={filterProjectId}
+          onClientChange={setFilterClientId}
+          onProjectChange={setFilterProjectId}
+        />
       </div>
 
       <Button 
@@ -217,10 +234,10 @@ const UserManagement = () => {
         <div className="space-y-2">
           <Label>Projetos</Label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border rounded-lg p-4">
-            {projects.length === 0 ? (
-              <p className="text-sm text-muted-foreground col-span-2">Nenhum projeto cadastrado</p>
+            {filteredProjects.length === 0 ? (
+              <p className="text-sm text-muted-foreground col-span-2">Nenhum projeto encontrado</p>
             ) : (
-              projects.map(project => (
+              filteredProjects.map(project => (
                 <div key={project.id} className="flex items-center space-x-2">
                   <Checkbox
                     id={`project-${project.id}`}

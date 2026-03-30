@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useProjects, useCompanies } from '@/hooks/useSupabase';
+import { AdminProjectFilter } from './AdminProjectFilter';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
@@ -245,9 +246,14 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
 export const ProjectsManagement = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const { data: projects = [], isLoading } = useProjects();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
+
+  const filteredProjects = selectedClientId
+    ? projects.filter((p) => p.client_id === selectedClientId)
+    : projects;
 
   const handleDelete = async (project: Project) => {
     if (!confirm(`Tem certeza que deseja remover ${project.name}?`)) return;
@@ -277,41 +283,48 @@ export const ProjectsManagement = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex items-center gap-4">
           <h2 className="text-xl font-semibold">Projetos</h2>
-          <p className="text-sm text-muted-foreground">{projects.length} projetos cadastrados</p>
+          <p className="text-sm text-muted-foreground">{filteredProjects.length} projetos</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => setEditingProject(null)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Projeto
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{editingProject ? 'Editar Projeto' : 'Novo Projeto'}</DialogTitle>
-            </DialogHeader>
-            <ProjectForm 
-              project={editingProject} 
-              onSuccess={() => {
-                setIsDialogOpen(false);
-                setEditingProject(null);
-              }}
-              onCancel={() => {
-                setIsDialogOpen(false);
-                setEditingProject(null);
-              }}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-3">
+          <AdminProjectFilter
+            selectedClientId={selectedClientId}
+            onClientChange={setSelectedClientId}
+            showProjectFilter={false}
+          />
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => setEditingProject(null)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Projeto
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>{editingProject ? 'Editar Projeto' : 'Novo Projeto'}</DialogTitle>
+              </DialogHeader>
+              <ProjectForm 
+                project={editingProject} 
+                onSuccess={() => {
+                  setIsDialogOpen(false);
+                  setEditingProject(null);
+                }}
+                onCancel={() => {
+                  setIsDialogOpen(false);
+                  setEditingProject(null);
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {isLoading ? (
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
-      ) : projects.length > 0 ? (
+      ) : filteredProjects.length > 0 ? (
         <ScrollArea className="h-[500px] border rounded-lg">
           <table className="w-full">
             <thead className="sticky top-0 bg-card border-b">
@@ -325,7 +338,7 @@ export const ProjectsManagement = () => {
               </tr>
             </thead>
             <tbody>
-              {projects.map((project) => (
+              {filteredProjects.map((project) => (
                 <tr key={project.id} className="border-b hover:bg-muted/50">
                   <td className="p-4">
                     <div className="flex items-center gap-3">

@@ -4,8 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { useDevices } from '@/hooks/useControlID';
-import { useProjects } from '@/hooks/useSupabase';
-import { useProject } from '@/contexts/ProjectContext';
+import { useProjects, useClients } from '@/hooks/useSupabase';
 import { useLocalAgents } from '@/hooks/useLocalAgents';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
@@ -19,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DeviceSetupInstructions } from './DeviceSetupInstructions';
 import { AgentManagement } from './AgentManagement';
+import { AdminProjectFilter } from '../admin/AdminProjectFilter';
 import {
   Plus, Wifi, WifiOff, Trash2, RefreshCw, DoorOpen, Camera, Server, Loader2, Users, Pencil, Ship, Anchor, MoreHorizontal, Bot
 } from 'lucide-react';
@@ -65,13 +65,22 @@ export const DeviceManagement = () => {
   const [sendingCommand, setSendingCommand] = useState<string | null>(null);
   const [listedUsers, setListedUsers] = useState<any[]>([]);
   const [isUsersDialogOpen, setIsUsersDialogOpen] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
-  const { selectedProjectId } = useProject();
   const { data: devices = [], isLoading, refetch } = useDevices(selectedProjectId);
   const { data: projects = [] } = useProjects();
   const { agents } = useLocalAgents(selectedProjectId);
   const queryClient = useQueryClient();
   const isLocalRuntime = usesLocalAuth() || usesLocalServer();
+
+  // Filter devices by client when no specific project is selected
+  const filteredDevices = selectedClientId && !selectedProjectId
+    ? devices.filter((d) => {
+        const project = projects.find((p) => p.id === d.project_id);
+        return project?.client_id === selectedClientId;
+      })
+    : devices;
 
   const createForm = useForm<DeviceFormData>({
     resolver: zodResolver(deviceSchema),
@@ -295,8 +304,8 @@ export const DeviceManagement = () => {
     }
   };
 
-  const onlineCount = devices.filter(d => d.status === 'online').length;
-  const offlineCount = devices.filter(d => d.status !== 'online').length;
+  const onlineCount = filteredDevices.filter(d => d.status === 'online').length;
+  const offlineCount = filteredDevices.filter(d => d.status !== 'online').length;
 
   const renderDeviceForm = (form: ReturnType<typeof useForm<DeviceFormData>>, onFormSubmit: (data: DeviceFormData) => void, submitLabel: string) => (
     <form onSubmit={form.handleSubmit(onFormSubmit)} className="space-y-4">
@@ -425,11 +434,19 @@ export const DeviceManagement = () => {
       <TabsContent value="devices">
       <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Dispositivos</h2>
-          <p className="text-sm text-muted-foreground">
-            {devices.length} dispositivos • {onlineCount} online • {offlineCount} offline
-          </p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">Dispositivos</h2>
+            <p className="text-sm text-muted-foreground">
+              {filteredDevices.length} dispositivos • {onlineCount} online • {offlineCount} offline
+            </p>
+          </div>
+          <AdminProjectFilter
+            selectedClientId={selectedClientId}
+            selectedProjectId={selectedProjectId}
+            onClientChange={setSelectedClientId}
+            onProjectChange={setSelectedProjectId}
+          />
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
@@ -448,7 +465,7 @@ export const DeviceManagement = () => {
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
-      ) : devices.length > 0 ? (
+      ) : filteredDevices.length > 0 ? (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
@@ -462,7 +479,7 @@ export const DeviceManagement = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {devices.map(device => {
+              {filteredDevices.map(device => {
                 const accessLoc = getAccessLocation(device);
                 const config = device.configuration as any;
                 const dirLabel = config?.passage_direction === 'entry' ? '↙ Entrada' : config?.passage_direction === 'exit' ? '↗ Saída' : '';

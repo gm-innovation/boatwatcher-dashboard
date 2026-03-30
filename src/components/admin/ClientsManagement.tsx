@@ -240,6 +240,7 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
 export const ClientsManagement = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Company | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const { data: companies = [], isLoading } = useClients();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
@@ -267,14 +268,24 @@ export const ClientsManagement = () => {
     return <Badge className="bg-green-500/10 text-green-500 hover:bg-green-500/20">Ativo</Badge>;
   };
 
+  const filteredCompanies = companies.filter((c) =>
+    c.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold">Gerenciar Clientes</h2>
-          <p className="text-xs text-muted-foreground">{companies.length} clientes cadastrados</p>
+          <p className="text-xs text-muted-foreground">{filteredCompanies.length} clientes</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <Input
+            placeholder="Buscar cliente..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-[200px] h-9 text-sm"
+          />
           <Button variant="outline" size="sm">
             Alterar Logo da Aplicação
           </Button>
@@ -309,7 +320,7 @@ export const ClientsManagement = () => {
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
-      ) : companies.length > 0 ? (
+      ) : filteredCompanies.length > 0 ? (
         <TooltipProvider>
           <ScrollArea className="h-[500px] border rounded-lg">
             <Table>
@@ -324,7 +335,7 @@ export const ClientsManagement = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {companies.map((company) => (
+                {filteredCompanies.map((company) => (
                   <TableRow key={company.id}>
                     <TableCell className="py-2 px-3 align-middle">
                       <div className="h-8 w-16 flex items-center justify-center">

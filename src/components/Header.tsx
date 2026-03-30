@@ -150,7 +150,9 @@ export const Header = () => {
                       )}
                     </nav>
                     <div className="p-4 border-t border-border space-y-3">
-                      <ProjectSelector selectedProjectId={selectedProjectId} onProjectSelect={setSelectedProjectId} />
+                      {!location.pathname.startsWith('/admin') && (
+                        <ProjectSelector selectedProjectId={selectedProjectId} onProjectSelect={setSelectedProjectId} />
+                      )}
                       <div className="flex items-center justify-between gap-2">
                         <Toggle variant="outline" size="sm" pressed={theme === 'dark'} onPressedChange={(pressed) => setTheme(pressed ? 'dark' : 'light')}>
                           {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
@@ -232,7 +234,7 @@ export const Header = () => {
         </div>
       </div>
 
-      {!isHeaderCollapsed && (
+      {!isHeaderCollapsed && !location.pathname.startsWith('/admin') && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
           <ProjectSelector selectedProjectId={selectedProjectId} onProjectSelect={setSelectedProjectId} />
         </div>
