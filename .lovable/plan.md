@@ -1,53 +1,57 @@
 
-Objetivo: corrigir de vez o posicionamento dos marcadores do RJ e evitar que futuros projetos “escapem” para dentro do continente.
+Objetivo: corrigir o RJ de forma definitiva para que o navio fique exatamente na reentrância da Baía de Guanabara, e não no mar aberto nem no interior.
 
-1. Confirmar a causa raiz
-- O problema não é só a tabela `LOCATION_COORDS`.
-- No código atual, os pontos do RJ foram ajustados com base em trechos do path bruto, mas o resultado visual continua errado no mapa renderizado.
-- Além disso, `spreadOverlappingMarkers` em `src/components/devices/mapUtils.ts` espalha marcadores em círculo. Em áreas costeiras como Baía de Guanabara, isso inevitavelmente joga parte dos marcadores para dentro do estado quando houver vários projetos.
+1. Corrigir a causa real
+- O erro atual não é só “coordenada ruim”.
+- Hoje existe um único hub `guanabara` em `src/components/devices/BrazilMap.tsx` com `x: 522, y: 432`, que já nasce longe demais da baía.
+- Depois disso, `spreadOverlappingMarkers` em `src/components/devices/mapUtils.ts` ainda empurra os marcadores para leste, piorando o desvio.
+- Resultado: mesmo com ajuste manual, o barco continua fora da reentrância correta.
 
-2. Corrigir o modelo de coordenadas
-- Refatorar `LOCATION_COORDS` em `src/components/devices/BrazilMap.tsx` para usar âncoras marítimas/hubs, em vez de coordenadas soltas repetidas.
-- Exemplo de hubs:
+2. Trocar o modelo de coordenadas do RJ
+- Substituir o hub único da Guanabara por âncoras específicas da baía.
+- Em vez de uma coordenada genérica “no oceano”, separar pelo menos:
   - `guanabara_rio`
   - `guanabara_niteroi`
+  - `guanabara_sao_goncalo`
   - `angra`
   - `macae`
   - `acu`
-  - `vitoria`
-  - `aracruz`
-  - `santos`
-- Depois, cada alias (`renave`, `maua`, `brasa`, `thomaz`, `brasfels`, `imbetiba`, etc.) passa a apontar para um hub específico.
+- Cada alias (`renave`, `maua`, `inhauma`, `brasa`, `thomaz`, `maclaren`, etc.) passará a apontar para a âncora correta dentro da reentrância ou no trecho costeiro certo.
 
-3. Recalibrar visualmente os pontos do RJ
-- Reposicionar todas as localizações do RJ usando a referência do mapa renderizado e os prints enviados, não apenas os números do path.
-- Ajustar especialmente:
+3. Recalibrar todas as coordenadas do RJ com base no mapa renderizado
+- Ajustar a Baía de Guanabara para a reentrância mostrada no seu print, usando o SVG final como referência visual.
+- Revisar todas as localizações marítimas do RJ:
   - Baía de Guanabara: `rio de janeiro`, `niteroi`, `sao goncalo`, `renave`, `maua`, `inhauma`, `brasa`, `utc`, `triunfo`, `mac laren`, `maclaren`, `alianca`, `thomaz`
   - Costa sul: `angra dos reis`, `brasfels`, `keppel`, `verolme`, `damen`
   - Costa norte: `macae`, `imbetiba`, `sao joao da barra`, `porto do acu`, `acu`
-- A correção aqui será “o que bate no SVG final”, não “o que parece certo no path isolado”.
+- Também revisar ES/SP próximos para manter consistência visual: `vitoria`, `aracruz`, `santos`, `guaruja`, `wilson sons`.
 
-4. Corrigir a lógica de dispersão para futuros projetos
-- Substituir a dispersão circular genérica por uma dispersão direcional/em leque para hubs costeiros.
-- Em vez de abrir 360°, abrir só no sentido seguro:
-  - Guanabara: espalhar sobre a baía/litoral
-  - Angra: espalhar para a costa/baía local
-  - Macaé/Açu/Vitória/Santos: espalhar para o lado marítimo
-- Manter as linhas pontilhadas conectando cada marcador à sua coordenada real.
+4. Tornar a dispersão específica por região
+- A lógica atual usa apenas `x/y`, então ela não sabe que Guanabara é baía e não mar aberto.
+- Vou planejar uma dispersão guiada por metadados da localização, por exemplo:
+  - `spreadRegion: "guanabara"`
+  - `spreadRegion: "angra"`
+  - `spreadRegion: "norte_rj"`
+- Para Guanabara, o leque deixará de abrir para leste e passará a abrir dentro da área segura da baía/reentrância.
+- Para Angra, Macaé, Açu, Vitória e Santos, o leque continuará regional, mas sem jogar marcador para dentro do continente.
 
-5. Aplicar a mesma lógica nos dois mapas
-- Garantir que o mapa compacto (`BrazilMap.tsx`) e o modal (`BrazilMapModal.tsx`) continuem consumindo a mesma fonte de verdade para coordenadas e dispersão.
-- Assim a posição não muda entre card e modal.
+5. Manter uma única fonte de verdade
+- `BrazilMapModal.tsx` já reutiliza `findCityCoords` e `spreadOverlappingMarkers`.
+- Vou manter isso, para que card e modal usem exatamente:
+  - as mesmas coordenadas
+  - a mesma regra de dispersão
+- Assim a posição não muda entre o mapa pequeno e o expandido.
 
-6. Validação que farei após implementar
-- Testar o caso atual (`Estaleiro Renave`) no modal com zoom alto.
-- Verificar se o marcador cai dentro da Baía de Guanabara no ponto indicado pelos seus prints.
-- Validar também os grupos futuros:
-  - Guanabara com múltiplos estaleiros
+6. Validação após implementar
+- Conferir o caso atual do seu print: `Skandi Botafogo`/Renave na reentrância da Baía de Guanabara.
+- Verificar grupos múltiplos na mesma região:
+  - Guanabara
   - Angra
-  - Macaé/Açu
-  - Santos/Guarujá
-- Confirmar que nenhum marcador espalhado vai parar “em Minas Gerais” ou no interior do estado.
+  - Macaé / Açu
+- Confirmar que nenhum marcador:
+  - vai para “Minas Gerais”
+  - vai para mar aberto quando deveria estar na baía
+  - muda de lugar entre card e modal
 
 Detalhes técnicos
 - Arquivos principais:
@@ -55,9 +59,7 @@ Detalhes técnicos
   - `src/components/devices/mapUtils.ts`
   - `src/components/devices/BrazilMapModal.tsx`
 - Mudanças centrais:
-  - trocar coordenadas avulsas por hubs reutilizáveis
-  - trocar spread circular por spread em arco/fan com direção preferencial por região
-- Benefício:
-  - corrige o caso atual
-  - deixa a entrada de novos projetos consistente e previsível
-  - evita regressão visual quando vários estaleiros compartilham a mesma área costeira
+  - remover a premissa atual de que Guanabara deve ficar “fora do estado/no oceano”
+  - criar hubs separados para a baía
+  - adicionar metadados de dispersão por região
+  - recalibrar todas as coordenadas costeiras do RJ usando a reentrância do SVG final como referência
