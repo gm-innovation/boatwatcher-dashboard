@@ -81,7 +81,8 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
         cnpj: cnpj || null,
         contact_email: contactEmail || null,
         logo_url_light: logoUrlLight || null,
-        logo_url_dark: logoUrlDark || null
+        logo_url_dark: logoUrlDark || null,
+        logo_url_rotated: logoUrlRotated || null
       };
 
       if (client) {
