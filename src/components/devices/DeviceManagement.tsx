@@ -607,5 +607,7 @@ export const DeviceManagement = () => {
         </DialogContent>
       </Dialog>
     </div>
+      </TabsContent>
+    </Tabs>
   );
 };
