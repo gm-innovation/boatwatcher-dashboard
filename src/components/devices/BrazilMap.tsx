@@ -129,8 +129,7 @@ const COLOR_ONLINE = '#22c55e';
 const COLOR_OFFLINE = '#ef4444';
 const COLOR_PARTIAL = '#eab308';
 
-// Ship silhouette path centered at (0,0), ~20x10 units
-const SHIP_PATH = 'M-9,6 C-9,8 9,8 9,6 L8,2 L6,2 L6,0 L8,0 L8,-2 L4,-2 L4,-6 L2,-6 L2,-8 L-2,-8 L-2,-6 L-4,-6 L-4,-2 L-8,-2 L-8,0 L-6,0 L-6,2 L-8,2 Z';
+const SHIP_ICON_SIZE = 20; // base icon size in SVG units
 
 export type MapProjectData = {
   id: string;
