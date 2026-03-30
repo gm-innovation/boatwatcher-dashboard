@@ -12,7 +12,8 @@ const SVG_WIDTH = 450;
 const SVG_HEIGHT = 400;
 
 // Dictionary: normalized city/port name → SVG {x, y} coordinates
-const CITY_COORDS: Record<string, { x: number; y: number; label: string }> = {
+const LOCATION_COORDS: Record<string, { x: number; y: number; label: string }> = {
+  // === Cidades principais ===
   'manaus': { x: 105, y: 85, label: 'Manaus' },
   'belem': { x: 220, y: 55, label: 'Belém' },
   'sao luis': { x: 250, y: 60, label: 'São Luís' },
@@ -26,6 +27,7 @@ const CITY_COORDS: Record<string, { x: number; y: number; label: string }> = {
   'vitoria': { x: 340, y: 215, label: 'Vitória' },
   'rio de janeiro': { x: 310, y: 240, label: 'Rio de Janeiro' },
   'niteroi': { x: 315, y: 245, label: 'Niterói' },
+  'sao goncalo': { x: 313, y: 241, label: 'São Gonçalo' },
   'angra dos reis': { x: 295, y: 245, label: 'Angra dos Reis' },
   'santos': { x: 270, y: 260, label: 'Santos' },
   'sao paulo': { x: 260, y: 250, label: 'São Paulo' },
@@ -34,6 +36,7 @@ const CITY_COORDS: Record<string, { x: number; y: number; label: string }> = {
   'curitiba': { x: 240, y: 270, label: 'Curitiba' },
   'florianopolis': { x: 235, y: 290, label: 'Florianópolis' },
   'itajai': { x: 240, y: 285, label: 'Itajaí' },
+  'navegantes': { x: 238, y: 287, label: 'Navegantes' },
   'porto alegre': { x: 210, y: 320, label: 'Porto Alegre' },
   'rio grande': { x: 195, y: 345, label: 'Rio Grande' },
   'macapa': { x: 180, y: 45, label: 'Macapá' },
@@ -43,6 +46,48 @@ const CITY_COORDS: Record<string, { x: number; y: number; label: string }> = {
   'brasilia': { x: 225, y: 175, label: 'Brasília' },
   'belo horizonte': { x: 285, y: 205, label: 'Belo Horizonte' },
   'campo grande': { x: 160, y: 230, label: 'Campo Grande' },
+  'macae': { x: 330, y: 225, label: 'Macaé' },
+  'aracruz': { x: 338, y: 210, label: 'Aracruz' },
+  'suape': { x: 362, y: 112, label: 'Suape' },
+  'ipojuca': { x: 362, y: 112, label: 'Ipojuca' },
+  'maragogipe': { x: 335, y: 158, label: 'Maragogipe' },
+  'barcarena': { x: 215, y: 55, label: 'Barcarena' },
+  'sao joao da barra': { x: 335, y: 220, label: 'São João da Barra' },
+  'aracatuba': { x: 205, y: 240, label: 'Araçatuba' },
+  // === Estaleiros offshore ===
+  'renave': { x: 315, y: 245, label: 'Estaleiro Renave' },
+  'brasfels': { x: 295, y: 248, label: 'Estaleiro Brasfels' },
+  'keppel': { x: 293, y: 250, label: 'Keppel Fels' },
+  'maua': { x: 315, y: 243, label: 'Estaleiro Mauá' },
+  'inhauma': { x: 310, y: 240, label: 'Estaleiro Inhaúma' },
+  'brasa': { x: 312, y: 242, label: 'Estaleiro Brasa' },
+  'atlantico sul': { x: 362, y: 112, label: 'Estaleiro Atlântico Sul' },
+  'eas': { x: 362, y: 112, label: 'EAS' },
+  'jurong': { x: 338, y: 210, label: 'Estaleiro Jurong Aracruz' },
+  'osx': { x: 335, y: 158, label: 'Estaleiro OSX' },
+  'enseada': { x: 335, y: 158, label: 'Enseada Paraguaçu' },
+  'paraguacu': { x: 335, y: 158, label: 'Enseada Paraguaçu' },
+  'erg': { x: 195, y: 345, label: 'Estaleiro Rio Grande' },
+  'qgi': { x: 195, y: 345, label: 'QGI Rio Grande' },
+  'wilson sons': { x: 275, y: 262, label: 'Estaleiro Wilson Sons' },
+  'vard': { x: 362, y: 114, label: 'Estaleiro Vard Promar' },
+  'promar': { x: 362, y: 114, label: 'Vard Promar' },
+  'utc': { x: 316, y: 244, label: 'Estaleiro UTC' },
+  'triunfo': { x: 316, y: 244, label: 'Estaleiro Triunfo' },
+  'mac laren': { x: 314, y: 246, label: 'Estaleiro Mac Laren' },
+  'maclaren': { x: 314, y: 246, label: 'Estaleiro Mac Laren' },
+  'alianca': { x: 317, y: 244, label: 'Estaleiro Aliança' },
+  'imbetiba': { x: 332, y: 223, label: 'Base de Imbetiba' },
+  'sermetal': { x: 215, y: 55, label: 'SERMETAL' },
+  'navship': { x: 238, y: 287, label: 'Estaleiro Navship' },
+  'detroit': { x: 240, y: 285, label: 'Estaleiro Detroit' },
+  'oceana': { x: 241, y: 286, label: 'Estaleiro Oceana' },
+  'verolme': { x: 294, y: 249, label: 'Damen Verolme' },
+  'damen': { x: 294, y: 249, label: 'Damen Verolme' },
+  'thomaz': { x: 313, y: 241, label: 'Estaleiro Thomaz' },
+  'porto do acu': { x: 335, y: 220, label: 'Porto do Açu' },
+  'acu': { x: 335, y: 220, label: 'Porto do Açu' },
+  'rio tiete': { x: 205, y: 240, label: 'Estaleiro Rio Tietê' },
 };
 
 function normalizeString(str: string): string {
@@ -58,12 +103,23 @@ function findCityCoords(location: string | null): { x: number; y: number; label:
   const normalized = normalizeString(location);
   
   // Exact match
-  if (CITY_COORDS[normalized]) return CITY_COORDS[normalized];
+  if (LOCATION_COORDS[normalized]) return LOCATION_COORDS[normalized];
   
-  // Partial match — check if location contains or is contained by a city name
-  for (const [key, coords] of Object.entries(CITY_COORDS)) {
+  // Check if location contains a known key (e.g. "Estaleiro Renave" contains "renave")
+  for (const [key, coords] of Object.entries(LOCATION_COORDS)) {
     if (normalized.includes(key) || key.includes(normalized)) {
       return coords;
+    }
+  }
+  
+  // Word-level match: check each word of location against dictionary keys
+  const words = normalized.split(/[\s,\-\/]+/).filter(w => w.length > 2);
+  for (const word of words) {
+    if (LOCATION_COORDS[word]) return LOCATION_COORDS[word];
+    for (const [key, coords] of Object.entries(LOCATION_COORDS)) {
+      if (key.includes(word) || word.includes(key)) {
+        return coords;
+      }
     }
   }
   
@@ -224,4 +280,4 @@ export function BrazilMap({ projects, onExpandClick, compact = false }: BrazilMa
   );
 }
 
-export { findCityCoords, CITY_COORDS, SVG_WIDTH, SVG_HEIGHT, BRAZIL_PATH };
+export { findCityCoords, LOCATION_COORDS, LOCATION_COORDS as CITY_COORDS, SVG_WIDTH, SVG_HEIGHT, BRAZIL_PATH };
