@@ -479,7 +479,7 @@ export const DeviceManagement = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {devices.map(device => {
+              {filteredDevices.map(device => {
                 const accessLoc = getAccessLocation(device);
                 const config = device.configuration as any;
                 const dirLabel = config?.passage_direction === 'entry' ? '↙ Entrada' : config?.passage_direction === 'exit' ? '↗ Saída' : '';
