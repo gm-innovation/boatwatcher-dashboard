@@ -169,11 +169,19 @@ const UserManagement = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-foreground">Gerenciamento de Usuários</h2>
-        <p className="text-sm text-muted-foreground">
-          Crie e gerencie os usuários que terão acesso ao sistema.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-foreground">Gerenciamento de Usuários</h2>
+          <p className="text-sm text-muted-foreground">
+            Crie e gerencie os usuários que terão acesso ao sistema.
+          </p>
+        </div>
+        <AdminProjectFilter
+          selectedClientId={filterClientId}
+          selectedProjectId={filterProjectId}
+          onClientChange={setFilterClientId}
+          onProjectChange={setFilterProjectId}
+        />
       </div>
 
       <Button 
