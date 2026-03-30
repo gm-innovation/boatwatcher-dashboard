@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { Clock, Moon, Sun, LogOut, LayoutDashboard, FileText, Users, Building2, Shield, Menu, RefreshCw, ToggleLeft, ToggleRight, Cloud, CloudOff, HardDrive } from 'lucide-react';
+import { Clock, Moon, Sun, LogOut, LayoutDashboard, FileText, Users, Building2, Shield, Menu, RefreshCw, ToggleLeft, ToggleRight, Cloud, CloudOff, HardDrive, ChevronUp, ChevronDown } from 'lucide-react';
 import { isElectron, getElectronAPI } from '@/lib/dataProvider';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -18,7 +18,7 @@ export const Header = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const { theme, setTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { selectedProject, selectedProjectId, setSelectedProjectId, lastUpdate, autoRefresh, setAutoRefresh, handleRefresh } = useProject();
+  const { selectedProject, selectedProjectId, setSelectedProjectId, lastUpdate, autoRefresh, setAutoRefresh, handleRefresh, isHeaderCollapsed, toggleHeaderCollapsed } = useProject();
   const { role, signOut, hasCloudSession } = useAuthContext();
   const runtimeProfile = useRuntimeProfile();
 
@@ -43,9 +43,9 @@ export const Header = () => {
     });
   }, [isDesktop]);
 
-  const clientLogo = theme === 'dark' 
-    ? selectedProject?.client?.logo_url_dark 
-    : selectedProject?.client?.logo_url_light;
+  const systemLogo = theme === 'dark'
+    ? localStorage.getItem('company_dark')
+    : localStorage.getItem('company_light');
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -98,20 +98,18 @@ export const Header = () => {
     <header className="fixed top-0 left-0 right-0 w-full bg-background/95 backdrop-blur-sm border-b border-border animate-fade-in z-50">
       <div className="w-full border-b border-border/50">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 py-2">
-          {clientLogo ? (
-            <img src={clientLogo} alt="Logo do Cliente" className="h-8 w-28 object-contain" />
+          {systemLogo ? (
+            <img src={systemLogo} alt="Logo do Sistema" className="h-8 w-28 object-contain" />
           ) : (
-            <div className="h-8 w-28 bg-muted rounded flex items-center justify-center">
-              <span className="text-xs text-muted-foreground">Cliente</span>
-            </div>
+            <span className="text-lg font-bold text-foreground">DockCheck</span>
           )}
-          <div className="h-8 w-28 bg-muted rounded flex items-center justify-center">
-            <span className="text-xs text-muted-foreground">Sistema</span>
-          </div>
+          <Button variant="ghost" size="icon" onClick={toggleHeaderCollapsed} className="h-7 w-7">
+            {isHeaderCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+          </Button>
         </div>
       </div>
 
-      <div className="w-full border-b border-border/50">
+      <div className={`w-full border-b border-border/50 transition-all duration-300 overflow-hidden ${isHeaderCollapsed ? 'max-h-0 border-b-0' : 'max-h-96'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-1">
           <div className="flex items-center justify-between">
             <div className="lg:hidden">
@@ -232,7 +230,7 @@ export const Header = () => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+      <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 transition-all duration-300 overflow-hidden ${isHeaderCollapsed ? 'max-h-0 py-0' : 'max-h-24'}`}>
         <ProjectSelector selectedProjectId={selectedProjectId} onProjectSelect={setSelectedProjectId} />
       </div>
     </header>

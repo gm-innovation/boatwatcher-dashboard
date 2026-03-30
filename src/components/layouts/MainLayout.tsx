@@ -4,12 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 
 const MainLayoutContent = ({ children }: { children: React.ReactNode }) => {
-  const { isFullscreenMode, toggleFullscreen } = useProject();
+  const { isFullscreenMode, toggleFullscreen, isHeaderCollapsed } = useProject();
 
   return (
     <div className="min-h-screen">
       {!isFullscreenMode && <Header />}
-      <main className={`px-4 sm:px-6 lg:px-8 pb-8 ${isFullscreenMode ? 'pt-4' : 'pt-40'}`}>
+      <main className={`px-4 sm:px-6 lg:px-8 pb-8 transition-all duration-300 ${isFullscreenMode ? 'pt-4' : isHeaderCollapsed ? 'pt-20' : 'pt-40'}`}>
         {children}
       </main>
       {isFullscreenMode && (

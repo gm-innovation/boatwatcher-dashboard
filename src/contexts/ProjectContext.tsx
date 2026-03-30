@@ -24,6 +24,8 @@ interface ProjectContextType {
   loading: boolean;
   isFullscreenMode: boolean;
   toggleFullscreen: () => void;
+  isHeaderCollapsed: boolean;
+  toggleHeaderCollapsed: () => void;
   lastUpdate: Date;
   autoRefresh: boolean;
   setAutoRefresh: (value: boolean) => void;
@@ -42,6 +44,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [syncRefreshKey, setSyncRefreshKey] = useState(0);
@@ -58,6 +61,10 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
 
   const toggleFullscreen = () => {
     setIsFullscreenMode((prev) => !prev);
+  };
+
+  const toggleHeaderCollapsed = () => {
+    setIsHeaderCollapsed((prev) => !prev);
   };
 
   const handleRefresh = useCallback(() => {
@@ -154,6 +161,8 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
         loading,
         isFullscreenMode,
         toggleFullscreen,
+        isHeaderCollapsed,
+        toggleHeaderCollapsed,
         lastUpdate,
         autoRefresh,
         setAutoRefresh,
