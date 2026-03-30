@@ -654,9 +654,9 @@ export const DiagnosticsPanel = () => {
     }
   };
 
-  const okCount = diagnostics.filter(d => d.status === 'ok').length;
-  const warningCount = diagnostics.filter(d => d.status === 'warning').length;
-  const errorCount = diagnostics.filter(d => d.status === 'error').length;
+  const okCount = diagnostics.filter(d => d.status === 'ok').length + projectDiagCounts.ok;
+  const warningCount = diagnostics.filter(d => d.status === 'warning').length + projectDiagCounts.warning;
+  const errorCount = diagnostics.filter(d => d.status === 'error').length + projectDiagCounts.error;
 
   const getTimeRemaining = (expiresAt: Date | null) => {
     if (!expiresAt) return 'N/A';
