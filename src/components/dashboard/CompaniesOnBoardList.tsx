@@ -22,13 +22,13 @@ interface CompaniesOnBoardListProps {
 
 export const CompaniesOnBoardList = ({ companies }: CompaniesOnBoardListProps) => {
   return (
-    <div className="bg-card rounded-lg border h-full flex flex-col">
-      <div className="p-4 border-b">
+    <div className="bg-white dark:bg-card rounded-xl border shadow-sm h-full flex flex-col">
+      <div className="p-6 border-b">
         <div className="flex items-center gap-2">
-          <h3 className="font-semibold text-lg">Empresas a Bordo</h3>
-          <Badge variant="secondary" className="rounded-full">
+          <h3 className="font-semibold text-xl">Empresas a Bordo</h3>
+          <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full font-semibold">
             {companies.length}
-          </Badge>
+          </span>
         </div>
       </div>
 
@@ -44,14 +44,14 @@ export const CompaniesOnBoardList = ({ companies }: CompaniesOnBoardListProps) =
           <TableBody>
             {companies.length > 0 ? (
               companies.map((company) => (
-                <TableRow key={company.id}>
+                <TableRow key={company.id} className="hover:bg-gray-50 dark:hover:bg-muted/50">
                   <TableCell className="font-medium">{company.name}</TableCell>
                   <TableCell className="text-center">{company.workersCount}</TableCell>
                   <TableCell className="text-right">
                     {company.entryTime ? (
-                      <Badge variant="outline" className="text-primary border-primary">
+                      <span className="inline-flex items-center bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-md font-semibold">
                         {format(new Date(company.entryTime), 'HH:mm')}
-                      </Badge>
+                      </span>
                     ) : '-'}
                   </TableCell>
                 </TableRow>
