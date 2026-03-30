@@ -304,8 +304,8 @@ export const DeviceManagement = () => {
     }
   };
 
-  const onlineCount = devices.filter(d => d.status === 'online').length;
-  const offlineCount = devices.filter(d => d.status !== 'online').length;
+  const onlineCount = filteredDevices.filter(d => d.status === 'online').length;
+  const offlineCount = filteredDevices.filter(d => d.status !== 'online').length;
 
   const renderDeviceForm = (form: ReturnType<typeof useForm<DeviceFormData>>, onFormSubmit: (data: DeviceFormData) => void, submitLabel: string) => (
     <form onSubmit={form.handleSubmit(onFormSubmit)} className="space-y-4">
