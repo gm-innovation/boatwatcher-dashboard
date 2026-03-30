@@ -3,6 +3,7 @@ export interface Company {
   name: string;
   logo_url_light: string | null;
   logo_url_dark: string | null;
+  logo_url_rotated: string | null;
   vessels: string[];
   project_managers: string[];
   cnpj: string | null;

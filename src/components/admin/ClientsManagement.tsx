@@ -137,7 +137,7 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
       </div>
 
       {/* Row 2: Logos */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label>Logo Normal</Label>
           <input
@@ -160,7 +160,7 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
             {uploadingLight ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             Enviar Logo
           </Button>
-          <p className="text-xs text-muted-foreground">Logo usada no sistema</p>
+          <p className="text-xs text-muted-foreground">Logo usada no modo claro</p>
           {logoUrlLight && (
             <div className="mt-2">
               <img src={logoUrlLight} alt="Logo Normal" className="h-12 object-contain rounded border p-1" />
@@ -168,7 +168,7 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
           )}
         </div>
         <div className="space-y-2">
-          <Label>Logo Rotacionada (Etiquetas)</Label>
+          <Label>Logo Dark Mode</Label>
           <input
             type="file"
             ref={darkLogoRef}
@@ -189,10 +189,39 @@ const ClientForm = ({ client, onSuccess, onCancel }: ClientFormProps) => {
             {uploadingDark ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             Enviar Logo
           </Button>
-          <p className="text-xs text-muted-foreground">Logo já rotacionada para etiquetas</p>
+          <p className="text-xs text-muted-foreground">Logo usada no modo escuro</p>
           {logoUrlDark && (
             <div className="mt-2">
-              <img src={logoUrlDark} alt="Logo Rotacionada" className="h-12 object-contain rounded border p-1" />
+              <img src={logoUrlDark} alt="Logo Dark" className="h-12 object-contain rounded border p-1" />
+            </div>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label>Logo Rotacionada (Etiquetas)</Label>
+          <input
+            type="file"
+            ref={rotatedLogoRef}
+            className="hidden"
+            accept="image/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleLogoUpload(file, 'rotated');
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className="w-auto gap-2"
+            onClick={() => rotatedLogoRef.current?.click()}
+            disabled={uploadingRotated}
+          >
+            {uploadingRotated ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            Enviar Logo
+          </Button>
+          <p className="text-xs text-muted-foreground">Logo já rotacionada para etiquetas</p>
+          {logoUrlRotated && (
+            <div className="mt-2">
+              <img src={logoUrlRotated} alt="Logo Rotacionada" className="h-12 object-contain rounded border p-1" />
             </div>
           )}
         </div>
