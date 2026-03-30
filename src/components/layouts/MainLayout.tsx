@@ -9,7 +9,7 @@ const MainLayoutContent = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="min-h-screen">
       {!isFullscreenMode && <Header />}
-      <main className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8 transition-all duration-300 ${isFullscreenMode ? 'pt-4' : isHeaderCollapsed ? 'pt-14' : 'pt-40'}`}>
+      <main className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8 transition-all duration-300 ${isFullscreenMode ? 'pt-4' : isHeaderCollapsed ? 'pt-24' : 'pt-48'}`}>
         {children}
       </main>
       {isFullscreenMode && (
