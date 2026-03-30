@@ -11,6 +11,8 @@ import {
   RefreshCw, Monitor, Radio, ShieldAlert, BarChart3, Maximize2, Minimize2,
   TrendingDown, Timer, ArrowRightLeft, Globe, HardDrive
 } from 'lucide-react';
+import { BrazilMap, type MapProjectData } from './BrazilMap';
+import { BrazilMapModal } from './BrazilMapModal';
 import { formatDistanceToNow, subDays, format, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, AreaChart, Area, ResponsiveContainer } from 'recharts';
@@ -127,6 +129,7 @@ function computeIncidentsByDay(events: ConnectivityEvent[]) {
 export function ConnectivityDashboard() {
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [isMaximized, setIsMaximized] = useState(false);
+  const [mapModalOpen, setMapModalOpen] = useState(false);
   const [webLatency, setWebLatency] = useState<number | null>(null);
   const [webLatencyStatus, setWebLatencyStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
@@ -256,6 +259,19 @@ export function ConnectivityDashboard() {
 
   const globalHealthColor = stats.healthPct === 100 ? COLOR_ONLINE : stats.healthPct >= 50 ? COLOR_PARTIAL : COLOR_OFFLINE;
   const globalHealthText = stats.healthPct === 100 ? 'Sistema Operacional' : stats.healthPct >= 50 ? 'Atenção Necessária' : 'Sistema Crítico';
+
+  const mapProjectData: MapProjectData[] = useMemo(() => {
+    return projects.map(p => {
+      const pDevices = devicesByProject[p.id] || [];
+      return {
+        id: p.id,
+        name: p.name,
+        location: p.location,
+        onlineDevices: pDevices.filter(d => d.status === 'online').length,
+        totalDevices: pDevices.length,
+      };
+    }).filter(p => p.totalDevices > 0);
+  }, [projects, devicesByProject]);
 
   const barChartData = useMemo(() => {
     return projects.map(p => {
@@ -819,6 +835,9 @@ export function ConnectivityDashboard() {
 
       {renderAvailabilitySection()}
       {renderConnectionDiagnostics()}
+
+      <BrazilMap projects={mapProjectData} onExpandClick={() => setMapModalOpen(true)} />
+      <BrazilMapModal open={mapModalOpen} onOpenChange={setMapModalOpen} projects={mapProjectData} />
 
       {renderDeviceTable('max-h-[400px]')}
 
