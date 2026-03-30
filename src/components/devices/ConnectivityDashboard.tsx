@@ -129,6 +129,7 @@ function computeIncidentsByDay(events: ConnectivityEvent[]) {
 export function ConnectivityDashboard() {
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [isMaximized, setIsMaximized] = useState(false);
+  const [mapModalOpen, setMapModalOpen] = useState(false);
   const [webLatency, setWebLatency] = useState<number | null>(null);
   const [webLatencyStatus, setWebLatencyStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
