@@ -18,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DeviceSetupInstructions } from './DeviceSetupInstructions';
 import { AgentManagement } from './AgentManagement';
+import { AdminProjectFilter } from '../admin/AdminProjectFilter';
 import {
   Plus, Wifi, WifiOff, Trash2, RefreshCw, DoorOpen, Camera, Server, Loader2, Users, Pencil, Ship, Anchor, MoreHorizontal, Bot
 } from 'lucide-react';
