@@ -14,7 +14,7 @@ interface StatCardProps {
 }
 
 const StatCard = ({ icon, label, value, iconBgColor }: StatCardProps) => (
-  <div className="bg-card rounded-xl border shadow-sm p-6 flex flex-col gap-3">
+  <div className="bg-card rounded-xl shadow-sm p-6 flex flex-col gap-3">
     <div className={`p-3 rounded-full ${iconBgColor} w-fit`}>
       {icon}
     </div>
