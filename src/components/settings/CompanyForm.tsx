@@ -114,9 +114,11 @@ export const CompanyForm = () => {
 
       let logoUrlLight = null;
       let logoUrlDark = null;
+      let logoUrlRotated = null;
       
       const logoLightInput = document.querySelector<HTMLInputElement>('input[name="logo-light"]');
       const logoDarkInput = document.querySelector<HTMLInputElement>('input[name="logo-dark"]');
+      const logoRotatedInput = document.querySelector<HTMLInputElement>('input[name="logo-rotated"]');
 
       if (logoLightInput?.files?.length) {
         logoUrlLight = await handleLogoUpload(logoLightInput.files[0], false);
@@ -124,6 +126,10 @@ export const CompanyForm = () => {
 
       if (logoDarkInput?.files?.length) {
         logoUrlDark = await handleLogoUpload(logoDarkInput.files[0], true);
+      }
+
+      if (logoRotatedInput?.files?.length) {
+        logoUrlRotated = await handleLogoUpload(logoRotatedInput.files[0], false);
       }
 
       const companyData = {
@@ -135,6 +141,7 @@ export const CompanyForm = () => {
         address: address || null,
         ...(logoUrlLight && { logo_url_light: logoUrlLight }),
         ...(logoUrlDark && { logo_url_dark: logoUrlDark }),
+        ...(logoUrlRotated && { logo_url_rotated: logoUrlRotated }),
       };
 
       if (selectedCompanyId && selectedCompanyId !== "new") {
