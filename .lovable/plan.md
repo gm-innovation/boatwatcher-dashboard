@@ -1,14 +1,26 @@
 
 
-## Corrigir sobreposição do header sobre o conteúdo
+## Ajustar StatisticsCards para corresponder ao design de referência
 
-### Problema
-O header é `fixed` (posição fixa), então o conteúdo precisa de `padding-top` suficiente para não ficar escondido atrás dele. O `pt-40` (160px) no MainLayout não é suficiente para a altura real do header, que tem 3 seções: logo (~74px), navegação (~40px) e seletor de projeto (~48px) ≈ 162px+.
+### Diferenças identificadas (atual vs referência)
+
+O print mostra cards com:
+- **Layout vertical**: ícone no topo à esquerda, label abaixo, valor embaixo — em coluna, não em linha
+- **Fundo branco** (não colorido) com borda sutil e sombra leve
+- **Ícone** dentro de um círculo com fundo colorido suave (azul, verde, púrpura)
+- **Label** em cinza escuro/muted, fonte pequena
+- **Valor** em preto/escuro, fonte grande e bold
+- **Sem cores de fundo** nos cards — fundo neutro (bg-white / bg-card)
 
 ### Alteração
 
-**`src/components/layouts/MainLayout.tsx`** (linha 12):
+**`src/components/dashboard/StatisticsCards.tsx`**
 
-- Header expandido: trocar `pt-40` por `pt-48` (192px) para garantir folga
-- Header colapsado: trocar `pt-14` por `pt-24` (96px) pois a barra de logo (~74px) continua visível
+Refatorar o `StatCard` para layout vertical:
+- Card: `bg-white dark:bg-card rounded-xl border shadow-sm p-6`
+- Layout: `flex flex-col gap-3` (vertical)
+- Ícone: círculo colorido no topo (`p-3 rounded-full` com cor de fundo suave)
+- Label: `text-sm text-muted-foreground`
+- Valor: `text-3xl font-bold text-foreground`
+- Remover props `bgColor`, `textColor` — simplificar para apenas `iconBgColor`
 
