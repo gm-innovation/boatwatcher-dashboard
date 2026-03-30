@@ -6,10 +6,7 @@ import { GlobalSettings } from "@/components/admin/GlobalSettings";
 import { AuditLog } from "@/components/admin/AuditLog";
 import { ClientsManagement } from "@/components/admin/ClientsManagement";
 import { ProjectsManagement } from "@/components/admin/ProjectsManagement";
-import { ReportScheduler } from "@/components/reports/ReportScheduler";
 import { DiagnosticsPanel } from "@/components/admin/DiagnosticsPanel";
-
-import { DocumentExpirationCheck } from "@/components/admin/DocumentExpirationCheck";
 import { AgentManagement } from "@/components/devices/AgentManagement";
 import { ConnectivityDashboard } from "@/components/devices/ConnectivityDashboard";
 import { Server, FolderKanban, Shield, Cog, Activity, Building2, Calendar, Stethoscope, FileWarning, Bot, Wifi, MonitorDown } from "lucide-react";
