@@ -161,6 +161,8 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
         loading,
         isFullscreenMode,
         toggleFullscreen,
+        isHeaderCollapsed,
+        toggleHeaderCollapsed,
         lastUpdate,
         autoRefresh,
         setAutoRefresh,
