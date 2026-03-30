@@ -1,11 +1,10 @@
 
 
-## Aumentar logo e ajustar alinhamento à esquerda
+## Reduzir logo 25% e ajustar espaçamento
 
-A logo atual usa `h-12 w-40` (48px). Dobrar para `h-24 w-80` (96px altura, 320px largura). Para alinhar com o conteúdo da página, usar `object-contain object-left` e margem negativa à esquerda (`-ml-2`) para compensar o espaço vazio interno da imagem.
+**`src/components/Header.tsx`** linha 102-104:
 
-### Alteração
-
-**`src/components/Header.tsx`** linha 104:
-- Trocar `className="h-12 w-40 object-contain"` por `className="h-24 w-80 object-contain object-left -ml-2"`
+- Reduzir logo de `h-24 w-80` (96px) para `h-[72px] w-60` (75% = 72px altura, 240px largura)
+- Aumentar margem negativa para `-ml-3` para compensar melhor o espaço interno da imagem
+- Reduzir padding vertical do container de `py-2` para `py-1` para diminuir a altura do bloco
 
