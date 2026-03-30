@@ -1,34 +1,15 @@
 
 
-## Corrigir logo e adicionar header colapsável
+## Colapsar seção do seletor de projeto junto com o header
 
-### Problema da logo
-A seção de logos (linhas 99-111) exibe a logo do **cliente** à esquerda e um placeholder "Sistema" à direita. O correto é: logo do **sistema** à esquerda, sem a logo do cliente nessa seção.
+A terceira seção do header (linhas 233-235) com o `ProjectSelector` ainda aparece quando colapsado porque usa `max-h-0` mas mantém padding residual. Basta escondê-la completamente quando colapsado.
 
-### Plano
+### Alteração
 
-**1. Corrigir logo do sistema (`src/components/Header.tsx`)**
-- Remover a logo do cliente (lado esquerdo) e o placeholder "Sistema" (lado direito)
-- Colocar apenas a logo do sistema no canto esquerdo — usar `localStorage.getItem('company_light')` / `company_dark` conforme o tema (mesma lógica do `SystemSettings.tsx`)
-- Se não houver logo configurada, mostrar placeholder "DockCheck" ou texto do sistema
+**`src/components/Header.tsx` (linha 233)**
+- Mudar a div do ProjectSelector para não renderizar quando colapsado, ou adicionar `hidden` condicional
+- De: `max-h-0 py-0` → Para: renderização condicional `{!isHeaderCollapsed && <div>...</div>}`
 
-**2. Header colapsável (`src/contexts/ProjectContext.tsx`)**
-- Adicionar `isHeaderCollapsed` (boolean) e `toggleHeaderCollapsed` ao contexto
-
-**3. Header colapsável (`src/components/Header.tsx`)**
-- Quando colapsado: ocultar seção de navegação (segunda div), manter logo + seletor de projeto numa barra compacta
-- Botão `ChevronUp`/`ChevronDown` para alternar
-- Transição suave com `transition-all duration-300`
-
-**4. Ajustar padding (`src/components/layouts/MainLayout.tsx`)**
-- Consumir `isHeaderCollapsed` do contexto
-- Expandido: `pt-40` (atual) → Colapsado: `pt-24` (aprox.)
-
-### Arquivos alterados
-
-| Arquivo | Mudança |
-|---|---|
-| `src/components/Header.tsx` | Corrigir logo (sistema no lugar do cliente) + toggle de colapso |
-| `src/contexts/ProjectContext.tsx` | Adicionar `isHeaderCollapsed` / `toggleHeaderCollapsed` |
-| `src/components/layouts/MainLayout.tsx` | Padding dinâmico baseado no estado colapsado |
+**`src/components/layouts/MainLayout.tsx`**
+- Ajustar padding colapsado de `pt-20` para `pt-14` (apenas a barra com logo + botão toggle)
 
