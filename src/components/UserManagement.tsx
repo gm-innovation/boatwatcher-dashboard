@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Project, AppRole } from "@/types/supabase";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useProjects } from "@/hooks/useSupabase";
+import { AdminProjectFilter } from "@/components/admin/AdminProjectFilter";
 
 const UserManagement = () => {
   const [email, setEmail] = useState("");
