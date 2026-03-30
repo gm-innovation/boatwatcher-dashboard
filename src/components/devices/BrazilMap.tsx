@@ -280,4 +280,4 @@ export function BrazilMap({ projects, onExpandClick, compact = false }: BrazilMa
   );
 }
 
-export { findCityCoords, CITY_COORDS, SVG_WIDTH, SVG_HEIGHT, BRAZIL_PATH };
+export { findCityCoords, LOCATION_COORDS, LOCATION_COORDS as CITY_COORDS, SVG_WIDTH, SVG_HEIGHT, BRAZIL_PATH };
