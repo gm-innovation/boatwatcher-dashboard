@@ -1124,6 +1124,14 @@ export const DiagnosticsPanel = () => {
         </Card>
       )}
 
+      {/* Per-Project Diagnostics */}
+      {!isLocalRuntime && (
+        <ProjectDiagnosticsSection
+          onDiagnosticsReady={handleProjectDiagnosticsReady}
+          refreshKey={projectDiagRefreshKey}
+        />
+      )}
+
       {/* Inter-Layer Connectivity Tests */}
       <InterLayerConnectivityCard
         isLocalRuntime={isLocalRuntime}
