@@ -146,6 +146,21 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
                 />
               ))}
 
+              {/* Connection lines for spread markers */}
+              {markers.filter(m => m.wasSpread).map((m) => (
+                <line
+                  key={`line-${m.id}`}
+                  x1={m.originalX}
+                  y1={m.originalY}
+                  x2={m.x}
+                  y2={m.y}
+                  stroke="hsl(var(--foreground))"
+                  strokeWidth={0.8 / Math.sqrt(scale)}
+                  opacity={0.25}
+                  strokeDasharray={`${3 / Math.sqrt(scale)},${2 / Math.sqrt(scale)}`}
+                />
+              ))}
+
               {/* Markers */}
               {markers.map((m) => {
                 const cr = compensatedRadius(m.radius);
