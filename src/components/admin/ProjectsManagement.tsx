@@ -104,6 +104,13 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
         if (error) throw error;
         toast({ title: 'Projeto cadastrado com sucesso' });
       }
+      // Upsert known_locations if coordinates are provided
+      if (location && lat != null && lng != null) {
+        await supabase.from('known_locations').upsert(
+          { name: location, latitude: lat, longitude: lng },
+          { onConflict: 'name' }
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       onSuccess();
     } catch (error: any) {
