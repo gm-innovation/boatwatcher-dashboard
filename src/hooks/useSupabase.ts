@@ -276,6 +276,15 @@ async function fetchWorkersOnBoardFromCloud(
 
     if (workersOnBoard.size === 0) return [];
 
+    // Build first entry map (entryLogs is ascending)
+    const firstEntryMap = new Map<string, string>();
+    for (const entry of entryLogs || []) {
+      const key = entry.worker_name || entry.worker_id || '';
+      if (key && !firstEntryMap.has(key)) {
+        firstEntryMap.set(key, entry.timestamp);
+      }
+    }
+
     // Enrich by worker_name (handles UUID mismatch)
     const workerNames = Array.from(workersOnBoard.values())
       .map(w => w.worker_name)
@@ -309,6 +318,7 @@ async function fetchWorkersOnBoardFromCloud(
         company: enriched?.companies?.name || 'N/A',
         company_id: enriched?.company_id || null,
         entryTime: onBoard.entry_time,
+        firstEntryTime: firstEntryMap.get(key) || onBoard.entry_time,
       };
     });
   } catch (err) {
@@ -357,18 +367,19 @@ export const useCompaniesOnBoard = (workersOnBoard: any[]) => {
   for (const worker of workersOnBoard) {
     if (!worker.company_id) continue;
 
+    const workerFirstEntry = worker.firstEntryTime || worker.entryTime;
     const existing = companiesMap.get(worker.company_id);
     if (existing) {
       existing.count++;
-      if (worker.entryTime && (!existing.entryTime || worker.entryTime < existing.entryTime)) {
-        existing.entryTime = worker.entryTime;
+      if (workerFirstEntry && (!existing.entryTime || workerFirstEntry < existing.entryTime)) {
+        existing.entryTime = workerFirstEntry;
       }
     } else {
       companiesMap.set(worker.company_id, {
         id: worker.company_id,
         name: worker.company,
         count: 1,
-        entryTime: worker.entryTime || null,
+        entryTime: workerFirstEntry || null,
       });
     }
   }

@@ -1110,12 +1110,15 @@ function createDatabaseAPI(db, startCode) {
         : [startTimestamp, maxTimestamp, startTimestamp, maxTimestamp];
 
       const rows = db.prepare(`
-        WITH first_entries AS (
+        WITH all_entries AS (
           SELECT al.worker_id, al.worker_name, al.device_name, al.device_id, al.timestamp,
             ROW_NUMBER() OVER (
               PARTITION BY COALESCE(al.worker_name, al.worker_id)
-              ORDER BY al.timestamp ASC
-            ) as rn
+              ORDER BY al.timestamp DESC
+            ) as rn_desc,
+            MIN(al.timestamp) OVER (
+              PARTITION BY COALESCE(al.worker_name, al.worker_id)
+            ) as first_entry_time
           FROM access_logs al
           WHERE al.timestamp >= ?
             AND al.timestamp <= ?
@@ -1124,19 +1127,20 @@ function createDatabaseAPI(db, startCode) {
             AND al.worker_id IS NOT NULL
             ${deviceFilter}
         )
-        SELECT fe.worker_id, fe.worker_name, fe.device_name, fe.timestamp as entry_time,
+        SELECT ae.worker_id, ae.worker_name, ae.device_name, ae.timestamp as entry_time,
+          ae.first_entry_time,
           w.name, w.role, w.company_id, c.name as company_name,
           d.configuration as device_configuration
-        FROM first_entries fe
-        LEFT JOIN devices d ON fe.device_id = d.id
-        LEFT JOIN workers w ON fe.worker_id = w.id
+        FROM all_entries ae
+        LEFT JOIN devices d ON ae.device_id = d.id
+        LEFT JOIN workers w ON ae.worker_id = w.id
         LEFT JOIN companies c ON w.company_id = c.id
-        WHERE fe.rn = 1
+        WHERE ae.rn_desc = 1
           AND NOT EXISTS (
             SELECT 1 FROM access_logs ex
-            WHERE (ex.worker_name = fe.worker_name OR ex.worker_id = fe.worker_id)
+            WHERE (ex.worker_name = ae.worker_name OR ex.worker_id = ae.worker_id)
               AND ex.direction = 'exit'
-              AND ex.timestamp > fe.timestamp
+              AND ex.timestamp > ae.timestamp
               AND ex.timestamp >= ?
               AND ex.timestamp <= ?
               ${exitDeviceFilter}
@@ -1148,10 +1152,12 @@ function createDatabaseAPI(db, startCode) {
         // Timestamps from local agent capture are also stored in UTC after +3h normalization.
         // Just ensure proper ISO format for the frontend.
         let entryTime = r.entry_time;
-        if (entryTime && !entryTime.includes('Z') && !entryTime.includes('+')) {
-          // Timestamps without timezone marker are legacy BRT data — tag as -03:00
-          // so the frontend interprets them correctly as local time
-          entryTime = entryTime + '-03:00';
+        if (entryTime && !entryTime.includes('Z') && !entryTime.includes('+') && !entryTime.includes('-', 10)) {
+          entryTime = entryTime + 'Z';
+        }
+        let firstEntryTime = r.first_entry_time;
+        if (firstEntryTime && !firstEntryTime.includes('Z') && !firstEntryTime.includes('+') && !firstEntryTime.includes('-', 10)) {
+          firstEntryTime = firstEntryTime + 'Z';
         }
         const isManual = !r.device_id && r.device_name && r.device_name.startsWith('Manual -');
         let locationLabel;
@@ -1174,6 +1180,7 @@ function createDatabaseAPI(db, startCode) {
           company: r.company_name || 'N/A',
           company_id: r.company_id,
           entryTime,
+          firstEntryTime: firstEntryTime || entryTime,
         };
       });
     },
