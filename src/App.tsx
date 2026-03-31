@@ -31,7 +31,7 @@ const queryClient = new QueryClient({
   },
 });
 
-const ProtectedPage = ({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string }) => (
+const ProtectedPage = ({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string | string[] }) => (
   <ProtectedRoute requiredRole={requiredRole}>
     <MainLayout>{children}</MainLayout>
   </ProtectedRoute>
