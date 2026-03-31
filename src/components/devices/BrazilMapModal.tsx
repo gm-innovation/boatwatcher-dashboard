@@ -140,7 +140,7 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl w-[95vw] h-[85vh] flex flex-col p-0 gap-0">
+      <DialogContent className="max-w-5xl w-[95vw] h-[85vh] flex flex-col p-0 gap-0 z-[200]">
         <DialogHeader className="px-6 pt-5 pb-3 border-b border-border/50">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-lg">Mapa de Operações</DialogTitle>
