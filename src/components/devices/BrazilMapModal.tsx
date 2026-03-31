@@ -1,6 +1,5 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { findCityCoords, type MapProjectData } from './BrazilMap';
@@ -41,16 +40,10 @@ function createShipIcon(color: string, size: number = 36) {
   });
 }
 
-function MapResizer() {
-  const map = useMap();
-  useEffect(() => {
-    const timer = setTimeout(() => map.invalidateSize(), 200);
-    return () => clearTimeout(timer);
-  }, [map]);
-  return null;
-}
-
 export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalProps) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+
   const markers = useMemo(() => {
     return projects
       .map(p => {
@@ -58,13 +51,57 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
         if (!coords) return null;
         const health = p.totalDevices === 0 ? 'none'
           : p.onlineDevices === p.totalDevices ? 'online'
-          : p.onlineDevices > 0 ? 'partial'
-          : 'offline';
+          : p.onlineDevices > 0 ? 'partial' : 'offline';
         const color = health === 'online' ? COLOR_ONLINE : health === 'partial' ? COLOR_PARTIAL : COLOR_OFFLINE;
         return { ...p, ...coords, health, color };
       })
       .filter(Boolean) as (MapProjectData & { lat: number; lng: number; label: string; health: string; color: string })[];
   }, [projects]);
+
+  // Init / destroy map when dialog opens/closes
+  useEffect(() => {
+    if (!open) {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+      return;
+    }
+
+    // Small delay so the dialog DOM is ready
+    const timer = setTimeout(() => {
+      if (!mapRef.current || mapInstanceRef.current) return;
+
+      const map = L.map(mapRef.current, {
+        center: [-14.2, -51.9],
+        zoom: 4,
+        scrollWheelZoom: true,
+        zoomControl: true,
+      });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      }).addTo(map);
+
+      const layer = L.layerGroup().addTo(map);
+      markers.forEach(m => {
+        const statusLabel = m.health === 'online' ? 'Operacional' : m.health === 'partial' ? 'Parcial' : 'Crítico';
+        const popup = `<div style="font-size:12px;max-width:200px;">
+          <p style="font-weight:600;margin:0 0 2px">${m.name}</p>
+          <p style="color:#888;margin:0 0 2px">${m.label}</p>
+          <p style="margin:0"><span style="color:${m.color}">●</span> ${m.onlineDevices}/${m.totalDevices} dispositivos online</p>
+          <p style="color:#888;margin:2px 0 0">Status: ${statusLabel}</p>
+        </div>`;
+        L.marker([m.lat, m.lng], { icon: createShipIcon(m.color, 36) })
+          .bindPopup(popup)
+          .addTo(layer);
+      });
+
+      mapInstanceRef.current = map;
+      setTimeout(() => map.invalidateSize(), 200);
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [open, markers]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -79,42 +116,7 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
         </DialogHeader>
 
         <div className="flex-1 min-h-0 overflow-hidden">
-          {open && (
-            <MapContainer
-              center={[-14.2, -51.9]}
-              zoom={4}
-              style={{ height: '100%', width: '100%' }}
-              scrollWheelZoom={true}
-              zoomControl={true}
-            >
-              <MapResizer />
-              <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              />
-              {markers.map((m) => (
-                <Marker
-                  key={m.id}
-                  position={[m.lat, m.lng]}
-                  icon={createShipIcon(m.color, 36)}
-                >
-                  <Popup>
-                    <div className="text-xs max-w-[200px]">
-                      <p className="font-semibold">{m.name}</p>
-                      <p className="text-muted-foreground">{m.label}</p>
-                      <p>
-                        <span style={{ color: m.color }}>●</span>{' '}
-                        {m.onlineDevices}/{m.totalDevices} dispositivos online
-                      </p>
-                      <p className="text-muted-foreground">
-                        Status: {m.health === 'online' ? 'Operacional' : m.health === 'partial' ? 'Parcial' : 'Crítico'}
-                      </p>
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
-            </MapContainer>
-          )}
+          {open && <div ref={mapRef} style={{ height: '100%', width: '100%' }} />}
         </div>
 
         <div className="px-6 py-3 border-t border-border/50 flex items-center gap-4 text-xs text-muted-foreground">
