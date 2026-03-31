@@ -1,76 +1,70 @@
 
 
-## Por que os acessos manuais nao aparecem no dashboard
+## Corrigir localização de acessos manuais e incluí-los no Desktop
 
-### Causa raiz
+### Problemas identificados
 
-O dashboard filtra os logs de acesso por `device_id` vinculado ao projeto:
+1. **Local mostra "Manual" em vez de "Bordo"/"Dique"**: A query web não consulta o campo `access_location` do terminal manual. Precisa buscar essa configuração da tabela `manual_access_points` e mapear para "Bordo" ou "Dique".
 
-```text
-access_logs  →  .in('device_id', deviceIds)  →  deviceIds vem de devices.project_id
-```
+2. **Desktop não mostra acessos manuais**: A query SQLite em `electron/database.js` filtra apenas por `device_id IN (SELECT id FROM devices ...)`. Logs manuais têm `device_id = NULL`, então são completamente ignorados.
 
-O modulo de acesso manual insere logs **sem `device_id`** (apenas `device_name: "Manual - Terminal"`), entao a query do dashboard nunca encontra esses registros.
+### Alterações
 
-### Solucao
+**1. `src/hooks/useSupabase.ts`** — Buscar `access_location` do terminal e usar como label
 
-Duas alteracoes:
-
-**1. `src/pages/AccessControl.tsx`** — Incluir `device_id` no log inserido, usando um ID convencional derivado do terminal. Como `manual_access_points` nao e a tabela `devices`, sera necessario tambem incluir o `project_id` do terminal para permitir filtragem alternativa.
-
-Na verdade, a melhor abordagem e ajustar a query do dashboard para tambem considerar logs sem `device_id` mas com `device_name` que comeca com "Manual".
-
-**2. `src/hooks/useSupabase.ts`** (funcao `fetchWorkersOnBoardFromCloud`) — Alem da query por `device_id`, fazer uma segunda query para logs manuais do mesmo projeto:
-
-- Buscar `manual_access_points` com `project_id` igual ao projeto selecionado
-- Construir os nomes de dispositivo (`Manual - {nome}`)
-- Fazer uma query adicional em `access_logs` filtrando por `device_name` IN esses nomes (quando `device_id` e null)
-- Mesclar os resultados com os logs dos dispositivos fisicos
-
-### Detalhes tecnicos
-
-Em `fetchWorkersOnBoardFromCloud`:
-
+Na query de `manual_access_points`, incluir `access_location`:
 ```typescript
-// Apos a query de devices, buscar terminais manuais do projeto
 const { data: manualPoints } = await supabase
   .from('manual_access_points')
-  .select('name, project_id')
+  .select('name, access_location')
   .eq('project_id', projectId);
-
-const manualDeviceNames = (manualPoints || []).map(p => `Manual - ${p.name}`);
-
-// Query adicional para logs manuais (device_id IS NULL, device_name em manualDeviceNames)
-if (manualDeviceNames.length > 0) {
-  const { data: manualEntries } = await supabase
-    .from('access_logs')
-    .select('worker_id, worker_name, device_name, device_id, timestamp')
-    .eq('direction', 'entry')
-    .eq('access_status', 'granted')
-    .is('device_id', null)
-    .in('device_name', manualDeviceNames)
-    .gte('timestamp', startTimestamp)
-    .lte('timestamp', maxTimestamp);
-
-  // Idem para exits manuais
-  const { data: manualExits } = await supabase
-    .from('access_logs')
-    .select('worker_id, worker_name, timestamp')
-    .eq('direction', 'exit')
-    .is('device_id', null)
-    .in('device_name', manualDeviceNames)
-    .gte('timestamp', startTimestamp)
-    .lte('timestamp', maxTimestamp);
-
-  // Mesclar com entryLogs e exitLogs existentes
-}
 ```
 
-Os logs manuais terao `location` = "Manual" no dashboard para diferenciar visualmente.
+Criar um mapa `device_name → location`:
+```typescript
+const manualLocationMap = new Map(
+  (manualPoints || []).flatMap(p => [
+    [`Manual - ${p.name}`, p.access_location === 'dique' ? 'Dique' : 'Bordo']
+  ])
+);
+```
+
+Na linha 293, substituir:
+```typescript
+// Antes
+const locationLabel = isManual ? 'Manual' : ...
+// Depois
+const locationLabel = isManual
+  ? (manualLocationMap.get(onBoard.device_name || '') || 'Bordo')
+  : accessLocation === 'dique' ? 'Dique' : 'Bordo';
+```
+
+**2. `electron/database.js`** — Incluir logs manuais na query SQLite
+
+Alterar a função `getWorkersOnBoard` para também buscar logs onde `device_id IS NULL` e `device_name LIKE 'Manual - %'`. Usar uma `UNION` ou `OR` no filtro de dispositivos:
+
+```sql
+-- No deviceFilter, adicionar OR para logs manuais
+AND (
+  al.device_id IN (SELECT id FROM devices WHERE project_id = ?)
+  OR (al.device_id IS NULL AND al.device_name LIKE 'Manual - %')
+)
+```
+
+Mesma lógica para o filtro de exits. Ajustar os params correspondentes.
+
+Na seção de mapeamento de localização (linha 1156-1158), adicionar fallback para logs manuais:
+```javascript
+const isManual = !r.device_id && r.device_name?.startsWith('Manual -');
+const locationLabel = isManual ? 'Bordo' : (accessLocation === 'dique' ? 'Dique' : 'Bordo');
+```
+
+Para mapear corretamente o `access_location` do terminal manual no Desktop, consultar a tabela local `manual_access_points` (se sincronizada) ou usar `'Bordo'` como default seguro.
 
 ### Arquivos afetados
 
-| Arquivo | Acao |
+| Arquivo | Ação |
 |---|---|
-| `src/hooks/useSupabase.ts` | Adicionar query para logs manuais na funcao `fetchWorkersOnBoardFromCloud` |
+| `src/hooks/useSupabase.ts` | Buscar `access_location` e mapear para Bordo/Dique |
+| `electron/database.js` | Incluir logs manuais (`device_id IS NULL`) na query |
 
