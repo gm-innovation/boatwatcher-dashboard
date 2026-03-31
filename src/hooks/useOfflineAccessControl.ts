@@ -12,6 +12,7 @@ export interface CachedWorker {
   company_name?: string;
   job_function_name?: string;
   status: string | null;
+  role?: string | null;
 }
 
 export interface PendingAccessLog {
@@ -56,7 +57,7 @@ export function useOfflineAccessControl(clientIdFilter?: string) {
       if (navigator.onLine) {
         let query = supabase
           .from('workers')
-          .select('id, name, code, document_number, photo_url, company_id, status, job_function_id')
+          .select('id, name, code, document_number, photo_url, company_id, status, job_function_id, role')
           .eq('status', 'active')
           .limit(5000);
 
@@ -83,6 +84,7 @@ export function useOfflineAccessControl(clientIdFilter?: string) {
             company_name: w.company_id ? companiesMap.get(w.company_id) || undefined : undefined,
             job_function_name: w.job_function_id ? jobFunctionsMap.get(w.job_function_id) || undefined : undefined,
             status: w.status,
+            role: w.role,
           }));
 
           await set(WORKERS_CACHE_KEY, cached);
