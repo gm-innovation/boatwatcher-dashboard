@@ -8,10 +8,14 @@ const COLOR_ONLINE = '#22c55e';
 const COLOR_OFFLINE = '#ef4444';
 const COLOR_PARTIAL = '#eab308';
 
-interface BrazilMapModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  projects: MapProjectData[];
+function isDarkMode() {
+  return document.documentElement.classList.contains('dark');
+}
+
+function getTileUrl() {
+  return isDarkMode()
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 }
 
 function createShipIcon(color: string, size: number = 36) {
