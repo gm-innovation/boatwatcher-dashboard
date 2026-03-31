@@ -815,10 +815,18 @@ export function ConnectivityDashboard() {
           </div>
 
           {/* Right column */}
-          <div className="flex flex-col gap-3 min-h-0 overflow-hidden">
-            <div className="flex-1 min-h-0 flex flex-col">
-              {renderDeviceTable()}
-            </div>
+          <div className="flex flex-col gap-3 min-h-0 overflow-auto">
+            {renderDeviceTable('max-h-[300px]')}
+            <BrazilMap
+              projects={mapProjectData}
+              onExpandClick={() => setMapModalOpen(true)}
+              compact
+            />
+            <BrazilMapModal
+              open={mapModalOpen}
+              onOpenChange={setMapModalOpen}
+              projects={mapProjectData}
+            />
             {renderAlerts()}
           </div>
         </div>
