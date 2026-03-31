@@ -71,7 +71,9 @@ export function AppSidebar() {
   };
 
   const isAdmin = role === 'admin';
+  const isOperator = role === 'operator';
   const isCompanyAdmin = role === 'company_admin';
+  const canAccessControl = isAdmin || isOperator;
 
   return (
     <Sidebar collapsible="icon">
