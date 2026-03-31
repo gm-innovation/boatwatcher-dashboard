@@ -208,10 +208,18 @@ async function fetchWorkersOnBoardFromCloud(
     // --- Manual access point logs ---
     const { data: manualPoints } = await supabase
       .from('manual_access_points')
-      .select('name')
+      .select('name, access_location')
       .eq('project_id', projectId);
 
     const manualDeviceNames = (manualPoints || []).map(p => `Manual - ${p.name}`);
+
+    // Map device_name → Bordo/Dique based on terminal's access_location config
+    const manualLocationMap = new Map<string, string>(
+      (manualPoints || []).map(p => [
+        `Manual - ${p.name}`,
+        p.access_location === 'dique' ? 'Dique' : 'Bordo'
+      ])
+    );
 
     if (manualDeviceNames.length > 0) {
       const { data: manualEntries } = await supabase
@@ -290,7 +298,9 @@ async function fetchWorkersOnBoardFromCloud(
       // Map device access_location to display label; manual entries show "Manual"
       const isManual = !onBoard.device_id && onBoard.device_name?.startsWith('Manual -');
       const accessLocation = onBoard.device_id ? deviceLocationMap.get(onBoard.device_id) || 'bordo' : 'bordo';
-      const locationLabel = isManual ? 'Manual' : accessLocation === 'dique' ? 'Dique' : 'Bordo';
+      const locationLabel = isManual
+        ? (manualLocationMap.get(onBoard.device_name || '') || 'Bordo')
+        : accessLocation === 'dique' ? 'Dique' : 'Bordo';
       return {
         id: enriched?.id || onBoard.worker_id || key,
         name: enriched?.name || onBoard.worker_name || 'Desconhecido',

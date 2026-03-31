@@ -1100,10 +1100,10 @@ function createDatabaseAPI(db, startCode) {
       
       // Filter by project devices when projectId is provided
       const deviceFilter = projectId
-        ? 'AND al.device_id IN (SELECT id FROM devices WHERE project_id = ?)'
+        ? 'AND (al.device_id IN (SELECT id FROM devices WHERE project_id = ?) OR (al.device_id IS NULL AND al.device_name LIKE \'Manual - %\'))'
         : '';
       const exitDeviceFilter = projectId
-        ? 'AND ex.device_id IN (SELECT id FROM devices WHERE project_id = ?)'
+        ? 'AND (ex.device_id IN (SELECT id FROM devices WHERE project_id = ?) OR (ex.device_id IS NULL AND ex.device_name LIKE \'Manual - %\'))'
         : '';
       const params = projectId
         ? [startTimestamp, maxTimestamp, projectId, startTimestamp, maxTimestamp, projectId]
@@ -1153,9 +1153,19 @@ function createDatabaseAPI(db, startCode) {
           // so the frontend interprets them correctly as local time
           entryTime = entryTime + '-03:00';
         }
-        const config = safeParseJson(r.device_configuration, {});
-        const accessLocation = config.access_location || 'bordo';
-        const locationLabel = accessLocation === 'dique' ? 'Dique' : 'Bordo';
+        const isManual = !r.device_id && r.device_name && r.device_name.startsWith('Manual -');
+        let locationLabel;
+        if (isManual) {
+          // Try to find location from manual_access_points table
+          const terminalName = r.device_name.replace(/^Manual - /, '');
+          const manualPoint = db.prepare('SELECT access_location FROM manual_access_points WHERE name = ? LIMIT 1').get(terminalName);
+          const manualLoc = manualPoint ? manualPoint.access_location : 'bordo';
+          locationLabel = manualLoc === 'dique' ? 'Dique' : 'Bordo';
+        } else {
+          const config = safeParseJson(r.device_configuration, {});
+          const accessLocation = config.access_location || 'bordo';
+          locationLabel = accessLocation === 'dique' ? 'Dique' : 'Bordo';
+        }
         return {
           id: r.worker_id,
           name: r.name || r.worker_name,
