@@ -19,6 +19,7 @@ function getTileUrl() {
 }
 
 function createShipIcon(color: string, size: number = 36) {
+  const svgSize = Math.round(size * 0.65);
   return L.divIcon({
     className: 'leaflet-ship-marker',
     html: `
@@ -29,13 +30,21 @@ function createShipIcon(color: string, size: number = 36) {
           width:${size}px;height:${size}px;
           border-radius:50%;
           background:${color};
+          opacity:0.35;
           animation:marker-pulse 2s infinite;
         "></div>
-        <img src="/ship-icon.png" style="
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${svgSize}" height="${svgSize}" style="
           position:absolute;top:50%;left:50%;
           transform:translate(-50%,-50%);
-          width:${size * 0.7}px;height:${size * 0.7}px;
-        " />
+          fill:${color};
+          filter:drop-shadow(0 0 3px ${color}) drop-shadow(0 0 8px ${color}) drop-shadow(0 0 14px ${color});
+        ">
+          <path d="M3 17h1.2l1.8-5.4V8h4V5h4v3h4v3.6L19.8 17H21l1 2H2l1-2zM12 8H9v3.6L7.8 15h8.4L15 11.6V8h-3z" fill="${color}" opacity="0.3"/>
+          <path d="M6 8h12v3.6L19.8 17H4.2L6 11.6V8z" fill="none" stroke="${color}" stroke-width="1.2"/>
+          <path d="M10 5h4v3h-4z" fill="none" stroke="${color}" stroke-width="1.2"/>
+          <path d="M12 2v3" fill="none" stroke="${color}" stroke-width="1.2"/>
+          <path d="M2 19l1-2h18l1 2" fill="none" stroke="${color}" stroke-width="1.2"/>
+        </svg>
       </div>
     `,
     iconSize: [size, size],
