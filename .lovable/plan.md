@@ -1,65 +1,56 @@
 
-Objetivo: corrigir o RJ de forma definitiva para que o navio fique exatamente na reentrância da Baía de Guanabara, e não no mar aberto nem no interior.
 
-1. Corrigir a causa real
-- O erro atual não é só “coordenada ruim”.
-- Hoje existe um único hub `guanabara` em `src/components/devices/BrazilMap.tsx` com `x: 522, y: 432`, que já nasce longe demais da baía.
-- Depois disso, `spreadOverlappingMarkers` em `src/components/devices/mapUtils.ts` ainda empurra os marcadores para leste, piorando o desvio.
-- Resultado: mesmo com ajuste manual, o barco continua fora da reentrância correta.
+## Corrigir posicionamento do marcador na Baía de Guanabara
 
-2. Trocar o modelo de coordenadas do RJ
-- Substituir o hub único da Guanabara por âncoras específicas da baía.
-- Em vez de uma coordenada genérica “no oceano”, separar pelo menos:
-  - `guanabara_rio`
-  - `guanabara_niteroi`
-  - `guanabara_sao_goncalo`
-  - `angra`
-  - `macae`
-  - `acu`
-- Cada alias (`renave`, `maua`, `inhauma`, `brasa`, `thomaz`, `maclaren`, etc.) passará a apontar para a âncora correta dentro da reentrância ou no trecho costeiro certo.
+### Diagnóstico visual confirmado
 
-3. Recalibrar todas as coordenadas do RJ com base no mapa renderizado
-- Ajustar a Baía de Guanabara para a reentrância mostrada no seu print, usando o SVG final como referência visual.
-- Revisar todas as localizações marítimas do RJ:
-  - Baía de Guanabara: `rio de janeiro`, `niteroi`, `sao goncalo`, `renave`, `maua`, `inhauma`, `brasa`, `utc`, `triunfo`, `mac laren`, `maclaren`, `alianca`, `thomaz`
-  - Costa sul: `angra dos reis`, `brasfels`, `keppel`, `verolme`, `damen`
-  - Costa norte: `macae`, `imbetiba`, `sao joao da barra`, `porto do acu`, `acu`
-- Também revisar ES/SP próximos para manter consistência visual: `vitoria`, `aracruz`, `santos`, `guaruja`, `wilson sons`.
+Através do browser, confirmei que o marcador "Skandi Botafogo" está posicionado acima e à direita da reentrância costeira. As setas do usuário indicam que precisa ir para ESQUERDA e para BAIXO.
 
-4. Tornar a dispersão específica por região
-- A lógica atual usa apenas `x/y`, então ela não sabe que Guanabara é baía e não mar aberto.
-- Vou planejar uma dispersão guiada por metadados da localização, por exemplo:
-  - `spreadRegion: "guanabara"`
-  - `spreadRegion: "angra"`
-  - `spreadRegion: "norte_rj"`
-- Para Guanabara, o leque deixará de abrir para leste e passará a abrir dentro da área segura da baía/reentrância.
-- Para Angra, Macaé, Açu, Vitória e Santos, o leque continuará regional, mas sem jogar marcador para dentro do continente.
+Analisando os vértices do path SVG do RJ:
 
-5. Manter uma única fonte de verdade
-- `BrazilMapModal.tsx` já reutiliza `findCityCoords` e `spreadOverlappingMarkers`.
-- Vou manter isso, para que card e modal usem exatamente:
-  - as mesmas coordenadas
-  - a mesma regra de dispersão
-- Assim a posição não muda entre o mapa pequeno e o expandido.
+```text
+Costa interna (oeste→nordeste):        Costa externa (leste→sudoeste):
+  483.21, 432.49                          515.62, 431.47
+  492.72, 427.96                          512.04, 433.90
+  495.25, 426.97                          506.07, 435.84
+                                          503.24, 437.56
+                                          499.74, 441.25
+                                          490.65, 447.54
 
-6. Validação após implementar
-- Conferir o caso atual do seu print: `Skandi Botafogo`/Renave na reentrância da Baía de Guanabara.
-- Verificar grupos múltiplos na mesma região:
-  - Guanabara
-  - Angra
-  - Macaé / Açu
-- Confirmar que nenhum marcador:
-  - vai para “Minas Gerais”
-  - vai para mar aberto quando deveria estar na baía
-  - muda de lugar entre card e modal
+Atual: x:502, y:428 → ACIMA da abertura da baía
+Correto: x:~490, y:~440 → DENTRO da abertura, entre as duas costas
+```
 
-Detalhes técnicos
-- Arquivos principais:
-  - `src/components/devices/BrazilMap.tsx`
-  - `src/components/devices/mapUtils.ts`
-  - `src/components/devices/BrazilMapModal.tsx`
-- Mudanças centrais:
-  - remover a premissa atual de que Guanabara deve ficar “fora do estado/no oceano”
-  - criar hubs separados para a baía
-  - adicionar metadados de dispersão por região
-  - recalibrar todas as coordenadas costeiras do RJ usando a reentrância do SVG final como referência
+Na latitude y=440:
+- Costa oeste em x ≈ 480
+- Costa leste em x ≈ 500
+- Centro da água: x ≈ 490
+
+### Correções no arquivo `src/components/devices/BrazilMap.tsx`
+
+**Hub principal:**
+
+| Hub | Atual | Novo | Justificativa |
+|-----|-------|------|---------------|
+| `guanabara` | 502, 428 | **490, 440** | Centro da água entre as duas costas |
+| `angra` | 457, 451 | **460, 453** | Costa sul RJ (path ≈ 457-460, 449-454) |
+| `macae` | 500, 418 | **500, 418** | Mantém (costa NE correta) |
+| `acu` | 498, 414 | **500, 413** | Leve ajuste para a costa NE |
+
+**Cidades e estaleiros afetados** (todos que apontam para `guanabara`):
+- `rio de janeiro`, `niteroi`, `sao goncalo`, `renave`, `maua`, `inhauma`, `brasa`, `utc`, `triunfo`, `mac laren`, `maclaren`, `alianca`, `thomaz` → todos herdam o novo hub (490, 440)
+
+### Dispersão em `mapUtils.ts`
+
+Atualizar a região da Guanabara em `getSpreadDirection` para o novo range de coordenadas:
+- Antes: `cx > 490 && cx < 520 && cy > 420 && cy < 435`
+- Depois: `cx > 480 && cx < 505 && cy > 435 && cy < 450`
+- Manter direção sul (π/2) com leque estreito para espalhar dentro da baía sem ir para terra
+
+### Arquivos modificados
+1. `src/components/devices/BrazilMap.tsx` — coordenadas dos hubs marítimos
+2. `src/components/devices/mapUtils.ts` — range de detecção da região Guanabara
+
+### Resumo da mudança
+Mover o marcador **12 unidades para a esquerda** e **12 unidades para baixo** no SVG, colocando-o no centro da abertura da baía entre as duas linhas costeiras do RJ.
+
