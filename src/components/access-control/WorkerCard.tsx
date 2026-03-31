@@ -10,8 +10,9 @@ export function WorkerCard({ worker }: WorkerCardProps) {
   return (
     <div className="flex items-center gap-4 p-4 rounded-lg border bg-card">
       <ResolvedAvatar
-        src={worker.photo_url}
-        fallback={worker.name.slice(0, 2).toUpperCase()}
+        photoUrl={worker.photo_url}
+        name={worker.name}
+        fallback="initials"
         className="h-16 w-16 text-lg"
       />
       <div className="flex-1 min-w-0">
