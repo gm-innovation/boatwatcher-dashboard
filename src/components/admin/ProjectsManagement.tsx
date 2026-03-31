@@ -50,11 +50,11 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
   const queryClient = useQueryClient();
 
   // Fetch known locations
-  useState(() => {
+  useEffect(() => {
     supabase.from('known_locations').select('name, latitude, longitude').then(({ data }) => {
       if (data) setKnownLocations(data);
     });
-  });
+  }, []);
 
   // Auto-fill coordinates when location matches a known location
   const handleLocationChange = (value: string) => {
