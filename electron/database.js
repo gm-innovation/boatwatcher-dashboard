@@ -1100,10 +1100,10 @@ function createDatabaseAPI(db, startCode) {
       
       // Filter by project devices when projectId is provided
       const deviceFilter = projectId
-        ? 'AND al.device_id IN (SELECT id FROM devices WHERE project_id = ?)'
+        ? 'AND (al.device_id IN (SELECT id FROM devices WHERE project_id = ?) OR (al.device_id IS NULL AND al.device_name LIKE \'Manual - %\'))'
         : '';
       const exitDeviceFilter = projectId
-        ? 'AND ex.device_id IN (SELECT id FROM devices WHERE project_id = ?)'
+        ? 'AND (ex.device_id IN (SELECT id FROM devices WHERE project_id = ?) OR (ex.device_id IS NULL AND ex.device_name LIKE \'Manual - %\'))'
         : '';
       const params = projectId
         ? [startTimestamp, maxTimestamp, projectId, startTimestamp, maxTimestamp, projectId]
