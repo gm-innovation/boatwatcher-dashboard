@@ -367,18 +367,19 @@ export const useCompaniesOnBoard = (workersOnBoard: any[]) => {
   for (const worker of workersOnBoard) {
     if (!worker.company_id) continue;
 
+    const workerFirstEntry = worker.firstEntryTime || worker.entryTime;
     const existing = companiesMap.get(worker.company_id);
     if (existing) {
       existing.count++;
-      if (worker.entryTime && (!existing.entryTime || worker.entryTime < existing.entryTime)) {
-        existing.entryTime = worker.entryTime;
+      if (workerFirstEntry && (!existing.entryTime || workerFirstEntry < existing.entryTime)) {
+        existing.entryTime = workerFirstEntry;
       }
     } else {
       companiesMap.set(worker.company_id, {
         id: worker.company_id,
         name: worker.company,
         count: 1,
-        entryTime: worker.entryTime || null,
+        entryTime: workerFirstEntry || null,
       });
     }
   }

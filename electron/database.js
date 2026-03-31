@@ -1180,6 +1180,7 @@ function createDatabaseAPI(db, startCode) {
           company: r.company_name || 'N/A',
           company_id: r.company_id,
           entryTime,
+          firstEntryTime: firstEntryTime || entryTime,
         };
       });
     },
