@@ -27,6 +27,7 @@ export function BadgePrinter({ worker, companyName, jobFunctionName }: BadgePrin
     let qrDataUrl: string | null = null;
     if (worker.code) {
       try {
+        const { QRCodeCanvas } = await import('qrcode.react');
         const container = document.createElement('div');
         container.style.position = 'absolute';
         container.style.left = '-9999px';

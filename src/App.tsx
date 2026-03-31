@@ -61,7 +61,7 @@ const App = () => {
                 <Route path="/company-portal/*" element={<ProtectedPage><CompanyPortal /></ProtectedPage>} />
                 <Route path="/settings" element={<ProtectedPage requiredRole="admin"><ProjectSettings /></ProtectedPage>} />
                 <Route path="/visitors" element={<ProtectedPage><Visitors /></ProtectedPage>} />
-                <Route path="/access-control" element={<ProtectedPage requiredRole={['admin', 'operator']}><AccessControl /></ProtectedPage>} />
+                <Route path="/access-control" element={<ProtectedPage requiredRole={['admin', 'operator']}><React.Suspense fallback={<div className="flex items-center justify-center min-h-screen">Carregando...</div>}><AccessControl /></React.Suspense></ProtectedPage>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AuthProvider>
