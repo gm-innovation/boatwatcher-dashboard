@@ -1152,10 +1152,12 @@ function createDatabaseAPI(db, startCode) {
         // Timestamps from local agent capture are also stored in UTC after +3h normalization.
         // Just ensure proper ISO format for the frontend.
         let entryTime = r.entry_time;
-        if (entryTime && !entryTime.includes('Z') && !entryTime.includes('+')) {
-          // Timestamps without timezone marker are legacy BRT data — tag as -03:00
-          // so the frontend interprets them correctly as local time
-          entryTime = entryTime + '-03:00';
+        if (entryTime && !entryTime.includes('Z') && !entryTime.includes('+') && !entryTime.includes('-', 10)) {
+          entryTime = entryTime + 'Z';
+        }
+        let firstEntryTime = r.first_entry_time;
+        if (firstEntryTime && !firstEntryTime.includes('Z') && !firstEntryTime.includes('+') && !firstEntryTime.includes('-', 10)) {
+          firstEntryTime = firstEntryTime + 'Z';
         }
         const isManual = !r.device_id && r.device_name && r.device_name.startsWith('Manual -');
         let locationLabel;
