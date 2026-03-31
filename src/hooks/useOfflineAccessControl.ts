@@ -57,7 +57,7 @@ export function useOfflineAccessControl(clientIdFilter?: string) {
       if (navigator.onLine) {
         let query = supabase
           .from('workers')
-          .select('id, name, code, document_number, photo_url, company_id, status, job_function_id')
+          .select('id, name, code, document_number, photo_url, company_id, status, job_function_id, role')
           .eq('status', 'active')
           .limit(5000);
 
