@@ -16,6 +16,7 @@ import {
   Wifi,
   Bot,
   FileWarning,
+  ScanLine,
 } from 'lucide-react';
 import { useAuthContext } from '@/contexts/AuthContext';
 import {
