@@ -318,6 +318,7 @@ async function fetchWorkersOnBoardFromCloud(
         company: enriched?.companies?.name || 'N/A',
         company_id: enriched?.company_id || null,
         entryTime: onBoard.entry_time,
+        firstEntryTime: firstEntryMap.get(key) || onBoard.entry_time,
       };
     });
   } catch (err) {
