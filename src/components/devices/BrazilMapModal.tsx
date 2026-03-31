@@ -8,10 +8,14 @@ const COLOR_ONLINE = '#22c55e';
 const COLOR_OFFLINE = '#ef4444';
 const COLOR_PARTIAL = '#eab308';
 
-interface BrazilMapModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  projects: MapProjectData[];
+function isDarkMode() {
+  return document.documentElement.classList.contains('dark');
+}
+
+function getTileUrl() {
+  return isDarkMode()
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 }
 
 function createShipIcon(color: string, size: number = 36) {
@@ -40,6 +44,12 @@ function createShipIcon(color: string, size: number = 36) {
   });
 }
 
+interface BrazilMapModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  projects: MapProjectData[];
+}
+
 export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -62,6 +72,7 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
   useEffect(() => {
     if (!open) {
       if (mapInstanceRef.current) {
+        (mapInstanceRef.current as any)._themeObserver?.disconnect();
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
@@ -78,18 +89,29 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
         scrollWheelZoom: true,
         zoomControl: true,
       });
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      const tileLayer = L.tileLayer(getTileUrl(), {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       }).addTo(map);
 
+      // Watch for theme changes
+      const observer = new MutationObserver(() => {
+        tileLayer.setUrl(getTileUrl());
+      });
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      (map as any)._themeObserver = observer;
+
       const layer = L.layerGroup().addTo(map);
       markers.forEach(m => {
+        const dark = isDarkMode();
         const statusLabel = m.health === 'online' ? 'Operacional' : m.health === 'partial' ? 'Parcial' : 'Crítico';
-        const popup = `<div style="font-size:12px;max-width:200px;">
+        const bg = dark ? '#1e293b' : '#fff';
+        const fg = dark ? '#e2e8f0' : '#111';
+        const muted = dark ? '#94a3b8' : '#888';
+        const popup = `<div style="font-size:12px;max-width:200px;background:${bg};color:${fg};padding:8px;border-radius:6px;">
           <p style="font-weight:600;margin:0 0 2px">${m.name}</p>
-          <p style="color:#888;margin:0 0 2px">${m.label}</p>
+          <p style="color:${muted};margin:0 0 2px">${m.label}</p>
           <p style="margin:0"><span style="color:${m.color}">●</span> ${m.onlineDevices}/${m.totalDevices} dispositivos online</p>
-          <p style="color:#888;margin:2px 0 0">Status: ${statusLabel}</p>
+          <p style="color:${muted};margin:2px 0 0">Status: ${statusLabel}</p>
         </div>`;
         L.marker([m.lat, m.lng], { icon: createShipIcon(m.color, 36) })
           .bindPopup(popup)
