@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useProjects, useCompanies } from '@/hooks/useSupabase';
 import { AdminProjectFilter } from './AdminProjectFilter';
 import { supabase } from '@/integrations/supabase/client';
