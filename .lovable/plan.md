@@ -1,42 +1,70 @@
 
 
-## Forçar tema azul com labels brancos no mapa escuro
+## Eliminar falsos positivos de offline nos dispositivos
 
-### Problema
-O filtro CSS atual (`brightness(1.8) contrast(1.4) saturate(0.6) hue-rotate(15deg)`) já está aplicado no código, mas o resultado visual nos tiles CartoDB Dark ainda é muito escuro e os labels continuam pouco legíveis. O `hue-rotate` sozinho não é suficiente para transformar o cinza em azul.
+### Problema raiz
 
-### Solução — Abordagem dupla
+O sistema tem **três pontos** que atualizam `devices.status` na nuvem, e nenhum deles aplica um período de graça:
 
-**1. Trocar a técnica de filtro CSS** (`src/index.css`)
+1. **`agent-sync/status`** (heartbeat do sync engine, ~60s) — recebe `devices: [{serial, online: true/false}]` e grava imediatamente no banco
+2. **`agent-relay/heartbeat`** — mesma lógica, grava `online`/`offline` direto
+3. **`controlid-api`** — marca `offline` quando falha ao comunicar com dispositivo
 
-Usar a técnica de **inversão + hue-rotate** que transforma tiles claros em um tema escuro azulado com labels brancos:
+Embora o agente local tenha histerese (6 falhas consecutivas = offline, 2 sucessos = online), **qualquer oscilação rápida** de rede local (1 ciclo de 5s sem resposta) pode gerar `online: false` no relatório do heartbeat. Quando o heartbeat chega na nuvem, o status é gravado imediatamente — sem verificar se é uma oscilação transitória.
 
-```css
-.dark .leaflet-tile-pane {
-  filter: invert(100%) hue-rotate(180deg) brightness(0.85) contrast(1.2) saturate(0.3);
-}
-```
+O debounce de 60s que existe só protege o **log de eventos** (`connectivity_events`), não o campo `devices.status`.
 
-E trocar o tile do modo escuro para usar o **tile claro** (OSM ou Positron), que ao ser invertido produz labels brancos sobre fundo escuro azulado — muito mais legível que tentar clarear o CartoDB Dark.
+### Solução — Três camadas de proteção
 
-**2. Usar tile claro no modo escuro** (`src/components/devices/BrazilMap.tsx` e `BrazilMapModal.tsx`)
+**1. Aumentar tolerância no agente local** (`electron/agent.js`)
+- Aumentar `FAILURE_THRESHOLD` de 6 para **12** (60s a 5s/poll) — exige 1 minuto completo sem resposta antes de reportar offline
+- Manter `RECOVERY_THRESHOLD` em 2
 
-Mudar `getTileUrl()` para usar o **mesmo tile claro** em ambos os modos:
+**2. Adicionar grace period na nuvem** (`supabase/functions/agent-sync/index.ts`)
+- Antes de gravar `status = 'offline'`, verificar o `updated_at` do dispositivo
+- Só aceitar transição online→offline se o dispositivo está marcado como online há mais de **180 segundos** (3 minutos)
+- Se o último update foi há menos de 180s, ignorar o status offline (considerar transitório)
 
 ```typescript
-function getTileUrl() {
-  // Sempre usa tile claro — o CSS inverte no dark mode
-  return 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+// Pseudo-código da lógica no agent-sync/status
+for (const deviceStatus of body.devices) {
+  const newStatus = deviceStatus.online ? 'online' : 'offline'
+  
+  if (newStatus === 'offline') {
+    // Grace period: só aceitar offline se último update > 180s
+    const { data: current } = await supabase
+      .from('devices')
+      .select('status, updated_at')
+      .eq('controlid_serial_number', serial)
+      .eq('agent_id', agent.id)
+      .maybeSingle()
+    
+    if (current?.status === 'online') {
+      const lastUpdate = new Date(current.updated_at).getTime()
+      if (Date.now() - lastUpdate < 180_000) {
+        continue // Ignorar — transitório
+      }
+    }
+  }
+  
+  // Gravar status
+  await supabase.from('devices').update({ status: newStatus, updated_at: now }).eq(...)
 }
 ```
 
-O CartoDB Positron (light_all) tem labels pretos e linhas de fronteira claras. Quando invertido pelo CSS, os labels ficam **brancos** e o fundo fica **escuro azulado** — exatamente o resultado desejado.
+**3. Mesma lógica no `agent-relay/heartbeat`** (`supabase/functions/agent-relay/index.ts`)
+- Aplicar o mesmo grace period de 180s antes de aceitar transição para offline
 
 ### Arquivos
 
 | Arquivo | Mudança |
 |---|---|
-| `src/index.css` | Trocar filtro para `invert(100%) hue-rotate(180deg) brightness(0.85) contrast(1.2) saturate(0.3)` |
-| `src/components/devices/BrazilMap.tsx` | `getTileUrl()` retorna Positron (light_all) para ambos os modos |
-| `src/components/devices/BrazilMapModal.tsx` | Mesma mudança no `getTileUrl()` |
+| `electron/agent.js` | `FAILURE_THRESHOLD`: 6 → 12 |
+| `supabase/functions/agent-sync/index.ts` | Grace period de 180s antes de aceitar offline |
+| `supabase/functions/agent-relay/index.ts` | Grace period de 180s antes de aceitar offline |
+
+### Resultado esperado
+- Oscilações de rede < 3 minutos não geram mais transições offline
+- Dispositivos só são marcados offline após confirmação sustentada
+- O número de incidentes no painel de disponibilidade deve cair drasticamente
 
