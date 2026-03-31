@@ -99,3 +99,30 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Leaflet marker pulse animation */
+@keyframes marker-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.5);
+    opacity: 0.4;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 0;
+  }
+}
+
+.leaflet-ship-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Fix leaflet z-index inside dialogs */
+.leaflet-pane {
+  z-index: 1;
+}
+
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 2;
+}
