@@ -1153,10 +1153,13 @@ function createDatabaseAPI(db, startCode) {
           // so the frontend interprets them correctly as local time
           entryTime = entryTime + '-03:00';
         }
+        const config = safeParseJson(r.device_configuration, {});
+        const accessLocation = config.access_location || 'bordo';
+        const locationLabel = accessLocation === 'dique' ? 'Dique' : 'Bordo';
         return {
           id: r.worker_id,
           name: r.name || r.worker_name,
-          location: r.device_name,
+          location: locationLabel,
           role: r.role,
           company: r.company_name || 'N/A',
           company_id: r.company_id,
