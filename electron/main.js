@@ -402,7 +402,39 @@ function registerIpcHandlers() {
 
   ipcMain.handle('db:getAccessLogs', (_, filters) => apiCall('GET', '/api/access-logs' + (filters ? '?' + new URLSearchParams(filters) : '')));
   ipcMain.handle('db:insertAccessLog', (_, data) => apiCall('POST', '/api/access-logs', data));
-  ipcMain.handle('db:getWorkersOnBoard', (_, projectId) => apiCall('GET', `/api/projects/${projectId}/workers-on-board`));
+  ipcMain.handle('db:getWorkersOnBoard', async (_, projectId) => {
+    const workers = await apiCall('GET', `/api/projects/${projectId}/workers-on-board`);
+
+    // Resilience: if the Local Server is outdated and still returns device_name
+    // as location, fetch devices and apply access_location mapping here
+    if (Array.isArray(workers) && workers.length > 0) {
+      const needsFix = workers.some(w => w.location && !['Bordo', 'Dique'].includes(w.location));
+      if (needsFix) {
+        try {
+          const devices = await apiCall('GET', '/api/devices' + (projectId ? `?projectId=${projectId}` : ''));
+          const deviceConfigMap = {};
+          for (const d of (devices || [])) {
+            const config = typeof d.configuration === 'string' ? JSON.parse(d.configuration) : (d.configuration || {});
+            const loc = config.access_location || 'bordo';
+            deviceConfigMap[d.name] = loc === 'dique' ? 'Dique' : 'Bordo';
+          }
+          for (const w of workers) {
+            if (w.location && !['Bordo', 'Dique'].includes(w.location)) {
+              w.location = deviceConfigMap[w.location] || 'Bordo';
+            }
+          }
+        } catch (e) {
+          // Fallback: set all non-standard locations to "Bordo"
+          for (const w of workers) {
+            if (w.location && !['Bordo', 'Dique'].includes(w.location)) {
+              w.location = 'Bordo';
+            }
+          }
+        }
+      }
+    }
+    return workers;
+  });
   ipcMain.handle('db:getDevices', (_, projectId) => apiCall('GET', '/api/devices' + (projectId ? `?projectId=${projectId}` : '')));
   ipcMain.handle('db:getJobFunctions', () => apiCall('GET', '/api/job-functions'));
 
