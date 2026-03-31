@@ -1,60 +1,64 @@
 
 
-## Migração do mapa SVG para React-Leaflet (OpenStreetMap)
+## Corrigir erro `render2 is not a function` — Abordagem definitiva
 
-Substituir o mapa SVG manual por React-Leaflet com tiles reais do OpenStreetMap. Todas as coordenadas passam a ser latitude/longitude reais -- nunca mais ajuste manual de pixels.
+### Diagnóstico real
 
-### Arquivos modificados
+O `package.json` e `bun.lock` já mostram `react-leaflet@4.2.1` com `@react-leaflet/core@2.1.0` (peerDep `react ^18.0.0`). As versões estão corretas. O problema persiste porque o **cache prebundled do Vite** (`node_modules/.vite/deps/`) não foi invalidado — o hash `v=7be910b6` no stack trace é o mesmo desde o início, indicando que o Vite continua servindo os deps antigos (react-leaflet v5 compilado).
 
-1. **`src/components/devices/BrazilMap.tsx`** — reescrever completamente
-   - Instalar `leaflet` + `react-leaflet` (via package.json)
-   - Converter `LOCATION_COORDS` de `{x, y}` SVG para `{lat, lng}` reais
-   - Substituir o SVG por `<MapContainer>` + `<TileLayer>` do OpenStreetMap
-   - Marcadores: usar `<Marker>` com ícone customizado (ship-icon.png) + `<Popup>` para tooltip
-   - Pulso colorido por status: CSS animation no marcador
-   - Manter Card wrapper com header "Mapa de Operações" e botão Expandir
-   - Centro do mapa: Brasil (`-14.2, -51.9`), zoom 4
-   - Altura compacta: 280px; compact: 200px
-   - Exportar `findCityCoords`, `MapProjectData`, `LOCATION_COORDS` para backward compat
+Como não é possível limpar o cache Vite manualmente neste ambiente, a solução mais confiável é **remover `react-leaflet` completamente** e usar a API nativa do Leaflet via `useRef`/`useEffect`. Isso elimina toda dependência do wrapper React e resolve o problema de incompatibilidade de Context de forma permanente.
 
-2. **`src/components/devices/BrazilMapModal.tsx`** — reescrever completamente
-   - Usar `<MapContainer>` em tela cheia dentro do Dialog
-   - Zoom/pan nativo do Leaflet (remover implementação manual)
-   - Manter legenda de status (Operacional/Parcial/Crítico)
-   - Remover botões manuais de zoom (Leaflet tem controles nativos)
+### Mudanças
 
-3. **`src/components/devices/mapUtils.ts`** — simplificar
-   - `spreadOverlappingMarkers` agora opera em lat/lng com offset em graus (~0.02°) em vez de pixels
-   - Remover toda a lógica de `getSpreadDirection` baseada em coordenadas SVG
+#### 1. `package.json` — remover react-leaflet
+- Remover `"react-leaflet": "4.2.1"` das dependencies
+- Manter `"leaflet": "^1.9.4"` e `"@types/leaflet": "^1.9.21"`
 
-4. **`src/index.css`** — adicionar import do CSS do Leaflet + estilos customizados para o pulso
+#### 2. `src/components/devices/BrazilMap.tsx` — reescrever sem react-leaflet
+- Remover imports de `react-leaflet` (`MapContainer`, `TileLayer`, `Marker`, `Popup`, `useMap`)
+- Usar `useRef<HTMLDivElement>` + `useEffect` para inicializar `L.map()` diretamente
+- Criar markers com `L.marker()` e `L.divIcon()` (mesmos ícones ship com pulso)
+- Popups com `marker.bindPopup()`
+- Manter toda a lógica de coordenadas, `findCityCoords`, `LOCATION_COORDS`, exports
+- Mapa estático (sem zoom/drag) no modo compacto, como antes
 
-### Coordenadas reais (lat/lng) — exemplos principais
+```typescript
+// Estrutura simplificada
+const mapRef = useRef<HTMLDivElement>(null);
+const mapInstanceRef = useRef<L.Map | null>(null);
 
-| Local | Atual (SVG) | Novo (lat/lng) |
-|-------|------------|----------------|
-| Baía de Guanabara | 482, 448 | -22.90, -43.17 |
-| Angra dos Reis | 460, 453 | -23.00, -44.32 |
-| Macaé | 500, 418 | -22.37, -41.79 |
-| Santos | 438, 462 | -23.96, -46.33 |
-| Vitória | 521, 413 | -20.32, -40.34 |
-| Suape | 598, 215 | -8.39, -35.06 |
-| Salvador | 545, 280 | -12.97, -38.51 |
-| Manaus | 120, 120 | -3.12, -60.02 |
+useEffect(() => {
+  if (!mapRef.current || mapInstanceRef.current) return;
+  const map = L.map(mapRef.current, {
+    center: [-14.2, -51.9],
+    zoom: compact ? 3 : 4,
+    zoomControl: false,
+    scrollWheelZoom: false,
+    dragging: false,
+  });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+  mapInstanceRef.current = map;
+  return () => { map.remove(); };
+}, []);
 
-Todas as ~70 localizações serão convertidas para coordenadas reais.
+// Atualizar markers quando `markers` mudar
+useEffect(() => {
+  // limpar markers antigos, adicionar novos com L.marker + L.divIcon
+}, [markers]);
+```
 
-### Dependências
+#### 3. `src/components/devices/BrazilMapModal.tsx` — reescrever sem react-leaflet
+- Mesma abordagem: `L.map()` direto no `useEffect`
+- Modal com zoom/drag habilitados (`scrollWheelZoom: true`, `dragging: true`, `zoomControl: true`)
+- Inicializar mapa apenas quando `open === true`
+- Chamar `map.invalidateSize()` após abertura do dialog
 
-- `leaflet` (tiles + mapa)
-- `react-leaflet` (componentes React)
-- `@types/leaflet` (tipagem)
+#### 4. `src/index.css` — manter estilos existentes
+- Manter o import do leaflet CSS e animação `marker-pulse` (já existem)
 
-### O que melhora
-
-- Coordenadas reais: nunca mais ajuste manual de pixels
-- Zoom/pan nativo e fluido
-- Tiles reais do OpenStreetMap (ruas, nomes de cidades visíveis)
-- Funciona perfeitamente em qualquer resolução
-- `brazilStatesData.ts` e `mapUtils.ts` (lógica SVG complexa) ficam muito mais simples
+### Benefícios
+- Elimina completamente a dependência problemática `react-leaflet`
+- Zero risco de incompatibilidade React Context
+- Leaflet puro é mais leve e previsível
+- Mesma funcionalidade visual (tiles OSM, ship markers, popups, pulso colorido)
 
