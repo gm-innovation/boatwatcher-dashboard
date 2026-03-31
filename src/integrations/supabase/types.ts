@@ -1188,7 +1188,7 @@ export type Database = {
     Enums: {
       access_direction: "entry" | "exit" | "unknown"
       access_status: "granted" | "denied"
-      app_role: "admin" | "moderator" | "user" | "company_admin"
+      app_role: "admin" | "moderator" | "user" | "company_admin" | "operator"
       device_status: "online" | "offline" | "error" | "configuring"
       device_type: "facial_reader" | "turnstile" | "terminal"
       worker_status: "active" | "inactive" | "blocked" | "pending_review"
@@ -1321,7 +1321,7 @@ export const Constants = {
     Enums: {
       access_direction: ["entry", "exit", "unknown"],
       access_status: ["granted", "denied"],
-      app_role: ["admin", "moderator", "user", "company_admin"],
+      app_role: ["admin", "moderator", "user", "company_admin", "operator"],
       device_status: ["online", "offline", "error", "configuring"],
       device_type: ["facial_reader", "turnstile", "terminal"],
       worker_status: ["active", "inactive", "blocked", "pending_review"],
