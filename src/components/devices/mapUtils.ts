@@ -27,7 +27,7 @@ export interface SpreadMarker<T extends MarkerWithCoords> extends MarkerWithCoor
 function getSpreadDirection(cx: number, cy: number): { angle: number; fanSpanMax: number } {
   // Guanabara Bay region (x: 490-520, y: 420-435)
   // Spread roughly south (downward in SVG) to stay inside the bay
-  if (cx > 490 && cx < 520 && cy > 420 && cy < 435) {
+  if (cx > 480 && cx < 505 && cy > 435 && cy < 450) {
     return { angle: Math.PI / 2, fanSpanMax: Math.PI * 0.6 }; // south, narrow fan
   }
 

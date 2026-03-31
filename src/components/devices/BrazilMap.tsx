@@ -17,10 +17,10 @@ export const BRAZIL_PATH = '';
 // Guanabara Bay: RJ path indent x≈494 y≈426 (west shore), east cape x≈515 y≈431.
 // Bay water center ≈ x:502 y:428.  Markers sit inside the bay reentrance.
 const MARITIME_HUBS = {
-  guanabara:  { x: 502, y: 428, label: 'Baía de Guanabara' },    // center of bay reentrance
-  angra:      { x: 457, y: 451, label: 'Angra dos Reis' },        // south RJ coast (path ≈457,450)
-  macae:      { x: 500, y: 418, label: 'Macaé' },                 // NE RJ coast (path ≈498-501,415)
-  acu:        { x: 498, y: 414, label: 'Porto do Açu' },          // São João da Barra (path ≈497,414)
+  guanabara:  { x: 490, y: 440, label: 'Baía de Guanabara' },    // center of bay reentrance between two coastlines
+  angra:      { x: 460, y: 453, label: 'Angra dos Reis' },        // south RJ coast
+  macae:      { x: 500, y: 418, label: 'Macaé' },                 // NE RJ coast
+  acu:        { x: 500, y: 413, label: 'Porto do Açu' },          // São João da Barra
   vitoria:    { x: 521, y: 413, label: 'Vitória' },               // ES coast (path ≈520,412)
   aracruz:    { x: 518, y: 416, label: 'Aracruz' },               // ES coast south of Vitória
   santos:     { x: 438, y: 462, label: 'Santos' },                // SP coast
