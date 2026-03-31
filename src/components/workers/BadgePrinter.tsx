@@ -106,6 +106,11 @@ export function BadgePrinter({ worker, companyName, jobFunctionName }: BadgePrin
       doc.text(`Matrícula: ${worker.code}`, 28, 36);
     }
 
+    // QR Code
+    if (qrDataUrl) {
+      doc.addImage(qrDataUrl, 'PNG', 68, 15, 14, 14);
+    }
+
     // Bottom bar
     doc.setFillColor(30, 41, 59);
     doc.rect(0, 46, 86, 8, 'F');
