@@ -15,6 +15,21 @@ import { RecentAccessList } from '@/components/access-control/RecentAccessList';
 import { AccessControlShell } from '@/components/access-control/AccessControlShell';
 import { QRScanner } from '@/components/access-control/QRScanner';
 import { NumericKeypad } from '@/components/access-control/NumericKeypad';
+import { useResolvedUrl } from '@/hooks/useResolvedUrl';
+
+function playBeep() {
+  try {
+    const ctx = new window.AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.2);
+  } catch { /* ignore audio errors */ }
+}
 
 interface ActiveTerminal {
   id: string;

@@ -2,14 +2,24 @@ import { ResolvedAvatar } from '@/components/ResolvedAvatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { CachedWorker } from '@/hooks/useOfflineAccessControl';
+import { cn } from '@/lib/utils';
 
 interface WorkerCardProps {
   worker: CachedWorker;
+  borderStatus?: 'granted' | 'blocked' | 'pending' | null;
 }
 
-export function WorkerCard({ worker }: WorkerCardProps) {
+const borderColorMap: Record<string, string> = {
+  granted: 'border-green-500',
+  blocked: 'border-red-500',
+  pending: 'border-yellow-500',
+};
+
+export function WorkerCard({ worker, borderStatus }: WorkerCardProps) {
+  const borderClass = borderStatus ? borderColorMap[borderStatus] : 'border-border';
+
   return (
-    <Card>
+    <Card className={cn('border-2', borderClass)}>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Informações do Trabalhador</CardTitle>
       </CardHeader>
@@ -19,10 +29,10 @@ export function WorkerCard({ worker }: WorkerCardProps) {
             photoUrl={worker.photo_url}
             name={worker.name}
             fallback="initials"
-            className="h-20 w-20 text-xl"
+            className="h-24 w-24 text-2xl"
           />
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-lg truncate">{worker.name}</p>
+            <p className="font-bold text-xl truncate">{worker.name}</p>
             <div className="flex gap-2 mt-1 flex-wrap">
               <Badge className="bg-green-600 text-white text-xs">Ativo</Badge>
             </div>
@@ -34,12 +44,6 @@ export function WorkerCard({ worker }: WorkerCardProps) {
             <span className="text-muted-foreground">Código</span>
             <span className="font-semibold">{worker.code}</span>
           </div>
-          {worker.document_number && (
-            <div className="flex justify-between border-b pb-1">
-              <span className="text-muted-foreground">Documento</span>
-              <span className="font-semibold">{worker.document_number}</span>
-            </div>
-          )}
           {worker.company_name && (
             <div className="flex justify-between border-b pb-1">
               <span className="text-muted-foreground">Empresa</span>
