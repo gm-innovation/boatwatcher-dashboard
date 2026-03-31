@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useProjects, useCompanies } from '@/hooks/useSupabase';
 import { AdminProjectFilter } from './AdminProjectFilter';
 import { supabase } from '@/integrations/supabase/client';
@@ -41,16 +41,39 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
   const [crewSize, setCrewSize] = useState(project?.crew_size?.toString() || '');
   const [armador, setArmador] = useState(project?.armador || '');
   const [apiProjectId, setApiProjectId] = useState(project?.api_project_id || '');
+  const [latitude, setLatitude] = useState(project?.latitude?.toString() || '');
+  const [longitude, setLongitude] = useState(project?.longitude?.toString() || '');
   const [isLoading, setIsLoading] = useState(false);
+  const [knownLocations, setKnownLocations] = useState<{ name: string; latitude: number; longitude: number }[]>([]);
   
   const { data: companies = [] } = useCompanies();
   const queryClient = useQueryClient();
+
+  // Fetch known locations
+  useEffect(() => {
+    supabase.from('known_locations').select('name, latitude, longitude').then(({ data }) => {
+      if (data) setKnownLocations(data);
+    });
+  }, []);
+
+  // Auto-fill coordinates when location matches a known location
+  const handleLocationChange = (value: string) => {
+    setLocation(value);
+    const match = knownLocations.find(kl => kl.name.toLowerCase() === value.toLowerCase());
+    if (match) {
+      setLatitude(match.latitude.toString());
+      setLongitude(match.longitude.toString());
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
+      const lat = latitude ? parseFloat(latitude) : null;
+      const lng = longitude ? parseFloat(longitude) : null;
+
       const projectData = {
         name,
         location: location || null,
@@ -62,6 +85,8 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
         crew_size: crewSize ? parseInt(crewSize) : null,
         armador: armador || null,
         api_project_id: apiProjectId || null,
+        latitude: lat,
+        longitude: lng,
         status: 'active'
       };
 
@@ -78,6 +103,13 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
           .insert(projectData);
         if (error) throw error;
         toast({ title: 'Projeto cadastrado com sucesso' });
+      }
+      // Upsert known_locations if coordinates are provided
+      if (location && lat != null && lng != null) {
+        await supabase.from('known_locations').upsert(
+          { name: location, latitude: lat, longitude: lng },
+          { onConflict: 'name' }
+        );
       }
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       onSuccess();
@@ -133,8 +165,34 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
           <Input 
             id="location" 
             value={location} 
-            onChange={(e) => setLocation(e.target.value)} 
+            onChange={(e) => handleLocationChange(e.target.value)} 
             placeholder="Local do projeto"
+          />
+        </div>
+      </div>
+
+      {/* Row 2.5: Latitude + Longitude */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="latitude">Latitude</Label>
+          <Input 
+            id="latitude" 
+            type="number" 
+            step="any"
+            value={latitude} 
+            onChange={(e) => setLatitude(e.target.value)} 
+            placeholder="-23.5505"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="longitude">Longitude</Label>
+          <Input 
+            id="longitude" 
+            type="number" 
+            step="any"
+            value={longitude} 
+            onChange={(e) => setLongitude(e.target.value)} 
+            placeholder="-46.6333"
           />
         </div>
       </div>

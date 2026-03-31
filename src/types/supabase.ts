@@ -54,6 +54,8 @@ export interface Project {
   project_type: string | null;
   armador: string | null;
   api_project_id: string | null;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export type AppRole = 'admin' | 'moderator' | 'user' | 'company_admin';
