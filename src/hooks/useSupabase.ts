@@ -163,7 +163,6 @@ async function fetchWorkersOnBoardFromCloud(
     if (devicesError) throw devicesError;
 
     const deviceIds = (projectDevices || []).map(d => d.id);
-    if (deviceIds.length === 0) return [];
 
     // Build device location map from configuration.access_location
     const deviceLocationMap = new Map<string, string>();
@@ -176,27 +175,71 @@ async function fetchWorkersOnBoardFromCloud(
     // Temporal ceiling: ignore timestamps more than 2 min in the future
     const maxTimestamp = new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
-    const { data: entryLogs, error: entryError } = await supabase
-      .from('access_logs')
-      .select('worker_id, worker_name, device_name, device_id, timestamp')
-      .eq('direction', 'entry')
-      .eq('access_status', 'granted')
-      .in('device_id', deviceIds)
-      .gte('timestamp', startTimestamp)
-      .lte('timestamp', maxTimestamp)
-      .order('timestamp', { ascending: true });
+    // --- Physical device logs ---
+    let entryLogs: any[] = [];
+    let exitLogs: any[] = [];
 
-    if (entryError) throw entryError;
+    if (deviceIds.length > 0) {
+      const { data: devEntries, error: entryError } = await supabase
+        .from('access_logs')
+        .select('worker_id, worker_name, device_name, device_id, timestamp')
+        .eq('direction', 'entry')
+        .eq('access_status', 'granted')
+        .in('device_id', deviceIds)
+        .gte('timestamp', startTimestamp)
+        .lte('timestamp', maxTimestamp)
+        .order('timestamp', { ascending: true });
 
-    const { data: exitLogs, error: exitError } = await supabase
-      .from('access_logs')
-      .select('worker_id, worker_name, timestamp')
-      .eq('direction', 'exit')
-      .in('device_id', deviceIds)
-      .gte('timestamp', startTimestamp)
-      .lte('timestamp', maxTimestamp);
+      if (entryError) throw entryError;
+      entryLogs = devEntries || [];
 
-    if (exitError) throw exitError;
+      const { data: devExits, error: exitError } = await supabase
+        .from('access_logs')
+        .select('worker_id, worker_name, timestamp')
+        .eq('direction', 'exit')
+        .in('device_id', deviceIds)
+        .gte('timestamp', startTimestamp)
+        .lte('timestamp', maxTimestamp);
+
+      if (exitError) throw exitError;
+      exitLogs = devExits || [];
+    }
+
+    // --- Manual access point logs ---
+    const { data: manualPoints } = await supabase
+      .from('manual_access_points')
+      .select('name')
+      .eq('project_id', projectId);
+
+    const manualDeviceNames = (manualPoints || []).map(p => `Manual - ${p.name}`);
+
+    if (manualDeviceNames.length > 0) {
+      const { data: manualEntries } = await supabase
+        .from('access_logs')
+        .select('worker_id, worker_name, device_name, device_id, timestamp')
+        .eq('direction', 'entry')
+        .eq('access_status', 'granted')
+        .is('device_id', null)
+        .in('device_name', manualDeviceNames)
+        .gte('timestamp', startTimestamp)
+        .lte('timestamp', maxTimestamp)
+        .order('timestamp', { ascending: true });
+
+      if (manualEntries) entryLogs = [...entryLogs, ...manualEntries];
+
+      const { data: manualExits } = await supabase
+        .from('access_logs')
+        .select('worker_id, worker_name, timestamp')
+        .eq('direction', 'exit')
+        .is('device_id', null)
+        .in('device_name', manualDeviceNames)
+        .gte('timestamp', startTimestamp)
+        .lte('timestamp', maxTimestamp);
+
+      if (manualExits) exitLogs = [...exitLogs, ...manualExits];
+    }
+
+    if (deviceIds.length === 0 && manualDeviceNames.length === 0) return [];
 
     // Use worker_name as the primary key for matching entries/exits (handles UUID mismatch)
     const workersOnBoard = new Map<string, any>();
