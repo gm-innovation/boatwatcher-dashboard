@@ -126,3 +126,10 @@
 .leaflet-bottom {
   z-index: 2;
 }
+
+/* Dark mode leaflet popup */
+.dark .leaflet-popup-content-wrapper,
+.dark .leaflet-popup-tip {
+  background: #1e293b;
+  color: #e2e8f0;
+}
