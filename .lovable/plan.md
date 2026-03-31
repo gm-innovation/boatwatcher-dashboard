@@ -1,32 +1,26 @@
 
 
-## Adicionar campos de coordenadas ao formulário de projetos da Administração
+## Aumentar o mapa e adicionar tema dark
 
-### Problema
-Os campos de latitude, longitude e o auto-preenchimento por local conhecido foram implementados apenas no `ProjectForm` da página de Configurações. O formulário principal usado na prática — o dialog "Editar/Novo Projeto" em `src/components/admin/ProjectsManagement.tsx` — não possui esses campos.
+### Alterações
 
-### Solução
+#### 1. Aumentar altura do mapa (`BrazilMap.tsx`)
+- Alterar `height` de `compact ? 200 : 280` para `compact ? 260 : 420`
+- Isso dará mais espaço para visualização no card do dashboard
 
-#### Arquivo: `src/components/admin/ProjectsManagement.tsx`
+#### 2. Tile layer dark mode (`BrazilMap.tsx` + `BrazilMapModal.tsx`)
+- Detectar o tema atual via `document.documentElement.classList.contains('dark')`
+- Usar tile dark do CartoDB: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png` quando em dark mode
+- Manter o tile padrão do OpenStreetMap para light mode
+- Reagir a mudanças de tema trocando o tile layer dinamicamente
 
-1. Adicionar estados `latitude` e `longitude` ao `ProjectForm` interno, carregando do projeto quando em edição
-2. Buscar `known_locations` via Supabase ao montar o componente
-3. Quando o campo `location` mudar e corresponder a um local conhecido, auto-preencher latitude/longitude
-4. Incluir latitude/longitude no `projectData` enviado ao salvar
-5. Ao salvar, fazer upsert na tabela `known_locations` se houver coordenadas preenchidas
-6. Adicionar uma nova row no formulário (após Localização) com dois inputs numéricos: Latitude e Longitude
-
-#### Layout do formulário (nova row após Armador + Localização)
-
-```text
-| Armador          | Localização        |
-| Latitude         | Longitude          |   ← nova row
-| Tipo de Projeto  | Data de Início     |
-```
+#### 3. Popup styling para dark mode
+- Ajustar as cores inline dos popups para funcionar em ambos os temas (texto branco no dark, texto escuro no light)
 
 ### Arquivos alterados
 
 | Arquivo | Alteração |
 |---|---|
-| `src/components/admin/ProjectsManagement.tsx` | Adicionar campos latitude/longitude, buscar known_locations, auto-fill e upsert ao salvar |
+| `src/components/devices/BrazilMap.tsx` | Aumentar altura, tile dark, popup dark |
+| `src/components/devices/BrazilMapModal.tsx` | Tile dark, popup dark |
 
