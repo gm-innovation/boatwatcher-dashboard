@@ -47,7 +47,7 @@ export function AccessPointConfig({ editingId, onBack }: AccessPointConfigProps)
   const { data: companies = [] } = useQuery({
     queryKey: ['companies_for_access'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('companies').select('id, name').order('name');
+      const { data, error } = await supabase.from('companies').select('id, name').eq('type', 'client').order('name');
       if (error) throw error;
       return data;
     },

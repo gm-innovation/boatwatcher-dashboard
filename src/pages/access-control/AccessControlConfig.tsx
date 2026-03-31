@@ -57,7 +57,7 @@ export default function AccessControlConfig() {
   const { data: companies = [] } = useQuery({
     queryKey: ['companies_for_sync'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('companies').select('id, name').order('name');
+      const { data, error } = await supabase.from('companies').select('id, name').eq('type', 'client').order('name');
       if (error) throw error;
       return data;
     },
