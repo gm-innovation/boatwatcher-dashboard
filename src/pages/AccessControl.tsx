@@ -15,6 +15,21 @@ import { RecentAccessList } from '@/components/access-control/RecentAccessList';
 import { AccessControlShell } from '@/components/access-control/AccessControlShell';
 import { QRScanner } from '@/components/access-control/QRScanner';
 import { NumericKeypad } from '@/components/access-control/NumericKeypad';
+import { useResolvedUrl } from '@/hooks/useResolvedUrl';
+
+function playBeep() {
+  try {
+    const ctx = new window.AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.2);
+  } catch { /* ignore audio errors */ }
+}
 
 interface ActiveTerminal {
   id: string;
@@ -82,6 +97,8 @@ export default function AccessControl() {
     saveAccessLog, syncPendingLogs,
   } = useOfflineAccessControl();
 
+  const resolvedLogo = useResolvedUrl(terminal?.client_logo ?? null);
+
   const [selectedWorker, setSelectedWorker] = useState<CachedWorker | null>(null);
   const [showScanner, setShowScanner] = useState(false);
   const [sessionLogs, setSessionLogs] = useState<PendingAccessLog[]>([]);
@@ -140,6 +157,7 @@ export default function AccessControl() {
     await saveAccessLog(log);
     setSessionLogs(prev => [...prev, log]);
     setAccessGranted(true);
+    playBeep();
 
     toast({
       title: direction === 'entry' ? '✅ Entrada registrada' : '🔴 Saída registrada',
@@ -184,10 +202,10 @@ export default function AccessControl() {
     <AccessControlShell isOnline={isOnline}>
       <div className="flex flex-col max-w-lg mx-auto min-h-[calc(100vh-3rem)]">
         {/* Branded header */}
-        <div className="p-6 border-b bg-card text-center space-y-2">
-          {terminal.client_logo && (
+        <div className="p-4 border-b bg-card text-center space-y-1">
+          {resolvedLogo && (
             <img
-              src={terminal.client_logo}
+              src={resolvedLogo}
               alt={terminal.client_name || 'Logo'}
               className="h-14 w-auto mx-auto object-contain"
             />
@@ -217,7 +235,7 @@ export default function AccessControl() {
                 </div>
               )}
 
-              <WorkerCard worker={selectedWorker} />
+              <WorkerCard worker={selectedWorker} borderStatus={accessGranted ? 'granted' : null} />
 
               {!accessGranted && (
                 <AccessConfirmation onConfirm={handleConfirm} />

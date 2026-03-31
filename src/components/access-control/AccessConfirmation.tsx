@@ -20,7 +20,7 @@ export function AccessConfirmation({ onConfirm, disabled }: AccessConfirmationPr
       <Button
         onClick={() => onConfirm('exit')}
         disabled={disabled}
-        className="h-14 text-base font-bold gap-2 bg-purple-700 hover:bg-purple-800 text-white"
+        className="h-14 text-base font-bold gap-2 bg-red-600 hover:bg-red-700 text-white"
       >
         <LogOut className="h-5 w-5" />
         SAÍDA
