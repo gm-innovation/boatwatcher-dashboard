@@ -170,12 +170,13 @@ export default function AccessControl() {
     await saveAccessLog(log);
     playBeep();
 
-    toast({
+    const { dismiss } = toast({
       title: direction === 'entry' ? '✅ Entrada registrada' : '🔴 Saída registrada',
       description: `${selectedWorker.name} - ${terminal.name}`,
     });
 
     setTimeout(() => {
+      dismiss();
       handleNewAccess();
     }, 1200);
   };
