@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, RotateCcw, Camera } from 'lucide-react';
+import { AlertCircle, Camera, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { v4 as uuidv4 } from 'uuid';
@@ -11,7 +11,6 @@ import { useOfflineAccessControl, type CachedWorker, type PendingAccessLog } fro
 import { OfflineIndicator } from '@/components/access-control/OfflineIndicator';
 import { WorkerCard } from '@/components/access-control/WorkerCard';
 import { AccessConfirmation } from '@/components/access-control/AccessConfirmation';
-import { RecentAccessList } from '@/components/access-control/RecentAccessList';
 import { AccessControlShell } from '@/components/access-control/AccessControlShell';
 import { QRScanner } from '@/components/access-control/QRScanner';
 import { NumericKeypad } from '@/components/access-control/NumericKeypad';
@@ -29,6 +28,12 @@ function playBeep() {
     osc.start();
     osc.stop(ctx.currentTime + 0.2);
   } catch { /* ignore audio errors */ }
+}
+
+function getWorkerBorderStatus(worker: CachedWorker): 'granted' | 'blocked' | 'pending' {
+  if (worker.status === 'blocked') return 'blocked';
+  if (worker.status === 'active') return 'granted';
+  return 'pending';
 }
 
 interface ActiveTerminal {
@@ -64,27 +69,32 @@ export default function AccessControl() {
       let client_name: string | undefined;
       let client_logo: string | undefined;
       let project_name: string | undefined;
+      let effectiveClientId = data.client_id;
 
-      if (data.client_id) {
-        const { data: company } = await supabase
-          .from('companies')
-          .select('name, logo_url_light')
-          .eq('id', data.client_id)
-          .maybeSingle();
-        if (company) {
-          client_name = company.name;
-          client_logo = company.logo_url_light || undefined;
-        }
-      }
-
+      // Fetch project info and use as fallback for client_id
       if (data.project_id) {
         const { data: project } = await supabase
           .from('projects')
-          .select('name')
+          .select('name, client_id')
           .eq('id', data.project_id)
           .maybeSingle();
         if (project) {
           project_name = project.name;
+          if (!effectiveClientId && project.client_id) {
+            effectiveClientId = project.client_id;
+          }
+        }
+      }
+
+      if (effectiveClientId) {
+        const { data: company } = await supabase
+          .from('companies')
+          .select('name, logo_url_light')
+          .eq('id', effectiveClientId)
+          .maybeSingle();
+        if (company) {
+          client_name = company.name;
+          client_logo = company.logo_url_light || undefined;
         }
       }
 
@@ -101,9 +111,7 @@ export default function AccessControl() {
 
   const [selectedWorker, setSelectedWorker] = useState<CachedWorker | null>(null);
   const [showScanner, setShowScanner] = useState(false);
-  const [sessionLogs, setSessionLogs] = useState<PendingAccessLog[]>([]);
   const [workerCode, setWorkerCode] = useState('');
-  const [accessGranted, setAccessGranted] = useState(false);
 
   const handleDigit = useCallback((digit: string) => {
     setWorkerCode(prev => prev.length < 10 ? prev + digit : prev);
@@ -112,6 +120,11 @@ export default function AccessControl() {
   const handleClear = useCallback(() => {
     setWorkerCode('');
   }, []);
+
+  const handleNewAccess = () => {
+    setSelectedWorker(null);
+    setWorkerCode('');
+  };
 
   const handleVerify = useCallback(() => {
     if (!workerCode.trim()) return;
@@ -155,20 +168,16 @@ export default function AccessControl() {
     };
 
     await saveAccessLog(log);
-    setSessionLogs(prev => [...prev, log]);
-    setAccessGranted(true);
     playBeep();
 
     toast({
       title: direction === 'entry' ? '✅ Entrada registrada' : '🔴 Saída registrada',
       description: `${selectedWorker.name} - ${terminal.name}`,
     });
-  };
 
-  const handleNewAccess = () => {
-    setSelectedWorker(null);
-    setWorkerCode('');
-    setAccessGranted(false);
+    setTimeout(() => {
+      handleNewAccess();
+    }, 1200);
   };
 
   if (loadingTerminal) {
@@ -202,7 +211,7 @@ export default function AccessControl() {
     <AccessControlShell isOnline={isOnline}>
       <div className="flex flex-col max-w-lg mx-auto min-h-[calc(100vh-3rem)]">
         {/* Branded header */}
-        <div className="p-4 border-b bg-card text-center space-y-1">
+        <div className="p-3 border-b bg-card text-center space-y-1">
           {resolvedLogo && (
             <img
               src={resolvedLogo}
@@ -228,26 +237,20 @@ export default function AccessControl() {
         <div className="flex-1 p-4 space-y-4">
           {selectedWorker ? (
             <div className="space-y-4">
-              {accessGranted && (
-                <div className="flex items-center gap-2 bg-green-600 text-white rounded-lg p-3 justify-center font-semibold">
-                  <CheckCircle2 className="h-5 w-5" />
-                  Acesso Liberado
-                </div>
-              )}
+              <WorkerCard
+                worker={selectedWorker}
+                borderStatus={getWorkerBorderStatus(selectedWorker)}
+              />
 
-              <WorkerCard worker={selectedWorker} borderStatus={accessGranted ? 'granted' : null} />
-
-              {!accessGranted && (
-                <AccessConfirmation onConfirm={handleConfirm} />
-              )}
+              <AccessConfirmation onConfirm={handleConfirm} />
 
               <Button
                 variant="outline"
                 className="w-full gap-2"
                 onClick={handleNewAccess}
               >
-                <RotateCcw className="h-4 w-4" />
-                Novo Acesso
+                <X className="h-4 w-4" />
+                Cancelar
               </Button>
             </div>
           ) : (
@@ -279,8 +282,6 @@ export default function AccessControl() {
               />
             </>
           )}
-
-          <RecentAccessList logs={sessionLogs} />
         </div>
 
         {showScanner && (
