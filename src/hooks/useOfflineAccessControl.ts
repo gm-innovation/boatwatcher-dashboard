@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { get, set, del, keys } from 'idb-keyval';
+import { get, set } from 'idb-keyval';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface CachedWorker {
@@ -29,7 +29,7 @@ export interface PendingAccessLog {
 const WORKERS_CACHE_KEY = 'ac_workers_cache';
 const PENDING_LOGS_KEY = 'ac_pending_logs';
 
-export function useOfflineAccessControl() {
+export function useOfflineAccessControl(clientIdFilter?: string) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [workers, setWorkers] = useState<CachedWorker[]>([]);
   const [pendingLogs, setPendingLogs] = useState<PendingAccessLog[]>([]);
@@ -54,14 +54,19 @@ export function useOfflineAccessControl() {
     setLoadingWorkers(true);
     try {
       if (navigator.onLine) {
-        const { data: workersData } = await supabase
+        let query = supabase
           .from('workers')
           .select('id, name, code, document_number, photo_url, company_id, status, job_function_id')
           .eq('status', 'active')
           .limit(5000);
 
+        if (clientIdFilter) {
+          query = query.eq('company_id', clientIdFilter);
+        }
+
+        const { data: workersData } = await query;
+
         if (workersData && workersData.length > 0) {
-          // Fetch companies and job functions for display
           const { data: companies } = await supabase.from('companies').select('id, name');
           const { data: jobFunctions } = await supabase.from('job_functions').select('id, name');
 
@@ -94,7 +99,7 @@ export function useOfflineAccessControl() {
     } finally {
       setLoadingWorkers(false);
     }
-  }, []);
+  }, [clientIdFilter]);
 
   useEffect(() => {
     loadWorkers();
@@ -127,7 +132,6 @@ export function useOfflineAccessControl() {
       }
     }
 
-    // Save to IndexedDB
     const current = (await get<PendingAccessLog[]>(PENDING_LOGS_KEY)) || [];
     const updated = [...current, log];
     await set(PENDING_LOGS_KEY, updated);
