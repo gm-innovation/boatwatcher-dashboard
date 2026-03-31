@@ -62,10 +62,10 @@ export function WorkerCard({ worker, borderStatus }: WorkerCardProps) {
               <span className="font-semibold">{worker.job_function_name}</span>
             </div>
           )}
-          {worker.role && (
+          {(worker as any).role && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">Cargo</span>
-              <span className="font-semibold">{worker.role}</span>
+              <span className="font-semibold">{(worker as any).role}</span>
             </div>
           )}
         </div>
