@@ -235,7 +235,7 @@ export default function AccessControl() {
                 </div>
               )}
 
-              <WorkerCard worker={selectedWorker} />
+              <WorkerCard worker={selectedWorker} borderStatus={accessGranted ? 'granted' : null} />
 
               {!accessGranted && (
                 <AccessConfirmation onConfirm={handleConfirm} />
