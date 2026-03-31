@@ -8,7 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 
 import { useOfflineAccessControl, type CachedWorker, type PendingAccessLog } from '@/hooks/useOfflineAccessControl';
-import { OfflineIndicator } from '@/components/access-control/OfflineIndicator';
+
 import { WorkerCard } from '@/components/access-control/WorkerCard';
 import { AccessConfirmation } from '@/components/access-control/AccessConfirmation';
 import { AccessControlShell } from '@/components/access-control/AccessControlShell';
