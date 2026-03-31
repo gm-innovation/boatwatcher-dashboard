@@ -71,6 +71,9 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
     setIsLoading(true);
 
     try {
+      const lat = latitude ? parseFloat(latitude) : null;
+      const lng = longitude ? parseFloat(longitude) : null;
+
       const projectData = {
         name,
         location: location || null,
@@ -82,6 +85,8 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
         crew_size: crewSize ? parseInt(crewSize) : null,
         armador: armador || null,
         api_project_id: apiProjectId || null,
+        latitude: lat,
+        longitude: lng,
         status: 'active'
       };
 
