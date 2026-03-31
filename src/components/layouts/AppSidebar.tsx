@@ -132,11 +132,11 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={currentPath.startsWith('/access-control')} tooltip="Controle Manual">
-                    <NavLink to="/access-control">
+                  <SidebarMenuButton asChild isActive={false} tooltip="Controle Manual (abre em nova aba)">
+                    <a href="/access-control" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
                       <ScanLine className="h-4 w-4" />
-                      <span>Acesso Manual</span>
-                    </NavLink>
+                      <span>Acesso Manual ↗</span>
+                    </a>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
