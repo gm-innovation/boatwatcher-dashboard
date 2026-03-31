@@ -141,7 +141,10 @@ function isDarkMode() {
 }
 
 function getTileUrl() {
-  return 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+  const dark = document.documentElement.classList.contains('dark');
+  return dark
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 }
 
 function createShipIcon(color: string, size: number = 32) {
