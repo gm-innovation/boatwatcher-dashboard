@@ -298,7 +298,9 @@ async function fetchWorkersOnBoardFromCloud(
       // Map device access_location to display label; manual entries show "Manual"
       const isManual = !onBoard.device_id && onBoard.device_name?.startsWith('Manual -');
       const accessLocation = onBoard.device_id ? deviceLocationMap.get(onBoard.device_id) || 'bordo' : 'bordo';
-      const locationLabel = isManual ? 'Manual' : accessLocation === 'dique' ? 'Dique' : 'Bordo';
+      const locationLabel = isManual
+        ? (manualLocationMap.get(onBoard.device_name || '') || 'Bordo')
+        : accessLocation === 'dique' ? 'Dique' : 'Bordo';
       return {
         id: enriched?.id || onBoard.worker_id || key,
         name: enriched?.name || onBoard.worker_name || 'Desconhecido',
