@@ -136,6 +136,16 @@ interface BrazilMapProps {
   compact?: boolean;
 }
 
+function isDarkMode() {
+  return document.documentElement.classList.contains('dark');
+}
+
+function getTileUrl() {
+  return isDarkMode()
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+}
+
 function createShipIcon(color: string, size: number = 32) {
   return L.divIcon({
     className: 'leaflet-ship-marker',
@@ -163,12 +173,16 @@ function createShipIcon(color: string, size: number = 32) {
 }
 
 function buildPopupHtml(m: { name: string; label: string; color: string; onlineDevices: number; totalDevices: number; health: string }) {
+  const dark = isDarkMode();
   const statusLabel = m.health === 'online' ? 'Operacional' : m.health === 'partial' ? 'Parcial' : 'Crítico';
-  return `<div style="font-size:12px;max-width:200px;">
+  const bg = dark ? '#1e293b' : '#fff';
+  const fg = dark ? '#e2e8f0' : '#111';
+  const muted = dark ? '#94a3b8' : '#888';
+  return `<div style="font-size:12px;max-width:200px;background:${bg};color:${fg};padding:8px;border-radius:6px;">
     <p style="font-weight:600;margin:0 0 2px">${m.name}</p>
-    <p style="color:#888;margin:0 0 2px">${m.label}</p>
+    <p style="color:${muted};margin:0 0 2px">${m.label}</p>
     <p style="margin:0"><span style="color:${m.color}">●</span> ${m.onlineDevices}/${m.totalDevices} dispositivos online</p>
-    <p style="color:#888;margin:2px 0 0">Status: ${statusLabel}</p>
+    <p style="color:${muted};margin:2px 0 0">Status: ${statusLabel}</p>
   </div>`;
 }
 
