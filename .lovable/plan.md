@@ -1,36 +1,61 @@
 
 
-## Corrigir localização na tabela "Trabalhadores a Bordo" no Desktop
+## Corrigir localização no Desktop — abordagem resiliente
 
-### Problema
-A query `getWorkersOnBoard` no Desktop (`electron/database.js`, linha 1157) usa `device_name` como localização, retornando o nome do dispositivo (ex: "Engenharia - Entrada"). A versão Web usa `configuration.access_location` do dispositivo para exibir "Bordo" ou "Dique".
+### Problema real
+O código no repositório está correto, mas o **Servidor Local instalado na máquina continua em v1.3.6** e não atualiza. O Desktop e o Servidor Local são instaladores independentes — o Desktop atualiza via `latest.yml`, o Servidor Local via `server.yml`. O Desktop já atualizou, mas o Servidor Local não.
 
 ### Solução
-Alterar a query SQL do `getWorkersOnBoard` para fazer JOIN com a tabela `devices` e ler o campo `configuration`, extraindo `access_location` para determinar a localização correta.
+Aplicar a correção de localização **também no Desktop** (`electron/main.js`), como pós-processamento da resposta da API do Servidor Local. Assim, mesmo que o Servidor Local retorne `device_name` como `location`, o Desktop corrige para "Bordo" ou "Dique".
+
+Adicionalmente, buscar a lista de devices para mapear `device_id → configuration.access_location` e aplicar no resultado.
 
 ### Alteração
 
-**`electron/database.js`** — método `getWorkersOnBoard`:
-
-1. Adicionar JOIN com `devices` na CTE `first_entries` para trazer `d.configuration`
-2. No `.map()` final, parsear `configuration` e usar `access_location` (default `'bordo'`) para gerar o label "Bordo" ou "Dique", em vez de usar `device_name`
+**`electron/main.js`** — linha 405, substituir o handler de `getWorkersOnBoard`:
 
 ```javascript
-// Na query SQL, adicionar na seleção de first_entries:
-// JOIN devices d ON al.device_id = d.id
-// SELECT ... d.configuration as device_configuration
-
-// No .map() final (linha 1157):
-const config = safeParseJson(r.device_configuration, {});
-const accessLocation = config.access_location || 'bordo';
-const locationLabel = accessLocation === 'dique' ? 'Dique' : 'Bordo';
-return {
-  ...
-  location: locationLabel,  // era: r.device_name
-};
+ipcMain.handle('db:getWorkersOnBoard', async (_, projectId) => {
+  const workers = await apiCall('GET', `/api/projects/${projectId}/workers-on-board`);
+  
+  // Resilience: if the Local Server is outdated and still returns device_name
+  // as location, fetch devices and apply access_location mapping here
+  if (Array.isArray(workers) && workers.length > 0) {
+    const needsFix = workers.some(w => w.location && !['Bordo', 'Dique'].includes(w.location));
+    if (needsFix) {
+      try {
+        const devices = await apiCall('GET', '/api/devices' + (projectId ? `?projectId=${projectId}` : ''));
+        const deviceConfigMap = {};
+        for (const d of (devices || [])) {
+          const config = typeof d.configuration === 'string' ? JSON.parse(d.configuration) : (d.configuration || {});
+          const loc = config.access_location || 'bordo';
+          deviceConfigMap[d.name] = loc === 'dique' ? 'Dique' : 'Bordo';
+        }
+        for (const w of workers) {
+          if (w.location && !['Bordo', 'Dique'].includes(w.location)) {
+            w.location = deviceConfigMap[w.location] || 'Bordo';
+          }
+        }
+      } catch (e) {
+        // Fallback: set all non-standard locations to "Bordo"
+        for (const w of workers) {
+          if (w.location && !['Bordo', 'Dique'].includes(w.location)) {
+            w.location = 'Bordo';
+          }
+        }
+      }
+    }
+  }
+  return workers;
+});
 ```
+
+### Por que essa abordagem?
+- O **Desktop atualiza automaticamente** via `latest.yml` — funciona independente do Servidor Local
+- É **retrocompatível** — se o Servidor Local já retorna "Bordo", o `needsFix` será `false` e nenhum processamento extra ocorre
+- Resolve o problema **imediatamente** quando o Desktop atualizar, sem depender do Servidor Local
 
 | Arquivo | Mudança |
 |---|---|
-| `electron/database.js` | JOIN com `devices` + usar `configuration.access_location` em vez de `device_name` |
+| `electron/main.js` | Pós-processar resposta de `workers-on-board` para corrigir localização |
 
