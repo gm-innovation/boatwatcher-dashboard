@@ -211,7 +211,7 @@ export default function AccessControl() {
     <AccessControlShell isOnline={isOnline}>
       <div className="flex flex-col max-w-lg mx-auto min-h-[calc(100vh-3rem)]">
         {/* Branded header */}
-        <div className="p-3 border-b bg-card text-center space-y-1">
+        <div className="p-6 border-b bg-card text-center space-y-1">
           {resolvedLogo && (
             <img
               src={resolvedLogo}
@@ -224,13 +224,6 @@ export default function AccessControl() {
             {terminal.name}
             {terminal.location_description && ` · ${terminal.location_description}`}
           </p>
-
-          <OfflineIndicator
-            isOnline={isOnline}
-            pendingCount={pendingLogs.length}
-            isSyncing={isSyncing}
-            onSync={syncPendingLogs}
-          />
         </div>
 
         {/* Content */}

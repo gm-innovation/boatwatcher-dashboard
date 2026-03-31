@@ -84,6 +84,7 @@ export function useOfflineAccessControl(clientIdFilter?: string) {
             company_name: w.company_id ? companiesMap.get(w.company_id) || undefined : undefined,
             job_function_name: w.job_function_id ? jobFunctionsMap.get(w.job_function_id) || undefined : undefined,
             status: w.status,
+            role: w.role,
           }));
 
           await set(WORKERS_CACHE_KEY, cached);
