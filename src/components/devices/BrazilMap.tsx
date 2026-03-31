@@ -62,7 +62,7 @@ const LOCATION_COORDS: Record<string, { lat: number; lng: number; label: string 
   'maragogipe':       { ...MARITIME_HUBS.paraguacu, label: 'Maragogipe' },
   'sao joao da barra':{ ...MARITIME_HUBS.acu,       label: 'São João da Barra' },
   'aracatuba':        { lat: -21.21, lng: -50.43, label: 'Araçatuba' },
-  'renave':           { lat: -22.8622, lng: -43.1078, label: 'Estaleiro Renave' },
+  'renave':           { lat: -22.864691, lng: -43.130371, label: 'Estaleiro Renave' },
   'brasfels':         { ...MARITIME_HUBS.angra,     label: 'Estaleiro Brasfels' },
   'keppel':           { ...MARITIME_HUBS.angra,     label: 'Keppel Fels' },
   'maua':             { ...MARITIME_HUBS.guanabara, label: 'Estaleiro Mauá' },
