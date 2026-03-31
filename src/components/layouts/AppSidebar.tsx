@@ -126,6 +126,24 @@ export function AppSidebar() {
           </Collapsible>
         </SidebarGroup>
 
+        {canAccessControl && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Controle de Acesso</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={currentPath.startsWith('/access-control')} tooltip="Controle Manual">
+                    <NavLink to="/access-control">
+                      <ScanLine className="h-4 w-4" />
+                      <span>Acesso Manual</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
         {isCompanyAdmin && (
           <SidebarGroup>
             <SidebarGroupLabel>Portal da Empresa</SidebarGroupLabel>
