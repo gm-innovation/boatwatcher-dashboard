@@ -45,7 +45,7 @@ const SuspenseFallback = () => (
   <div className="flex items-center justify-center min-h-screen">Carregando...</div>
 );
 
-const isNative = Capacitor.isNativePlatform();
+const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
 
 const NativeRoutes = () => (
   <Routes>
