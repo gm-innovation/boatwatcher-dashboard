@@ -16,6 +16,7 @@ import {
   Wifi,
   Bot,
   FileWarning,
+  ScanLine,
 } from 'lucide-react';
 import { useAuthContext } from '@/contexts/AuthContext';
 import {
@@ -70,7 +71,9 @@ export function AppSidebar() {
   };
 
   const isAdmin = role === 'admin';
+  const isOperator = role === 'operator';
   const isCompanyAdmin = role === 'company_admin';
+  const canAccessControl = isAdmin || isOperator;
 
   return (
     <Sidebar collapsible="icon">
@@ -122,6 +125,24 @@ export function AppSidebar() {
             </CollapsibleContent>
           </Collapsible>
         </SidebarGroup>
+
+        {canAccessControl && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Controle de Acesso</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={currentPath.startsWith('/access-control')} tooltip="Controle Manual">
+                    <NavLink to="/access-control">
+                      <ScanLine className="h-4 w-4" />
+                      <span>Acesso Manual</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {isCompanyAdmin && (
           <SidebarGroup>

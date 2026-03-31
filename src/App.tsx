@@ -17,6 +17,7 @@ import UserRegistration from "./pages/UserRegistration";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 import Visitors from "./pages/Visitors";
+import AccessControl from "./pages/AccessControl";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { MainLayout } from "./components/layouts/MainLayout";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -30,7 +31,7 @@ const queryClient = new QueryClient({
   },
 });
 
-const ProtectedPage = ({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string }) => (
+const ProtectedPage = ({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string | string[] }) => (
   <ProtectedRoute requiredRole={requiredRole}>
     <MainLayout>{children}</MainLayout>
   </ProtectedRoute>
@@ -59,6 +60,7 @@ const App = () => {
                 <Route path="/company-portal/*" element={<ProtectedPage><CompanyPortal /></ProtectedPage>} />
                 <Route path="/settings" element={<ProtectedPage requiredRole="admin"><ProjectSettings /></ProtectedPage>} />
                 <Route path="/visitors" element={<ProtectedPage><Visitors /></ProtectedPage>} />
+                <Route path="/access-control" element={<ProtectedPage requiredRole={['admin', 'operator']}><AccessControl /></ProtectedPage>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AuthProvider>

@@ -2,6 +2,9 @@ import jsPDF from 'jspdf';
 import { Button } from '@/components/ui/button';
 import { useResolvedUrl } from '@/hooks/useResolvedUrl';
 import { Printer } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react';
+import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
 
 interface BadgePrinterProps {
   worker: {
@@ -20,6 +23,25 @@ export function BadgePrinter({ worker, companyName, jobFunctionName }: BadgePrin
 
   const handlePrint = async () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [86, 54] });
+
+    // Generate QR Code as data URL
+    let qrDataUrl: string | null = null;
+    if (worker.code) {
+      try {
+        const container = document.createElement('div');
+        container.style.position = 'absolute';
+        container.style.left = '-9999px';
+        document.body.appendChild(container);
+        const root = createRoot(container);
+        flushSync(() => {
+          root.render(<QRCodeCanvas value={String(worker.code)} size={128} />);
+        });
+        const canvas = container.querySelector('canvas');
+        if (canvas) qrDataUrl = canvas.toDataURL('image/png');
+        root.unmount();
+        document.body.removeChild(container);
+      } catch {}
+    }
 
     // Background
     doc.setFillColor(255, 255, 255);
@@ -82,6 +104,11 @@ export function BadgePrinter({ worker, companyName, jobFunctionName }: BadgePrin
     // Code
     if (worker.code) {
       doc.text(`Matrícula: ${worker.code}`, 28, 36);
+    }
+
+    // QR Code
+    if (qrDataUrl) {
+      doc.addImage(qrDataUrl, 'PNG', 68, 15, 14, 14);
     }
 
     // Bottom bar
