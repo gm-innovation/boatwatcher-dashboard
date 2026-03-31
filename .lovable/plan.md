@@ -1,70 +1,57 @@
 
 
-## Corrigir localização de acessos manuais e incluí-los no Desktop
+## Corrigir horário da empresa e UTC no Desktop
 
-### Problemas identificados
+### Resumo do problema
 
-1. **Local mostra "Manual" em vez de "Bordo"/"Dique"**: A query web não consulta o campo `access_location` do terminal manual. Precisa buscar essa configuração da tabela `manual_access_points` e mapear para "Bordo" ou "Dique".
+1. **Horário da empresa**: deve mostrar o primeiro acesso do dia de qualquer trabalhador vinculado, mas hoje mostra o `min()` dos horários de entrada atuais dos trabalhadores (que podem ser re-entradas). Se um trabalhador entrou às 06:00, saiu e re-entrou às 09:00, o worker mostra 09:00 (correto), mas a empresa deveria mostrar 06:00 e está mostrando 09:00.
 
-2. **Desktop não mostra acessos manuais**: A query SQLite em `electron/database.js` filtra apenas por `device_id IN (SELECT id FROM devices ...)`. Logs manuais têm `device_id = NULL`, então são completamente ignorados.
+2. **UTC no Desktop**: linha 1154 do `electron/database.js` anexa `-03:00` a timestamps sem marcador, causando atraso de 3h. Deve ser `Z`.
+
+3. **Desktop SQL**: a query atual usa `ROW_NUMBER() ORDER BY ASC` com `rn = 1`, retornando apenas a **primeira** entrada. Se o trabalhador saiu e re-entrou, a primeira entrada tem saída correspondente e o trabalhador não aparece. Precisa retornar a **última entrada sem saída** como `entryTime` do worker, e separadamente a **primeira entrada do dia** como `firstEntryTime` para o cálculo da empresa.
 
 ### Alterações
 
-**1. `src/hooks/useSupabase.ts`** — Buscar `access_location` do terminal e usar como label
+**1. `src/hooks/useSupabase.ts`**
 
-Na query de `manual_access_points`, incluir `access_location`:
+Na função `fetchWorkersOnBoardFromCloud`, após construir o `workersOnBoard` map (linha 275):
+- Criar `firstEntryMap` com a primeira entrada do dia de cada worker (entryLogs já está ascending):
 ```typescript
-const { data: manualPoints } = await supabase
-  .from('manual_access_points')
-  .select('name, access_location')
-  .eq('project_id', projectId);
+const firstEntryMap = new Map<string, string>();
+for (const entry of entryLogs || []) {
+  const key = entry.worker_name || entry.worker_id || '';
+  if (key && !firstEntryMap.has(key)) {
+    firstEntryMap.set(key, entry.timestamp);
+  }
+}
 ```
-
-Criar um mapa `device_name → location`:
+- No return (linha 311), adicionar campo `firstEntryTime`:
 ```typescript
-const manualLocationMap = new Map(
-  (manualPoints || []).flatMap(p => [
-    [`Manual - ${p.name}`, p.access_location === 'dique' ? 'Dique' : 'Bordo']
-  ])
-);
+entryTime: onBoard.entry_time,
+firstEntryTime: firstEntryMap.get(key) || onBoard.entry_time,
 ```
 
-Na linha 293, substituir:
+Na função `useCompaniesOnBoard` (linha 354-382):
+- Usar `worker.firstEntryTime` em vez de `worker.entryTime` para calcular o horário da empresa:
 ```typescript
-// Antes
-const locationLabel = isManual ? 'Manual' : ...
-// Depois
-const locationLabel = isManual
-  ? (manualLocationMap.get(onBoard.device_name || '') || 'Bordo')
-  : accessLocation === 'dique' ? 'Dique' : 'Bordo';
+const workerFirstEntry = worker.firstEntryTime || worker.entryTime;
+// usar workerFirstEntry na comparação de min
 ```
 
-**2. `electron/database.js`** — Incluir logs manuais na query SQLite
+**2. `electron/database.js`**
 
-Alterar a função `getWorkersOnBoard` para também buscar logs onde `device_id IS NULL` e `device_name LIKE 'Manual - %'`. Usar uma `UNION` ou `OR` no filtro de dispositivos:
+- **UTC fix** (linha 1154): trocar `'-03:00'` por `'Z'`
 
-```sql
--- No deviceFilter, adicionar OR para logs manuais
-AND (
-  al.device_id IN (SELECT id FROM devices WHERE project_id = ?)
-  OR (al.device_id IS NULL AND al.device_name LIKE 'Manual - %')
-)
-```
-
-Mesma lógica para o filtro de exits. Ajustar os params correspondentes.
-
-Na seção de mapeamento de localização (linha 1156-1158), adicionar fallback para logs manuais:
+- **SQL**: mudar a query para retornar tanto a última entrada sem saída (para o worker) quanto a primeira entrada do dia (para a empresa). Adicionar uma segunda CTE ou subquery para buscar `MIN(timestamp)` como `first_entry_time` por worker, e incluir no resultado. No mapeamento (linha 1176), retornar ambos:
 ```javascript
-const isManual = !r.device_id && r.device_name?.startsWith('Manual -');
-const locationLabel = isManual ? 'Bordo' : (accessLocation === 'dique' ? 'Dique' : 'Bordo');
+entryTime,           // última entrada sem saída
+firstEntryTime: ..., // MIN do dia
 ```
-
-Para mapear corretamente o `access_location` do terminal manual no Desktop, consultar a tabela local `manual_access_points` (se sincronizada) ou usar `'Bordo'` como default seguro.
 
 ### Arquivos afetados
 
 | Arquivo | Ação |
 |---|---|
-| `src/hooks/useSupabase.ts` | Buscar `access_location` e mapear para Bordo/Dique |
-| `electron/database.js` | Incluir logs manuais (`device_id IS NULL`) na query |
+| `src/hooks/useSupabase.ts` | Adicionar `firstEntryMap` + usar no `useCompaniesOnBoard` |
+| `electron/database.js` | Fix UTC (`Z`), SQL retornar first + last entry |
 
