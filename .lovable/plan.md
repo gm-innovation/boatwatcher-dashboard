@@ -1,29 +1,36 @@
 
 
-## Melhorar contraste do mapa no modo dark
+## Efeito neon no ícone do mapa
 
 ### Problema
-O tile CartoDB Dark Matter (`dark_all`) é muito escuro e tem pouco contraste — fronteiras e labels ficam quase invisíveis.
+O marcador atual usa uma imagem estática (`/ship-icon.png`) com um círculo pulsante por trás. O ícone em si não reflete a cor do status (verde/amarelo/vermelho), resultando em pouco impacto visual.
 
 ### Solução
-Trocar para o tile **Stadia Dark** ou **CartoDB Dark Matter (labels only em cinza claro)** que tem melhor contraste. A melhor opção sem API key é usar o **CartoDB Voyager Dark** ou simplesmente o **dark_nolabels** com um overlay de labels mais claros.
-
-A alternativa mais prática e sem dependência de API key é usar o tile **Stamen Toner Lite** invertido via CSS, ou simplesmente trocar para o tile `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png` com um filtro CSS de brightness/contrast no container do mapa.
-
-**Abordagem escolhida**: Aplicar um filtro CSS `brightness(1.4) contrast(1.1)` nos tiles do mapa quando em dark mode. Isso mantém o tile dark mas aumenta significativamente a visibilidade de fronteiras, labels e detalhes geográficos. Sem trocar de provider, sem API key.
+Substituir a `<img>` por um **SVG inline de um navio/âncora** que recebe a cor do status como `fill`/`stroke`, e adicionar um **glow neon** via `filter: drop-shadow` com a mesma cor. O círculo pulsante continua atrás, e o ícone SVG ganha o efeito luminoso.
 
 ### Alterações
 
-#### `src/index.css`
-Adicionar regra CSS para aumentar brilho dos tiles no dark mode:
-```css
-.dark .leaflet-tile-pane {
-  filter: brightness(1.4) contrast(1.1);
-}
+#### `src/components/devices/BrazilMap.tsx` — função `createShipIcon`
+- Trocar `<img src="/ship-icon.png">` por um SVG inline de navio (mesmo estilo visual do ícone atual — um navio/embarcação simples)
+- Aplicar `fill: ${color}` e `filter: drop-shadow(0 0 6px ${color}) drop-shadow(0 0 12px ${color})` no SVG para efeito neon
+- O círculo pulsante continua como está
+
+#### `src/components/devices/BrazilMapModal.tsx` — função `createShipIcon`
+- Mesma alteração (SVG inline + glow neon)
+
+#### Resultado visual
+```text
+┌─────────────────┐
+│  ○ pulse (color) │  ← círculo pulsante (já existe)
+│    ⛵ (color)     │  ← SVG do navio com fill=color + drop-shadow neon
+└─────────────────┘
 ```
 
-#### Arquivos alterados
+O ícone ficará com a cor verde/amarelo/vermelho e um brilho neon ao redor, combinando com o pulso.
+
+### Arquivos alterados
 | Arquivo | Alteração |
 |---|---|
-| `src/index.css` | Filtro CSS de brightness/contrast nos tiles em dark mode |
+| `src/components/devices/BrazilMap.tsx` | SVG inline + glow neon no `createShipIcon` |
+| `src/components/devices/BrazilMapModal.tsx` | SVG inline + glow neon no `createShipIcon` |
 
