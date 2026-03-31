@@ -157,6 +157,7 @@ export default function AccessControl() {
     await saveAccessLog(log);
     setSessionLogs(prev => [...prev, log]);
     setAccessGranted(true);
+    playBeep();
 
     toast({
       title: direction === 'entry' ? '✅ Entrada registrada' : '🔴 Saída registrada',
