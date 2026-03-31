@@ -287,9 +287,10 @@ async function fetchWorkersOnBoardFromCloud(
 
     return Array.from(workersOnBoard.entries()).map(([key, onBoard]) => {
       const enriched = workersByName.get(onBoard.worker_name);
-      // Map device access_location to display label
+      // Map device access_location to display label; manual entries show "Manual"
+      const isManual = !onBoard.device_id && onBoard.device_name?.startsWith('Manual -');
       const accessLocation = onBoard.device_id ? deviceLocationMap.get(onBoard.device_id) || 'bordo' : 'bordo';
-      const locationLabel = accessLocation === 'dique' ? 'Dique' : 'Bordo';
+      const locationLabel = isManual ? 'Manual' : accessLocation === 'dique' ? 'Dique' : 'Bordo';
       return {
         id: enriched?.id || onBoard.worker_id || key,
         name: enriched?.name || onBoard.worker_name || 'Desconhecido',
