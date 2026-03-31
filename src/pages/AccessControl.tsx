@@ -97,6 +97,8 @@ export default function AccessControl() {
     saveAccessLog, syncPendingLogs,
   } = useOfflineAccessControl();
 
+  const resolvedLogo = useResolvedUrl(terminal?.client_logo ?? null);
+
   const [selectedWorker, setSelectedWorker] = useState<CachedWorker | null>(null);
   const [showScanner, setShowScanner] = useState(false);
   const [sessionLogs, setSessionLogs] = useState<PendingAccessLog[]>([]);
