@@ -1,6 +1,6 @@
 import { ResolvedAvatar } from '@/components/ResolvedAvatar';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import type { CachedWorker } from '@/hooks/useOfflineAccessControl';
 import { cn } from '@/lib/utils';
 
@@ -15,27 +15,33 @@ const borderColorMap: Record<string, string> = {
   pending: 'border-yellow-500',
 };
 
+const statusLabelMap: Record<string, { label: string; className: string }> = {
+  granted: { label: 'Autorizado', className: 'bg-green-600 text-white' },
+  blocked: { label: 'Bloqueado', className: 'bg-red-600 text-white' },
+  pending: { label: 'Pendente', className: 'bg-yellow-500 text-white' },
+};
+
 export function WorkerCard({ worker, borderStatus }: WorkerCardProps) {
   const borderClass = borderStatus ? borderColorMap[borderStatus] : 'border-border';
+  const statusInfo = borderStatus ? statusLabelMap[borderStatus] : null;
 
   return (
     <Card className={cn('border-2', borderClass)}>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Informações do Trabalhador</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="p-5 space-y-4">
         <div className="flex items-center gap-4">
           <ResolvedAvatar
             photoUrl={worker.photo_url}
             name={worker.name}
             fallback="initials"
-            className="h-24 w-24 text-2xl"
+            className="h-32 w-32 text-3xl"
           />
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-xl truncate">{worker.name}</p>
-            <div className="flex gap-2 mt-1 flex-wrap">
-              <Badge className="bg-green-600 text-white text-xs">Ativo</Badge>
-            </div>
+            <p className="font-bold text-2xl truncate">{worker.name}</p>
+            {statusInfo && (
+              <div className="flex gap-2 mt-2 flex-wrap">
+                <Badge className={cn('text-xs', statusInfo.className)}>{statusInfo.label}</Badge>
+              </div>
+            )}
           </div>
         </div>
 
@@ -51,9 +57,15 @@ export function WorkerCard({ worker, borderStatus }: WorkerCardProps) {
             </div>
           )}
           {worker.job_function_name && (
-            <div className="flex justify-between">
+            <div className="flex justify-between border-b pb-1">
               <span className="text-muted-foreground">Função</span>
               <span className="font-semibold">{worker.job_function_name}</span>
+            </div>
+          )}
+          {(worker as any).role && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Cargo</span>
+              <span className="font-semibold">{(worker as any).role}</span>
             </div>
           )}
         </div>
