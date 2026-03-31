@@ -221,11 +221,18 @@ export function BrazilMap({ projects, onExpandClick, compact = false }: BrazilMa
       doubleClickZoom: false,
       touchZoom: false,
     });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const tileLayer = L.tileLayer(getTileUrl()).addTo(map);
     markersLayerRef.current = L.layerGroup().addTo(map);
     mapInstanceRef.current = map;
+
+    // Watch for theme changes
+    const observer = new MutationObserver(() => {
+      tileLayer.setUrl(getTileUrl());
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
     setTimeout(() => map.invalidateSize(), 100);
-    return () => { map.remove(); mapInstanceRef.current = null; markersLayerRef.current = null; };
+    return () => { observer.disconnect(); map.remove(); mapInstanceRef.current = null; markersLayerRef.current = null; };
   }, [compact]);
 
   // Update markers

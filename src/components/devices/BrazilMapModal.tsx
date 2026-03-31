@@ -66,6 +66,7 @@ export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalP
   useEffect(() => {
     if (!open) {
       if (mapInstanceRef.current) {
+        (mapInstanceRef.current as any)._themeObserver?.disconnect();
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
