@@ -44,6 +44,12 @@ function createShipIcon(color: string, size: number = 36) {
   });
 }
 
+interface BrazilMapModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  projects: MapProjectData[];
+}
+
 export function BrazilMapModal({ open, onOpenChange, projects }: BrazilMapModalProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
