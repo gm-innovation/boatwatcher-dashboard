@@ -1,9 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings2, LogIn, LogOut, AlertCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, RotateCcw, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/integrations/supabase/client';
@@ -36,7 +34,6 @@ export default function AccessControl() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Auto-load the active terminal
   const { data: terminal, isLoading: loadingTerminal } = useQuery({
     queryKey: ['active_terminal'],
     queryFn: async () => {
@@ -76,12 +73,7 @@ export default function AccessControl() {
         }
       }
 
-      return {
-        ...data,
-        client_name,
-        client_logo,
-        project_name,
-      } as ActiveTerminal;
+      return { ...data, client_name, client_logo, project_name } as ActiveTerminal;
     },
   });
 
@@ -91,18 +83,10 @@ export default function AccessControl() {
   } = useOfflineAccessControl();
 
   const [selectedWorker, setSelectedWorker] = useState<CachedWorker | null>(null);
-  const [direction, setDirection] = useState<'entry' | 'exit'>('entry');
   const [showScanner, setShowScanner] = useState(false);
   const [sessionLogs, setSessionLogs] = useState<PendingAccessLog[]>([]);
   const [workerCode, setWorkerCode] = useState('');
-
-  // Set direction based on terminal config
-  useEffect(() => {
-    if (terminal) {
-      if (terminal.direction_mode === 'entry') setDirection('entry');
-      else if (terminal.direction_mode === 'exit') setDirection('exit');
-    }
-  }, [terminal]);
+  const [accessGranted, setAccessGranted] = useState(false);
 
   const handleDigit = useCallback((digit: string) => {
     setWorkerCode(prev => prev.length < 10 ? prev + digit : prev);
@@ -138,7 +122,7 @@ export default function AccessControl() {
     }
   }, [workers, toast]);
 
-  const handleConfirm = async () => {
+  const handleConfirm = async (direction: 'entry' | 'exit') => {
     if (!selectedWorker || !terminal) return;
 
     const log: PendingAccessLog = {
@@ -155,13 +139,18 @@ export default function AccessControl() {
 
     await saveAccessLog(log);
     setSessionLogs(prev => [...prev, log]);
-    setSelectedWorker(null);
-    setWorkerCode('');
+    setAccessGranted(true);
 
     toast({
       title: direction === 'entry' ? '✅ Entrada registrada' : '🔴 Saída registrada',
       description: `${selectedWorker.name} - ${terminal.name}`,
     });
+  };
+
+  const handleNewAccess = () => {
+    setSelectedWorker(null);
+    setWorkerCode('');
+    setAccessGranted(false);
   };
 
   if (loadingTerminal) {
@@ -194,28 +183,20 @@ export default function AccessControl() {
   return (
     <AccessControlShell isOnline={isOnline}>
       <div className="flex flex-col max-w-lg mx-auto min-h-[calc(100vh-3rem)]">
-        {/* Header with branding */}
-        <div className="p-4 border-b bg-card">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              {terminal.client_logo && (
-                <img
-                  src={terminal.client_logo}
-                  alt={terminal.client_name || 'Logo'}
-                  className="h-10 w-auto max-w-[120px] object-contain"
-                />
-              )}
-              <div>
-                <h1 className="text-lg font-bold">{terminal.project_name || terminal.name}</h1>
-                {terminal.location_description && (
-                  <p className="text-sm text-muted-foreground">{terminal.location_description}</p>
-                )}
-              </div>
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => navigate('/access-control/config')}>
-              <Settings2 className="h-5 w-5" />
-            </Button>
-          </div>
+        {/* Branded header */}
+        <div className="p-6 border-b bg-card text-center space-y-2">
+          {terminal.client_logo && (
+            <img
+              src={terminal.client_logo}
+              alt={terminal.client_name || 'Logo'}
+              className="h-14 w-auto mx-auto object-contain"
+            />
+          )}
+          <h1 className="text-xl font-bold">{terminal.project_name || terminal.name}</h1>
+          <p className="text-sm text-muted-foreground">
+            {terminal.name}
+            {terminal.location_description && ` · ${terminal.location_description}`}
+          </p>
 
           <OfflineIndicator
             isOnline={isOnline}
@@ -223,65 +204,55 @@ export default function AccessControl() {
             isSyncing={isSyncing}
             onSync={syncPendingLogs}
           />
-
-          {/* Location badge + direction */}
-          <div className="flex items-center justify-between mt-3">
-            <Badge variant="outline" className="text-sm">
-              {terminal.access_location === 'bordo' ? '🚢 Bordo' : '🏗️ Dique'}
-            </Badge>
-
-            {terminal.direction_mode === 'both' ? (
-              <Tabs value={direction} onValueChange={v => setDirection(v as 'entry' | 'exit')}>
-                <TabsList>
-                  <TabsTrigger value="entry" className="gap-1 data-[state=active]:bg-green-600 data-[state=active]:text-white">
-                    <LogIn className="h-4 w-4" /> Entrada
-                  </TabsTrigger>
-                  <TabsTrigger value="exit" className="gap-1 data-[state=active]:bg-red-600 data-[state=active]:text-white">
-                    <LogOut className="h-4 w-4" /> Saída
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            ) : (
-              <Badge className={terminal.direction_mode === 'entry'
-                ? 'bg-green-600 text-white'
-                : 'bg-red-600 text-white'
-              }>
-                {terminal.direction_mode === 'entry' ? 'Apenas Entrada' : 'Apenas Saída'}
-              </Badge>
-            )}
-          </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 p-4 space-y-4">
           {selectedWorker ? (
             <div className="space-y-4">
+              {accessGranted && (
+                <div className="flex items-center gap-2 bg-green-600 text-white rounded-lg p-3 justify-center font-semibold">
+                  <CheckCircle2 className="h-5 w-5" />
+                  Acesso Liberado
+                </div>
+              )}
+
               <WorkerCard worker={selectedWorker} />
-              <AccessConfirmation
-                direction={direction}
-                onConfirm={handleConfirm}
-              />
+
+              {!accessGranted && (
+                <AccessConfirmation onConfirm={handleConfirm} />
+              )}
+
               <Button
-                variant="ghost"
-                className="w-full"
-                onClick={() => { setSelectedWorker(null); setWorkerCode(''); }}
+                variant="outline"
+                className="w-full gap-2"
+                onClick={handleNewAccess}
               >
-                Cancelar
+                <RotateCcw className="h-4 w-4" />
+                Novo Acesso
               </Button>
             </div>
           ) : (
             <>
-              {/* Code display */}
-              <div className="text-center space-y-2">
-                <label className="text-sm font-medium text-muted-foreground">Código do Trabalhador</label>
-                <div className="bg-muted rounded-lg p-4 min-h-[56px] flex items-center justify-center">
-                  <span className="text-3xl font-mono font-bold tracking-widest">
-                    {workerCode || <span className="text-muted-foreground/50">---</span>}
-                  </span>
-                </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">Código do Trabalhador</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 text-primary"
+                  onClick={() => setShowScanner(true)}
+                >
+                  <Camera className="h-4 w-4" />
+                  Usar Câmera
+                </Button>
               </div>
 
-              {/* Numeric keypad */}
+              <div className="bg-muted rounded-lg p-4 min-h-[72px] flex items-center justify-center">
+                <span className="text-4xl font-mono font-bold tracking-widest">
+                  {workerCode || <span className="text-muted-foreground/40">---</span>}
+                </span>
+              </div>
+
               <NumericKeypad
                 onDigit={handleDigit}
                 onClear={handleClear}
@@ -294,7 +265,6 @@ export default function AccessControl() {
           <RecentAccessList logs={sessionLogs} />
         </div>
 
-        {/* QR Scanner modal */}
         {showScanner && (
           <QRScanner
             onScan={handleQRScan}
