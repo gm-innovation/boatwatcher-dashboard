@@ -41,10 +41,30 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
   const [crewSize, setCrewSize] = useState(project?.crew_size?.toString() || '');
   const [armador, setArmador] = useState(project?.armador || '');
   const [apiProjectId, setApiProjectId] = useState(project?.api_project_id || '');
+  const [latitude, setLatitude] = useState(project?.latitude?.toString() || '');
+  const [longitude, setLongitude] = useState(project?.longitude?.toString() || '');
   const [isLoading, setIsLoading] = useState(false);
+  const [knownLocations, setKnownLocations] = useState<{ name: string; latitude: number; longitude: number }[]>([]);
   
   const { data: companies = [] } = useCompanies();
   const queryClient = useQueryClient();
+
+  // Fetch known locations
+  useState(() => {
+    supabase.from('known_locations').select('name, latitude, longitude').then(({ data }) => {
+      if (data) setKnownLocations(data);
+    });
+  });
+
+  // Auto-fill coordinates when location matches a known location
+  const handleLocationChange = (value: string) => {
+    setLocation(value);
+    const match = knownLocations.find(kl => kl.name.toLowerCase() === value.toLowerCase());
+    if (match) {
+      setLatitude(match.latitude.toString());
+      setLongitude(match.longitude.toString());
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
