@@ -12,6 +12,7 @@ export interface CachedWorker {
   company_name?: string;
   job_function_name?: string;
   status: string | null;
+  role?: string | null;
 }
 
 export interface PendingAccessLog {
