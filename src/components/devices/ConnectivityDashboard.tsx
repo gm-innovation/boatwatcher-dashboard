@@ -820,16 +820,15 @@ export function ConnectivityDashboard() {
             <BrazilMap
               projects={mapProjectData}
               onExpandClick={() => setMapModalOpen(true)}
-              compact
-            />
-            <BrazilMapModal
-              open={mapModalOpen}
-              onOpenChange={setMapModalOpen}
-              projects={mapProjectData}
             />
             {renderAlerts()}
           </div>
         </div>
+        <BrazilMapModal
+          open={mapModalOpen}
+          onOpenChange={setMapModalOpen}
+          projects={mapProjectData}
+        />
       </div>
     );
   }
