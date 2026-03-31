@@ -46,7 +46,7 @@ const peopleSubItems = [
 const webAdminSubItems = [
   { title: 'Dispositivos', url: '/admin/devices', icon: Server },
   { title: 'Agentes', url: '/admin/agents', icon: Bot },
-  { title: 'Conectividade', url: '/admin/connectivity', icon: Wifi },
+  { title: 'Monitoramento', url: '/admin/connectivity', icon: Wifi },
   { title: 'Projetos', url: '/admin/projects', icon: FolderKanban },
   { title: 'Clientes', url: '/admin/clients', icon: Building2 },
   { title: 'Usuários', url: '/admin/users', icon: Shield },

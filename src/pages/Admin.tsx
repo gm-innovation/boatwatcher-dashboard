@@ -32,7 +32,7 @@ const Admin = () => {
     { value: 'projects', label: 'Projetos', icon: FolderKanban, content: <ProjectsManagement /> },
     { value: 'devices', label: 'Dispositivos', icon: Server, content: <DeviceManagement /> },
     { value: 'users', label: 'Usuários', icon: Shield, content: <UserManagement /> },
-    { value: 'connectivity', label: 'Conectividade', icon: Wifi, content: <ConnectivityDashboard /> },
+    { value: 'connectivity', label: 'Monitoramento', icon: Wifi, content: <ConnectivityDashboard /> },
     { value: 'diagnostics', label: 'Diagnóstico', icon: Stethoscope, content: <DiagnosticsPanel /> },
     { value: 'audit', label: 'Auditoria', icon: Activity, content: <AuditLog /> },
     { value: 'settings', label: 'Configurações', icon: Cog, content: <GlobalSettings /> },
