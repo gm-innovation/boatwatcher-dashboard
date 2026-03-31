@@ -1,24 +1,53 @@
 
 
-## Trocar ícone SVG para um navio mais realista
+## Corrigir layout maximizado: mapa na coluna direita + lista com scroll
 
 ### Problema
-O SVG atual é um desenho abstrato/geométrico que não se parece claramente com um navio.
+No modo maximizado do Monitoramento, o mapa não aparece. Além disso, a lista de dispositivos ocupa todo o espaço vertical sem limitação.
 
 ### Solução
-Substituir o path SVG por um **ícone de navio/embarcação** mais reconhecível — um cargo ship / vessel com casco, cabine e chaminé. Manter todo o efeito neon (pulse + drop-shadow) já implementado, apenas trocando os `<path>` internos.
 
-O novo SVG será um navio de perfil lateral (silhueta clássica de embarcação marítima), com:
-- Casco curvo na base
-- Cabine/superestrutura
-- Mastro/chaminé
+Modificar o bloco maximizado (linhas 802-827) em `src/components/devices/ConnectivityDashboard.tsx`:
 
-### Alterações
+1. **Lista de dispositivos com altura limitada e scroll** — passar uma classe de altura máxima (ex: `max-h-[300px]`) ao `renderDeviceTable` para que a tabela fique dentro de uma box com barra de rolagem, exibindo apenas alguns dispositivos por vez.
 
-| Arquivo | Alteração |
-|---|---|
-| `src/components/devices/BrazilMap.tsx` | Trocar os `<path>` dentro do `createShipIcon` por SVG de navio realista |
-| `src/components/devices/BrazilMapModal.tsx` | Mesma troca de paths |
+2. **Mapa na coluna da direita** — adicionar `<BrazilMap>` e `<BrazilMapModal>` logo abaixo da lista de dispositivos na coluna direita, em modo compacto.
 
-Apenas os paths SVG mudam (linhas 170-174 em BrazilMap.tsx e equivalentes em BrazilMapModal.tsx). Todo o resto (pulse, glow, sizing) permanece idêntico.
+### Alteração
+
+**Arquivo:** `src/components/devices/ConnectivityDashboard.tsx`
+
+O bloco maximizado (linhas 817-823) passará de:
+
+```tsx
+{/* Right column */}
+<div className="flex flex-col gap-3 min-h-0 overflow-hidden">
+  <div className="flex-1 min-h-0 flex flex-col">
+    {renderDeviceTable()}
+  </div>
+  {renderAlerts()}
+</div>
+```
+
+Para:
+
+```tsx
+{/* Right column */}
+<div className="flex flex-col gap-3 min-h-0 overflow-auto">
+  {renderDeviceTable('max-h-[300px]')}
+  <BrazilMap 
+    projects={mapProjectData} 
+    onExpandClick={() => setMapModalOpen(true)} 
+    compact 
+  />
+  <BrazilMapModal 
+    open={mapModalOpen} 
+    onOpenChange={setMapModalOpen} 
+    projects={mapProjectData} 
+  />
+  {renderAlerts()}
+</div>
+```
+
+Isso coloca a lista de dispositivos em uma box com scroll de ~300px, seguida do mapa compacto e dos alertas, tudo na coluna direita com scroll geral caso o conteúdo exceda a altura disponível.
 
