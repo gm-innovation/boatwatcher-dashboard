@@ -24,6 +24,25 @@ export function BadgePrinter({ worker, companyName, jobFunctionName }: BadgePrin
   const handlePrint = async () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [86, 54] });
 
+    // Generate QR Code as data URL
+    let qrDataUrl: string | null = null;
+    if (worker.code) {
+      try {
+        const container = document.createElement('div');
+        container.style.position = 'absolute';
+        container.style.left = '-9999px';
+        document.body.appendChild(container);
+        const root = createRoot(container);
+        flushSync(() => {
+          root.render(<QRCodeCanvas value={String(worker.code)} size={128} />);
+        });
+        const canvas = container.querySelector('canvas');
+        if (canvas) qrDataUrl = canvas.toDataURL('image/png');
+        root.unmount();
+        document.body.removeChild(container);
+      } catch {}
+    }
+
     // Background
     doc.setFillColor(255, 255, 255);
     doc.rect(0, 0, 86, 54, 'F');
