@@ -2,7 +2,6 @@ import jsPDF from 'jspdf';
 import { Button } from '@/components/ui/button';
 import { useResolvedUrl } from '@/hooks/useResolvedUrl';
 import { Printer } from 'lucide-react';
-import { QRCodeCanvas } from 'qrcode.react';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 
