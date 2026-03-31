@@ -1,72 +1,45 @@
 
 
-## App Android Standalone — Controle de Acesso
+## Reformular Configuração de Terminais — Baseado no Sistema de Referência
 
-### Objetivo
-Empacotar o módulo de Controle de Acesso como um APK Android instalável via Capacitor, com acesso exclusivo às telas de controle de acesso (login dedicado, registro, configuração) — sem sidebar nem acesso ao sistema principal.
+### Contexto
+Os prints fornecidos mostram um sistema de referência com uma área administrativa de "Gerenciamento de Terminais" mais completa do que a implementação atual. O formulário de edição de terminal inclui campos adicionais (Localização textual, Cliente, Projeto/Obra, Método de Reconhecimento, toggles de Terminal Ativo / Captura de Foto / Sincronização Automática), além de uma área de sincronização de trabalhadores por cliente e sincronização de dados.
 
-### Arquitetura
+### O que mudar
 
-```text
-App Android (Capacitor)
-  └─ /access-control/login   → Login dedicado do operador
-  └─ /access-control/        → Tela principal (QR, busca, registro)
-  └─ /access-control/config  → Configuração dos pontos
+#### 1. Expandir a tabela `manual_access_points` (migration)
+Adicionar colunas para alinhar com o sistema de referência:
+- `location_description` (text) — descrição livre do local (ex: "Convés")
+- `client_id` (uuid, FK → clients) — cliente vinculado
+- `recognition_method` (text, default 'code') — valores: `code`, `cpf`, `name`, `facial`
+- `require_photo` (boolean, default false) — captura de foto obrigatória
+- `auto_sync` (boolean, default true) — sincronização automática
 
-Detecção: Capacitor.isNativePlatform() → true = modo standalone
-```
+#### 2. Reformular o formulário de terminal (`AccessPointConfig.tsx`)
+Substituir o dialog compacto atual por um formulário fullscreen (como nos prints), com:
+- Nome do Terminal (input)
+- Localização (input livre)
+- Cliente (select, carregado de `clients`)
+- Projeto/Obra (select, filtrado pelo cliente selecionado)
+- Método de Reconhecimento (select: Código, CPF, Nome, Reconhecimento Facial)
+- Modo de Operação (select: Entrada e Saída / Apenas Entrada / Apenas Saída)
+- Terminal Ativo (switch toggle)
+- Captura de Foto Obrigatória (switch toggle)
+- Sincronização Automática (switch toggle)
+- Botão "Salvar Terminal" / "Atualizar Terminal" (azul, full-width)
 
-### Implementação
+#### 3. Reformular a página de configuração (`AccessControlConfig.tsx`)
+Reorganizar em seções conforme os prints:
+- **Lista de terminais** com opção de editar/criar (abre formulário inline ou tela dedicada)
+- **Sincronização de Trabalhadores**: seletor de cliente + contagem de cache local + botão "Sincronizar Trabalhadores"
+- **Sincronização de Dados**: botão para sincronizar clientes e projetos do sistema principal
 
-#### 1. Instalar Capacitor
-- Dependências: `@capacitor/core`, `@capacitor/cli`, `@capacitor/android`
-- Inicializar com `npx cap init` e configurar `capacitor.config.ts`
-- `appId`: `app.lovable.3e981c04bfa74702822c2908ab036748`
-- `appName`: `Dock Check Acesso`
-- `server.url` apontando para o preview sandbox (hot-reload)
-
-#### 2. Login dedicado (`src/pages/access-control/AccessControlLogin.tsx`)
-- Tela de login minimalista, mobile-first
-- Título "Controle de Acesso" com branding
-- Apenas email + senha, sem link para o sistema
-- Valida role (admin/operator), redireciona para `/access-control/`
-
-#### 3. Shell standalone (`src/components/access-control/AccessControlShell.tsx`)
-- Layout fullscreen sem sidebar
-- Header compacto: status online/offline, logout
-- Sem navegação para o sistema principal
-
-#### 4. Roteamento condicional (`App.tsx`)
-- Detectar se está rodando como app nativo (`Capacitor.isNativePlatform()`)
-- **Modo nativo**: renderiza APENAS rotas `/access-control/*` — rota raiz `/` redireciona para `/access-control/login`
-- **Modo web**: mantém tudo como está, com link no sidebar abrindo em nova aba
-
-#### 5. Refatorar `AccessControl.tsx`
-- Remover botão "voltar para /" (não faz sentido no standalone)
-- Usar `AccessControlShell` como wrapper
-- Config acessível via rota `/access-control/config` em vez de estado
-
-#### 6. Sidebar do sistema principal
-- Link "Acesso Manual" abre `/access-control/` em nova aba (`target="_blank"`)
-
-### Arquivos
+#### 4. Arquivos afetados
 
 | Arquivo | Ação |
 |---|---|
-| `capacitor.config.ts` | Criar — config do Capacitor |
-| `src/pages/access-control/AccessControlLogin.tsx` | Criar — login dedicado |
-| `src/components/access-control/AccessControlShell.tsx` | Criar — shell standalone |
-| `src/pages/AccessControl.tsx` | Refatorar — modo standalone |
-| `src/App.tsx` | Atualizar — roteamento condicional |
-| `src/components/layouts/AppSidebar.tsx` | Atualizar — link nova aba |
-
-### Para instalar no Android
-Após a implementação, você precisará:
-1. Exportar o projeto para o GitHub
-2. Clonar, rodar `npm install`
-3. `npx cap add android`
-4. `npx cap sync`
-5. `npx cap run android` (requer Android Studio)
-
-O APK gerado pode ser distribuído diretamente para os tablets/celulares dos operadores.
+| Migration SQL | Criar — adicionar colunas à `manual_access_points` |
+| `src/components/access-control/AccessPointConfig.tsx` | Reescrever — formulário expandido com todos os campos |
+| `src/pages/access-control/AccessControlConfig.tsx` | Reescrever — layout com seções de sync |
+| `src/hooks/useOfflineAccessControl.ts` | Ajustar — sync de trabalhadores filtrado por cliente |
 
