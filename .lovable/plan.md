@@ -1,19 +1,31 @@
 
 
-## Corrigir filtro de Clientes vs Empresas no Controle de Acesso
+## Reformular Tela de Acesso — Sem Seletor de Terminal
 
-### Problema
-As queries em `AccessPointConfig.tsx` e `AccessControlConfig.tsx` buscam **todas** as empresas da tabela `companies` sem filtrar por `type = 'client'`. Isso faz com que empresas terceirizadas (como "Googlemarine") apareçam no seletor de clientes.
+### Mudança principal
+Remover o `AccessPointSelector` da tela de acesso (`AccessControl.tsx`). O terminal ativo será carregado automaticamente da base de dados — busca o primeiro (ou único) terminal com `is_active = true`. Se nenhum estiver ativo, exibe mensagem orientando a configurar na área administrativa.
 
-### Correção
+### Alterações em `src/pages/AccessControl.tsx`
 
-**2 arquivos, mesma alteração** — adicionar `.eq('type', 'client')` nas queries:
+1. **Remover** o import e uso de `AccessPointSelector`
+2. **Adicionar** query automática ao montar a página:
+   - Busca `manual_access_points` com `is_active = true`, limit 1
+   - Join com `companies` para obter logo e nome do cliente
+   - Seta `selectedPoint` automaticamente com o resultado
+3. **Header redesenhado**: exibir logo do cliente, nome do terminal, localização — sem dropdown
+4. **Estado vazio**: se não houver terminal ativo, mostrar "Nenhum terminal configurado. Configure na área administrativa."
+5. **Teclado numérico virtual**: criar componente `NumericKeypad.tsx` com grid 3x4 (1-9, limpar, 0, confirmar) conforme os prints de referência
+6. **Campo de código**: display numérico grande + link "Usar Câmera" para QR
+7. **Botão "Verificar Acesso"**: busca trabalhador no cache pelo código digitado
 
-1. **`src/components/access-control/AccessPointConfig.tsx`** (linha ~50):
-   - Query `companies_for_access` → adicionar `.eq('type', 'client')`
+### Novo arquivo: `src/components/access-control/NumericKeypad.tsx`
+Componente do teclado numérico virtual com callbacks `onDigit`, `onClear`, `onConfirm`.
 
-2. **`src/pages/access-control/AccessControlConfig.tsx`** (linha ~60):
-   - Query `companies_for_sync` → adicionar `.eq('type', 'client')`
+### Arquivos afetados
 
-Padrão já existente no projeto em `useClients()` de `src/hooks/useSupabase.ts`.
+| Arquivo | Ação |
+|---|---|
+| `src/pages/AccessControl.tsx` | Reescrever — auto-load terminal ativo, layout com teclado numérico |
+| `src/components/access-control/NumericKeypad.tsx` | Criar — teclado virtual |
+| `src/components/access-control/AccessPointSelector.tsx` | Sem alteração (mantém para uso futuro na config) |
 
