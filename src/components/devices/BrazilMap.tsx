@@ -205,7 +205,7 @@ export function BrazilMap({ projects, onExpandClick, compact = false }: BrazilMa
       .filter(Boolean) as (MapProjectData & { lat: number; lng: number; label: string; health: string; color: string })[];
   }, [projects]);
 
-  const height = compact ? 200 : 280;
+  const height = compact ? 260 : 420;
 
   // Init map
   useEffect(() => {
