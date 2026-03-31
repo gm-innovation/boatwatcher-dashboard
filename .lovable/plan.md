@@ -1,37 +1,27 @@
 
 
-## Melhorias na Tela de Acesso
+## Ajustes Finais na Tela de Acesso
 
-### Alterações
+### Alterações em `src/pages/AccessControl.tsx`
 
-#### 1. `src/components/access-control/WorkerCard.tsx`
-- Aumentar avatar para `h-24 w-24` e nome para `text-xl`
-- Remover linha "Documento" — exibir "Função" no lugar
-- Aceitar prop `borderStatus: 'granted' | 'blocked' | 'pending' | null` para borda colorida do card:
-  - `granted` → `border-green-500`
-  - `blocked` → `border-red-500`
-  - `pending` → `border-yellow-500`
-- Aplicar `border-2` com a cor correspondente
+1. **Botão "Cancelar"** no lugar de "Novo Acesso": trocar texto e ícone (`RotateCcw` → `X` ou sem ícone), label "Cancelar"
+2. **Auto-retorno após confirmar**: `handleConfirm` faz beep + toast → chama `handleNewAccess()` após ~1.2s automaticamente (sem ficar na tela de "Acesso Liberado")
+3. **Remover `RecentAccessList`** e imports não usados (`sessionLogs`, `CheckCircle2`, `RecentAccessList`)
+4. **Remover estado `accessGranted`** e banner "Acesso Liberado" — ao confirmar, volta direto para o teclado
+5. **Borda do WorkerCard ao identificar**: passar `borderStatus` baseado no `worker.status` imediatamente ao identificar (`active` → `'granted'`, `blocked` → `'blocked'`, outros → `'pending'`), não esperar confirmação
+6. **Logo fallback via projeto**: se `client_id` do terminal for null, buscar `client_id` do projeto e depois a logo da empresa
 
-#### 2. `src/components/access-control/AccessConfirmation.tsx`
-- Botão SAÍDA: mudar de `bg-purple-700` para `bg-red-600 hover:bg-red-700`
+### Alterações em `src/components/access-control/WorkerCard.tsx`
 
-#### 3. `src/pages/AccessControl.tsx`
-- **Logo do cliente**: a query já busca `logo_url_light` mas o URL pode ser um path de storage privado. Usar `useResolvedUrl` para resolver a URL da logo antes de renderizar
-- **Beep sonoro**: ao confirmar acesso (entrada/saída), tocar um beep usando `AudioContext` (Web Audio API) — som curto de ~200ms a 800Hz
-- Passar `borderStatus` para `WorkerCard` baseado no status do acesso:
-  - Após confirmar → `'granted'`
-  - Antes de confirmar → `null` (ou futuramente lógica de bloqueio)
-- Reduzir padding do header para melhor ocupação de espaço
-
-#### 4. Beep helper
-Criar função inline `playBeep()` em `AccessControl.tsx` usando `AudioContext` — sem dependência externa.
+1. **Avatar maior**: `h-32 w-32`, texto fallback `text-3xl`
+2. **Nome maior**: `text-2xl`
+3. **Garantir exibição de Função**: já existe no código, mas confirmar que aparece mesmo quando `job_function_name` está definido — manter a linha de "Função"
+4. **Remover CardHeader** ("Informações do Trabalhador") para ganhar espaço
 
 ### Arquivos afetados
 
 | Arquivo | Ação |
 |---|---|
-| `src/pages/AccessControl.tsx` | Editar — resolver logo, beep, borderStatus, padding |
-| `src/components/access-control/WorkerCard.tsx` | Editar — avatar maior, remover documento, borda colorida |
-| `src/components/access-control/AccessConfirmation.tsx` | Editar — botão saída vermelho |
+| `src/pages/AccessControl.tsx` | Editar — cancelar, auto-retorno, logo fallback, remover lista recentes, borda imediata |
+| `src/components/access-control/WorkerCard.tsx` | Editar — avatar/nome maiores, remover header |
 
