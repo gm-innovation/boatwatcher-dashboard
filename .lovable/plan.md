@@ -1,29 +1,35 @@
 
 
-## Corrigir mapa no modo maximizado: aumentar altura + fix botão Expandir
+## Ajustar mapa no modo escuro: tonalidade azul + labels mais claros
 
-### Problemas identificados
-
-1. **Mapa pequeno**: O `BrazilMap` usa `compact` que fixa a altura em 260px — muito pequeno para o modo maximizado.
-2. **Botão Expandir não funciona**: O layout maximizado usa `z-[100]` (`fixed inset-0 z-[100]`), mas o `DialogContent` do Radix UI usa `z-50` por padrão. O modal do mapa fica **por baixo** do layout maximizado e não aparece.
+### Problema
+No modo escuro, os tiles do mapa (CartoDB Dark) têm tom cinza/neutro que destoa do design system azul-marinho do app, e os labels/contornos de localização são pouco legíveis.
 
 ### Solução
+Alterar apenas o filtro CSS do modo escuro para os tiles do Leaflet — sem mexer no modo claro.
 
-**Arquivo:** `src/components/devices/ConnectivityDashboard.tsx`
+### Alteração
 
-1. Remover `compact` do `BrazilMap` no modo maximizado para usar a altura padrão (420px), ou passar uma altura customizada.
-2. Mover o `BrazilMapModal` para **fora** do container `fixed z-[100]`, renderizando-o após o fechamento da `div` maximizada, garantindo que o Dialog do Radix UI fique no nível correto do DOM (portaled).
+**Arquivo:** `src/index.css` (linha ~126)
 
-**Arquivo:** `src/components/devices/BrazilMapModal.tsx`
+De:
+```css
+.dark .leaflet-tile-pane {
+  filter: brightness(1.4) contrast(1.1);
+}
+```
 
-3. Adicionar `z-[200]` ao `DialogContent` para garantir que fique acima do layout maximizado `z-[100]`.
+Para:
+```css
+.dark .leaflet-tile-pane {
+  filter: brightness(1.8) contrast(1.4) saturate(0.6) hue-rotate(15deg);
+}
+```
 
-### Alterações específicas
+- `brightness(1.8)` — clareia significativamente labels e linhas de fronteira
+- `contrast(1.4)` — destaca contornos e textos contra o fundo escuro
+- `saturate(0.6)` — reduz cores saturadas mantendo visual limpo
+- `hue-rotate(15deg)` — puxa levemente para o tom azul, alinhando com o `--sidebar-background` e `--sidebar-primary` do dark mode
 
-**ConnectivityDashboard.tsx (bloco maximizado, ~linhas 804-834):**
-- Remover `compact` do `<BrazilMap>` (ou não passar a prop)
-- Mover `<BrazilMapModal>` para fora do bloco condicional `isMaximized`, colocando-o antes do return final do componente (uma única instância compartilhada entre os dois layouts)
-
-**BrazilMapModal.tsx (~linha 140):**
-- Adicionar classe `z-[200]` ao `DialogContent` para sobrepor o layout maximizado
+Nenhuma alteração nos tiles (URLs), no modo claro, ou nos componentes `BrazilMap.tsx` / `BrazilMapModal.tsx`.
 
