@@ -165,8 +165,34 @@ const ProjectForm = ({ project, onSuccess, onCancel }: ProjectFormProps) => {
           <Input 
             id="location" 
             value={location} 
-            onChange={(e) => setLocation(e.target.value)} 
+            onChange={(e) => handleLocationChange(e.target.value)} 
             placeholder="Local do projeto"
+          />
+        </div>
+      </div>
+
+      {/* Row 2.5: Latitude + Longitude */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="latitude">Latitude</Label>
+          <Input 
+            id="latitude" 
+            type="number" 
+            step="any"
+            value={latitude} 
+            onChange={(e) => setLatitude(e.target.value)} 
+            placeholder="-23.5505"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="longitude">Longitude</Label>
+          <Input 
+            id="longitude" 
+            type="number" 
+            step="any"
+            value={longitude} 
+            onChange={(e) => setLongitude(e.target.value)} 
+            placeholder="-46.6333"
           />
         </div>
       </div>
