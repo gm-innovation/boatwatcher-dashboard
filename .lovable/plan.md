@@ -1,53 +1,29 @@
 
 
-## Corrigir layout maximizado: mapa na coluna direita + lista com scroll
+## Corrigir mapa no modo maximizado: aumentar altura + fix botão Expandir
 
-### Problema
-No modo maximizado do Monitoramento, o mapa não aparece. Além disso, a lista de dispositivos ocupa todo o espaço vertical sem limitação.
+### Problemas identificados
+
+1. **Mapa pequeno**: O `BrazilMap` usa `compact` que fixa a altura em 260px — muito pequeno para o modo maximizado.
+2. **Botão Expandir não funciona**: O layout maximizado usa `z-[100]` (`fixed inset-0 z-[100]`), mas o `DialogContent` do Radix UI usa `z-50` por padrão. O modal do mapa fica **por baixo** do layout maximizado e não aparece.
 
 ### Solução
 
-Modificar o bloco maximizado (linhas 802-827) em `src/components/devices/ConnectivityDashboard.tsx`:
-
-1. **Lista de dispositivos com altura limitada e scroll** — passar uma classe de altura máxima (ex: `max-h-[300px]`) ao `renderDeviceTable` para que a tabela fique dentro de uma box com barra de rolagem, exibindo apenas alguns dispositivos por vez.
-
-2. **Mapa na coluna da direita** — adicionar `<BrazilMap>` e `<BrazilMapModal>` logo abaixo da lista de dispositivos na coluna direita, em modo compacto.
-
-### Alteração
-
 **Arquivo:** `src/components/devices/ConnectivityDashboard.tsx`
 
-O bloco maximizado (linhas 817-823) passará de:
+1. Remover `compact` do `BrazilMap` no modo maximizado para usar a altura padrão (420px), ou passar uma altura customizada.
+2. Mover o `BrazilMapModal` para **fora** do container `fixed z-[100]`, renderizando-o após o fechamento da `div` maximizada, garantindo que o Dialog do Radix UI fique no nível correto do DOM (portaled).
 
-```tsx
-{/* Right column */}
-<div className="flex flex-col gap-3 min-h-0 overflow-hidden">
-  <div className="flex-1 min-h-0 flex flex-col">
-    {renderDeviceTable()}
-  </div>
-  {renderAlerts()}
-</div>
-```
+**Arquivo:** `src/components/devices/BrazilMapModal.tsx`
 
-Para:
+3. Adicionar `z-[200]` ao `DialogContent` para garantir que fique acima do layout maximizado `z-[100]`.
 
-```tsx
-{/* Right column */}
-<div className="flex flex-col gap-3 min-h-0 overflow-auto">
-  {renderDeviceTable('max-h-[300px]')}
-  <BrazilMap 
-    projects={mapProjectData} 
-    onExpandClick={() => setMapModalOpen(true)} 
-    compact 
-  />
-  <BrazilMapModal 
-    open={mapModalOpen} 
-    onOpenChange={setMapModalOpen} 
-    projects={mapProjectData} 
-  />
-  {renderAlerts()}
-</div>
-```
+### Alterações específicas
 
-Isso coloca a lista de dispositivos em uma box com scroll de ~300px, seguida do mapa compacto e dos alertas, tudo na coluna direita com scroll geral caso o conteúdo exceda a altura disponível.
+**ConnectivityDashboard.tsx (bloco maximizado, ~linhas 804-834):**
+- Remover `compact` do `<BrazilMap>` (ou não passar a prop)
+- Mover `<BrazilMapModal>` para fora do bloco condicional `isMaximized`, colocando-o antes do return final do componente (uma única instância compartilhada entre os dois layouts)
+
+**BrazilMapModal.tsx (~linha 140):**
+- Adicionar classe `z-[200]` ao `DialogContent` para sobrepor o layout maximizado
 
