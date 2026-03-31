@@ -585,35 +585,57 @@ export type Database = {
       manual_access_points: {
         Row: {
           access_location: string
+          auto_sync: boolean
+          client_id: string | null
           created_at: string
           created_by: string | null
           direction_mode: string
           id: string
           is_active: boolean
+          location_description: string | null
           name: string
           project_id: string | null
+          recognition_method: string
+          require_photo: boolean
         }
         Insert: {
           access_location?: string
+          auto_sync?: boolean
+          client_id?: string | null
           created_at?: string
           created_by?: string | null
           direction_mode?: string
           id?: string
           is_active?: boolean
+          location_description?: string | null
           name: string
           project_id?: string | null
+          recognition_method?: string
+          require_photo?: boolean
         }
         Update: {
           access_location?: string
+          auto_sync?: boolean
+          client_id?: string | null
           created_at?: string
           created_by?: string | null
           direction_mode?: string
           id?: string
           is_active?: boolean
+          location_description?: string | null
           name?: string
           project_id?: string | null
+          recognition_method?: string
+          require_photo?: boolean
         }
         Relationships: [
+          {
+            foreignKeyName: "manual_access_points_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "manual_access_points_project_id_fkey"
             columns: ["project_id"]
