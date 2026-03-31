@@ -276,6 +276,15 @@ async function fetchWorkersOnBoardFromCloud(
 
     if (workersOnBoard.size === 0) return [];
 
+    // Build first entry map (entryLogs is ascending)
+    const firstEntryMap = new Map<string, string>();
+    for (const entry of entryLogs || []) {
+      const key = entry.worker_name || entry.worker_id || '';
+      if (key && !firstEntryMap.has(key)) {
+        firstEntryMap.set(key, entry.timestamp);
+      }
+    }
+
     // Enrich by worker_name (handles UUID mismatch)
     const workerNames = Array.from(workersOnBoard.values())
       .map(w => w.worker_name)
