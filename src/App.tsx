@@ -17,8 +17,9 @@ import UserRegistration from "./pages/UserRegistration";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 import Visitors from "./pages/Visitors";
-import AccessControl from "./pages/AccessControl";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+
+const AccessControl = React.lazy(() => import('./pages/AccessControl'));
 import { MainLayout } from "./components/layouts/MainLayout";
 import { AuthProvider } from "@/contexts/AuthContext";
 
@@ -60,7 +61,7 @@ const App = () => {
                 <Route path="/company-portal/*" element={<ProtectedPage><CompanyPortal /></ProtectedPage>} />
                 <Route path="/settings" element={<ProtectedPage requiredRole="admin"><ProjectSettings /></ProtectedPage>} />
                 <Route path="/visitors" element={<ProtectedPage><Visitors /></ProtectedPage>} />
-                <Route path="/access-control" element={<ProtectedPage requiredRole={['admin', 'operator']}><AccessControl /></ProtectedPage>} />
+                <Route path="/access-control" element={<ProtectedPage requiredRole={['admin', 'operator']}><React.Suspense fallback={<div className="flex items-center justify-center min-h-screen">Carregando...</div>}><AccessControl /></React.Suspense></ProtectedPage>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AuthProvider>
