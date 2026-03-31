@@ -496,6 +496,30 @@ export type Database = {
         }
         Relationships: []
       }
+      known_locations: {
+        Row: {
+          created_at: string
+          id: string
+          latitude: number
+          longitude: number
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          latitude: number
+          longitude: number
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          latitude?: number
+          longitude?: number
+          name?: string
+        }
+        Relationships: []
+      }
       local_agents: {
         Row: {
           configuration: Json | null
@@ -671,7 +695,9 @@ export type Database = {
           created_at: string
           crew_size: number | null
           id: string
+          latitude: number | null
           location: string | null
+          longitude: number | null
           name: string
           project_type: string | null
           start_date: string | null
@@ -688,7 +714,9 @@ export type Database = {
           created_at?: string
           crew_size?: number | null
           id?: string
+          latitude?: number | null
           location?: string | null
+          longitude?: number | null
           name: string
           project_type?: string | null
           start_date?: string | null
@@ -705,7 +733,9 @@ export type Database = {
           created_at?: string
           crew_size?: number | null
           id?: string
+          latitude?: number | null
           location?: string | null
+          longitude?: number | null
           name?: string
           project_type?: string | null
           start_date?: string | null
