@@ -1,35 +1,36 @@
 
 
-## Reverter mapa para versão anterior (sem perder outras alterações)
+## Corrigir localização na tabela "Trabalhadores a Bordo" no Desktop
 
-Vou desfazer **apenas** as mudanças do mapa, mantendo todas as outras alterações (grace period de offline, etc.).
+### Problema
+A query `getWorkersOnBoard` no Desktop (`electron/database.js`, linha 1157) usa `device_name` como localização, retornando o nome do dispositivo (ex: "Engenharia - Entrada"). A versão Web usa `configuration.access_location` do dispositivo para exibir "Bordo" ou "Dique".
 
-### Alterações
+### Solução
+Alterar a query SQL do `getWorkersOnBoard` para fazer JOIN com a tabela `devices` e ler o campo `configuration`, extraindo `access_location` para determinar a localização correta.
+
+### Alteração
+
+**`electron/database.js`** — método `getWorkersOnBoard`:
+
+1. Adicionar JOIN com `devices` na CTE `first_entries` para trazer `d.configuration`
+2. No `.map()` final, parsear `configuration` e usar `access_location` (default `'bordo'`) para gerar o label "Bordo" ou "Dique", em vez de usar `device_name`
+
+```javascript
+// Na query SQL, adicionar na seleção de first_entries:
+// JOIN devices d ON al.device_id = d.id
+// SELECT ... d.configuration as device_configuration
+
+// No .map() final (linha 1157):
+const config = safeParseJson(r.device_configuration, {});
+const accessLocation = config.access_location || 'bordo';
+const locationLabel = accessLocation === 'dique' ? 'Dique' : 'Bordo';
+return {
+  ...
+  location: locationLabel,  // era: r.device_name
+};
+```
 
 | Arquivo | Mudança |
 |---|---|
-| `src/index.css` (linha 127) | Trocar filtro de `invert(100%) hue-rotate(180deg) brightness(0.85) contrast(1.2) saturate(0.3)` para `brightness(1.4) contrast(1.1)` (versão original) |
-| `src/components/devices/BrazilMap.tsx` (linha 143-144) | `getTileUrl()` volta a usar tile escuro no dark mode: `dark_all` quando escuro, `light_all` quando claro |
-| `src/components/devices/BrazilMapModal.tsx` (linha 15-17) | Mesma mudança no `getTileUrl()` |
-
-### Código
-
-**CSS** — filtro simples original:
-```css
-.dark .leaflet-tile-pane {
-  filter: brightness(1.4) contrast(1.1);
-}
-```
-
-**getTileUrl()** — volta a usar tile escuro no dark mode:
-```typescript
-function getTileUrl() {
-  const dark = document.documentElement.classList.contains('dark');
-  return dark
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-}
-```
-
-Nenhuma outra alteração será afetada.
+| `electron/database.js` | JOIN com `devices` + usar `configuration.access_location` em vez de `device_name` |
 
