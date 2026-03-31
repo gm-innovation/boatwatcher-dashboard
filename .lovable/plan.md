@@ -1,32 +1,24 @@
 
 
-## Ajustes na Tela de Acesso
+## Dismiss toast ao voltar para o teclado
 
-### 1. Remover OfflineIndicator (`AccessControl.tsx`)
-- Remover o bloco `<OfflineIndicator ... />` do header de branding
-- Remover o import do componente
+O toast de confirmação fica visível mesmo após o retorno automático ao teclado. A solução é capturar o `id` retornado pelo `toast()` e chamar `dismiss(id)` dentro do `setTimeout`, antes de `handleNewAccess()`.
 
-### 2. Aumentar padding do header (`AccessControl.tsx`)
-- Trocar `p-3` para `p-6` no bloco de branding para dar espaço à logo
+### Alteração em `src/pages/AccessControl.tsx`
 
-### 3. Buscar campo `role` do trabalhador (`useOfflineAccessControl.ts`)
-- Adicionar `role` ao select da query: `'id, name, code, document_number, photo_url, company_id, status, job_function_id, role'`
-- Adicionar `role` ao `CachedWorker` interface: `role?: string | null`
-- Mapear `role` no objeto cached
+Na função `handleConfirm`, guardar o retorno do `toast()` e dismissá-lo no timeout:
 
-### 4. Exibir Cargo/Função corretamente (`WorkerCard.tsx`)
-- Remover o cast `(worker as any).role` — usar `worker.role` tipado
-- Garantir que tanto `job_function_name` (Função) quanto `role` (Cargo) sejam exibidos quando presentes
+```typescript
+const { dismiss } = toast({
+  title: direction === 'entry' ? '✅ Entrada registrada' : '🔴 Saída registrada',
+  description: `${selectedWorker.name} - ${terminal.name}`,
+});
 
-### 5. Centralizar toast na tela (`toast.tsx`)
-- Alterar `ToastViewport` de `top-0 ... sm:bottom-0 sm:right-0` para centralizado: `fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2`
+setTimeout(() => {
+  dismiss();
+  handleNewAccess();
+}, 1200);
+```
 
-### Arquivos afetados
-
-| Arquivo | Ação |
-|---|---|
-| `src/pages/AccessControl.tsx` | Remover OfflineIndicator, aumentar padding |
-| `src/hooks/useOfflineAccessControl.ts` | Adicionar `role` à interface e query |
-| `src/components/access-control/WorkerCard.tsx` | Usar `worker.role` tipado |
-| `src/components/ui/toast.tsx` | Centralizar viewport |
+Somente este trecho precisa ser alterado — 1 arquivo, ~3 linhas.
 
