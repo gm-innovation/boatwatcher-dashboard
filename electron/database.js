@@ -1111,7 +1111,7 @@ function createDatabaseAPI(db, startCode) {
 
       const rows = db.prepare(`
         WITH first_entries AS (
-          SELECT al.worker_id, al.worker_name, al.device_name, al.timestamp,
+          SELECT al.worker_id, al.worker_name, al.device_name, al.device_id, al.timestamp,
             ROW_NUMBER() OVER (
               PARTITION BY COALESCE(al.worker_name, al.worker_id)
               ORDER BY al.timestamp ASC
@@ -1125,8 +1125,10 @@ function createDatabaseAPI(db, startCode) {
             ${deviceFilter}
         )
         SELECT fe.worker_id, fe.worker_name, fe.device_name, fe.timestamp as entry_time,
-          w.name, w.role, w.company_id, c.name as company_name
+          w.name, w.role, w.company_id, c.name as company_name,
+          d.configuration as device_configuration
         FROM first_entries fe
+        LEFT JOIN devices d ON fe.device_id = d.id
         LEFT JOIN workers w ON fe.worker_id = w.id
         LEFT JOIN companies c ON w.company_id = c.id
         WHERE fe.rn = 1
@@ -1151,10 +1153,13 @@ function createDatabaseAPI(db, startCode) {
           // so the frontend interprets them correctly as local time
           entryTime = entryTime + '-03:00';
         }
+        const config = safeParseJson(r.device_configuration, {});
+        const accessLocation = config.access_location || 'bordo';
+        const locationLabel = accessLocation === 'dique' ? 'Dique' : 'Bordo';
         return {
           id: r.worker_id,
           name: r.name || r.worker_name,
-          location: r.device_name,
+          location: locationLabel,
           role: r.role,
           company: r.company_name || 'N/A',
           company_id: r.company_id,
