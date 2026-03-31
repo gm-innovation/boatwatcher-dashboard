@@ -39,11 +39,15 @@ function createShipIcon(color: string, size: number = 36) {
           fill:${color};
           filter:drop-shadow(0 0 3px ${color}) drop-shadow(0 0 8px ${color}) drop-shadow(0 0 14px ${color});
         ">
-          <path d="M3 17h1.2l1.8-5.4V8h4V5h4v3h4v3.6L19.8 17H21l1 2H2l1-2zM12 8H9v3.6L7.8 15h8.4L15 11.6V8h-3z" fill="${color}" opacity="0.3"/>
-          <path d="M6 8h12v3.6L19.8 17H4.2L6 11.6V8z" fill="none" stroke="${color}" stroke-width="1.2"/>
-          <path d="M10 5h4v3h-4z" fill="none" stroke="${color}" stroke-width="1.2"/>
-          <path d="M12 2v3" fill="none" stroke="${color}" stroke-width="1.2"/>
-          <path d="M2 19l1-2h18l1 2" fill="none" stroke="${color}" stroke-width="1.2"/>
+          <path d="M2 20 L4 16 L20 16 L22 20 Z" fill="${color}" opacity="0.25"/>
+          <path d="M2 20 L4 16 L20 16 L22 20 Z" fill="none" stroke="${color}" stroke-width="1.0"/>
+          <path d="M6 16 L6 11 L14 11 L14 16" fill="${color}" opacity="0.15"/>
+          <path d="M6 16 L6 11 L14 11 L14 16" fill="none" stroke="${color}" stroke-width="1.0"/>
+          <path d="M15 16 L15 9 L19 9 L19 16" fill="${color}" opacity="0.2"/>
+          <path d="M15 16 L15 9 L19 9 L19 16" fill="none" stroke="${color}" stroke-width="1.0"/>
+          <path d="M16.5 9 L16.5 5" stroke="${color}" stroke-width="1.2"/>
+          <path d="M17.5 9 L17.5 6" stroke="${color}" stroke-width="1.0"/>
+          <path d="M8 11 L8 8 L12 8 L12 11" fill="none" stroke="${color}" stroke-width="0.8"/>
         </svg>
       </div>
     `,
