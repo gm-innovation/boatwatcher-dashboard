@@ -6,7 +6,6 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getRuntimeProfile } from "@/lib/runtimeProfile";
-import { Capacitor } from '@capacitor/core';
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import ProjectSettings from "./pages/ProjectSettings";
@@ -46,7 +45,7 @@ const SuspenseFallback = () => (
   <div className="flex items-center justify-center min-h-screen">Carregando...</div>
 );
 
-const isNative = Capacitor.isNativePlatform();
+const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
 
 const NativeRoutes = () => (
   <Routes>
