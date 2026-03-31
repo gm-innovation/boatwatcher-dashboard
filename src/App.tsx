@@ -17,6 +17,7 @@ import UserRegistration from "./pages/UserRegistration";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 import Visitors from "./pages/Visitors";
+import AccessControl from "./pages/AccessControl";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { MainLayout } from "./components/layouts/MainLayout";
 import { AuthProvider } from "@/contexts/AuthContext";
