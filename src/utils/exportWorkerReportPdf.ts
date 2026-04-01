@@ -336,7 +336,7 @@ export async function exportStandardWorkerPdf(opts: PdfOptions) {
    PDF DETALHADO — Retrato, ficha por trabalhador
    ═══════════════════════════════════════════════════ */
 
-export function exportDetailedWorkerPdf(opts: PdfOptions) {
+export async function exportDetailedWorkerPdf(opts: PdfOptions) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const availableWidth = pageWidth - MARGIN * 2;
@@ -344,7 +344,7 @@ export function exportDetailedWorkerPdf(opts: PdfOptions) {
   const dayRows = opts.rows.filter(r => classifyShift(r) === 'day');
   const nightRows = opts.rows.filter(r => classifyShift(r) === 'night');
 
-  let y = drawHeader(doc, 'Relatório de Controle de Acessos de Colaboradores', opts, dayRows.length, nightRows.length);
+  let y = await drawHeader(doc, 'Relatório de Controle de Acessos de Colaboradores', opts, dayRows.length, nightRows.length);
 
   opts.rows.forEach((row, idx) => {
     // Estimate space
