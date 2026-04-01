@@ -1,44 +1,48 @@
 
 
-## Reformular aba "Todos Trabalhadores" — Lista de Trabalhadores que Acessaram
+## Corrigir PDFs — Adicionar Logos, Cabeçalho e Layout Correto
 
-### Contexto
-A aba "Todos Trabalhadores" atualmente exibe logs brutos de acesso (cada evento individual). O objetivo real é mostrar uma **lista deduplicada de trabalhadores únicos** que acessaram a embarcação no período selecionado, agrupados por empresa — conforme o print de referência.
+### Problema
+Os PDFs exportados na aba "Todos Trabalhadores" (`ReportsList.tsx`) usam a função genérica `exportAccessLogsToPdf` que não tem logos, info do projeto, nem o layout correto. O PDF deveria seguir o mesmo padrão dos relatórios de trabalhadores e empresas (logos, título, projeto, local, resumo, tabela estilizada).
 
-### O que muda
+### Solução
 
-**Arquivo: `src/components/reports/ReportsList.tsx`** — reescrever completamente
+#### 1. Criar `exportAllWorkersReportPdf` em `src/utils/exportWorkerReportPdf.ts`
 
-1. **Dados**: Continuar usando `useAccessLogs` para buscar os logs do período, mas processar client-side para extrair trabalhadores únicos
-2. **Deduplicação**: Agrupar logs por `worker_id`, extraindo de cada grupo: `worker_name`, `worker_document`, `company_name` (via lookup), `code` e `job_function`
-   - Para obter empresa e função, buscar workers via `useWorkers` (ou dados já disponíveis nos logs)
-   - Precisarei consultar a tabela `workers` para obter `code` e `job_function_id`, e `companies` para nome da empresa
-3. **Agrupamento por empresa**: Renderizar seção por empresa com logo e nome (como no print), listando os trabalhadores daquela empresa
-4. **Colunas da tabela**: Nº (code serial), Nome, Empresa, CPF, Função
-5. **Busca**: Filtro por nome/CPF mantido
-6. **Título**: "Todos os Trabalhadores com Acesso"
-7. **Exports PDF/Excel**: Atualizar para exportar a lista deduplicada (não logs brutos)
+Nova função dedicada que recebe a lista deduplicada de trabalhadores (não logs brutos) e gera o PDF seguindo o padrão existente:
 
-### Dados necessários (hooks adicionais)
-- `useWorkers(projectId)` — para obter `code`, `company_id`, `job_function_id`
-- `useCompanies()` — para nome da empresa
-- `useJobFunctions()` — para nome da função
+- **Logos**: Cliente (esquerda) e Sistema (direita) — usando `drawLogos` já existente
+- **Título**: "Relatório de Todos os Trabalhadores Registrados"
+- **Metadados**: "Projeto: X | Local: Y", "Gerado em: dd/MM/yyyy HH:mm:ss"
+- **Resumo**: "Total de Trabalhadores: X | Total de Empresas: Y"
+- **Tabela**: Cabeçalho escuro, colunas: Nº, Nome, Empresa, CPF, Função
+- **Paginação**: "Página X de Y" no rodapé
 
-### Lógica de processamento
-```text
-accessLogs (período) 
-  → extrair worker_ids únicos com access_status === 'granted'
-  → cruzar com workers table para code, company_id, job_function_id
-  → agrupar por company_id
-  → renderizar seções por empresa
+Interface:
+```typescript
+interface AllWorkersReportOptions {
+  workers: { code: number | null; name: string; companyName: string; document: string; jobFunction: string }[];
+  projectName?: string;
+  projectLocation?: string;
+  clientLogoDataUrl?: string;
+  systemLogoDataUrl?: string;
+}
 ```
 
-### Layout (conforme print)
-- Header: "Todos os Trabalhadores com Acesso"
-- Para cada empresa: logo + nome como sub-header
-- Tabela: Nº | Nome | Empresa | CPF | Função
-- Botões: Exportar CSV, Exportar PDF
+#### 2. Atualizar `ReportsList.tsx`
 
-### Arquivo alterado
-- `src/components/reports/ReportsList.tsx` — reescrita completa do componente
+- Importar `exportAllWorkersReportPdf` e `loadImageAsDataUrl` de `exportWorkerReportPdf`
+- Receber `projectName`, `projectLocation`, `clientLogoUrl` como props (ou via contexto)
+- Tornar `handleExportPdf` async
+- Pré-carregar logos como Base64
+- Chamar `exportAllWorkersReportPdf` com dados deduplicados + logos + info do projeto
+- Adicionar `useSystemSettings` para buscar logo do sistema
+
+#### 3. Atualizar componente pai para passar props necessárias
+
+Verificar onde `ReportsList` é renderizado para garantir que `projectName`, `projectLocation`, e `clientLogoUrl` estão disponíveis.
+
+### Arquivos alterados
+- `src/utils/exportWorkerReportPdf.ts` — adicionar `exportAllWorkersReportPdf`
+- `src/components/reports/ReportsList.tsx` — refazer exports com logos e layout
 
