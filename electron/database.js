@@ -1175,11 +1175,11 @@ function createDatabaseAPI(db, startCode) {
         // Normalize timestamps
         let entryTime = state.entry_time;
         if (entryTime && !entryTime.includes('Z') && !entryTime.includes('+') && !entryTime.includes('-', 10)) {
-          entryTime = entryTime + 'Z';
+          entryTime = entryTime + '-03:00';
         }
         let firstEntryTime = firstEntryMap.get(key) || entryTime;
         if (firstEntryTime && !firstEntryTime.includes('Z') && !firstEntryTime.includes('+') && !firstEntryTime.includes('-', 10)) {
-          firstEntryTime = firstEntryTime + 'Z';
+          firstEntryTime = firstEntryTime + '-03:00';
         }
 
         onBoard.push({
