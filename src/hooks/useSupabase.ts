@@ -107,11 +107,12 @@ export const useCompanyLogo = (companyId: string | null) => {
 export type DateFilter = 'today' | '7days' | '30days';
 
 export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilter = 'today') => {
-  // UTC-aware: compute local midnight then convert to ISO for correct timezone offset
+  // Fixed BRT midnight (UTC-3) — ensures consistent filtering regardless of browser timezone
   const now = new Date();
   const daysBack = dateFilter === 'today' ? 0 : dateFilter === '7days' ? 7 : 30;
-  const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack);
-  const startTimestamp = localMidnight.toISOString();
+  const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysBack));
+  todayUTC.setUTCHours(3, 0, 0, 0); // meia-noite BRT = 03:00 UTC
+  const startTimestamp = todayUTC.toISOString();
 
   return useQuery({
     queryKey: ['workers-on-board', projectId, startTimestamp],
@@ -143,7 +144,7 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
       return [];
     },
     enabled: !!projectId,
-    refetchInterval: 10000,
+    refetchInterval: 5000,
   });
 };
 
