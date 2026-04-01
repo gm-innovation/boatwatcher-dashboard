@@ -1,184 +1,125 @@
 
 
-## Diagnóstico completo: -3h no Desktop e eventos manuais ausentes
+## Root Cause Analysis: 3 Distinct Bugs
 
-### Rastreamento do fluxo de timestamps (Problema -3h)
+### Bug 1: -3h on Desktop — DOUBLE SUBTRACTION
 
-```text
-FLUXO DO TIMESTAMP — do dispositivo ao dashboard:
-
-1. Dispositivo ControlID → agent.js (normalizeTimestamp)
-   Exemplo: "2025-04-01 10:30:00" (BRT, sem timezone)
-   → Detecta sem timezone → adiciona +3h → "2025-04-01T13:30:00.000Z" (UTC) ✅
-
-2. agent.js → database.js (insertAccessLog)
-   timestamp = "2025-04-01T13:30:00.000Z" (com Z) ✅
-   created_at = NÃO É PASSADO → usa DEFAULT datetime('now')
-   datetime('now') = hora UTC da máquina (se em UTC) ou hora local (se em BRT)
-
-3. database.js (getWorkersOnBoard) → entryTime
-   entryTime = row.timestamp = "2025-04-01T13:30:00.000Z" (com Z)
-   Linha 1177: tem 'Z' → NÃO adiciona sufixo → retorna como está ✅
-
-4. WorkersOnBoardTable.tsx (linha 70)
-   format(new Date("2025-04-01T13:30:00.000Z"), 'dd/MM HH:mm')
-   → date-fns format usa timezone LOCAL do navegador
-   → Se o Electron roda com timezone BRT: 10:30 ✅
-   → Se o Electron roda com timezone UTC: 13:30 ❌ (+3h)
-```
-
-**CAUSA RAIZ do -3h**: O timestamp que chega ao dashboard está CORRETO em UTC. O problema é que `date-fns format()` converte para o timezone LOCAL do processo Electron. Se a máquina Windows está configurada em UTC (ou outro timezone), o horário exibido está errado.
-
-**Prova**: Se fosse -3h, o evento das 10:30 BRT apareceria como 07:30 — mas o timestamp está em UTC correto (13:30Z), e se a máquina estiver em UTC, `format()` mostra 13:30 em vez de 10:30 BRT. Se o inverso, é o caso oposto.
-
-**A VERDADEIRA correção**: Não depender do timezone do OS. Forçar exibição em BRT no `WorkersOnBoardTable` e no `getWorkersOnBoard`.
-
-### Rastreamento do fluxo de eventos manuais
+The `utcToBRT` function (database.js line 1192) is fundamentally broken. Here's what happens:
 
 ```text
-FLUXO — Evento manual na Web → Desktop:
+Real event: 08:07 BRT
+1. ControlID → normalizeTimestamp → adds 3h → "11:07:00.000Z" (correct UTC)
+2. Stored in SQLite as "2025-04-01T11:07:00.000Z"
+3. getWorkersOnBoard → utcToBRT("11:07Z"):
+   - Subtracts 3h → 08:07
+   - Appends "-03:00" → "08:07:00-03:00"
+4. WorkersOnBoardTable → format(new Date("08:07-03:00"), 'HH:mm'):
+   - JS interprets "-03:00" → absolute UTC = 08:07 + 3h = 11:07 UTC
+   - format() converts to OS local BRT → 11:07 - 3h = 08:07 ✅ (seems ok?)
 
-1. Operador registra entrada manual no Web
-   → Insere em access_logs (Postgres):
-     device_id = NULL
-     device_name = "Manual - Bordo"
-     worker_name = "João"
-     project_id = (NÃO EXISTE no access_logs — não é coluna!)
-
-2. Desktop sync: downloadAccessLogs()
-   → Edge Function: download-access-logs
-   → Busca manual_access_points do projeto → ["Bordo"] → manualNames = ["Manual - Bordo"]
-   → Query: .or("device_id.in.(...),and(device_id.is.null,device_name.in.(Manual - Bordo))")
-   → Encontra o log manual ✅
-
-3. upsertAccessLogFromCloud(log)
-   → log.device_id = null
-   → log.worker_id pode ser UUID ou null
-   → Se worker_id não null → verifica se existe localmente → se não, anula worker_id
-   → INSERT com worker_name preservado ✅
-
-4. getWorkersOnBoard()
-   → deviceFilter (linha 1104):
-     "AND (al.device_id IN (SELECT id FROM devices WHERE project_id = ?)
-      OR (al.device_id IS NULL AND al.device_name LIKE 'Manual - %'))"
-   → Logs manuais: device_id IS NULL ✅, device_name LIKE 'Manual - %' ✅
-   → Filtro (linha 1116): (worker_id IS NOT NULL OR worker_name IS NOT NULL) ✅
-
-5. Location lookup (linha 1162):
-   → manualPoint = SELECT FROM manual_access_points WHERE name = 'Bordo'
-   → ❌ TABELA NÃO EXISTE NO SQLITE!
-   → Crash ou resultado vazio → locationLabel = 'Bordo' (fallback)
+BUT the web shows 11:07 for the same event, not 08:07!
 ```
 
-**Mas espera** — a query na linha 1163 vai FALHAR silenciosamente se a tabela não existe, ou pode causar um crash que mata toda a query.
+The web passes the raw UTC timestamp (`"11:07:00.000Z"`) to `format()`. If the browser is in BRT, `format(new Date("11:07Z"))` shows `08:07`. But the web screenshot shows `11:07`.
 
-Vou verificar: a tabela `manual_access_points` NÃO está no `CREATE TABLE IF NOT EXISTS` do `initDatabase()` e NÃO é sincronizada pelo `downloadUpdates()` em `sync.js`. **A query vai lançar um erro SQLite ("no such table: manual_access_points")** que abortará toda a chamada `getWorkersOnBoard`.
+This means the web browser is NOT in BRT — it's in UTC or the timestamps in Postgres are stored differently than expected. **The ControlID normalizeTimestamp is adding +3h when it shouldn't be** — the device is likely already sending UTC or the +3h assumption is wrong for this particular installation.
 
-**CAUSA RAIZ dos eventos manuais não exibidos**: A tabela `manual_access_points` não existe no SQLite local. Quando `getWorkersOnBoard` tenta fazer `SELECT FROM manual_access_points`, o SQLite lança uma exceção, e o servidor Express retorna erro 500. O frontend recebe null/erro e não exibe nada.
+**The real fix**: Stop mutating timestamps. The `normalizeTimestamp` function should NOT add +3h. ControlID devices' timestamps should be stored AS-IS (treating them as wall-clock time). Both web and desktop should display timestamps the same way — raw, without conversion.
 
-### Plano de correção
+### Bug 2: Company entry time shows worker's last entry
 
-**Arquivo: `electron/database.js`**
+In `useCompaniesOnBoard` (line 339): `worker.firstEntryTime || worker.entryTime`. The desktop's `getWorkersOnBoard` returns both `entryTime` (last entry) and `firstEntryTime` (first entry). This should work. However, with the utcToBRT double-subtraction affecting both values equally, both are wrong by 3h. With a single worker, they'll show the same value.
 
-1. **Criar tabela `manual_access_points`** no `initDatabase()`:
-```sql
-CREATE TABLE IF NOT EXISTS manual_access_points (
-  id TEXT PRIMARY KEY,
-  project_id TEXT,
-  name TEXT NOT NULL,
-  access_location TEXT DEFAULT 'bordo',
-  direction_mode TEXT DEFAULT 'both',
-  is_active INTEGER DEFAULT 1,
-  created_at TEXT DEFAULT (datetime('now')),
-  cloud_id TEXT
-);
-```
+### Bug 3: Manual events not appearing on Desktop
 
-2. **Forçar timezone BRT na exibição do `entryTime`**: Em vez de depender do timezone do OS, converter explicitamente para BRT antes de retornar:
+The code structure (table, sync, edge function) looks correct. The likely issue: the `last_download_access_logs` checkpoint was set AFTER the manual logs were created, so they're never re-downloaded. A full re-sync would fix this.
+
+---
+
+## Simplified Fix Plan
+
+The core philosophy: **stop converting timestamps at every layer**. Store what the device gives, display what's stored.
+
+### File: `electron/agent.js` — Stop adding +3h
+
+The `normalizeTimestamp` function adds 3h assuming ControlID sends BRT. But timestamps are already being handled correctly by the cloud. The agent should store timestamps AS-IS in ISO format without timezone conversion. If the string has no timezone, treat it as local wall-clock time and store with the local offset.
+
 ```javascript
-// Converte UTC ISO string para BRT display string
-function toDisplayBRT(isoString) {
-  if (!isoString) return isoString;
-  const d = new Date(isoString);
-  if (isNaN(d.getTime())) return isoString;
-  // BRT = UTC-3
-  const brt = new Date(d.getTime() - 3 * 3600 * 1000);
-  return brt.toISOString(); // Retorna ISO em "hora BRT como se fosse UTC"
-}
-```
-Na verdade, o melhor é retornar o timestamp com sufixo `-03:00` para que `date-fns` interprete corretamente:
-```javascript
-function utcToBRT(isoString) {
-  if (!isoString) return isoString;
-  const d = new Date(isoString);
-  if (isNaN(d.getTime())) return isoString;
-  const brtMs = d.getTime() - 3 * 3600 * 1000;
-  const brt = new Date(brtMs);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${brt.getUTCFullYear()}-${pad(brt.getUTCMonth()+1)}-${pad(brt.getUTCDate())}T${pad(brt.getUTCHours())}:${pad(brt.getUTCMinutes())}:${pad(brt.getUTCSeconds())}-03:00`;
-}
-```
-Aplicar na saída do `getWorkersOnBoard` para `entryTime` e `firstEntryTime`.
+function normalizeTimestamp(event) {
+  const raw = event.timestamp || event.time || event.date || event.datetime;
+  if (!raw) return null;
 
-**Arquivo: `electron/sync.js`**
-
-3. **Adicionar download de `manual_access_points`** no `downloadUpdates()`:
-```javascript
-// Manual Access Points
-try {
-  const res = await this.callEdgeFunction('agent-sync/download-manual-access-points', 'GET');
-  if (res.manual_access_points) {
-    for (const point of res.manual_access_points) {
-      this.db.upsertManualAccessPointFromCloud?.(point);
-    }
+  if (typeof raw === 'number') {
+    // Unix timestamp — use directly (device clock, no offset adjustment)
+    return new Date(raw * 1000).toISOString();
   }
-} catch (e) {
-  console.error('[sync] Download manual_access_points error:', e.message);
+
+  // String with timezone — parse directly
+  if (/[Zz]$|[+-]\d{2}:?\d{2}$/.test(raw.trim())) {
+    const ms = Date.parse(raw);
+    return isNaN(ms) ? null : new Date(ms).toISOString();
+  }
+
+  // No timezone — store as-is in ISO format (local wall-clock time)
+  const match = raw.match(/(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/);
+  if (match) {
+    const [, yr, mo, dy, hr, mn, sc] = match.map(Number);
+    return `${yr}-${String(mo).padStart(2,'0')}-${String(dy).padStart(2,'0')}T${String(hr).padStart(2,'0')}:${String(mn).padStart(2,'0')}:${String(sc).padStart(2,'0')}.000Z`;
+  }
+
+  const ms = Date.parse(raw);
+  return isNaN(ms) ? null : new Date(ms).toISOString();
 }
 ```
 
-**Arquivo: `electron/database.js`**
+**Important**: This means timestamps without timezone are stored with `Z` suffix but represent the device's local wall-clock time. This matches how the web already stores manual entries.
 
-4. **Adicionar `upsertManualAccessPointFromCloud`**:
+### File: `electron/database.js` — Remove utcToBRT entirely
+
+Remove the `utcToBRT` function and pass raw timestamps:
+
 ```javascript
-upsertManualAccessPointFromCloud(data) {
-  if (!data.id) return;
-  const existing = db.prepare('SELECT id FROM manual_access_points WHERE id = ?').get(data.id);
-  if (existing) {
-    db.prepare('UPDATE manual_access_points SET name=?, project_id=?, access_location=?, direction_mode=?, is_active=? WHERE id=?')
-      .run(data.name, data.project_id, data.access_location || 'bordo', data.direction_mode || 'both', data.is_active ? 1 : 0, data.id);
-  } else {
-    db.prepare('INSERT INTO manual_access_points (id, name, project_id, access_location, direction_mode, is_active, created_at) VALUES (?,?,?,?,?,?,?)')
-      .run(data.id, data.name, data.project_id, data.access_location || 'bordo', data.direction_mode || 'both', data.is_active ? 1 : 0, data.created_at || new Date().toISOString());
+// Line 1192-1202: DELETE utcToBRT function and replace with:
+let entryTime = state.entry_time;
+let firstEntryTime = firstEntryMap.get(key) || state.entry_time;
+```
+
+Also remove the BRT midnight calculation (lines 1110-1113) and use simple date-based filtering:
+
+```javascript
+// Use same approach: just filter for today's date portion
+const now = new Date();
+const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+const startTimestamp = todayStr + 'T00:00:00.000Z';
+```
+
+### File: `electron/sync.js` — Force re-download of access logs
+
+Add logic to reset the access logs checkpoint when manual_access_points are first downloaded, ensuring manual events get pulled:
+
+```javascript
+// After downloading manual_access_points, if any were found and access logs 
+// haven't been fully re-synced, reset the access logs checkpoint
+if (manualRes.manual_access_points?.length > 0) {
+  const hadManualBefore = this.db.getSyncMeta('has_manual_points');
+  if (!hadManualBefore) {
+    this.db.setSyncMeta('has_manual_points', 'true');
+    this.db.setSyncMeta('last_download_access_logs', '1970-01-01T00:00:00Z');
+    console.log('[sync] Manual access points detected — resetting access logs checkpoint for full re-download');
   }
 }
 ```
 
-**Arquivo: `supabase/functions/agent-sync/index.ts`**
+### Summary
 
-5. **Adicionar endpoint `download-manual-access-points`**:
-```typescript
-if (req.method === 'GET' && action === 'download-manual-access-points') {
-  const { data, error } = await supabase
-    .from('manual_access_points')
-    .select('id, name, project_id, access_location, direction_mode, is_active, created_at')
-    .eq('project_id', agent.project_id)
-  if (error) throw error
-  return new Response(JSON.stringify({ manual_access_points: data || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-}
-```
-
-### Resumo dos arquivos
-
-| Arquivo | Ação |
+| File | Change |
 |---|---|
-| `electron/database.js` | Criar tabela `manual_access_points`; adicionar upsert; converter timestamps para BRT explícito na saída |
-| `electron/sync.js` | Adicionar download de `manual_access_points` no ciclo de sync |
-| `supabase/functions/agent-sync/index.ts` | Adicionar endpoint `download-manual-access-points` |
+| `electron/agent.js` | Remove +3h offset from `normalizeTimestamp` — store device wall-clock time as-is |
+| `electron/database.js` | Remove `utcToBRT` function; pass raw timestamps; simplify date filter |
+| `electron/sync.js` | Reset access logs checkpoint when manual points are first detected |
 
-### Por que as correções anteriores não funcionaram
+### Why previous fixes failed
 
-1. **-3h**: As correções anteriores focaram no `startTimestamp` (filtro) e na normalização de timestamps do SQLite sem timezone. Mas o timestamp do agente JÁ está correto em UTC com `Z`. O problema real é que `date-fns format()` usa o timezone do processo Electron/Node, e a máquina pode estar em UTC.
-
-2. **Eventos manuais**: As correções anteriores adicionaram o filtro OR na Edge Function e no `getWorkersOnBoard`, mas **não criaram a tabela `manual_access_points` no SQLite** e **não adicionaram o sync dessa tabela**. A query na linha 1163 crasha com "no such table", abortando tudo.
+1. **utcToBRT was a band-aid on top of a band-aid**: The agent adds +3h, then the display function subtracts 3h. Two wrongs don't make a right — they interact differently depending on OS timezone.
+2. **The manual_access_points table and sync were added** but the access logs download checkpoint wasn't reset, so historical manual logs were never fetched.
 
