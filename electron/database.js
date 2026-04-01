@@ -1108,8 +1108,10 @@ function createDatabaseAPI(db, startCode) {
     getWorkersOnBoard(projectId) {
       // Simple date-based filtering — timestamps are stored as wall-clock time
       const now = new Date();
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-      const startTimestamp = todayStr + 'T00:00:00.000Z';
+      // BRT midnight = 03:00 UTC (consistent with web filtering)
+      const todayBRT = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      todayBRT.setUTCHours(3, 0, 0, 0);
+      const startTimestamp = todayBRT.toISOString();
       // Temporal ceiling: ignore timestamps more than 2 min in the future (matches web)
       const maxTimestamp = new Date(Date.now() + 2 * 60 * 1000).toISOString();
 

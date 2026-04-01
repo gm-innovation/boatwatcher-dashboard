@@ -318,7 +318,7 @@ class SyncEngine {
   async downloadAccessLogs() {
     try {
       const since = this.db.getSyncMeta('last_download_access_logs') || '1970-01-01T00:00:00Z';
-      const response = await this.callEdgeFunction(`agent-sync/download-access-logs?since=${since}`, 'GET');
+      const response = await this.callEdgeFunction(`agent-sync/download-access-logs?since=${encodeURIComponent(since)}`, 'GET');
       if (response.access_logs && Array.isArray(response.access_logs)) {
         let count = 0;
         let maxCreatedAt = since;
