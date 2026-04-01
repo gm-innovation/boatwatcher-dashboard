@@ -198,7 +198,7 @@ async function drawHeader(
    PDF PADRÃO — Retrato, agrupado por turno
    ═══════════════════════════════════════════════════ */
 
-export function exportStandardWorkerPdf(opts: PdfOptions) {
+export async function exportStandardWorkerPdf(opts: PdfOptions) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const availableWidth = pageWidth - MARGIN * 2;
@@ -206,7 +206,7 @@ export function exportStandardWorkerPdf(opts: PdfOptions) {
   const dayRows = opts.rows.filter(r => classifyShift(r) === 'day');
   const nightRows = opts.rows.filter(r => classifyShift(r) === 'night');
 
-  let y = drawHeader(doc, 'Relatório de Acesso por Trabalhador', opts, dayRows.length, nightRows.length);
+  let y = await drawHeader(doc, 'Relatório de Acesso por Trabalhador', opts, dayRows.length, nightRows.length);
 
   // Column definitions for portrait A4 (~182mm available)
   const cols = [
