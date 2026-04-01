@@ -128,7 +128,7 @@ async function drawLogos(doc: jsPDF, clientLogo?: string, systemLogo?: string) {
   }
 }
 
-function drawHeader(
+async function drawHeader(
   doc: jsPDF,
   title: string,
   opts: PdfOptions,
@@ -138,7 +138,7 @@ function drawHeader(
   const pageWidth = doc.internal.pageSize.getWidth();
   const availableWidth = pageWidth - MARGIN * 2;
 
-  drawLogos(doc, opts.clientLogoDataUrl, opts.systemLogoDataUrl);
+  await drawLogos(doc, opts.clientLogoDataUrl, opts.systemLogoDataUrl);
 
   let y = 26;
 
