@@ -328,7 +328,7 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
                       {company.allExited ? (
                         <span className="text-sm text-muted-foreground">Todos saíram</span>
                       ) : (
-                        <Badge className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-1.5 py-0">
+                        <Badge className="border border-green-500 text-green-600 bg-transparent hover:bg-green-50 text-[10px] px-1.5 py-0">
                           A bordo
                         </Badge>
                       )}
