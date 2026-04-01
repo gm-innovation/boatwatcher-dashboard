@@ -30,12 +30,15 @@ interface RawLog {
 interface WorkerTimeRow {
   workerId: string;
   workerName: string;
+  workerCode?: number;
+  documentNumber: string;
   role: string;
   companyId: string;
   companyName: string;
   firstEntry: Date | null;
   lastExit: Date | null;
   totalMinutes: number;
+  effectiveMinutes: number;
   isOnBoard: boolean;
   rawLogs: RawLog[];
 }
