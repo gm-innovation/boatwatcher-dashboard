@@ -352,7 +352,7 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
                   </td>
                   <td className="p-3 text-center">
                     {totalOnBoard > 0 && (
-                      <Badge className="bg-green-600 hover:bg-green-700 text-white text-xs">
+                      <Badge className="border border-green-500 text-green-600 bg-green-50 hover:bg-green-100 text-xs">
                         A bordo agora: {totalOnBoard}
                       </Badge>
                     )}
