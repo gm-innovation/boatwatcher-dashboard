@@ -244,12 +244,13 @@ async function fetchWorkersOnBoardFromCloud(
 
     if (workersOnBoard.size === 0) return [];
 
-    // Build first entry map (entryLogs is ascending)
+    // Build first entry map from relevantLogs (already ordered by created_at ASC)
     const firstEntryMap = new Map<string, string>();
-    for (const entry of entryLogs || []) {
-      const key = entry.worker_name || entry.worker_id || '';
+    for (const log of relevantLogs) {
+      if (log.direction !== 'entry') continue;
+      const key = log.worker_name || log.worker_id || '';
       if (key && !firstEntryMap.has(key)) {
-        firstEntryMap.set(key, entry.timestamp);
+        firstEntryMap.set(key, log.timestamp);
       }
     }
 
