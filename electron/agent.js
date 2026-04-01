@@ -394,7 +394,7 @@ class AgentController {
     });
   }
 
-
+  async pollDevice(device, _retried = false) {
     const ip = device.controlid_ip_address;
     if (!ip) throw new Error('No IP');
 
@@ -417,7 +417,7 @@ class AgentController {
     }
     const postData = JSON.stringify(payload);
 
-    return new Promise((resolve, reject) => {
+    const pollResult = await new Promise((resolve, reject) => {
       const req = http.request({
         hostname: ip,
         port: creds.port,
@@ -448,35 +448,14 @@ class AgentController {
             const events = response.access_logs || response.events || [];
             if (!Array.isArray(events)) {
               console.log(`[Agent][${device.name}] Response is not an array. Keys: ${Object.keys(response).join(', ')}. Checking single-event fallback.`);
-              // Fallback: single event response (legacy /api/access/last format)
               if (response && (response.timestamp || response.time || response.date)) {
                 this.processEvent(device, response);
               }
-              resolve();
+              resolve({ events: [], session, lastEventId });
               return;
             }
 
             console.log(`[Agent][${device.name}] Received ${events.length} events (lastEventId=${lastEventId})`);
-
-            // Stale cursor detection: if 0 events returned but we have a cursor,
-            // the device may have reset its event buffer
-            if (events.length === 0 && lastEventId > 0) {
-              console.log(`[Agent][${device.name}] Zero events with lastEventId=${lastEventId}. Checking for stale cursor...`);
-              try {
-                const maxIdOnDevice = await this.fetchMaxEventId(device, session, creds);
-                if (maxIdOnDevice !== null && maxIdOnDevice < lastEventId) {
-                  console.warn(`[Agent][${device.name}] Stale cursor detected! Device maxId=${maxIdOnDevice} < lastEventId=${lastEventId}. Resetting cursor to 0.`);
-                  this.setLastEventId(device, 0);
-                  // Re-poll will happen on next cycle with cursor=0
-                } else {
-                  console.log(`[Agent][${device.name}] Cursor OK (device maxId=${maxIdOnDevice}, lastEventId=${lastEventId}). No new events.`);
-                }
-              } catch (fallbackErr) {
-                console.warn(`[Agent][${device.name}] Stale cursor check failed: ${fallbackErr.message}`);
-              }
-              resolve();
-              return;
-            }
 
             let maxId = lastEventId;
             for (const rawEvent of events) {
@@ -492,10 +471,11 @@ class AgentController {
             if (events.length > 0) {
               console.log(`[Agent][${device.name}] Polled ${events.length} events (lastId: ${lastEventId} → ${maxId})`);
             }
+            resolve({ events, session, lastEventId });
           } catch (parseErr) {
             console.error(`[Agent][${device.name}] Failed to parse response: ${parseErr.message}. Raw body (first 500 chars): ${data.slice(0, 500)}`);
+            resolve({ events: [], session, lastEventId });
           }
-          resolve();
         });
       });
 
@@ -504,6 +484,23 @@ class AgentController {
       req.write(postData);
       req.end();
     });
+
+    // Stale cursor detection AFTER the promise resolves (proper async context)
+    if (pollResult.events.length === 0 && pollResult.lastEventId > 0) {
+      console.log(`[Agent][${device.name}] Zero events with lastEventId=${pollResult.lastEventId}. Checking for stale cursor...`);
+      try {
+        const creds2 = this.parseApiCredentials(device.api_credentials);
+        const maxIdOnDevice = await this.fetchMaxEventId(device, pollResult.session, creds2);
+        if (maxIdOnDevice !== null && maxIdOnDevice < pollResult.lastEventId) {
+          console.warn(`[Agent][${device.name}] Stale cursor detected! Device maxId=${maxIdOnDevice} < lastEventId=${pollResult.lastEventId}. Resetting cursor to 0.`);
+          this.setLastEventId(device, 0);
+        } else {
+          console.log(`[Agent][${device.name}] Cursor OK (device maxId=${maxIdOnDevice}, lastEventId=${pollResult.lastEventId}). No new events.`);
+        }
+      } catch (fallbackErr) {
+        console.warn(`[Agent][${device.name}] Stale cursor check failed: ${fallbackErr.message}`);
+      }
+    }
   }
 
   processEvent(device, rawEvent) {
