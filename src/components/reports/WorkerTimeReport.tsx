@@ -135,6 +135,15 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
         totalMinutes = diffMs > 0 ? Math.round(diffMs / 60000) : 0;
       }
 
+      // Effective minutes: sum of individual entry→exit pairs
+      let effectiveMinutes = 0;
+      for (let i = 0; i < alternating.length - 1; i += 2) {
+        if (alternating[i].direction === 'entry' && alternating[i + 1]?.direction === 'exit') {
+          const pairMs = new Date(alternating[i + 1].timestamp).getTime() - new Date(alternating[i].timestamp).getTime();
+          if (pairMs > 0) effectiveMinutes += Math.round(pairMs / 60000);
+        }
+      }
+
       const worker = workerById.get(key) || findWorker(logs[0]);
       const companyObj = worker?.companies as any;
       const jobObj = worker?.job_functions as any;
@@ -142,12 +151,15 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
       results.push({
         workerId: worker?.id || key,
         workerName: worker?.name || logs[0]?.worker_name || 'Desconhecido',
+        workerCode: worker?.code,
+        documentNumber: worker?.document_number || '',
         role: jobObj?.name || worker?.role || '-',
         companyId: companyObj?.id || worker?.company_id || '',
         companyName: companyObj?.name || 'Sem empresa',
         firstEntry,
         lastExit: isOnBoard ? null : lastExit,
         totalMinutes,
+        effectiveMinutes,
         isOnBoard,
         rawLogs: normalizeAlternatingLogs(
           sorted.filter(l => l.access_status === 'granted' && (l.direction === 'entry' || l.direction === 'exit'))
