@@ -1106,11 +1106,10 @@ function createDatabaseAPI(db, startCode) {
 
     // === Workers On Board ===
     getWorkersOnBoard(projectId) {
-      // Fixed BRT midnight (UTC-3) — ensures consistent filtering regardless of server timezone
+      // Simple date-based filtering — timestamps are stored as wall-clock time
       const now = new Date();
-      const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-      todayUTC.setUTCHours(3, 0, 0, 0); // meia-noite BRT = 03:00 UTC
-      const startTimestamp = todayUTC.toISOString();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      const startTimestamp = todayStr + 'T00:00:00.000Z';
       // Temporal ceiling: ignore timestamps more than 2 min in the future (matches web)
       const maxTimestamp = new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
