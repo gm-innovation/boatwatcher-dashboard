@@ -144,7 +144,7 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
       return [];
     },
     enabled: !!projectId,
-    refetchInterval: 10000,
+    refetchInterval: 5000,
   });
 };
 
