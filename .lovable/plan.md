@@ -1,52 +1,84 @@
 
 
-## Relatórios PDF de Trabalhadores — Padrão e Detalhado
+## Recriar Layout dos PDFs — Formato Retrato com Logos
 
-### Resumo
+### Contexto
 
-Substituir o botão "PDF" único por dois botões: **PDF Padrão** (tabela resumida com primeira entrada, última saída, tempo bruto) e **PDF Detalhado** (ficha por trabalhador com todos os eventos individuais e tempo efetivo descontando ausências).
+Os prints mostram o layout desejado com:
+- **Logo do cliente** (OceanPact) à esquerda e **logo do sistema** (googlemarine) à direita no cabeçalho
+- Formato **retrato** (portrait) em ambos os PDFs
+- Cabeçalho com: título, projeto + local, período, contagem de trabalhadores (diurnos/noturnos), empresas
+- Nota sobre `(*)` indicando permanência além do período
+- **PDF Padrão**: agrupado por período (Diurno 05:00-18:59 / Noturno 19:00-04:59), não por empresa
+- **PDF Detalhado**: seção individual por trabalhador com registros separados por período diurno/noturno, e informações detalhadas (primeira entrada, status, tempo total, tempo efetivo)
+- Linha horizontal separadora antes de cada seção principal
 
-### Arquivos
+### Arquivos alterados
 
-| Arquivo | Ação |
+| Arquivo | Mudança |
 |---------|------|
-| `src/utils/exportWorkerReportPdf.ts` | **Novo** — duas funções de geração PDF |
-| `src/components/reports/WorkerTimeReport.tsx` | Modificar — adicionar CPF ao data model, dois botões PDF, calcular tempo efetivo |
+| `src/utils/exportWorkerReportPdf.ts` | Reescrever ambas funções com novo layout |
+| `src/components/reports/WorkerTimeReport.tsx` | Passar dados de projeto (location, client logos, system logo) para as funções de PDF |
 
-### 1. Novo utilitário `exportWorkerReportPdf.ts`
+### 1. Interface de opções — adicionar campos de logo e projeto
 
-**`exportStandardWorkerPdf(options)`** — PDF Padrão:
-- Cabeçalho: título, projeto, período, data de geração
-- Resumo: total trabalhadores, a bordo, total empresas
-- Tabela única com colunas: Nº, Nome, CPF, Função, Empresa, Entrada (primeira), Saída (última), Total (tempo bruto = última saída - primeira entrada)
-- Agrupado por empresa (linha de cabeçalho com nome da empresa)
-- Landscape A4 para caber todas as colunas
+```typescript
+interface PdfOptions {
+  rows: WorkerRow[];
+  grouped: [string, WorkerRow[]][];
+  startDate: string;
+  endDate: string;
+  projectName?: string;
+  projectLocation?: string;
+  clientLogoUrl?: string;   // logo_url_light da company/client do projeto
+  systemLogoUrl?: string;   // system_logo light_url
+}
+```
 
-**`exportDetailedWorkerPdf(options)`** — PDF Detalhado:
-- Cabeçalho igual ao padrão
-- Para cada trabalhador, seção individual com:
-  - Dados: Nº, Nome, CPF, Função, Empresa
-  - Tabela de todos os eventos individuais: Data/Hora, Tipo (Entrada/Saída), Dispositivo
-  - Tempo bruto (última saída - primeira entrada)
-  - **Tempo efetivo**: soma dos pares entrada→saída individuais (desconta ausências)
-  - Indicador "A bordo" se última ação foi entrada
-- Quebra de página entre trabalhadores (ou agrupamento compacto se poucos eventos)
+### 2. Novo `drawHeader` com logos
 
-### 2. Mudanças em `WorkerTimeReport.tsx`
+- Carregar as duas imagens (client logo esquerda, system logo direita) como `Image()` com `crossOrigin = 'anonymous'`
+- Se falhar o carregamento, ignorar a logo e usar espaço para texto
+- Título: "Relatório de Acesso por Trabalhador" (padrão) ou "Relatório de Controle de Acessos de Colaboradores" (detalhado)
+- Subtítulo: `Projeto: {name} | Local: {location}`
+- Período: `Período: dd/MM/yyyy a dd/MM/yyyy`
+- Contagem: `Total de Trabalhadores: X (Diurnos: Y, Noturnos: Z) | Total de Empresas: W`
+- Data geração em verde/cinza claro
+- Nota `(*)` em itálico
+- Linha horizontal separadora
 
-- Adicionar `documentNumber` (CPF) ao interface `WorkerTimeRow` e ao `useMemo` de processamento (já disponível via query de workers: `document_number`)
-- Adicionar cálculo de `effectiveMinutes` (soma dos pares entry→exit individuais) ao `WorkerTimeRow`
-- Substituir botão "PDF" por dropdown com duas opções:
-  - "PDF Padrão" → chama `exportStandardWorkerPdf`
-  - "PDF Detalhado" → chama `exportDetailedWorkerPdf`
-- Passar dados já processados (filteredRows com rawLogs, grouped) para as funções de PDF
+### 3. PDF Padrão — agrupar por período, não por empresa
+
+Mudança principal: em vez de agrupar por empresa, agrupar os trabalhadores em dois blocos:
+- **"Trabalhadores - Período Diurno (05:00 - 18:59)"**: trabalhadores cuja primeira entrada foi entre 05:00-18:59
+- **"Trabalhadores - Período Noturno (19:00 - 04:59)"**: trabalhadores cuja primeira entrada foi entre 19:00-04:59
+- Se um período não tem trabalhadores: "Nenhum trabalhador noturno neste período."
+- Colunas: Nº (código), Nome, CPF, Função, Empresa, Entrada (com indicador D/N), Saída, Total
+- Usar `workerCode` (não índice sequencial) na coluna Nº
+- Orientação: **portrait** A4
+
+### 4. PDF Detalhado — seção por trabalhador com períodos
+
+Para cada trabalhador:
+- Linha horizontal separadora
+- **"Trabalhador: {Nome} (Nº: {código})"** em bold
+- CPF, Função, Empresa numa linha
+- Primeira Entrada no Período, Status ao Final, Tempo Total, Tempo Efetivo
+- Sub-seção **"Registros Diurnos (05:00 - 18:59)"** com lista cronológica: data, hora, ENTRADA/SAÍDA, dispositivo
+- Sub-seção **"Registros Noturnos (19:00 - 04:59)"** idem
+- Orientação: **portrait** A4
+
+### 5. WorkerTimeReport.tsx — passar dados extras
+
+- Buscar o projeto selecionado (com `client_id`) para obter `location` e `client.logo_url_light`
+- Buscar `system_logo` setting (light_url)
+- Passar `projectName`, `projectLocation`, `clientLogoUrl`, `systemLogoUrl` para ambas funções de export
+- Pré-carregar as imagens como data URLs antes de chamar o export (usando `fetch` + `blob` + `toDataURL` via canvas) para evitar problemas de CORS no jsPDF
 
 ### Detalhes técnicos
 
-- Usa `jsPDF` (já instalado) com layout manual
-- Tempo bruto = `lastExit - firstEntry` (já calculado como `totalMinutes`)
-- Tempo efetivo = soma de `(exit[i].timestamp - entry[i].timestamp)` para cada par alternado nos rawLogs
-- CPF vem do campo `document_number` do worker, já disponível na query existente
-- Não precisa de queries adicionais ao banco — todos os dados já estão carregados no componente
-- Os PDFs são gerados client-side e baixados diretamente
+- As logos são carregadas como base64 data URLs antes de passar ao jsPDF (resolve CORS)
+- `jsPDF.addImage(dataUrl, 'PNG', x, y, w, h)` para posicionar as logos
+- Classificação diurno/noturno baseada na hora da primeira entrada do trabalhador
+- O formato passa de landscape para **portrait** no PDF padrão (colunas mais compactas)
 
