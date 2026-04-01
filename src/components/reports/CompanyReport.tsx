@@ -155,24 +155,12 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
       stats.workerExitStatus.set(workerId, !isOnBoard);
       if (isOnBoard) stats.onBoardNow++;
 
-      // Calculate total minutes from entry→exit pairs
-      let lastEntry: string | null = null;
-      for (const log of sorted) {
-        if (log.direction === 'entry') {
-          lastEntry = log.timestamp;
-        } else if (log.direction === 'exit' && lastEntry) {
-          const mins = differenceInMinutes(parseISO(log.timestamp), parseISO(lastEntry));
-          if (mins > 0 && mins < 1440) {
-            stats.totalMinutes += mins;
-          }
-          lastEntry = null;
-        }
-      }
-      // If still on board, add time from last entry to now
-      if (isOnBoard && lastEntry) {
-        const mins = differenceInMinutes(new Date(), parseISO(lastEntry));
-        if (mins > 0 && mins < 1440) {
-          stats.totalMinutes += mins;
+      // Track last exit for this worker
+      const exitLogs = sorted.filter(l => l.direction === 'exit');
+      if (exitLogs.length > 0) {
+        const lastExitDate = new Date(exitLogs[exitLogs.length - 1].timestamp);
+        if (!stats.lastExit || lastExitDate > stats.lastExit) {
+          stats.lastExit = lastExitDate;
         }
       }
     });
