@@ -1106,11 +1106,10 @@ function createDatabaseAPI(db, startCode) {
 
     // === Workers On Board ===
     getWorkersOnBoard(projectId) {
-      // Fixed BRT midnight (UTC-3) — ensures consistent filtering regardless of server timezone
+      // Simple date-based filtering — timestamps are stored as wall-clock time
       const now = new Date();
-      const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-      todayUTC.setUTCHours(3, 0, 0, 0); // meia-noite BRT = 03:00 UTC
-      const startTimestamp = todayUTC.toISOString();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      const startTimestamp = todayStr + 'T00:00:00.000Z';
       // Temporal ceiling: ignore timestamps more than 2 min in the future (matches web)
       const maxTimestamp = new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
@@ -1187,19 +1186,9 @@ function createDatabaseAPI(db, startCode) {
           locationLabel = 'Bordo';
         }
 
-        // Force BRT display — convert any UTC timestamp to BRT offset string
-        // so date-fns format() shows correct BRT time regardless of OS timezone
-        function utcToBRT(isoString) {
-          if (!isoString) return isoString;
-          const d = new Date(isoString);
-          if (isNaN(d.getTime())) return isoString;
-          const brtMs = d.getTime() - 3 * 3600 * 1000;
-          const brt = new Date(brtMs);
-          const pad = (n) => String(n).padStart(2, '0');
-          return `${brt.getUTCFullYear()}-${pad(brt.getUTCMonth()+1)}-${pad(brt.getUTCDate())}T${pad(brt.getUTCHours())}:${pad(brt.getUTCMinutes())}:${pad(brt.getUTCSeconds())}-03:00`;
-        }
-        let entryTime = utcToBRT(state.entry_time);
-        let firstEntryTime = utcToBRT(firstEntryMap.get(key) || state.entry_time);
+        // Pass raw timestamps — no conversion needed since they're stored as wall-clock time
+        let entryTime = state.entry_time;
+        let firstEntryTime = firstEntryMap.get(key) || state.entry_time;
 
         onBoard.push({
           id: state.worker_id,

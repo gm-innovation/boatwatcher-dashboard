@@ -507,6 +507,16 @@ class SyncEngine {
           }
         }
         console.log(`[sync] Downloaded ${manualRes.manual_access_points.length} manual_access_points`);
+
+        // If manual points exist but we haven't done a full re-sync yet, reset access logs checkpoint
+        if (manualRes.manual_access_points.length > 0) {
+          const hadManualBefore = this.db.getSyncMeta?.('has_manual_points');
+          if (!hadManualBefore) {
+            this.db.setSyncMeta?.('has_manual_points', 'true');
+            this.db.setSyncMeta?.('last_download_access_logs', '1970-01-01T00:00:00Z');
+            console.log('[sync] Manual access points detected — resetting access logs checkpoint for full re-download');
+          }
+        }
       }
     } catch (e) {
       console.error('[sync] Download manual_access_points error:', e.message);

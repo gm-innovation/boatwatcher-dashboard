@@ -43,42 +43,31 @@ function normalizeTimestamp(event) {
   const raw = event.timestamp || event.time || event.date || event.datetime;
   if (!raw) return null;
 
-  // ControlID reports local time (BRT, UTC-3) in ALL formats.
+  // Store device timestamps AS-IS — no timezone conversion.
+  // ControlID devices report wall-clock time; we preserve it directly.
   if (typeof raw === 'number') {
-    // Numeric Unix timestamps from device local clock (BRT) — add 3h to get real UTC
-    const d = new Date(raw * 1000);
-    d.setHours(d.getHours() + 3);
-    return d.toISOString();
+    // Unix timestamp — use directly without offset adjustment
+    return new Date(raw * 1000).toISOString();
   }
 
-  // String timestamp — check if it already has timezone info at the END of the string
-  // The old regex /[Zz+\-]\d{2}/ matched date hyphens like "-27" in "2025-03-27", causing
-  // the +3h correction to be skipped. Use anchored regex that only matches timezone suffixes.
+  // String with timezone suffix — parse directly
   const hasTimezone = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(raw.trim());
-
   if (hasTimezone) {
-    // Already has timezone — parse directly
     const ms = Date.parse(raw);
-    if (isNaN(ms)) return null;
-    return new Date(ms).toISOString();
+    return isNaN(ms) ? null : new Date(ms).toISOString();
   }
 
-  // No timezone — treat as BRT (UTC-3). Parse components manually to avoid
-  // Date.parse ambiguity (space-separated dates are treated as UTC by Node.js).
+  // No timezone — treat as wall-clock time, store as-is in ISO format
   const match = raw.match(/(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/);
   if (match) {
     const [, yr, mo, dy, hr, mn, sc] = match.map(Number);
-    // Build as UTC, then add 3h to convert BRT→UTC
-    const utcMs = Date.UTC(yr, mo - 1, dy, hr + 3, mn, sc);
-    return new Date(utcMs).toISOString();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${yr}-${pad(mo)}-${pad(dy)}T${pad(hr)}:${pad(mn)}:${pad(sc)}.000Z`;
   }
 
-  // Fallback: try Date.parse and assume BRT
+  // Fallback
   const ms = Date.parse(raw);
-  if (isNaN(ms)) return null;
-  const d = new Date(ms);
-  d.setHours(d.getHours() + 3);
-  return d.toISOString();
+  return isNaN(ms) ? null : new Date(ms).toISOString();
 }
 
 function parseControlIdEvent(rawEvent, device) {
