@@ -24,15 +24,15 @@ interface WorkerRow {
   rawLogs: RawLog[];
 }
 
-interface StandardPdfOptions {
+interface PdfOptions {
   rows: WorkerRow[];
-  grouped: [string, WorkerRow[]][];
   startDate: string;
   endDate: string;
   projectName?: string;
+  projectLocation?: string;
+  clientLogoDataUrl?: string;
+  systemLogoDataUrl?: string;
 }
-
-interface DetailedPdfOptions extends StandardPdfOptions {}
 
 const MARGIN = 14;
 const COLORS = {
@@ -42,14 +42,20 @@ const COLORS = {
   white: [255, 255, 255] as const,
   headerBg: [50, 50, 50] as const,
   altRowBg: [248, 248, 248] as const,
-  summaryBg: [245, 245, 245] as const,
-  companyBg: [230, 240, 255] as const,
-  entryBg: [220, 252, 231] as const,
-  exitBg: [255, 237, 213] as const,
+  summaryBg: [240, 245, 250] as const,
+  sectionBg: [235, 245, 255] as const,
+  entryColor: [22, 163, 74] as const,
+  exitColor: [194, 120, 47] as const,
   onBoardBg: [220, 252, 231] as const,
+  separator: [180, 200, 220] as const,
 };
 
 function formatTime(date: Date | null): string {
+  if (!date) return '-';
+  return format(date, 'dd/MM/yyyy HH:mm');
+}
+
+function formatTimeShort(date: Date | null): string {
   if (!date) return '-';
   return format(date, 'dd/MM HH:mm');
 }
@@ -57,6 +63,27 @@ function formatTime(date: Date | null): string {
 function formatDuration(mins: number): string {
   if (mins <= 0) return '-';
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+function isDaytime(timestamp: string): boolean {
+  const hour = new Date(timestamp).getHours();
+  return hour >= 5 && hour <= 18;
+}
+
+function classifyShift(row: WorkerRow): 'day' | 'night' {
+  if (!row.firstEntry) return 'day';
+  const hour = row.firstEntry.getHours();
+  return (hour >= 5 && hour <= 18) ? 'day' : 'night';
+}
+
+function classifyLogs(rawLogs: RawLog[]) {
+  const day: RawLog[] = [];
+  const night: RawLog[] = [];
+  for (const log of rawLogs) {
+    if (isDaytime(log.timestamp)) day.push(log);
+    else night.push(log);
+  }
+  return { day, night };
 }
 
 function addFooters(doc: jsPDF) {
@@ -72,29 +99,6 @@ function addFooters(doc: jsPDF) {
   }
 }
 
-function drawHeader(doc: jsPDF, title: string, startDate: string, endDate: string, projectName?: string): number {
-  const pageWidth = doc.internal.pageSize.getWidth();
-  let y = 18;
-
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...COLORS.dark);
-  doc.text(title, MARGIN, y);
-  y += 7;
-
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...COLORS.medium);
-  const period = `Período: ${format(new Date(startDate), 'dd/MM/yyyy')} a ${format(new Date(endDate), 'dd/MM/yyyy')}`;
-  doc.text(period, MARGIN, y);
-  if (projectName) {
-    doc.text(`Projeto: ${projectName}`, pageWidth - MARGIN, y, { align: 'right' });
-  }
-  y += 10;
-
-  return y;
-}
-
 function checkPageBreak(doc: jsPDF, y: number, needed: number): number {
   if (y + needed > doc.internal.pageSize.getHeight() - 16) {
     doc.addPage();
@@ -103,304 +107,403 @@ function checkPageBreak(doc: jsPDF, y: number, needed: number): number {
   return y;
 }
 
-/* ═══════════════════════════════════════════════════
-   PDF PADRÃO — Tabela resumida landscape
-   ═══════════════════════════════════════════════════ */
+function drawLogos(doc: jsPDF, clientLogo?: string, systemLogo?: string) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const logoH = 14;
+  const logoMaxW = 40;
 
-export function exportStandardWorkerPdf({ rows, grouped, startDate, endDate, projectName }: StandardPdfOptions) {
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  if (clientLogo) {
+    try { doc.addImage(clientLogo, 'PNG', MARGIN, 8, logoMaxW, logoH); } catch {}
+  }
+  if (systemLogo) {
+    try { doc.addImage(systemLogo, 'PNG', pageWidth - MARGIN - logoMaxW, 8, logoMaxW, logoH); } catch {}
+  }
+}
+
+function drawHeader(
+  doc: jsPDF,
+  title: string,
+  opts: PdfOptions,
+  dayCount: number,
+  nightCount: number,
+): number {
   const pageWidth = doc.internal.pageSize.getWidth();
   const availableWidth = pageWidth - MARGIN * 2;
 
-  let y = drawHeader(doc, 'Relatório de Trabalhadores', startDate, endDate, projectName);
+  drawLogos(doc, opts.clientLogoDataUrl, opts.systemLogoDataUrl);
 
-  // Summary box
-  const onBoard = rows.filter(r => r.isOnBoard).length;
-  const companiesCount = new Set(rows.map(r => r.companyName)).size;
-  doc.setFillColor(...COLORS.summaryBg);
-  doc.roundedRect(MARGIN, y - 2, availableWidth, 10, 1, 1, 'F');
-  doc.setFontSize(9);
-  doc.setTextColor(...COLORS.dark);
+  let y = 26;
+
+  // Title
+  doc.setFontSize(13);
   doc.setFont('helvetica', 'bold');
-  doc.text(`Total: ${rows.length} trabalhadores`, MARGIN + 4, y + 5);
-  doc.text(`A bordo: ${onBoard}`, MARGIN + 70, y + 5);
-  doc.text(`Empresas: ${companiesCount}`, MARGIN + 120, y + 5);
-  y += 14;
+  doc.setTextColor(...COLORS.dark);
+  doc.text(title, pageWidth / 2, y, { align: 'center' });
+  y += 6;
 
-  // Column definitions
+  // Project + location
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...COLORS.medium);
+  const projectLine = [
+    opts.projectName ? `Projeto: ${opts.projectName}` : null,
+    opts.projectLocation ? `Local: ${opts.projectLocation}` : null,
+  ].filter(Boolean).join(' | ');
+  if (projectLine) {
+    doc.text(projectLine, pageWidth / 2, y, { align: 'center' });
+    y += 5;
+  }
+
+  // Period
+  const period = `Período: ${format(new Date(opts.startDate), 'dd/MM/yyyy')} a ${format(new Date(opts.endDate), 'dd/MM/yyyy')}`;
+  doc.text(period, pageWidth / 2, y, { align: 'center' });
+  y += 6;
+
+  // Summary line
+  const companiesCount = new Set(opts.rows.map(r => r.companyName)).size;
+  doc.setFillColor(...COLORS.summaryBg);
+  doc.roundedRect(MARGIN, y - 3, availableWidth, 10, 1, 1, 'F');
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.dark);
+  const summaryText = `Total de Trabalhadores: ${opts.rows.length} (Diurnos: ${dayCount}, Noturnos: ${nightCount})  |  Total de Empresas: ${companiesCount}`;
+  doc.text(summaryText, pageWidth / 2, y + 4, { align: 'center' });
+  y += 12;
+
+  // Separator
+  doc.setDrawColor(...COLORS.separator);
+  doc.setLineWidth(0.5);
+  doc.line(MARGIN, y, pageWidth - MARGIN, y);
+  y += 4;
+
+  // Note
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(...COLORS.light);
+  doc.text('(*) Trabalhador com entrada registrada mas sem saída — permanência além do período ou em andamento.', MARGIN, y);
+  y += 6;
+
+  return y;
+}
+
+/* ═══════════════════════════════════════════════════
+   PDF PADRÃO — Retrato, agrupado por turno
+   ═══════════════════════════════════════════════════ */
+
+export function exportStandardWorkerPdf(opts: PdfOptions) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const availableWidth = pageWidth - MARGIN * 2;
+
+  const dayRows = opts.rows.filter(r => classifyShift(r) === 'day');
+  const nightRows = opts.rows.filter(r => classifyShift(r) === 'night');
+
+  let y = drawHeader(doc, 'Relatório de Acesso por Trabalhador', opts, dayRows.length, nightRows.length);
+
+  // Column definitions for portrait A4 (~182mm available)
   const cols = [
     { header: 'Nº', width: 12, align: 'center' as const },
     { header: 'Nome', width: 0, align: 'left' as const },
-    { header: 'CPF', width: 30, align: 'center' as const },
-    { header: 'Função', width: 35, align: 'left' as const },
-    { header: 'Empresa', width: 45, align: 'left' as const },
-    { header: 'Entrada', width: 28, align: 'center' as const },
-    { header: 'Saída', width: 28, align: 'center' as const },
-    { header: 'Total', width: 22, align: 'center' as const },
+    { header: 'CPF', width: 26, align: 'center' as const },
+    { header: 'Função', width: 28, align: 'left' as const },
+    { header: 'Empresa', width: 32, align: 'left' as const },
+    { header: 'Entrada', width: 24, align: 'center' as const },
+    { header: 'Saída', width: 24, align: 'center' as const },
+    { header: 'Total', width: 18, align: 'center' as const },
   ];
   const fixedWidth = cols.reduce((s, c) => s + c.width, 0);
   const nameWidth = availableWidth - fixedWidth;
   const colWidths = cols.map(c => c.width || nameWidth);
 
-  const drawTableHeader = () => {
+  const drawTableHeader = (currentY: number) => {
     doc.setFillColor(...COLORS.headerBg);
-    doc.rect(MARGIN, y, availableWidth, 7, 'F');
+    doc.rect(MARGIN, currentY, availableWidth, 7, 'F');
     doc.setTextColor(...COLORS.white);
-    doc.setFontSize(8);
+    doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
     let x = MARGIN;
     cols.forEach((col, i) => {
-      const tx = col.align === 'center' ? x + colWidths[i] / 2 : x + 2;
-      doc.text(col.header, tx, y + 5, { align: col.align === 'center' ? 'center' : 'left' });
+      const tx = col.align === 'center' ? x + colWidths[i] / 2 : x + 1.5;
+      doc.text(col.header, tx, currentY + 5, { align: col.align === 'center' ? 'center' : 'left' });
       x += colWidths[i];
     });
-    y += 7;
+    return currentY + 7;
   };
 
-  let rowNum = 0;
+  const drawShiftRows = (shiftRows: WorkerRow[], startY: number) => {
+    let cy = startY;
+    shiftRows.forEach((row, ri) => {
+      cy = checkPageBreak(doc, cy, 7);
+      if (cy <= 18) cy = drawTableHeader(cy);
 
-  grouped.forEach(([companyName, companyRows]) => {
-    y = checkPageBreak(doc, y, 14);
-
-    // Company group header
-    doc.setFillColor(...COLORS.companyBg);
-    doc.rect(MARGIN, y, availableWidth, 7, 'F');
-    doc.setTextColor(...COLORS.dark);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${companyName} (${companyRows.length})`, MARGIN + 3, y + 5);
-    y += 8;
-
-    // Table header after each company
-    drawTableHeader();
-
-    companyRows.forEach((row, ri) => {
-      y = checkPageBreak(doc, y, 7);
-      if (y <= 18) drawTableHeader(); // re-draw header on new page
-
-      rowNum++;
       if (ri % 2 === 0) {
         doc.setFillColor(...COLORS.altRowBg);
-        doc.rect(MARGIN, y, availableWidth, 6, 'F');
+        doc.rect(MARGIN, cy, availableWidth, 5.5, 'F');
       }
 
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
+      doc.setFontSize(7);
       doc.setTextColor(...COLORS.dark);
 
       const values = [
-        String(rowNum),
-        row.workerName + (row.isOnBoard ? ' *' : ''),
+        String(row.workerCode || '-'),
+        row.workerName + (row.isOnBoard ? ' (*)' : ''),
         row.documentNumber || '-',
         row.role,
         row.companyName,
-        formatTime(row.firstEntry),
-        row.isOnBoard ? 'A bordo' : formatTime(row.lastExit),
+        formatTimeShort(row.firstEntry),
+        row.isOnBoard ? 'A bordo' : formatTimeShort(row.lastExit),
         formatDuration(row.totalMinutes),
       ];
 
       let x = MARGIN;
       cols.forEach((col, i) => {
-        const tx = col.align === 'center' ? x + colWidths[i] / 2 : x + 2;
-        const maxW = colWidths[i] - 4;
+        const tx = col.align === 'center' ? x + colWidths[i] / 2 : x + 1.5;
+        const maxW = colWidths[i] - 3;
         let val = values[i];
         if (doc.getTextWidth(val) > maxW) {
           while (doc.getTextWidth(val + '…') > maxW && val.length > 1) val = val.slice(0, -1);
           val += '…';
         }
-        doc.text(val, tx, y + 4, { align: col.align === 'center' ? 'center' : 'left' });
+        if (i === 6 && row.isOnBoard) {
+          doc.setTextColor(...COLORS.entryColor);
+          doc.setFont('helvetica', 'bold');
+        }
+        doc.text(val, tx, cy + 4, { align: col.align === 'center' ? 'center' : 'left' });
+        doc.setTextColor(...COLORS.dark);
+        doc.setFont('helvetica', 'normal');
         x += colWidths[i];
       });
-      y += 6;
+      cy += 5.5;
     });
+    return cy;
+  };
 
-    y += 3;
-  });
+  // Day shift section
+  doc.setFillColor(...COLORS.sectionBg);
+  doc.roundedRect(MARGIN, y, availableWidth, 7, 1, 1, 'F');
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.dark);
+  doc.text(`Trabalhadores - Período Diurno (05:00 - 18:59)  [${dayRows.length}]`, MARGIN + 3, y + 5);
+  y += 9;
 
-  // Legend
-  y = checkPageBreak(doc, y, 10);
-  doc.setFontSize(7);
-  doc.setTextColor(...COLORS.light);
-  doc.text('(*) Trabalhador atualmente a bordo — sem saída registrada.', MARGIN, y + 4);
-  doc.text('Total = Última saída − Primeira entrada (tempo bruto, sem descontar ausências).', MARGIN, y + 9);
+  if (dayRows.length > 0) {
+    y = drawTableHeader(y);
+    y = drawShiftRows(dayRows, y);
+  } else {
+    doc.setFontSize(8);
+    doc.setTextColor(...COLORS.light);
+    doc.text('Nenhum trabalhador diurno neste período.', MARGIN + 3, y + 4);
+    y += 8;
+  }
+
+  y += 5;
+  y = checkPageBreak(doc, y, 25);
+
+  // Night shift section
+  doc.setFillColor(...COLORS.sectionBg);
+  doc.roundedRect(MARGIN, y, availableWidth, 7, 1, 1, 'F');
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.dark);
+  doc.text(`Trabalhadores - Período Noturno (19:00 - 04:59)  [${nightRows.length}]`, MARGIN + 3, y + 5);
+  y += 9;
+
+  if (nightRows.length > 0) {
+    y = drawTableHeader(y);
+    y = drawShiftRows(nightRows, y);
+  } else {
+    doc.setFontSize(8);
+    doc.setTextColor(...COLORS.light);
+    doc.text('Nenhum trabalhador noturno neste período.', MARGIN + 3, y + 4);
+    y += 8;
+  }
 
   addFooters(doc);
-  doc.save(`trabalhadores-padrao-${startDate}-${endDate}.pdf`);
+  doc.save(`trabalhadores-padrao-${opts.startDate}-${opts.endDate}.pdf`);
 }
 
 /* ═══════════════════════════════════════════════════
-   PDF DETALHADO — Ficha individual por trabalhador
+   PDF DETALHADO — Retrato, ficha por trabalhador
    ═══════════════════════════════════════════════════ */
 
-export function exportDetailedWorkerPdf({ rows, grouped, startDate, endDate, projectName }: DetailedPdfOptions) {
+export function exportDetailedWorkerPdf(opts: PdfOptions) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const availableWidth = pageWidth - MARGIN * 2;
 
-  let y = drawHeader(doc, 'Relatório Detalhado de Trabalhadores', startDate, endDate, projectName);
+  const dayRows = opts.rows.filter(r => classifyShift(r) === 'day');
+  const nightRows = opts.rows.filter(r => classifyShift(r) === 'night');
 
-  // Summary
-  const onBoard = rows.filter(r => r.isOnBoard).length;
-  doc.setFillColor(...COLORS.summaryBg);
-  doc.roundedRect(MARGIN, y - 2, availableWidth, 10, 1, 1, 'F');
-  doc.setFontSize(9);
-  doc.setTextColor(...COLORS.dark);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`Total: ${rows.length} trabalhadores`, MARGIN + 4, y + 5);
-  doc.text(`A bordo: ${onBoard}`, MARGIN + 70, y + 5);
-  y += 14;
+  let y = drawHeader(doc, 'Relatório de Controle de Acessos de Colaboradores', opts, dayRows.length, nightRows.length);
 
-  let workerNum = 0;
+  opts.rows.forEach((row, idx) => {
+    // Estimate space
+    const { day, night } = classifyLogs(row.rawLogs);
+    const logsHeight = 20 + Math.max(day.length, 1) * 5 + Math.max(night.length, 1) * 5 + 30;
+    const needed = Math.min(logsHeight, 80);
 
-  grouped.forEach(([companyName, companyRows]) => {
-    companyRows.forEach((row) => {
-      workerNum++;
+    if (y + needed > doc.internal.pageSize.getHeight() - 20) {
+      doc.addPage();
+      y = 18;
+    }
 
-      // Estimate space needed for this worker
-      const eventsHeight = 7 + row.rawLogs.length * 5.5 + 10;
-      const headerHeight = 30;
-      const totalNeeded = headerHeight + eventsHeight + 15;
+    // Separator
+    if (idx > 0) {
+      doc.setDrawColor(...COLORS.separator);
+      doc.setLineWidth(0.4);
+      doc.line(MARGIN, y, pageWidth - MARGIN, y);
+      y += 4;
+    }
 
-      // If won't fit, start new page
-      if (y + Math.min(totalNeeded, 80) > doc.internal.pageSize.getHeight() - 20) {
-        doc.addPage();
-        y = 18;
-      }
+    // Worker header
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.dark);
+    doc.text(`Trabalhador: ${row.workerName} (Nº: ${row.workerCode || '-'})`, MARGIN, y);
 
-      // Worker header box
-      doc.setFillColor(...COLORS.companyBg);
-      doc.roundedRect(MARGIN, y, availableWidth, 22, 1, 1, 'F');
+    if (row.isOnBoard) {
+      const badge = '(*)';
+      doc.setTextColor(...COLORS.entryColor);
+      doc.text(badge, MARGIN + doc.getTextWidth(`Trabalhador: ${row.workerName} (Nº: ${row.workerCode || '-'})`) + 3, y);
+    }
+    y += 5;
 
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
+    // Worker info line
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...COLORS.medium);
+    doc.text(`CPF: ${row.documentNumber || '-'}  |  Função: ${row.role}  |  Empresa: ${row.companyName}`, MARGIN, y);
+    y += 6;
+
+    // Summary stats
+    doc.setFillColor(...COLORS.summaryBg);
+    doc.roundedRect(MARGIN, y - 2, availableWidth, 12, 1, 1, 'F');
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.dark);
+
+    const col1 = MARGIN + 3;
+    const col2 = MARGIN + availableWidth / 4;
+    const col3 = MARGIN + availableWidth / 2;
+    const col4 = MARGIN + (3 * availableWidth) / 4;
+
+    doc.text(`Primeira Entrada:`, col1, y + 3);
+    doc.setFont('helvetica', 'normal');
+    doc.text(formatTime(row.firstEntry), col1, y + 7.5);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Status ao Final:`, col2, y + 3);
+    doc.setFont('helvetica', 'normal');
+    if (row.isOnBoard) {
+      doc.setTextColor(...COLORS.entryColor);
+      doc.text('A bordo (*)', col2, y + 7.5);
       doc.setTextColor(...COLORS.dark);
-      doc.text(`${workerNum}. ${row.workerName}`, MARGIN + 3, y + 6);
+    } else {
+      doc.text(formatTime(row.lastExit), col2, y + 7.5);
+    }
 
-      if (row.isOnBoard) {
-        doc.setFillColor(...COLORS.onBoardBg);
-        const badge = 'A BORDO';
-        const bw = doc.getTextWidth(badge) + 6;
-        doc.roundedRect(pageWidth - MARGIN - bw - 2, y + 1.5, bw, 6, 1, 1, 'F');
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(22, 163, 74);
-        doc.text(badge, pageWidth - MARGIN - bw / 2, y + 5.5, { align: 'center' });
-      }
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Tempo Total:`, col3, y + 3);
+    doc.setFont('helvetica', 'normal');
+    doc.text(formatDuration(row.totalMinutes), col3, y + 7.5);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Tempo Efetivo:`, col4, y + 3);
+    doc.setFont('helvetica', 'normal');
+    doc.text(formatDuration(row.effectiveMinutes), col4, y + 7.5);
+
+    y += 14;
+
+    // Draw log tables for day and night
+    const drawPeriodLogs = (periodTitle: string, logs: RawLog[], startY: number): number => {
+      let cy = checkPageBreak(doc, startY, 12);
 
       doc.setFontSize(8);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(...COLORS.medium);
-
-      const infoY = y + 11;
-      doc.text(`CPF: ${row.documentNumber || '-'}`, MARGIN + 3, infoY);
-      doc.text(`Função: ${row.role}`, MARGIN + 55, infoY);
-      doc.text(`Empresa: ${row.companyName}`, MARGIN + 3, infoY + 5);
-      if (row.workerCode) {
-        doc.text(`Cód: ${row.workerCode}`, MARGIN + 120, infoY);
-      }
-
-      y += 25;
-
-      // Time summary line
-      doc.setFontSize(8);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(...COLORS.dark);
-      doc.text(`Entrada: ${formatTime(row.firstEntry)}`, MARGIN + 3, y);
-      doc.text(`Saída: ${row.isOnBoard ? 'A bordo' : formatTime(row.lastExit)}`, MARGIN + 50, y);
-      doc.text(`Tempo bruto: ${formatDuration(row.totalMinutes)}`, MARGIN + 100, y);
-      doc.text(`Tempo efetivo: ${formatDuration(row.effectiveMinutes)}`, MARGIN + 145, y);
-      y += 6;
+      doc.text(periodTitle, MARGIN, cy);
+      cy += 4;
 
-      // Events table
-      if (row.rawLogs.length > 0) {
-        // Events header
-        const evCols = [
-          { header: 'Data/Hora', width: 45, align: 'left' as const },
-          { header: 'Evento', width: 30, align: 'center' as const },
-          { header: 'Dispositivo', width: 0, align: 'left' as const },
-        ];
-        const evFixedW = evCols.reduce((s, c) => s + c.width, 0);
-        const evAutoW = availableWidth - evFixedW;
-        const evWidths = evCols.map(c => c.width || evAutoW);
-
-        y = checkPageBreak(doc, y, 8);
-        doc.setFillColor(...COLORS.headerBg);
-        doc.rect(MARGIN, y, availableWidth, 6, 'F');
-        doc.setTextColor(...COLORS.white);
+      if (logs.length === 0) {
         doc.setFontSize(7);
-        doc.setFont('helvetica', 'bold');
-        let x = MARGIN;
-        evCols.forEach((col, i) => {
-          const tx = col.align === 'center' ? x + evWidths[i] / 2 : x + 2;
-          doc.text(col.header, tx, y + 4, { align: col.align === 'center' ? 'center' : 'left' });
-          x += evWidths[i];
-        });
-        y += 6;
-
-        row.rawLogs.forEach((log, li) => {
-          y = checkPageBreak(doc, y, 6);
-
-          const isEntry = log.direction === 'entry';
-
-          if (li % 2 === 0) {
-            doc.setFillColor(...COLORS.altRowBg);
-            doc.rect(MARGIN, y, availableWidth, 5.5, 'F');
-          }
-
-          // Small colored indicator
-          if (isEntry) {
-            doc.setFillColor(...COLORS.entryBg);
-          } else {
-            doc.setFillColor(...COLORS.exitBg);
-          }
-          doc.rect(MARGIN, y, 2, 5.5, 'F');
-
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(7);
-          doc.setTextColor(...COLORS.dark);
-
-          const dateStr = format(new Date(log.timestamp), 'dd/MM/yyyy HH:mm:ss');
-          const eventStr = isEntry ? 'ENTRADA' : 'SAÍDA';
-          const deviceStr = log.device_name || '-';
-
-          let x = MARGIN;
-          doc.text(dateStr, x + 4, y + 4);
-          x += evWidths[0];
-
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(isEntry ? 22 : 194, isEntry ? 163 : 120, isEntry ? 74 : 47);
-          doc.text(eventStr, x + evWidths[1] / 2, y + 4, { align: 'center' });
-          x += evWidths[1];
-
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(...COLORS.medium);
-          doc.text(deviceStr, x + 2, y + 4);
-
-          y += 5.5;
-        });
-      } else {
-        doc.setFontSize(8);
+        doc.setFont('helvetica', 'italic');
         doc.setTextColor(...COLORS.light);
-        doc.text('Nenhum registro de acesso no período.', MARGIN + 3, y + 3);
-        y += 8;
+        doc.text('Nenhum registro neste período.', MARGIN + 3, cy + 3);
+        return cy + 7;
       }
 
-      y += 8; // spacing between workers
+      // Mini header
+      doc.setFillColor(...COLORS.headerBg);
+      doc.rect(MARGIN, cy, availableWidth, 5.5, 'F');
+      doc.setTextColor(...COLORS.white);
+      doc.setFontSize(6.5);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Data/Hora', MARGIN + 2, cy + 4);
+      doc.text('Evento', MARGIN + 50, cy + 4);
+      doc.text('Dispositivo', MARGIN + 80, cy + 4);
+      cy += 5.5;
 
-      // Separator line
-      doc.setDrawColor(...COLORS.light);
-      doc.setLineWidth(0.2);
-      doc.line(MARGIN, y - 4, pageWidth - MARGIN, y - 4);
-    });
+      logs.forEach((log, li) => {
+        cy = checkPageBreak(doc, cy, 5);
+
+        if (li % 2 === 0) {
+          doc.setFillColor(...COLORS.altRowBg);
+          doc.rect(MARGIN, cy, availableWidth, 4.5, 'F');
+        }
+
+        const isEntry = log.direction === 'entry';
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.5);
+        doc.setTextColor(...COLORS.dark);
+
+        doc.text(format(new Date(log.timestamp), 'dd/MM/yyyy HH:mm:ss'), MARGIN + 2, cy + 3.5);
+
+        if (isEntry) {
+          doc.setTextColor(...COLORS.entryColor);
+        } else {
+          doc.setTextColor(...COLORS.exitColor);
+        }
+        doc.setFont('helvetica', 'bold');
+        doc.text(isEntry ? 'ENTRADA' : 'SAÍDA', MARGIN + 50, cy + 3.5);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...COLORS.medium);
+        doc.text(log.device_name || '-', MARGIN + 80, cy + 3.5);
+
+        cy += 4.5;
+      });
+
+      return cy + 2;
+    };
+
+    y = drawPeriodLogs(`Registros Diurnos (05:00 - 18:59)  [${day.length}]`, day, y);
+    y = drawPeriodLogs(`Registros Noturnos (19:00 - 04:59)  [${night.length}]`, night, y);
+
+    y += 4;
   });
 
-  // Legend
-  y = checkPageBreak(doc, y, 14);
-  doc.setFontSize(7);
-  doc.setTextColor(...COLORS.light);
-  doc.text('Tempo bruto = Última saída − Primeira entrada.', MARGIN, y + 2);
-  doc.text('Tempo efetivo = Soma dos pares entrada→saída individuais (desconta ausências).', MARGIN, y + 7);
-
   addFooters(doc);
-  doc.save(`trabalhadores-detalhado-${startDate}-${endDate}.pdf`);
+  doc.save(`trabalhadores-detalhado-${opts.startDate}-${opts.endDate}.pdf`);
+}
+
+/* ═══════════════════════════════════════════════════
+   Utilitário: carregar imagem como data URL (CORS-safe)
+   ═══════════════════════════════════════════════════ */
+
+export async function loadImageAsDataUrl(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
 }
