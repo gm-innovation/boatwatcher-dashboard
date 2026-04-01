@@ -112,6 +112,7 @@ class AgentController {
     this._ignoredInvalidCount = 0;
     this._lastCapturedAt = null;
     this._lastIgnoreReason = null;
+    this._startedAt = null;
   }
 
   onNewEvent(callback) {
