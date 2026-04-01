@@ -317,7 +317,7 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
                       </div>
                     </td>
                     <td className="p-3 text-center">
-                      <Badge variant="secondary">{company.totalWorkers}</Badge>
+                      <span className="font-semibold">{company.totalWorkers}</span>
                     </td>
                     <td className="p-3 text-center text-sm">
                       {company.firstEntry
