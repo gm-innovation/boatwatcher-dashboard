@@ -1,24 +1,35 @@
 
 
-## Ajustes na Tabela de Empresas — Conforme Print
+## Ajustes na Lógica de Saída e Permanência por Empresa
 
-### Diferenças identificadas no print vs código atual
+### O que muda
 
-| Elemento | Print | Atual |
-|----------|-------|-------|
-| Badge "X a bordo" (empresa) | Verde outline (borda verde, fundo claro) | Verde sólido (`bg-green-600 text-white`) |
-| Funcionários | Texto simples bold, sem badge | `Badge variant="secondary"` |
-| Badge "A bordo" (coluna Saída) | Verde outline | Azul sólido (`bg-blue-600`) |
-| Permanência | Badge com borda roxa/verde | `Badge variant="outline"` cinza |
-| TOTAL - "A bordo agora" | Verde outline | Verde sólido |
-| TOTAL - Diurno/Noturno | "Diurno: 1" em vermelho, "Noturno: 0" em linha separada | Texto simples inline |
+1. **Coluna "Saída"**: Quando todos saíram (`allExited`), exibir o horário da última saída do último trabalhador da empresa (em vez de "Todos saíram")
+2. **Coluna "Permanência"**: Calcular como tempo total desde a primeira entrada do primeiro trabalhador até a última saída do último (ou até agora se alguém ainda está a bordo) — em vez da soma individual de pares entry/exit
 
-### Arquivo: `src/components/reports/CompanyReport.tsx`
+### Mudanças no data model
 
-1. **Badge "X a bordo"** (linha 313): trocar para `border border-green-500 text-green-600 bg-green-50 hover:bg-green-100`
-2. **Funcionários** (linha 320): trocar `<Badge variant="secondary">` por `<span className="font-semibold">`
-3. **Badge "A bordo" na Saída** (linha 331): trocar `bg-blue-600` para `border border-green-500 text-green-600 bg-transparent hover:bg-green-50`
-4. **Permanência** (linha 337): adicionar cor condicional — se `onBoardNow > 0` usar borda verde, senão manter outline cinza
-5. **TOTAL "A bordo agora"** (linha 352): trocar para verde outline
-6. **TOTAL Diurno/Noturno** (linha 348): separar em duas linhas com "Diurno:" em vermelho e "Noturno:" abaixo
+Adicionar `lastExit: Date | null` ao `CompanyData`. Rastrear o maior timestamp de saída entre todos os workers da empresa.
+
+### Mudanças na lógica (`companyStats`)
+
+- Novo campo `lastExit` no stats, inicializado como `null`
+- Para cada worker, ao processar logs de exit, atualizar `stats.lastExit` se o timestamp for maior que o atual
+- **Permanência**: mudar cálculo — em vez de somar pares individuais, calcular `differenceInMinutes(lastExit || now, firstEntry)` no momento de montar o retorno
+
+### Mudanças no JSX
+
+- **Coluna Saída**: quando `allExited && lastExit`, exibir `format(lastExit, "dd/MM/yyyy HH:mm")`. Quando não `allExited`, manter badge "A bordo"
+- **Permanência**: já usa `totalMinutes` — a mudança é só no cálculo
+
+### Arquivo
+
+`src/components/reports/CompanyReport.tsx`
+
+- Interface `CompanyData`: adicionar `lastExit: Date | null`
+- `companyStats` map: adicionar `lastExit: null`
+- Dentro do forEach de workerLogs: rastrear o último exit de cada worker e atualizar `stats.lastExit`
+- No `return Array.from(...)`: calcular `totalMinutes` como `differenceInMinutes(lastExit || new Date(), firstEntry)` em vez de soma de pares
+- JSX coluna Saída: exibir horário formatado quando `allExited`
+- Export CSV/PDF: atualizar campo `exitStatus` para usar horário formatado
 
