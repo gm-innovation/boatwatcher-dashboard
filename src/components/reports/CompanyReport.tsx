@@ -310,7 +310,7 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{company.name}</span>
                         {company.onBoardNow > 0 && (
-                          <Badge className="bg-green-600 hover:bg-green-700 text-white text-[10px] px-1.5 py-0">
+                          <Badge className="border border-green-500 text-green-600 bg-green-50 hover:bg-green-100 text-[10px] px-1.5 py-0">
                             {company.onBoardNow} a bordo
                           </Badge>
                         )}
