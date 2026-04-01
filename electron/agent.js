@@ -417,7 +417,7 @@ class AgentController {
     }
     const postData = JSON.stringify(payload);
 
-    return new Promise((resolve, reject) => {
+    const pollResult = await new Promise((resolve, reject) => {
       const req = http.request({
         hostname: ip,
         port: creds.port,
