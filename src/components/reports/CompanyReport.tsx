@@ -218,30 +218,31 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
     link.click();
   };
 
-  const handleExportPdf = () => {
-    exportReportPdf({
-      title: 'Tempo de Trabalho por Empresa',
-      subtitle: `Período: ${startDate} a ${endDate}`,
-      columns: [
-        { header: 'Empresa', key: 'name' },
-        { header: 'Funcionários', key: 'totalWorkers', width: 28, align: 'center' },
-        { header: 'Entrada', key: 'firstEntryStr', width: 35, align: 'center' },
-        { header: 'Saída', key: 'exitStatus', width: 28, align: 'center' },
-        { header: 'Permanência', key: 'duration', width: 30, align: 'center' },
-      ],
-      data: filtered.map(c => ({
-        ...c,
-        firstEntryStr: c.firstEntry ? format(c.firstEntry, 'dd/MM/yyyy HH:mm') : '-',
-        exitStatus: c.allExited ? (c.lastExit ? format(c.lastExit, 'dd/MM/yyyy HH:mm') : 'Todos saíram') : `A bordo (${c.onBoardNow})`,
-        duration: formatDuration(c.totalMinutes),
-      })),
-      filename: `relatorio-empresa-${startDate}-${endDate}.pdf`,
-      summaryRows: [
-        { label: 'Total funcionários', value: String(totalWorkers) },
-        { label: 'Diurno', value: String(totalDay) },
-        { label: 'Noturno', value: String(totalNight) },
-        { label: 'A bordo agora', value: String(totalOnBoard) },
-      ],
+  const handleExportPdf = async () => {
+    let clientLogoDataUrl: string | undefined;
+    let systemLogoDataUrl: string | undefined;
+
+    if (clientLogoUrl) {
+      const loaded = await loadImageAsDataUrl(clientLogoUrl);
+      if (loaded) clientLogoDataUrl = loaded;
+    }
+
+    const sysLogoUrl = systemLogoSetting?.value && typeof systemLogoSetting.value === 'object'
+      ? (systemLogoSetting.value as any).light_url || (systemLogoSetting.value as any).url
+      : null;
+    if (sysLogoUrl) {
+      const loaded = await loadImageAsDataUrl(sysLogoUrl);
+      if (loaded) systemLogoDataUrl = loaded;
+    }
+
+    exportCompanyReportPdf({
+      companies: filtered,
+      startDate,
+      endDate,
+      projectName: project?.name,
+      projectLocation: project?.location || undefined,
+      clientLogoDataUrl,
+      systemLogoDataUrl,
     });
   };
 
