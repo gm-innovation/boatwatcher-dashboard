@@ -1091,98 +1091,110 @@ function createDatabaseAPI(db, startCode) {
 
     // === Workers On Board ===
     getWorkersOnBoard(projectId) {
-      // Compute local midnight in UTC (matches web: new Date(y,m,d).toISOString())
+      // Fixed BRT midnight (UTC-3) — ensures consistent filtering regardless of server timezone
       const now = new Date();
-      const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const startTimestamp = localMidnight.toISOString();
+      const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      todayUTC.setUTCHours(3, 0, 0, 0); // meia-noite BRT = 03:00 UTC
+      const startTimestamp = todayUTC.toISOString();
       // Temporal ceiling: ignore timestamps more than 2 min in the future (matches web)
       const maxTimestamp = new Date(Date.now() + 2 * 60 * 1000).toISOString();
-      
-      // Filter by project devices when projectId is provided
+
+      // Fetch ALL events (entry + exit) for the day, ordered by created_at (cloud arrival order)
       const deviceFilter = projectId
         ? 'AND (al.device_id IN (SELECT id FROM devices WHERE project_id = ?) OR (al.device_id IS NULL AND al.device_name LIKE \'Manual - %\'))'
         : '';
-      const exitDeviceFilter = projectId
-        ? 'AND (ex.device_id IN (SELECT id FROM devices WHERE project_id = ?) OR (ex.device_id IS NULL AND ex.device_name LIKE \'Manual - %\'))'
-        : '';
       const params = projectId
-        ? [startTimestamp, maxTimestamp, projectId, startTimestamp, maxTimestamp, projectId]
-        : [startTimestamp, maxTimestamp, startTimestamp, maxTimestamp];
+        ? [startTimestamp, maxTimestamp, projectId]
+        : [startTimestamp, maxTimestamp];
 
-      const rows = db.prepare(`
-        WITH all_entries AS (
-          SELECT al.worker_id, al.worker_name, al.device_name, al.device_id, al.timestamp,
-            ROW_NUMBER() OVER (
-              PARTITION BY COALESCE(al.worker_name, al.worker_id)
-              ORDER BY al.timestamp DESC
-            ) as rn_desc,
-            MIN(al.timestamp) OVER (
-              PARTITION BY COALESCE(al.worker_name, al.worker_id)
-            ) as first_entry_time
-          FROM access_logs al
-          WHERE al.timestamp >= ?
-            AND al.timestamp <= ?
-            AND al.access_status = 'granted'
-            AND al.direction = 'entry'
-            AND al.worker_id IS NOT NULL
-            ${deviceFilter}
-        )
-        SELECT ae.worker_id, ae.worker_name, ae.device_name, ae.timestamp as entry_time,
-          ae.first_entry_time,
-          w.name, w.role, w.company_id, c.name as company_name,
-          d.configuration as device_configuration
-        FROM all_entries ae
-        LEFT JOIN devices d ON ae.device_id = d.id
-        LEFT JOIN workers w ON ae.worker_id = w.id
-        LEFT JOIN companies c ON w.company_id = c.id
-        WHERE ae.rn_desc = 1
-          AND NOT EXISTS (
-            SELECT 1 FROM access_logs ex
-            WHERE (ex.worker_name = ae.worker_name OR ex.worker_id = ae.worker_id)
-              AND ex.direction = 'exit'
-              AND ex.timestamp > ae.timestamp
-              AND ex.timestamp >= ?
-              AND ex.timestamp <= ?
-              ${exitDeviceFilter}
-          )
+      const allLogs = db.prepare(`
+        SELECT al.worker_id, al.worker_name, al.device_name, al.device_id, al.timestamp, al.direction, al.created_at
+        FROM access_logs al
+        WHERE al.timestamp >= ?
+          AND al.timestamp <= ?
+          AND al.access_status = 'granted'
+          AND al.worker_id IS NOT NULL
+          ${deviceFilter}
+        ORDER BY al.created_at ASC
       `).all(...params);
 
-      return rows.map((r) => {
-        // Timestamps from cloud sync are already in UTC (ISO with Z).
-        // Timestamps from local agent capture are also stored in UTC after +3h normalization.
-        // Just ensure proper ISO format for the frontend.
-        let entryTime = r.entry_time;
-        if (entryTime && !entryTime.includes('Z') && !entryTime.includes('+') && !entryTime.includes('-', 10)) {
-          entryTime = entryTime + 'Z';
+      // Process worker state chronologically by created_at (cloud arrival order)
+      const workerState = new Map();
+      const firstEntryMap = new Map();
+      for (const log of allLogs) {
+        const key = log.worker_name || log.worker_id || '';
+        if (!key) continue;
+
+        if (log.direction === 'entry') {
+          workerState.set(key, {
+            worker_id: log.worker_id,
+            worker_name: log.worker_name,
+            device_name: log.device_name,
+            device_id: log.device_id,
+            entry_time: log.timestamp,
+            isOnBoard: true,
+          });
+          if (!firstEntryMap.has(key)) {
+            firstEntryMap.set(key, log.timestamp);
+          }
+        } else if (log.direction === 'exit') {
+          const existing = workerState.get(key);
+          if (existing) {
+            existing.isOnBoard = false;
+          }
         }
-        let firstEntryTime = r.first_entry_time;
-        if (firstEntryTime && !firstEntryTime.includes('Z') && !firstEntryTime.includes('+') && !firstEntryTime.includes('-', 10)) {
-          firstEntryTime = firstEntryTime + 'Z';
-        }
-        const isManual = !r.device_id && r.device_name && r.device_name.startsWith('Manual -');
+      }
+
+      // Keep only workers whose final state is on-board
+      const onBoard = [];
+      for (const [key, state] of workerState) {
+        if (!state.isOnBoard) continue;
+
+        // Enrich with worker/company data
+        const worker = state.worker_id
+          ? db.prepare('SELECT w.name, w.role, w.company_id, c.name as company_name FROM workers w LEFT JOIN companies c ON w.company_id = c.id WHERE w.id = ?').get(state.worker_id)
+          : null;
+
+        // Resolve location label
+        const isManual = !state.device_id && state.device_name && state.device_name.startsWith('Manual -');
         let locationLabel;
         if (isManual) {
-          // Try to find location from manual_access_points table
-          const terminalName = r.device_name.replace(/^Manual - /, '');
+          const terminalName = state.device_name.replace(/^Manual - /, '');
           const manualPoint = db.prepare('SELECT access_location FROM manual_access_points WHERE name = ? LIMIT 1').get(terminalName);
           const manualLoc = manualPoint ? manualPoint.access_location : 'bordo';
           locationLabel = manualLoc === 'dique' ? 'Dique' : 'Bordo';
-        } else {
-          const config = safeParseJson(r.device_configuration, {});
+        } else if (state.device_id) {
+          const device = db.prepare('SELECT configuration FROM devices WHERE id = ?').get(state.device_id);
+          const config = safeParseJson(device?.configuration, {});
           const accessLocation = config.access_location || 'bordo';
           locationLabel = accessLocation === 'dique' ? 'Dique' : 'Bordo';
+        } else {
+          locationLabel = 'Bordo';
         }
-        return {
-          id: r.worker_id,
-          name: r.name || r.worker_name,
+
+        // Normalize timestamps
+        let entryTime = state.entry_time;
+        if (entryTime && !entryTime.includes('Z') && !entryTime.includes('+') && !entryTime.includes('-', 10)) {
+          entryTime = entryTime + 'Z';
+        }
+        let firstEntryTime = firstEntryMap.get(key) || entryTime;
+        if (firstEntryTime && !firstEntryTime.includes('Z') && !firstEntryTime.includes('+') && !firstEntryTime.includes('-', 10)) {
+          firstEntryTime = firstEntryTime + 'Z';
+        }
+
+        onBoard.push({
+          id: state.worker_id,
+          name: worker?.name || state.worker_name || 'Desconhecido',
           location: locationLabel,
-          role: r.role,
-          company: r.company_name || 'N/A',
-          company_id: r.company_id,
+          role: worker?.role || null,
+          company: worker?.company_name || 'N/A',
+          company_id: worker?.company_id || null,
           entryTime,
-          firstEntryTime: firstEntryTime || entryTime,
-        };
-      });
+          firstEntryTime,
+        });
+      }
+
+      return onBoard;
     },
 
     // === Devices ===

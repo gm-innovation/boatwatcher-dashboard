@@ -1107,26 +1107,50 @@ serve(async (req) => {
 
       // Find device IDs for this agent's project
       let deviceFilter: string[] = []
+      let manualNames: string[] = []
       if (agent.project_id) {
         const { data: devices } = await supabase
           .from('devices')
           .select('id')
           .eq('project_id', agent.project_id)
         deviceFilter = (devices || []).map(d => d.id)
+
+        // Also fetch manual access points for this project
+        const { data: manualPoints } = await supabase
+          .from('manual_access_points')
+          .select('name')
+          .eq('project_id', agent.project_id)
+        manualNames = (manualPoints || []).map(p => `Manual - ${p.name}`)
       }
 
-      if (deviceFilter.length === 0) {
-        // No devices for this project — return empty
+      if (deviceFilter.length === 0 && manualNames.length === 0) {
+        // No devices or manual points for this project — return empty
         return new Response(JSON.stringify({ access_logs: [], timestamp: new Date().toISOString() }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
-      const { data: logs, error } = await supabase
+      // Build query with OR: device_id IN (...) OR (device_id IS NULL AND device_name IN (...))
+      let query = supabase
         .from('access_logs')
         .select('id, worker_id, device_id, timestamp, access_status, direction, reason, score, worker_name, worker_document, device_name')
-        .in('device_id', deviceFilter)
         .gte('created_at', since)
         .order('created_at', { ascending: true })
         .limit(500)
+
+      // Build OR filter for devices + manual points
+      const orParts: string[] = []
+      if (deviceFilter.length > 0) {
+        orParts.push(`device_id.in.(${deviceFilter.join(',')})`)
+      }
+      if (manualNames.length > 0) {
+        // Manual logs have device_id=null and device_name matching "Manual - <name>"
+        const escaped = manualNames.map(n => n.replace(/,/g, '\\,')).join(',')
+        orParts.push(`and(device_id.is.null,device_name.in.(${escaped}))`)
+      }
+      if (orParts.length > 0) {
+        query = query.or(orParts.join(','))
+      }
+
+      const { data: logs, error } = await query
 
       if (error) throw error
 
