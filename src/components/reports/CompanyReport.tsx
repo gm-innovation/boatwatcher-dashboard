@@ -334,7 +334,7 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
                       )}
                     </td>
                     <td className="p-3 text-center">
-                      <Badge variant="outline" className="font-mono text-xs">
+                      <Badge variant="outline" className={`font-mono text-xs ${company.onBoardNow > 0 ? 'border-green-500 text-green-600 bg-green-50' : ''}`}>
                         {formatDuration(company.totalMinutes)}
                       </Badge>
                     </td>
