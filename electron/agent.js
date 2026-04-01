@@ -394,7 +394,7 @@ class AgentController {
     });
   }
 
-
+  async pollDevice(device, _retried = false) {
     const ip = device.controlid_ip_address;
     if (!ip) throw new Error('No IP');
 
