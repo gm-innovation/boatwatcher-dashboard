@@ -1,14 +1,15 @@
-import { useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useAccessLogs } from '@/hooks/useControlID';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { exportReportPdf } from '@/utils/exportReportPdf';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, Building2, Users, Clock } from 'lucide-react';
-import { differenceInMinutes, parseISO } from 'date-fns';
+import { Download, Building2, Search } from 'lucide-react';
+import { differenceInMinutes, parseISO, format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface CompanyReportProps {
   projectId: string;
@@ -19,12 +20,43 @@ interface CompanyReportProps {
 interface CompanyData {
   name: string;
   totalWorkers: number;
-  totalHours: number;
-  entries: number;
+  onBoardNow: number;
+  firstEntry: Date | null;
+  allExited: boolean;
+  totalMinutes: number;
+  dayWorkers: number;
+  nightWorkers: number;
+}
+
+function formatDuration(minutes: number): string {
+  if (minutes <= 0) return '0h 0m';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${h}h ${m}m`;
+}
+
+function classifyShift(hour: number): 'day' | 'night' {
+  return hour >= 5 && hour <= 18 ? 'day' : 'night';
 }
 
 export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportProps) => {
+  const [searchTerm, setSearchTerm] = useState('');
   const { data: accessLogs = [], isLoading } = useAccessLogs(projectId, startDate, endDate, 1000);
+
+  const { data: project } = useQuery({
+    queryKey: ['project-for-company-report', projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name, location, client_id, companies(id, name, logo_url_light)')
+        .eq('id', projectId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!projectId,
+  });
 
   const { data: workers = [] } = useQuery({
     queryKey: ['workers-with-companies-report'],
@@ -37,10 +69,12 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
     },
   });
 
+  const clientLogoUrl = project?.companies && typeof project.companies === 'object' && 'logo_url_light' in project.companies
+    ? (project.companies as any).logo_url_light : null;
+
   const companyData = useMemo<CompanyData[]>(() => {
     if (!accessLogs.length || !workers.length) return [];
 
-    // Build hybrid lookup
     const workerById = new Map(workers.map((w: any) => [w.id, w]));
     const workerByName = new Map(workers.map((w: any) => [w.name?.toLowerCase().trim(), w]));
 
@@ -57,9 +91,7 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
       return comp;
     };
 
-    // Group logs by resolved worker key
-    const companyStats = new Map<string, { workers: Set<string>; entries: number; totalMinutes: number }>();
-
+    // Group logs by worker
     const workerLogs = new Map<string, typeof accessLogs>();
     for (const log of accessLogs) {
       const w = findWorker(log);
@@ -69,30 +101,76 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
       workerLogs.get(key)!.push(log);
     }
 
+    const companyStats = new Map<string, {
+      workers: Set<string>;
+      onBoardNow: number;
+      firstEntry: Date | null;
+      totalMinutes: number;
+      dayWorkers: number;
+      nightWorkers: number;
+      workerExitStatus: Map<string, boolean>; // workerId -> hasExited
+    }>();
+
     workerLogs.forEach((logs, workerId) => {
       const worker = workerById.get(workerId) || null;
-      const companyName = getCompanyName(worker) || (logs[0]?.worker_name ? 'Sem empresa' : 'Sem empresa');
+      const companyName = getCompanyName(worker);
       if (!companyStats.has(companyName)) {
-        companyStats.set(companyName, { workers: new Set(), entries: 0, totalMinutes: 0 });
+        companyStats.set(companyName, {
+          workers: new Set(),
+          onBoardNow: 0,
+          firstEntry: null,
+          totalMinutes: 0,
+          dayWorkers: 0,
+          nightWorkers: 0,
+          workerExitStatus: new Map(),
+        });
       }
       const stats = companyStats.get(companyName)!;
       stats.workers.add(workerId);
 
-      // Sort chronologically
-      const sorted = [...logs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      const sorted = [...logs]
+        .filter(l => l.access_status === 'granted' && (l.direction === 'entry' || l.direction === 'exit'))
+        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-      // Pair entries with exits
+      if (sorted.length === 0) return;
+
+      // First entry for this worker
+      const firstEntryLog = sorted.find(l => l.direction === 'entry');
+      if (firstEntryLog) {
+        const entryDate = new Date(firstEntryLog.timestamp);
+        if (!stats.firstEntry || entryDate < stats.firstEntry) {
+          stats.firstEntry = entryDate;
+        }
+        // Classify shift
+        const shift = classifyShift(entryDate.getHours());
+        if (shift === 'day') stats.dayWorkers++;
+        else stats.nightWorkers++;
+      }
+
+      // Check if worker is on board (last action = entry)
+      const lastLog = sorted[sorted.length - 1];
+      const isOnBoard = lastLog.direction === 'entry';
+      stats.workerExitStatus.set(workerId, !isOnBoard);
+      if (isOnBoard) stats.onBoardNow++;
+
+      // Calculate total minutes from entry→exit pairs
       let lastEntry: string | null = null;
       for (const log of sorted) {
         if (log.direction === 'entry') {
-          stats.entries++;
           lastEntry = log.timestamp;
         } else if (log.direction === 'exit' && lastEntry) {
           const mins = differenceInMinutes(parseISO(log.timestamp), parseISO(lastEntry));
-          if (mins > 0 && mins < 1440) { // max 24h sanity check
+          if (mins > 0 && mins < 1440) {
             stats.totalMinutes += mins;
           }
           lastEntry = null;
+        }
+      }
+      // If still on board, add time from last entry to now
+      if (isOnBoard && lastEntry) {
+        const mins = differenceInMinutes(new Date(), parseISO(lastEntry));
+        if (mins > 0 && mins < 1440) {
+          stats.totalMinutes += mins;
         }
       }
     });
@@ -100,13 +178,70 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
     return Array.from(companyStats.entries()).map(([name, stats]) => ({
       name,
       totalWorkers: stats.workers.size,
-      totalHours: Math.round(stats.totalMinutes / 60),
-      entries: stats.entries,
-    })).sort((a, b) => b.entries - a.entries);
+      onBoardNow: stats.onBoardNow,
+      firstEntry: stats.firstEntry,
+      allExited: stats.onBoardNow === 0,
+      totalMinutes: stats.totalMinutes,
+      dayWorkers: stats.dayWorkers,
+      nightWorkers: stats.nightWorkers,
+    })).sort((a, b) => b.totalWorkers - a.totalWorkers);
   }, [accessLogs, workers]);
 
+  const filtered = useMemo(() => {
+    if (!searchTerm) return companyData;
+    return companyData.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  }, [companyData, searchTerm]);
+
   const totalWorkers = companyData.reduce((sum, c) => sum + c.totalWorkers, 0);
-  const totalEntries = companyData.reduce((sum, c) => sum + c.entries, 0);
+  const totalOnBoard = companyData.reduce((sum, c) => sum + c.onBoardNow, 0);
+  const totalDay = companyData.reduce((sum, c) => sum + c.dayWorkers, 0);
+  const totalNight = companyData.reduce((sum, c) => sum + c.nightWorkers, 0);
+
+  const handleExportCsv = () => {
+    const csvContent = [
+      ['Empresa', 'Funcionários', 'A Bordo', 'Entrada', 'Saída', 'Permanência'].join(','),
+      ...filtered.map(c => [
+        c.name,
+        c.totalWorkers,
+        c.onBoardNow,
+        c.firstEntry ? format(c.firstEntry, 'dd/MM/yyyy HH:mm') : '-',
+        c.allExited ? 'Todos saíram' : 'A bordo',
+        formatDuration(c.totalMinutes),
+      ].join(','))
+    ].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `relatorio-empresa-${startDate}-${endDate}.csv`;
+    link.click();
+  };
+
+  const handleExportPdf = () => {
+    exportReportPdf({
+      title: 'Tempo de Trabalho por Empresa',
+      subtitle: `Período: ${startDate} a ${endDate}`,
+      columns: [
+        { header: 'Empresa', key: 'name' },
+        { header: 'Funcionários', key: 'totalWorkers', width: 28, align: 'center' },
+        { header: 'Entrada', key: 'firstEntryStr', width: 35, align: 'center' },
+        { header: 'Saída', key: 'exitStatus', width: 28, align: 'center' },
+        { header: 'Permanência', key: 'duration', width: 30, align: 'center' },
+      ],
+      data: filtered.map(c => ({
+        ...c,
+        firstEntryStr: c.firstEntry ? format(c.firstEntry, 'dd/MM/yyyy HH:mm') : '-',
+        exitStatus: c.allExited ? 'Todos saíram' : `A bordo (${c.onBoardNow})`,
+        duration: formatDuration(c.totalMinutes),
+      })),
+      filename: `relatorio-empresa-${startDate}-${endDate}.pdf`,
+      summaryRows: [
+        { label: 'Total funcionários', value: String(totalWorkers) },
+        { label: 'Diurno', value: String(totalDay) },
+        { label: 'Noturno', value: String(totalNight) },
+        { label: 'A bordo agora', value: String(totalOnBoard) },
+      ],
+    });
+  };
 
   if (!projectId) {
     return (
@@ -118,141 +253,119 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-full bg-blue-100 dark:bg-blue-900/30">
-                <Building2 className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Empresas</p>
-                <p className="text-3xl font-bold">{companyData.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-full bg-green-100 dark:bg-green-900/30">
-                <Users className="h-6 w-6 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Trabalhadores</p>
-                <p className="text-3xl font-bold">{totalWorkers}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-full bg-purple-100 dark:bg-purple-900/30">
-                <Clock className="h-6 w-6 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Acessos</p>
-                <p className="text-3xl font-bold">{totalEntries}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+    <div className="space-y-4">
+      {/* Title + Client Logo */}
+      <div className="flex items-center gap-4">
+        <h2 className="text-xl font-semibold">Tempo de Trabalho por Empresa</h2>
+        {clientLogoUrl && (
+          <img src={clientLogoUrl} alt="Logo do cliente" className="h-8 object-contain" />
+        )}
       </div>
 
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" className="gap-2" onClick={() => {
-          const csvContent = [
-            ['Empresa', 'Trabalhadores', 'Horas', 'Acessos'].join(','),
-            ...companyData.map(c => [c.name, c.totalWorkers, c.totalHours, c.entries].join(','))
-          ].join('\n');
-          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-          const link = document.createElement('a');
-          link.href = URL.createObjectURL(blob);
-          link.download = `relatorio-empresa-${startDate}-${endDate}.csv`;
-          link.click();
-        }}>
-          <Download className="h-4 w-4" />
-          CSV
-        </Button>
-        <Button className="gap-2" onClick={() => {
-          exportReportPdf({
-            title: 'Relatório por Empresa',
-            subtitle: `Período: ${startDate} a ${endDate}`,
-            columns: [
-              { header: 'Empresa', key: 'name' },
-              { header: 'Trabalhadores', key: 'totalWorkers', width: 30, align: 'center' },
-              { header: 'Horas', key: 'totalHours', width: 25, align: 'center' },
-              { header: 'Acessos', key: 'entries', width: 25, align: 'center' },
-            ],
-            data: companyData,
-            filename: `relatorio-empresa-${startDate}-${endDate}.pdf`,
-            summaryRows: [
-              { label: 'Empresas', value: String(companyData.length) },
-              { label: 'Total trabalhadores', value: String(totalWorkers) },
-              { label: 'Total acessos', value: String(totalEntries) },
-            ],
-          });
-        }}>
-          <Download className="h-4 w-4" />
-          PDF
-        </Button>
+      {/* Search + Export */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar empresa..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="gap-2" onClick={handleExportCsv}>
+            <Download className="h-4 w-4" />
+            Exportar CSV
+          </Button>
+          <Button size="sm" className="gap-2" onClick={handleExportPdf}>
+            <Download className="h-4 w-4" />
+            Exportar PDF
+          </Button>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Relatório por Empresa</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            </div>
-          ) : companyData.length > 0 ? (
-            <ScrollArea className="h-[400px]">
-              <table className="w-full">
-                <thead className="sticky top-0 bg-card border-b">
-                  <tr>
-                    <th className="text-left p-4 text-sm font-medium text-muted-foreground">Empresa</th>
-                    <th className="text-center p-4 text-sm font-medium text-muted-foreground">Trabalhadores</th>
-                    <th className="text-center p-4 text-sm font-medium text-muted-foreground">Horas Totais</th>
-                    <th className="text-center p-4 text-sm font-medium text-muted-foreground">Entradas</th>
-                    <th className="text-center p-4 text-sm font-medium text-muted-foreground">Média Horas</th>
+      {/* Table */}
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      ) : filtered.length > 0 ? (
+        <div className="border rounded-lg overflow-hidden">
+          <ScrollArea className="h-[500px]">
+            <table className="w-full">
+              <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm border-b">
+                <tr>
+                  <th className="text-left p-3 text-sm font-medium text-muted-foreground">Empresa</th>
+                  <th className="text-center p-3 text-sm font-medium text-muted-foreground">Funcionários</th>
+                  <th className="text-center p-3 text-sm font-medium text-muted-foreground">Entrada</th>
+                  <th className="text-center p-3 text-sm font-medium text-muted-foreground">Saída</th>
+                  <th className="text-center p-3 text-sm font-medium text-muted-foreground">Permanência</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((company, index) => (
+                  <tr key={index} className="border-b hover:bg-muted/30 transition-colors">
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{company.name}</span>
+                        {company.onBoardNow > 0 && (
+                          <Badge className="bg-green-600 hover:bg-green-700 text-white text-[10px] px-1.5 py-0">
+                            {company.onBoardNow} a bordo
+                          </Badge>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-3 text-center">
+                      <Badge variant="secondary">{company.totalWorkers}</Badge>
+                    </td>
+                    <td className="p-3 text-center text-sm">
+                      {company.firstEntry
+                        ? format(company.firstEntry, "dd/MM/yyyy HH:mm", { locale: ptBR })
+                        : '-'}
+                    </td>
+                    <td className="p-3 text-center">
+                      {company.allExited ? (
+                        <span className="text-sm text-muted-foreground">Todos saíram</span>
+                      ) : (
+                        <Badge className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-1.5 py-0">
+                          A bordo
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="p-3 text-center">
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {formatDuration(company.totalMinutes)}
+                      </Badge>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {companyData.map((company, index) => (
-                    <tr key={index} className="border-b hover:bg-muted/50">
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                            <Building2 className="h-5 w-5 text-primary" />
-                          </div>
-                          <span className="font-medium">{company.name}</span>
-                        </div>
-                      </td>
-                      <td className="p-4 text-center">
-                        <Badge variant="secondary">{company.totalWorkers}</Badge>
-                      </td>
-                      <td className="p-4 text-center">{company.totalHours}h</td>
-                      <td className="p-4 text-center">{company.entries}</td>
-                      <td className="p-4 text-center">
-                        {company.totalWorkers > 0 ? Math.round(company.totalHours / company.totalWorkers) : 0}h
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </ScrollArea>
-          ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Nenhum dado de acesso encontrado no período</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                ))}
+                {/* TOTAL row */}
+                <tr className="bg-muted/50 font-semibold border-t-2">
+                  <td className="p-3">TOTAL</td>
+                  <td className="p-3 text-center">{totalWorkers}</td>
+                  <td className="p-3 text-center text-sm">
+                    Diurno: {totalDay} / Noturno: {totalNight}
+                  </td>
+                  <td className="p-3 text-center">
+                    {totalOnBoard > 0 && (
+                      <Badge className="bg-green-600 hover:bg-green-700 text-white text-xs">
+                        A bordo agora: {totalOnBoard}
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="p-3 text-center">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </ScrollArea>
+        </div>
+      ) : (
+        <div className="text-center py-12 text-muted-foreground border rounded-lg">
+          <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          <p>Nenhum dado de acesso encontrado no período</p>
+        </div>
+      )}
     </div>
   );
 };
