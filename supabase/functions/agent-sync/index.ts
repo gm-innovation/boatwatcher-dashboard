@@ -22,7 +22,15 @@ function validateTimestamp(ts: string): { valid: boolean; timestamp: string; rea
     return { valid: false, timestamp: ts, reason: `timestamp ${Math.round(diffMs / 60000)}min in the future` };
   }
 
-  // No automatic BRT correction — the agent is responsible for proper UTC conversion
+  // Smart BRT correction: if timestamp is 160-200min behind now,
+  // it's likely BRT sent as UTC by an old agent build → add 3h
+  const lagMin = (now - parsed.getTime()) / 60000;
+  if (lagMin >= 160 && lagMin <= 200) {
+    const corrected = new Date(parsed.getTime() + 3 * 60 * 60 * 1000);
+    console.log(`[agent-sync] BRT autocorrect: ${ts} → ${corrected.toISOString()} (lag=${Math.round(lagMin)}min)`);
+    return { valid: true, timestamp: corrected.toISOString() };
+  }
+
   return { valid: true, timestamp: ts };
 }
 

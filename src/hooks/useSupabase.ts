@@ -119,18 +119,17 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
     queryFn: async () => {
       if (!projectId) return [];
 
-      // Desktop with local server: local-first for instant offline response
+      // Desktop with local server: cloud-first (has all events with correct timestamps)
       if (usesLocalServer()) {
+        const cloudResult = await fetchWorkersOnBoardFromCloud(projectId, startTimestamp, dateFilter);
+        if (cloudResult !== null) return cloudResult;
+
+        // Offline fallback: use local SQLite data
         if (dateFilter === 'today') {
           const localWorkersOnBoard = await fetchProjectWorkersOnBoard(projectId);
           if (localWorkersOnBoard !== null) {
             return localWorkersOnBoard;
           }
-        }
-        // Local failed or non-today filter: try cloud as fallback
-        const cloudResult = await fetchWorkersOnBoardFromCloud(projectId, startTimestamp, dateFilter);
-        if (cloudResult !== null) {
-          return cloudResult;
         }
         return [];
       }
