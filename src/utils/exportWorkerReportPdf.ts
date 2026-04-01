@@ -498,8 +498,218 @@ export async function exportDetailedWorkerPdf(opts: PdfOptions) {
 }
 
 /* ═══════════════════════════════════════════════════
+   PDF TODOS OS TRABALHADORES — Lista deduplicada
+   ═══════════════════════════════════════════════════ */
+
+interface AllWorkersWorker {
+  code: number | null;
+  name: string;
+  companyName: string;
+  document: string;
+  jobFunction: string;
+}
+
+interface AllWorkersReportOptions {
+  workers: AllWorkersWorker[];
+  startDate: string;
+  endDate: string;
+  projectName?: string;
+  projectLocation?: string;
+  clientLogoDataUrl?: string;
+  systemLogoDataUrl?: string;
+}
+
+export async function exportAllWorkersReportPdf(opts: AllWorkersReportOptions) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const availableWidth = pageWidth - MARGIN * 2;
+
+  await drawLogos(doc, opts.clientLogoDataUrl, opts.systemLogoDataUrl);
+
+  let y = 26;
+
+  // Title
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.dark);
+  doc.text('Relatório de Todos os Trabalhadores Registrados', pageWidth / 2, y, { align: 'center' });
+  y += 6;
+
+  // Project + location
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...COLORS.medium);
+  const projectLine = [
+    opts.projectName ? `Projeto: ${opts.projectName}` : null,
+    opts.projectLocation ? `Local: ${opts.projectLocation}` : null,
+  ].filter(Boolean).join(' | ');
+  if (projectLine) {
+    doc.text(projectLine, pageWidth / 2, y, { align: 'center' });
+    y += 5;
+  }
+
+  // Period
+  const period = `Período: ${format(new Date(opts.startDate), 'dd/MM/yyyy')} a ${format(new Date(opts.endDate), 'dd/MM/yyyy')}`;
+  doc.text(period, pageWidth / 2, y, { align: 'center' });
+  y += 5;
+
+  // Generated at
+  doc.setFontSize(7.5);
+  doc.setTextColor(...COLORS.light);
+  doc.text(`Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}`, pageWidth / 2, y, { align: 'center' });
+  y += 6;
+
+  // Summary bar
+  const companiesCount = new Set(opts.workers.map(w => w.companyName)).size;
+  doc.setFillColor(...COLORS.summaryBg);
+  doc.roundedRect(MARGIN, y - 3, availableWidth, 10, 1, 1, 'F');
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.dark);
+  const summaryText = `Total de Trabalhadores: ${opts.workers.length}  |  Total de Empresas: ${companiesCount}`;
+  doc.text(summaryText, pageWidth / 2, y + 4, { align: 'center' });
+  y += 12;
+
+  // Separator
+  doc.setDrawColor(...COLORS.separator);
+  doc.setLineWidth(0.5);
+  doc.line(MARGIN, y, pageWidth - MARGIN, y);
+  y += 4;
+
+  // Group by company
+  const grouped = new Map<string, AllWorkersWorker[]>();
+  for (const w of opts.workers) {
+    const key = w.companyName;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(w);
+  }
+  // Sort groups alphabetically
+  const sortedGroups = Array.from(grouped.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+  // Column defs
+  const cols = [
+    { header: 'Nº', width: 14, align: 'center' as const },
+    { header: 'Nome', width: 0, align: 'left' as const },
+    { header: 'Empresa', width: 38, align: 'left' as const },
+    { header: 'CPF', width: 30, align: 'center' as const },
+    { header: 'Função', width: 34, align: 'left' as const },
+  ];
+  const fixedWidth = cols.reduce((s, c) => s + c.width, 0);
+  const nameWidth = availableWidth - fixedWidth;
+  const colWidths = cols.map(c => c.width || nameWidth);
+
+  const drawTableHeader = (currentY: number) => {
+    doc.setFillColor(...COLORS.headerBg);
+    doc.rect(MARGIN, currentY, availableWidth, 7, 'F');
+    doc.setTextColor(...COLORS.white);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'bold');
+    let x = MARGIN;
+    cols.forEach((col, i) => {
+      const tx = col.align === 'center' ? x + colWidths[i] / 2 : x + 1.5;
+      doc.text(col.header, tx, currentY + 5, { align: col.align === 'center' ? 'center' : 'left' });
+      x += colWidths[i];
+    });
+    return currentY + 7;
+  };
+
+  for (const [companyName, companyWorkers] of sortedGroups) {
+    // Company section header
+    y = checkPageBreak(doc, y, 20);
+    if (y <= 18) y = 18;
+
+    doc.setFillColor(...COLORS.sectionBg);
+    doc.roundedRect(MARGIN, y, availableWidth, 7, 1, 1, 'F');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.dark);
+    doc.text(`${companyName}  [${companyWorkers.length}]`, MARGIN + 3, y + 5);
+    y += 9;
+
+    y = drawTableHeader(y);
+
+    companyWorkers.sort((a, b) => (a.code ?? 9999) - (b.code ?? 9999));
+
+    companyWorkers.forEach((worker, ri) => {
+      y = checkPageBreak(doc, y, 7);
+      if (y <= 18) y = drawTableHeader(y);
+
+      if (ri % 2 === 0) {
+        doc.setFillColor(...COLORS.altRowBg);
+        doc.rect(MARGIN, y, availableWidth, 5.5, 'F');
+      }
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(...COLORS.dark);
+
+      const values = [
+        String(worker.code || '-'),
+        worker.name,
+        worker.companyName,
+        worker.document || '-',
+        worker.jobFunction,
+      ];
+
+      let x = MARGIN;
+      cols.forEach((col, i) => {
+        const tx = col.align === 'center' ? x + colWidths[i] / 2 : x + 1.5;
+        const maxW = colWidths[i] - 3;
+        let val = values[i];
+        if (doc.getTextWidth(val) > maxW) {
+          while (doc.getTextWidth(val + '…') > maxW && val.length > 1) val = val.slice(0, -1);
+          val += '…';
+        }
+        doc.text(val, tx, y + 4, { align: col.align === 'center' ? 'center' : 'left' });
+        x += colWidths[i];
+      });
+      y += 5.5;
+    });
+
+    y += 4;
+  }
+
+  addFooters(doc);
+  doc.save(`todos-trabalhadores-${opts.startDate}-${opts.endDate}.pdf`);
+}
+
+/* ═══════════════════════════════════════════════════
    Utilitário: carregar imagem como data URL (CORS-safe)
    ═══════════════════════════════════════════════════ */
+
+export async function loadImageAsDataUrl(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Calculate dimensions that fit inside a bounding box while preserving aspect ratio.
+ */
+export function fitImageDimensions(
+  dataUrl: string,
+  maxW: number,
+  maxH: number
+): Promise<{ w: number; h: number }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const ratio = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+      resolve({ w: img.naturalWidth * ratio, h: img.naturalHeight * ratio });
+    };
+    img.onerror = () => resolve({ w: maxW, h: maxH });
+    img.src = dataUrl;
+  });
+}
 
 export async function loadImageAsDataUrl(url: string): Promise<string | null> {
   try {
