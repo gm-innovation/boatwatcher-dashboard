@@ -1,43 +1,48 @@
 
 
-## Relatório PDF de Empresas — Seguir Padrão do Print
+## Corrigir Logos Esticadas nos PDFs — Manter Proporção
 
-O PDF atual usa `exportReportPdf` genérico (sem logos, sem info do projeto). O print mostra o mesmo layout usado nos relatórios de trabalhadores: logos do cliente e do sistema, nome do projeto, local, período, tabela com cabeçalho escuro, e rodapé com "Total de Empresas".
+### Problema
+Todos os PDFs usam dimensões fixas para logos (ex: `40x14mm`, `40x15mm`), ignorando a proporção real da imagem. Isso deforma as logos.
 
-### Plano
+### Solução
+Criar uma função utilitária que calcula as dimensões respeitando o aspect ratio da imagem dentro de um bounding box (largura máxima × altura máxima). Usar em todos os pontos de inserção de logo.
 
-#### 1. Criar função dedicada `exportCompanyReportPdf` em `src/utils/exportReportPdf.ts`
+### Função auxiliar (em `exportWorkerReportPdf.ts`)
 
-Nova função que segue o padrão de `exportWorkerReportPdf.ts`:
-- **Logos**: Cliente (esquerda) e Sistema (direita) no topo, usando `doc.addImage`
-- **Cabeçalho**: Título "Relatório de Empresas" centralizado, linha com "Projeto: X | Local: Y", linha com "Período: dd/MM/yyyy a dd/MM/yyyy"
-- **Separador**: Linha horizontal após o cabeçalho
-- **Tabela**: Cabeçalho com fundo escuro (#323232), colunas: Empresa, Funcionários, Entrada (formato `dd/MM HH:mm`), Saída ("A bordo" ou `dd/MM HH:mm`), Permanência
-- **Rodapé da tabela**: "Total de Empresas: X" em negrito
-- **Paginação**: "Página X de Y" no rodapé
-
-Interface de parâmetros:
 ```typescript
-interface CompanyPdfOptions {
-  companies: { name, totalWorkers, firstEntry, lastExit, allExited, onBoardNow, totalMinutes }[];
-  startDate: string;
-  endDate: string;
-  projectName?: string;
-  projectLocation?: string;
-  clientLogoDataUrl?: string;
-  systemLogoDataUrl?: string;
+function fitImageDimensions(
+  dataUrl: string,
+  maxW: number,
+  maxH: number
+): Promise<{ w: number; h: number }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const ratio = Math.min(maxW / img.width, maxH / img.height);
+      resolve({ w: img.width * ratio, h: img.height * ratio });
+    };
+    img.onerror = () => resolve({ w: maxW, h: maxH });
+    img.src = dataUrl;
+  });
 }
 ```
 
-#### 2. Atualizar `CompanyReport.tsx` — `handleExportPdf`
+### Arquivos a alterar
 
-- Importar `loadImageAsDataUrl` de `exportWorkerReportPdf`
-- Importar `useSystemSetting` e buscar `system_logo`
-- Tornar `handleExportPdf` async
-- Pré-carregar logos (cliente e sistema) como Base64
-- Chamar `exportCompanyReportPdf` com dados completos (projeto, local, logos, empresas filtradas)
+1. **`src/utils/exportWorkerReportPdf.ts`**
+   - Adicionar e exportar `fitImageDimensions`
+   - Atualizar `drawLogos` para ser `async` e usar `fitImageDimensions` antes de `addImage`
 
-#### Arquivos alterados
-- `src/utils/exportReportPdf.ts` — adicionar `exportCompanyReportPdf`
-- `src/components/reports/CompanyReport.tsx` — atualizar import, buscar logo do sistema, refazer `handleExportPdf`
+2. **`src/utils/exportReportPdf.ts`**
+   - Importar `fitImageDimensions`
+   - Atualizar inserção de logos em `exportCompanyReportPdf` para usar a função
+
+3. **`src/utils/exportReports.ts`**
+   - Importar `fitImageDimensions`
+   - Atualizar `exportToPDF` para usar a função nos dois logos (inmeta e cliente)
+
+### Impacto
+- Logos centralizam verticalmente no bounding box mantendo proporção
+- Nenhuma mudança visual além de corrigir a deformação
 
