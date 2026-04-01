@@ -1602,12 +1602,15 @@ function createDatabaseAPI(db, startCode) {
       }
 
       const existing = db.prepare('SELECT id FROM access_logs WHERE id = ?').get(data.id);
+      const cloudCreatedAt = data.created_at || data.timestamp || new Date().toISOString();
+
       if (existing) {
         // UPDATE canonical fields from cloud (fixes timestamp drift)
         db.prepare(`
           UPDATE access_logs SET
             worker_id = ?, device_id = ?, timestamp = ?, access_status = ?, direction = ?,
-            reason = ?, score = ?, worker_name = ?, worker_document = ?, device_name = ?, synced = 1
+            reason = ?, score = ?, worker_name = ?, worker_document = ?, device_name = ?,
+            created_at = ?, synced = 1
           WHERE id = ?
         `).run(
           localWorkerId,
@@ -1620,14 +1623,15 @@ function createDatabaseAPI(db, startCode) {
           data.worker_name || null,
           data.worker_document || null,
           data.device_name || null,
+          cloudCreatedAt,
           data.id,
         );
         return;
       }
 
       db.prepare(`
-        INSERT INTO access_logs (id, worker_id, device_id, timestamp, access_status, direction, reason, score, worker_name, worker_document, device_name, synced)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        INSERT INTO access_logs (id, worker_id, device_id, timestamp, access_status, direction, reason, score, worker_name, worker_document, device_name, created_at, synced)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       `).run(
         data.id,
         localWorkerId,
@@ -1640,6 +1644,7 @@ function createDatabaseAPI(db, startCode) {
         data.worker_name || null,
         data.worker_document || null,
         data.device_name || null,
+        cloudCreatedAt,
       );
     },
 
