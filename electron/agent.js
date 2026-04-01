@@ -232,6 +232,7 @@ class AgentController {
   async start() {
     if (this.running) return;
     this.running = true;
+    this._startedAt = Date.now();
     this.reloadDevices();
     this.pollInterval = setInterval(() => this.pollDevices(), this.pollIntervalMs);
     console.log(`[Agent] Started polling ${this.devices.length} devices`);
