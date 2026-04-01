@@ -106,10 +106,11 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
       workers: Set<string>;
       onBoardNow: number;
       firstEntry: Date | null;
+      lastExit: Date | null;
       totalMinutes: number;
       dayWorkers: number;
       nightWorkers: number;
-      workerExitStatus: Map<string, boolean>; // workerId -> hasExited
+      workerExitStatus: Map<string, boolean>;
     }>();
 
     workerLogs.forEach((logs, workerId) => {
