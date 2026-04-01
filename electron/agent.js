@@ -112,6 +112,7 @@ class AgentController {
     this._ignoredInvalidCount = 0;
     this._lastCapturedAt = null;
     this._lastIgnoreReason = null;
+    this._startedAt = null;
   }
 
   onNewEvent(callback) {
@@ -231,6 +232,7 @@ class AgentController {
   async start() {
     if (this.running) return;
     this.running = true;
+    this._startedAt = Date.now();
     this.reloadDevices();
     this.pollInterval = setInterval(() => this.pollDevices(), this.pollIntervalMs);
     console.log(`[Agent] Started polling ${this.devices.length} devices`);
@@ -244,6 +246,19 @@ class AgentController {
 
   async pollDevices() {
     await Promise.allSettled(this.devices.map(device => this.pollDeviceWithRetry(device)));
+
+    // Auto-reset all cursors if 10+ minutes with zero captures
+    if (this._startedAt && this._capturedCount === 0 && this._ignoredDedupeCount === 0) {
+      const uptimeMs = Date.now() - this._startedAt;
+      if (uptimeMs > 10 * 60 * 1000) {
+        console.warn('[Agent] 10min+ with zero captures. Auto-resetting all event cursors.');
+        for (const device of this.devices) {
+          this.setLastEventId(device, 0);
+        }
+        // Reset timer so we don't spam resets every 5s
+        this._startedAt = Date.now();
+      }
+    }
   }
 
   async pollDeviceWithRetry(device) {
@@ -331,7 +346,55 @@ class AgentController {
     } catch { /* ignore */ }
   }
 
-  async pollDevice(device, _retried = false) {
+  /**
+   * Fetch the maximum event ID currently on the device (without any filter).
+   * Used to detect stale cursors when the device has reset its event buffer.
+   */
+  async fetchMaxEventId(device, session, creds) {
+    const ip = device.controlid_ip_address;
+    const postData = JSON.stringify({ object: 'access_logs' });
+
+    return new Promise((resolve, reject) => {
+      const req = http.request({
+        hostname: ip,
+        port: creds.port,
+        path: `/load_objects.fcgi?session=${session}`,
+        method: 'POST',
+        timeout: 5000,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            const response = JSON.parse(data);
+            const events = response.access_logs || response.events || [];
+            if (!Array.isArray(events) || events.length === 0) {
+              resolve(null);
+              return;
+            }
+            let maxId = 0;
+            for (const evt of events) {
+              const id = evt.id || 0;
+              if (id > maxId) maxId = id;
+            }
+            resolve(maxId);
+          } catch {
+            reject(new Error('Failed to parse fallback response'));
+          }
+        });
+      });
+      req.on('error', reject);
+      req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+      req.write(postData);
+      req.end();
+    });
+  }
+
+
     const ip = device.controlid_ip_address;
     if (!ip) throw new Error('No IP');
 
@@ -394,6 +457,26 @@ class AgentController {
             }
 
             console.log(`[Agent][${device.name}] Received ${events.length} events (lastEventId=${lastEventId})`);
+
+            // Stale cursor detection: if 0 events returned but we have a cursor,
+            // the device may have reset its event buffer
+            if (events.length === 0 && lastEventId > 0) {
+              console.log(`[Agent][${device.name}] Zero events with lastEventId=${lastEventId}. Checking for stale cursor...`);
+              try {
+                const maxIdOnDevice = await this.fetchMaxEventId(device, session, creds);
+                if (maxIdOnDevice !== null && maxIdOnDevice < lastEventId) {
+                  console.warn(`[Agent][${device.name}] Stale cursor detected! Device maxId=${maxIdOnDevice} < lastEventId=${lastEventId}. Resetting cursor to 0.`);
+                  this.setLastEventId(device, 0);
+                  // Re-poll will happen on next cycle with cursor=0
+                } else {
+                  console.log(`[Agent][${device.name}] Cursor OK (device maxId=${maxIdOnDevice}, lastEventId=${lastEventId}). No new events.`);
+                }
+              } catch (fallbackErr) {
+                console.warn(`[Agent][${device.name}] Stale cursor check failed: ${fallbackErr.message}`);
+              }
+              resolve();
+              return;
+            }
 
             let maxId = lastEventId;
             for (const rawEvent of events) {
