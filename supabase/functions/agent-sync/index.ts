@@ -1131,7 +1131,7 @@ serve(async (req) => {
       // Build query with OR: device_id IN (...) OR (device_id IS NULL AND device_name IN (...))
       let query = supabase
         .from('access_logs')
-        .select('id, worker_id, device_id, timestamp, access_status, direction, reason, score, worker_name, worker_document, device_name')
+        .select('id, worker_id, device_id, timestamp, access_status, direction, reason, score, worker_name, worker_document, device_name, created_at')
         .gte('created_at', since)
         .order('created_at', { ascending: true })
         .limit(500)
