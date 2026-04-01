@@ -11,8 +11,9 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Download, FileDown, Search, Users, Building2, ChevronDown, ChevronRight } from 'lucide-react';
-import { exportStandardWorkerPdf, exportDetailedWorkerPdf } from '@/utils/exportWorkerReportPdf';
+import { exportStandardWorkerPdf, exportDetailedWorkerPdf, loadImageAsDataUrl } from '@/utils/exportWorkerReportPdf';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useSystemSetting } from '@/hooks/useSystemSettings';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -53,6 +54,23 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
 
   const { data: companies = [] } = useCompanies();
   const { data: accessLogs = [], isLoading } = useAccessLogs(projectId, startDate, endDate, 1000);
+
+  const { data: systemLogoSetting } = useSystemSetting('system_logo');
+
+  const { data: project } = useQuery({
+    queryKey: ['project-for-report', projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name, location, client_id, companies(id, name, logo_url_light)')
+        .eq('id', projectId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!projectId,
+  });
 
   const { data: jobFunctions = [] } = useQuery({
     queryKey: ['job-functions-list'],
@@ -236,21 +254,43 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
     link.click();
   };
 
-  const handleExportStandardPdf = () => {
+  const handleExportStandardPdf = async () => {
+    const clientLogoUrl = (project?.companies as any)?.logo_url_light;
+    const systemLogoUrl = systemLogoSetting?.value && typeof systemLogoSetting.value === 'object' ? (systemLogoSetting.value as any).light_url : null;
+
+    const [clientLogo, systemLogo] = await Promise.all([
+      clientLogoUrl ? loadImageAsDataUrl(clientLogoUrl) : Promise.resolve(null),
+      systemLogoUrl ? loadImageAsDataUrl(systemLogoUrl) : Promise.resolve(null),
+    ]);
+
     exportStandardWorkerPdf({
       rows: filteredRows,
-      grouped,
       startDate,
       endDate,
+      projectName: project?.name,
+      projectLocation: project?.location || undefined,
+      clientLogoDataUrl: clientLogo || undefined,
+      systemLogoDataUrl: systemLogo || undefined,
     });
   };
 
-  const handleExportDetailedPdf = () => {
+  const handleExportDetailedPdf = async () => {
+    const clientLogoUrl = (project?.companies as any)?.logo_url_light;
+    const systemLogoUrl = systemLogoSetting?.value && typeof systemLogoSetting.value === 'object' ? (systemLogoSetting.value as any).light_url : null;
+
+    const [clientLogo, systemLogo] = await Promise.all([
+      clientLogoUrl ? loadImageAsDataUrl(clientLogoUrl) : Promise.resolve(null),
+      systemLogoUrl ? loadImageAsDataUrl(systemLogoUrl) : Promise.resolve(null),
+    ]);
+
     exportDetailedWorkerPdf({
       rows: filteredRows,
-      grouped,
       startDate,
       endDate,
+      projectName: project?.name,
+      projectLocation: project?.location || undefined,
+      clientLogoDataUrl: clientLogo || undefined,
+      systemLogoDataUrl: systemLogo || undefined,
     });
   };
 
