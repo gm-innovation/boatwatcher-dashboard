@@ -236,33 +236,21 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
     link.click();
   };
 
-  const handleExportPdf = () => {
-    exportReportPdf({
-      title: 'Tempo de Trabalho por Trabalhador',
-      subtitle: `Período: ${format(new Date(startDate), 'dd/MM/yyyy')} a ${format(new Date(endDate), 'dd/MM/yyyy')}`,
-      columns: [
-        { header: 'Nº', key: 'num', width: 10, align: 'center' },
-        { header: 'Nome', key: 'name' },
-        { header: 'Função', key: 'role', width: 25 },
-        { header: 'Empresa', key: 'company', width: 25 },
-        { header: 'Entrada', key: 'entry', width: 18, align: 'center' },
-        { header: 'Saída', key: 'exit', width: 18, align: 'center' },
-        { header: 'Total', key: 'total', width: 18, align: 'center' },
-      ],
-      data: filteredRows.map((row, i) => ({
-        num: String(i + 1),
-        name: row.workerName + (row.isOnBoard ? ' (A bordo)' : ''),
-        role: row.role,
-        company: row.companyName,
-        entry: formatTime(row.firstEntry),
-        exit: formatTime(row.lastExit),
-        total: formatDuration(row.totalMinutes),
-      })),
-      filename: `trabalhadores-${startDate}-${endDate}.pdf`,
-      summaryRows: [
-        { label: 'Total trabalhadores', value: String(filteredRows.length) },
-        { label: 'A bordo', value: String(filteredRows.filter(r => r.isOnBoard).length) },
-      ],
+  const handleExportStandardPdf = () => {
+    exportStandardWorkerPdf({
+      rows: filteredRows,
+      grouped,
+      startDate,
+      endDate,
+    });
+  };
+
+  const handleExportDetailedPdf = () => {
+    exportDetailedWorkerPdf({
+      rows: filteredRows,
+      grouped,
+      startDate,
+      endDate,
     });
   };
 
