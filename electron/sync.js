@@ -523,6 +523,11 @@ class SyncEngine {
             this.db.setSyncMeta?.('last_download_access_logs', '1970-01-01T00:00:00Z');
             console.log('[sync] Manual access points detected — resetting access logs checkpoint for full re-download');
           }
+          // Also check if we still have pending batches (pagination not yet complete)
+          const currentCheckpoint = this.db.getSyncMeta?.('last_download_access_logs') || '';
+          if (currentCheckpoint && currentCheckpoint < new Date(Date.now() - 60000).toISOString()) {
+            console.log('[sync] Access logs checkpoint is behind — will continue pagination on next cycle');
+          }
         }
       }
     } catch (e) {
