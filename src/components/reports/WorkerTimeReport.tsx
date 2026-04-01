@@ -55,6 +55,23 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
   const { data: companies = [] } = useCompanies();
   const { data: accessLogs = [], isLoading } = useAccessLogs(projectId, startDate, endDate, 1000);
 
+  const { data: systemLogoSetting } = useSystemSetting('system_logo');
+
+  const { data: project } = useQuery({
+    queryKey: ['project-for-report', projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name, location, client_id, companies(id, name, logo_url_light)')
+        .eq('id', projectId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!projectId,
+  });
+
   const { data: jobFunctions = [] } = useQuery({
     queryKey: ['job-functions-list'],
     queryFn: async () => {
