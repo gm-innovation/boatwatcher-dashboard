@@ -1,57 +1,50 @@
 
 
-## Corrigir horário da empresa e UTC no Desktop
+## Diagnóstico e Correções
 
-### Resumo do problema
+### Resultado da Investigação
 
-1. **Horário da empresa**: deve mostrar o primeiro acesso do dia de qualquer trabalhador vinculado, mas hoje mostra o `min()` dos horários de entrada atuais dos trabalhadores (que podem ser re-entradas). Se um trabalhador entrou às 06:00, saiu e re-entrou às 09:00, o worker mostra 09:00 (correto), mas a empresa deveria mostrar 06:00 e está mostrando 09:00.
+Verifiquei diretamente pelo navegador do sandbox:
+- As 4 queries de `access_logs` estão retornando status 200 com dados corretos
+- Eventos do leitor facial ESTÃO sendo retornados (13 entradas de dispositivo encontradas)
+- O último estado é: entrada por dispositivo às 20:56:38 → saída manual às 20:56:47 (9 segundos depois)
+- Dashboard corretamente mostra 0 trabalhadores a bordo
+- Nenhum erro no console
 
-2. **UTC no Desktop**: linha 1154 do `electron/database.js` anexa `-03:00` a timestamps sem marcador, causando atraso de 3h. Deve ser `Z`.
+**Causa provável**: o intervalo entre entrada (facial) e saída (manual) é muito curto (< 10s). O polling da web (10s) não captura essa janela. O desktop mostra porque usa SQLite local com resposta imediata.
 
-3. **Desktop SQL**: a query atual usa `ROW_NUMBER() ORDER BY ASC` com `rn = 1`, retornando apenas a **primeira** entrada. Se o trabalhador saiu e re-entrou, a primeira entrada tem saída correspondente e o trabalhador não aparece. Precisa retornar a **última entrada sem saída** como `entryTime` do worker, e separadamente a **primeira entrada do dia** como `firstEntryTime` para o cálculo da empresa.
+### Correções Propostas
 
-### Alterações
+**1. `startTimestamp` com timezone fixo (BRT)**
 
-**1. `src/hooks/useSupabase.ts`**
+O `startTimestamp` atual depende do timezone do navegador. No sandbox (PDT/UTC-7), calcula meia-noite como 07:00 UTC. No navegador do usuário (BRT/UTC-3), calcula 03:00 UTC. Isso pode causar inconsistências.
 
-Na função `fetchWorkersOnBoardFromCloud`, após construir o `workersOnBoard` map (linha 275):
-- Criar `firstEntryMap` com a primeira entrada do dia de cada worker (entryLogs já está ascending):
+Corrigir para usar sempre meia-noite BRT (UTC-3):
 ```typescript
-const firstEntryMap = new Map<string, string>();
-for (const entry of entryLogs || []) {
-  const key = entry.worker_name || entry.worker_id || '';
-  if (key && !firstEntryMap.has(key)) {
-    firstEntryMap.set(key, entry.timestamp);
-  }
-}
-```
-- No return (linha 311), adicionar campo `firstEntryTime`:
-```typescript
-entryTime: onBoard.entry_time,
-firstEntryTime: firstEntryMap.get(key) || onBoard.entry_time,
+// Trocar:
+const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack);
+// Por:
+const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysBack));
+todayUTC.setUTCHours(3, 0, 0, 0); // meia-noite BRT = 03:00 UTC
+const startTimestamp = todayUTC.toISOString();
 ```
 
-Na função `useCompaniesOnBoard` (linha 354-382):
-- Usar `worker.firstEntryTime` em vez de `worker.entryTime` para calcular o horário da empresa:
-```typescript
-const workerFirstEntry = worker.firstEntryTime || worker.entryTime;
-// usar workerFirstEntry na comparação de min
-```
+**2. Reduzir polling para 5s**
 
-**2. `electron/database.js`**
+Trocar `refetchInterval: 10000` por `refetchInterval: 5000` para capturar janelas curtas de on-board.
 
-- **UTC fix** (linha 1154): trocar `'-03:00'` por `'Z'`
+**3. Verificar UTC no Desktop (`electron/database.js`)**
 
-- **SQL**: mudar a query para retornar tanto a última entrada sem saída (para o worker) quanto a primeira entrada do dia (para a empresa). Adicionar uma segunda CTE ou subquery para buscar `MIN(timestamp)` como `first_entry_time` por worker, e incluir no resultado. No mapeamento (linha 1176), retornar ambos:
-```javascript
-entryTime,           // última entrada sem saída
-firstEntryTime: ..., // MIN do dia
-```
+Confirmar que a alteração de `-03:00` para `Z` foi aplicada corretamente na função `getWorkersOnBoard`.
+
+**4. Verificar `firstEntryTime` para empresas**
+
+Confirmar que `useCompaniesOnBoard` usa `worker.firstEntryTime` (primeiro acesso do dia) em vez de `worker.entryTime` (sessão atual).
 
 ### Arquivos afetados
 
 | Arquivo | Ação |
 |---|---|
-| `src/hooks/useSupabase.ts` | Adicionar `firstEntryMap` + usar no `useCompaniesOnBoard` |
-| `electron/database.js` | Fix UTC (`Z`), SQL retornar first + last entry |
+| `src/hooks/useSupabase.ts` | Fixar timezone BRT no startTimestamp + reduzir polling |
+| `electron/database.js` | Confirmar UTC fix aplicado |
 
