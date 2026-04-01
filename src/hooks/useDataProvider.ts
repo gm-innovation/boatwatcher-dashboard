@@ -370,28 +370,52 @@ export async function fetchAccessLogs(filters?: { projectId?: string; startDate?
   return executeWithDesktopFallback(
     () => localAccessLogs.list(filters as any),
     async () => {
-      let query = supabase
-        .from('access_logs')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .limit(filters?.limit || 100);
-
-      if (filters?.startDate) query = query.gte('timestamp', `${filters.startDate}T00:00:00`);
-      if (filters?.endDate) query = query.lte('timestamp', `${filters.endDate}T23:59:59`);
+      const limit = filters?.limit || 100;
 
       if (filters?.projectId) {
-        const { data: devices, error: devicesError } = await supabase
-          .from('devices')
-          .select('id')
-          .eq('project_id', filters.projectId);
+        // Fetch hardware devices and manual access points in parallel
+        const [devicesRes, manualPointsRes] = await Promise.all([
+          supabase.from('devices').select('id').eq('project_id', filters.projectId),
+          supabase.from('manual_access_points').select('name').eq('project_id', filters.projectId),
+        ]);
 
-        if (devicesError) throw devicesError;
+        if (devicesRes.error) throw devicesRes.error;
+        if (manualPointsRes.error) throw manualPointsRes.error;
 
-        const deviceIds = (devices || []).map((device) => device.id);
-        if (deviceIds.length === 0) return [];
+        const deviceIds = (devicesRes.data || []).map((d) => d.id);
+        const manualNames = (manualPointsRes.data || []).map((p) => `Manual - ${p.name}`);
 
-        query = query.in('device_id', deviceIds);
+        if (deviceIds.length === 0 && manualNames.length === 0) return [];
+
+        // Build base queries for each source
+        const buildBase = () => {
+          let q = supabase.from('access_logs').select('*').order('timestamp', { ascending: false }).limit(limit);
+          if (filters?.startDate) q = q.gte('timestamp', `${filters.startDate}T00:00:00`);
+          if (filters?.endDate) q = q.lte('timestamp', `${filters.endDate}T23:59:59`);
+          return q;
+        };
+
+        const [deviceLogs, manualLogs] = await Promise.all([
+          deviceIds.length > 0
+            ? buildBase().in('device_id', deviceIds)
+            : Promise.resolve({ data: [] as any[], error: null }),
+          manualNames.length > 0
+            ? buildBase().is('device_id', null).in('device_name', manualNames)
+            : Promise.resolve({ data: [] as any[], error: null }),
+        ]);
+
+        if (deviceLogs.error) throw deviceLogs.error;
+        if (manualLogs.error) throw manualLogs.error;
+
+        return [...(deviceLogs.data || []), ...(manualLogs.data || [])]
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          .slice(0, limit);
       }
+
+      // No project filter — return all logs
+      let query = supabase.from('access_logs').select('*').order('timestamp', { ascending: false }).limit(limit);
+      if (filters?.startDate) query = query.gte('timestamp', `${filters.startDate}T00:00:00`);
+      if (filters?.endDate) query = query.lte('timestamp', `${filters.endDate}T23:59:59`);
 
       const { data, error } = await query;
       if (error) throw error;
