@@ -203,7 +203,7 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
         c.totalWorkers,
         c.onBoardNow,
         c.firstEntry ? format(c.firstEntry, 'dd/MM/yyyy HH:mm') : '-',
-        c.allExited ? 'Todos saíram' : 'A bordo',
+        c.allExited ? (c.lastExit ? format(c.lastExit, 'dd/MM/yyyy HH:mm') : 'Todos saíram') : 'A bordo',
         formatDuration(c.totalMinutes),
       ].join(','))
     ].join('\n');
