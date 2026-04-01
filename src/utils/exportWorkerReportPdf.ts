@@ -134,7 +134,7 @@ async function drawHeader(
   opts: PdfOptions,
   dayCount: number,
   nightCount: number,
-): number {
+): Promise<number> {
   const pageWidth = doc.internal.pageSize.getWidth();
   const availableWidth = pageWidth - MARGIN * 2;
 
