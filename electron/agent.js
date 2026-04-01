@@ -246,6 +246,19 @@ class AgentController {
 
   async pollDevices() {
     await Promise.allSettled(this.devices.map(device => this.pollDeviceWithRetry(device)));
+
+    // Auto-reset all cursors if 10+ minutes with zero captures
+    if (this._startedAt && this._capturedCount === 0 && this._ignoredDedupeCount === 0) {
+      const uptimeMs = Date.now() - this._startedAt;
+      if (uptimeMs > 10 * 60 * 1000) {
+        console.warn('[Agent] 10min+ with zero captures. Auto-resetting all event cursors.');
+        for (const device of this.devices) {
+          this.setLastEventId(device, 0);
+        }
+        // Reset timer so we don't spam resets every 5s
+        this._startedAt = Date.now();
+      }
+    }
   }
 
   async pollDeviceWithRetry(device) {
