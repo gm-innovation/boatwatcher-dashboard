@@ -1,84 +1,58 @@
 
 
-## Recriar Layout dos PDFs — Formato Retrato com Logos
+## Redesign da Aba de Empresas — Layout conforme o print
 
-### Contexto
+### O que o print mostra
 
-Os prints mostram o layout desejado com:
-- **Logo do cliente** (OceanPact) à esquerda e **logo do sistema** (googlemarine) à direita no cabeçalho
-- Formato **retrato** (portrait) em ambos os PDFs
-- Cabeçalho com: título, projeto + local, período, contagem de trabalhadores (diurnos/noturnos), empresas
-- Nota sobre `(*)` indicando permanência além do período
-- **PDF Padrão**: agrupado por período (Diurno 05:00-18:59 / Noturno 19:00-04:59), não por empresa
-- **PDF Detalhado**: seção individual por trabalhador com registros separados por período diurno/noturno, e informações detalhadas (primeira entrada, status, tempo total, tempo efetivo)
-- Linha horizontal separadora antes de cada seção principal
+- Título "Tempo de Trabalho por Empresa" com logo do cliente (OceanPact) abaixo
+- Barra de busca por empresa + botões "Exportar CSV" e "Exportar PDF"
+- Tabela com colunas: **Empresa**, **Funcionários**, **Entrada**, **Saída**, **Permanência**
+- Cada empresa mostra: nome + badge "X a bordo" (verde), count de workers, data/hora da primeira entrada, badge "A bordo" (azul) se ainda dentro, tempo total formatado (ex: "572h 10m")
+- Linha **TOTAL** no rodapé: total funcionários, "Diurno: X / Noturno: Y", badge "A bordo agora: X" (verde), sem permanência
+- Remove os 3 summary cards (Empresas, Total Trabalhadores, Total Acessos)
+- Remove o card wrapper com CardHeader — layout mais limpo e direto
 
-### Arquivos alterados
+### Mudanças no data model
 
-| Arquivo | Mudança |
-|---------|------|
-| `src/utils/exportWorkerReportPdf.ts` | Reescrever ambas funções com novo layout |
-| `src/components/reports/WorkerTimeReport.tsx` | Passar dados de projeto (location, client logos, system logo) para as funções de PDF |
-
-### 1. Interface de opções — adicionar campos de logo e projeto
+O `CompanyData` atual tem `name, totalWorkers, totalHours, entries`. Precisa mudar para:
 
 ```typescript
-interface PdfOptions {
-  rows: WorkerRow[];
-  grouped: [string, WorkerRow[]][];
-  startDate: string;
-  endDate: string;
-  projectName?: string;
-  projectLocation?: string;
-  clientLogoUrl?: string;   // logo_url_light da company/client do projeto
-  systemLogoUrl?: string;   // system_logo light_url
+interface CompanyData {
+  name: string;
+  totalWorkers: number;
+  onBoardNow: number;           // quantos estão a bordo agora
+  firstEntry: Date | null;       // primeira entrada de qualquer worker da empresa
+  allExited: boolean;            // true se todos saíram
+  totalMinutes: number;          // permanência total (soma de todos os workers)
+  dayWorkers: number;            // workers com primeira entrada diurna
+  nightWorkers: number;          // workers com primeira entrada noturna
 }
 ```
 
-### 2. Novo `drawHeader` com logos
+A lógica de `companyData` já agrupa logs por worker e empresa — precisa adicionar:
+- Rastrear `isOnBoard` por worker (última ação = entry)
+- Calcular `firstEntry` (menor timestamp de entry da empresa)
+- Calcular permanência como soma dos pares entry→exit + tempo aberto para quem está a bordo
+- Classificar diurno/noturno pela hora da primeira entrada do worker
 
-- Carregar as duas imagens (client logo esquerda, system logo direita) como `Image()` com `crossOrigin = 'anonymous'`
-- Se falhar o carregamento, ignorar a logo e usar espaço para texto
-- Título: "Relatório de Acesso por Trabalhador" (padrão) ou "Relatório de Controle de Acessos de Colaboradores" (detalhado)
-- Subtítulo: `Projeto: {name} | Local: {location}`
-- Período: `Período: dd/MM/yyyy a dd/MM/yyyy`
-- Contagem: `Total de Trabalhadores: X (Diurnos: Y, Noturnos: Z) | Total de Empresas: W`
-- Data geração em verde/cinza claro
-- Nota `(*)` em itálico
-- Linha horizontal separadora
+### Arquivo alterado
 
-### 3. PDF Padrão — agrupar por período, não por empresa
+| Arquivo | Mudança |
+|---------|------|
+| `src/components/reports/CompanyReport.tsx` | Reescrever completamente: remover summary cards, novo layout de tabela, novo data model, busca por empresa, logo do cliente, linha TOTAL |
 
-Mudança principal: em vez de agrupar por empresa, agrupar os trabalhadores em dois blocos:
-- **"Trabalhadores - Período Diurno (05:00 - 18:59)"**: trabalhadores cuja primeira entrada foi entre 05:00-18:59
-- **"Trabalhadores - Período Noturno (19:00 - 04:59)"**: trabalhadores cuja primeira entrada foi entre 19:00-04:59
-- Se um período não tem trabalhadores: "Nenhum trabalhador noturno neste período."
-- Colunas: Nº (código), Nome, CPF, Função, Empresa, Entrada (com indicador D/N), Saída, Total
-- Usar `workerCode` (não índice sequencial) na coluna Nº
-- Orientação: **portrait** A4
+### Layout da tabela
 
-### 4. PDF Detalhado — seção por trabalhador com períodos
+- Sem cards de resumo no topo
+- Busca + botões de export no topo
+- Título "Tempo de Trabalho por Empresa" com logo do cliente (via query do projeto como já feito no WorkerTimeReport)
+- Tabela simples e limpa com as 5 colunas
+- Badges: "X a bordo" (verde, ao lado do nome), "A bordo" (azul, coluna Saída), tempo formatado "Xh Ym" (badge cinza, coluna Permanência)
+- Rodapé TOTAL com contagens diurno/noturno e "A bordo agora: X"
 
-Para cada trabalhador:
-- Linha horizontal separadora
-- **"Trabalhador: {Nome} (Nº: {código})"** em bold
-- CPF, Função, Empresa numa linha
-- Primeira Entrada no Período, Status ao Final, Tempo Total, Tempo Efetivo
-- Sub-seção **"Registros Diurnos (05:00 - 18:59)"** com lista cronológica: data, hora, ENTRADA/SAÍDA, dispositivo
-- Sub-seção **"Registros Noturnos (19:00 - 04:59)"** idem
-- Orientação: **portrait** A4
+### Dados necessários
 
-### 5. WorkerTimeReport.tsx — passar dados extras
-
-- Buscar o projeto selecionado (com `client_id`) para obter `location` e `client.logo_url_light`
-- Buscar `system_logo` setting (light_url)
-- Passar `projectName`, `projectLocation`, `clientLogoUrl`, `systemLogoUrl` para ambas funções de export
-- Pré-carregar as imagens como data URLs antes de chamar o export (usando `fetch` + `blob` + `toDataURL` via canvas) para evitar problemas de CORS no jsPDF
-
-### Detalhes técnicos
-
-- As logos são carregadas como base64 data URLs antes de passar ao jsPDF (resolve CORS)
-- `jsPDF.addImage(dataUrl, 'PNG', x, y, w, h)` para posicionar as logos
-- Classificação diurno/noturno baseada na hora da primeira entrada do trabalhador
-- O formato passa de landscape para **portrait** no PDF padrão (colunas mais compactas)
+- Reutilizar query de `workers` já existente
+- Adicionar query do projeto (para logo do cliente) — mesmo padrão do WorkerTimeReport
+- `useAccessLogs` já em uso
 
