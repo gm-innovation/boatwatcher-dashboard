@@ -1746,6 +1746,34 @@ function createDatabaseAPI(db, startCode) {
       return this.getAgentInfo();
     },
 
+    upsertManualAccessPointFromCloud(data) {
+      if (!data.id) return;
+      const existing = db.prepare('SELECT id FROM manual_access_points WHERE id = ?').get(data.id);
+      if (existing) {
+        db.prepare(`
+          UPDATE manual_access_points SET name=?, project_id=?, access_location=?, direction_mode=?, is_active=?,
+          location_description=?, client_id=?, recognition_method=?, require_photo=?, auto_sync=?
+          WHERE id=?
+        `).run(
+          data.name, data.project_id || null, data.access_location || 'bordo', data.direction_mode || 'both',
+          data.is_active ? 1 : 0, data.location_description || null, data.client_id || null,
+          data.recognition_method || 'code', data.require_photo ? 1 : 0, data.auto_sync !== false ? 1 : 0,
+          data.id
+        );
+      } else {
+        db.prepare(`
+          INSERT INTO manual_access_points (id, name, project_id, access_location, direction_mode, is_active,
+          location_description, client_id, recognition_method, require_photo, auto_sync, created_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+        `).run(
+          data.id, data.name, data.project_id || null, data.access_location || 'bordo', data.direction_mode || 'both',
+          data.is_active ? 1 : 0, data.location_description || null, data.client_id || null,
+          data.recognition_method || 'code', data.require_photo ? 1 : 0, data.auto_sync !== false ? 1 : 0,
+          data.created_at || new Date().toISOString()
+        );
+      }
+    },
+
     getRawDb() {
       return db;
     },

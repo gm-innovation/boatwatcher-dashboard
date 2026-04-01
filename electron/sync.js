@@ -495,6 +495,24 @@ class SyncEngine {
       allSucceeded = false;
     }
 
+    // Manual Access Points
+    try {
+      const manualRes = await this.callEdgeFunction('agent-sync/download-manual-access-points', 'GET');
+      if (manualRes.manual_access_points) {
+        for (const point of manualRes.manual_access_points) {
+          try {
+            this.db.upsertManualAccessPointFromCloud?.(point);
+          } catch (err) {
+            console.error(`[sync] manual_access_point upsert failed for ${point.id}:`, err.message);
+          }
+        }
+        console.log(`[sync] Downloaded ${manualRes.manual_access_points.length} manual_access_points`);
+      }
+    } catch (e) {
+      console.error('[sync] Download manual_access_points error:', e.message);
+      allSucceeded = false;
+    }
+
     // Only update the global checkpoint if all stages succeeded
     if (allSucceeded) {
       this.db.setSyncMeta('last_download', new Date().toISOString());
