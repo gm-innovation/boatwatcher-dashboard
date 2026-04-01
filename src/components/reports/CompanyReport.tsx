@@ -165,16 +165,24 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
       }
     });
 
-    return Array.from(companyStats.entries()).map(([name, stats]) => ({
-      name,
-      totalWorkers: stats.workers.size,
-      onBoardNow: stats.onBoardNow,
-      firstEntry: stats.firstEntry,
-      allExited: stats.onBoardNow === 0,
-      totalMinutes: stats.totalMinutes,
-      dayWorkers: stats.dayWorkers,
-      nightWorkers: stats.nightWorkers,
-    })).sort((a, b) => b.totalWorkers - a.totalWorkers);
+    return Array.from(companyStats.entries()).map(([name, stats]) => {
+      const allExited = stats.onBoardNow === 0;
+      const endTime = allExited ? stats.lastExit : new Date();
+      const totalMinutes = stats.firstEntry && endTime
+        ? differenceInMinutes(endTime, stats.firstEntry)
+        : 0;
+      return {
+        name,
+        totalWorkers: stats.workers.size,
+        onBoardNow: stats.onBoardNow,
+        firstEntry: stats.firstEntry,
+        lastExit: stats.lastExit,
+        allExited,
+        totalMinutes: Math.max(0, totalMinutes),
+        dayWorkers: stats.dayWorkers,
+        nightWorkers: stats.nightWorkers,
+      };
+    }).sort((a, b) => b.totalWorkers - a.totalWorkers);
   }, [accessLogs, workers]);
 
   const filtered = useMemo(() => {
