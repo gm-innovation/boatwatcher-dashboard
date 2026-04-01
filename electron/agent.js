@@ -410,6 +410,26 @@ class AgentController {
 
             console.log(`[Agent][${device.name}] Received ${events.length} events (lastEventId=${lastEventId})`);
 
+            // Stale cursor detection: if 0 events returned but we have a cursor,
+            // the device may have reset its event buffer
+            if (events.length === 0 && lastEventId > 0) {
+              console.log(`[Agent][${device.name}] Zero events with lastEventId=${lastEventId}. Checking for stale cursor...`);
+              try {
+                const maxIdOnDevice = await this.fetchMaxEventId(device, session, creds);
+                if (maxIdOnDevice !== null && maxIdOnDevice < lastEventId) {
+                  console.warn(`[Agent][${device.name}] Stale cursor detected! Device maxId=${maxIdOnDevice} < lastEventId=${lastEventId}. Resetting cursor to 0.`);
+                  this.setLastEventId(device, 0);
+                  // Re-poll will happen on next cycle with cursor=0
+                } else {
+                  console.log(`[Agent][${device.name}] Cursor OK (device maxId=${maxIdOnDevice}, lastEventId=${lastEventId}). No new events.`);
+                }
+              } catch (fallbackErr) {
+                console.warn(`[Agent][${device.name}] Stale cursor check failed: ${fallbackErr.message}`);
+              }
+              resolve();
+              return;
+            }
+
             let maxId = lastEventId;
             for (const rawEvent of events) {
               const eventId = rawEvent.id || 0;
