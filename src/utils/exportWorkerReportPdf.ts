@@ -107,30 +107,38 @@ function checkPageBreak(doc: jsPDF, y: number, needed: number): number {
   return y;
 }
 
-function drawLogos(doc: jsPDF, clientLogo?: string, systemLogo?: string) {
+async function drawLogos(doc: jsPDF, clientLogo?: string, systemLogo?: string) {
   const pageWidth = doc.internal.pageSize.getWidth();
-  const logoH = 14;
   const logoMaxW = 40;
+  const logoMaxH = 14;
 
   if (clientLogo) {
-    try { doc.addImage(clientLogo, 'PNG', MARGIN, 8, logoMaxW, logoH); } catch {}
+    try {
+      const { w, h } = await fitImageDimensions(clientLogo, logoMaxW, logoMaxH);
+      const yOffset = 8 + (logoMaxH - h) / 2;
+      doc.addImage(clientLogo, 'PNG', MARGIN, yOffset, w, h);
+    } catch {}
   }
   if (systemLogo) {
-    try { doc.addImage(systemLogo, 'PNG', pageWidth - MARGIN - logoMaxW, 8, logoMaxW, logoH); } catch {}
+    try {
+      const { w, h } = await fitImageDimensions(systemLogo, logoMaxW, logoMaxH);
+      const yOffset = 8 + (logoMaxH - h) / 2;
+      doc.addImage(systemLogo, 'PNG', pageWidth - MARGIN - w, yOffset, w, h);
+    } catch {}
   }
 }
 
-function drawHeader(
+async function drawHeader(
   doc: jsPDF,
   title: string,
   opts: PdfOptions,
   dayCount: number,
   nightCount: number,
-): number {
+): Promise<number> {
   const pageWidth = doc.internal.pageSize.getWidth();
   const availableWidth = pageWidth - MARGIN * 2;
 
-  drawLogos(doc, opts.clientLogoDataUrl, opts.systemLogoDataUrl);
+  await drawLogos(doc, opts.clientLogoDataUrl, opts.systemLogoDataUrl);
 
   let y = 26;
 
@@ -190,7 +198,7 @@ function drawHeader(
    PDF PADRÃO — Retrato, agrupado por turno
    ═══════════════════════════════════════════════════ */
 
-export function exportStandardWorkerPdf(opts: PdfOptions) {
+export async function exportStandardWorkerPdf(opts: PdfOptions) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const availableWidth = pageWidth - MARGIN * 2;
@@ -198,7 +206,7 @@ export function exportStandardWorkerPdf(opts: PdfOptions) {
   const dayRows = opts.rows.filter(r => classifyShift(r) === 'day');
   const nightRows = opts.rows.filter(r => classifyShift(r) === 'night');
 
-  let y = drawHeader(doc, 'Relatório de Acesso por Trabalhador', opts, dayRows.length, nightRows.length);
+  let y = await drawHeader(doc, 'Relatório de Acesso por Trabalhador', opts, dayRows.length, nightRows.length);
 
   // Column definitions for portrait A4 (~182mm available)
   const cols = [
@@ -328,7 +336,7 @@ export function exportStandardWorkerPdf(opts: PdfOptions) {
    PDF DETALHADO — Retrato, ficha por trabalhador
    ═══════════════════════════════════════════════════ */
 
-export function exportDetailedWorkerPdf(opts: PdfOptions) {
+export async function exportDetailedWorkerPdf(opts: PdfOptions) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const availableWidth = pageWidth - MARGIN * 2;
@@ -336,7 +344,7 @@ export function exportDetailedWorkerPdf(opts: PdfOptions) {
   const dayRows = opts.rows.filter(r => classifyShift(r) === 'day');
   const nightRows = opts.rows.filter(r => classifyShift(r) === 'night');
 
-  let y = drawHeader(doc, 'Relatório de Controle de Acessos de Colaboradores', opts, dayRows.length, nightRows.length);
+  let y = await drawHeader(doc, 'Relatório de Controle de Acessos de Colaboradores', opts, dayRows.length, nightRows.length);
 
   opts.rows.forEach((row, idx) => {
     // Estimate space
@@ -506,4 +514,23 @@ export async function loadImageAsDataUrl(url: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Calculate dimensions that fit inside a bounding box while preserving aspect ratio.
+ */
+export function fitImageDimensions(
+  dataUrl: string,
+  maxW: number,
+  maxH: number
+): Promise<{ w: number; h: number }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const ratio = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+      resolve({ w: img.naturalWidth * ratio, h: img.naturalHeight * ratio });
+    };
+    img.onerror = () => resolve({ w: maxW, h: maxH });
+    img.src = dataUrl;
+  });
 }

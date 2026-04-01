@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { fitImageDimensions } from './exportWorkerReportPdf';
 
 interface PdfColumn {
   header: string;
@@ -190,20 +191,28 @@ function fmtShort(date: Date | null): string {
   return format(date, 'dd/MM HH:mm');
 }
 
-export function exportCompanyReportPdf(opts: CompanyPdfOptions) {
+export async function exportCompanyReportPdf(opts: CompanyPdfOptions) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const availableWidth = pageWidth - MARGIN * 2;
 
-  // --- Logos ---
-  const logoH = 14;
+  // --- Logos (aspect-ratio safe) ---
   const logoMaxW = 40;
+  const logoMaxH = 14;
   if (opts.clientLogoDataUrl) {
-    try { doc.addImage(opts.clientLogoDataUrl, 'PNG', MARGIN, 8, logoMaxW, logoH); } catch {}
+    try {
+      const { w, h } = await fitImageDimensions(opts.clientLogoDataUrl, logoMaxW, logoMaxH);
+      const yOffset = 8 + (logoMaxH - h) / 2;
+      doc.addImage(opts.clientLogoDataUrl, 'PNG', MARGIN, yOffset, w, h);
+    } catch {}
   }
   if (opts.systemLogoDataUrl) {
-    try { doc.addImage(opts.systemLogoDataUrl, 'PNG', pageWidth - MARGIN - logoMaxW, 8, logoMaxW, logoH); } catch {}
+    try {
+      const { w, h } = await fitImageDimensions(opts.systemLogoDataUrl, logoMaxW, logoMaxH);
+      const yOffset = 8 + (logoMaxH - h) / 2;
+      doc.addImage(opts.systemLogoDataUrl, 'PNG', pageWidth - MARGIN - w, yOffset, w, h);
+    } catch {}
   }
 
   let y = 26;

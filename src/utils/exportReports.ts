@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { AccessLog } from '@/types/supabase';
+import { fitImageDimensions } from './exportWorkerReportPdf';
 
 interface WorkerData {
   name: string;
@@ -75,20 +76,22 @@ export const exportToPDF = async (
     
     try {
       const inmetaLogoData = await loadImage(inmetaLogoUrl);
-      doc.addImage(inmetaLogoData, 'PNG', margin, yPosition, 40, 15);
+      const { w, h } = await fitImageDimensions(inmetaLogoData, 40, 15);
+      const yOffset = yPosition + (15 - h) / 2;
+      doc.addImage(inmetaLogoData, 'PNG', margin, yOffset, w, h);
     } catch (logoError) {
       console.error('Failed to load Inmeta logo:', logoError);
-      // Continue without the logo
     }
 
     // Add client logo if available
     if (clientLogoUrl) {
       try {
         const clientLogoData = await loadImage(clientLogoUrl);
-        doc.addImage(clientLogoData, 'PNG', pageWidth - 60, yPosition, 40, 15);
+        const { w, h } = await fitImageDimensions(clientLogoData, 40, 15);
+        const yOffset = yPosition + (15 - h) / 2;
+        doc.addImage(clientLogoData, 'PNG', pageWidth - margin - w, yOffset, w, h);
       } catch (clientLogoError) {
         console.error('Failed to load client logo:', clientLogoError);
-        // Continue without the client logo
       }
     }
 
