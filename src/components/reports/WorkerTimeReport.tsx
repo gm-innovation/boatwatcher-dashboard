@@ -254,21 +254,43 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
     link.click();
   };
 
-  const handleExportStandardPdf = () => {
+  const handleExportStandardPdf = async () => {
+    const clientLogoUrl = (project?.companies as any)?.logo_url_light;
+    const systemLogoUrl = systemLogoSetting?.value && typeof systemLogoSetting.value === 'object' ? (systemLogoSetting.value as any).light_url : null;
+
+    const [clientLogo, systemLogo] = await Promise.all([
+      clientLogoUrl ? loadImageAsDataUrl(clientLogoUrl) : Promise.resolve(null),
+      systemLogoUrl ? loadImageAsDataUrl(systemLogoUrl) : Promise.resolve(null),
+    ]);
+
     exportStandardWorkerPdf({
       rows: filteredRows,
-      grouped,
       startDate,
       endDate,
+      projectName: project?.name,
+      projectLocation: project?.location || undefined,
+      clientLogoDataUrl: clientLogo || undefined,
+      systemLogoDataUrl: systemLogo || undefined,
     });
   };
 
-  const handleExportDetailedPdf = () => {
+  const handleExportDetailedPdf = async () => {
+    const clientLogoUrl = (project?.companies as any)?.logo_url_light;
+    const systemLogoUrl = systemLogoSetting?.value && typeof systemLogoSetting.value === 'object' ? (systemLogoSetting.value as any).light_url : null;
+
+    const [clientLogo, systemLogo] = await Promise.all([
+      clientLogoUrl ? loadImageAsDataUrl(clientLogoUrl) : Promise.resolve(null),
+      systemLogoUrl ? loadImageAsDataUrl(systemLogoUrl) : Promise.resolve(null),
+    ]);
+
     exportDetailedWorkerPdf({
       rows: filteredRows,
-      grouped,
       startDate,
       endDate,
+      projectName: project?.name,
+      projectLocation: project?.location || undefined,
+      clientLogoDataUrl: clientLogo || undefined,
+      systemLogoDataUrl: systemLogo || undefined,
     });
   };
 
