@@ -711,36 +711,3 @@ export function fitImageDimensions(
   });
 }
 
-export async function loadImageAsDataUrl(url: string): Promise<string | null> {
-  try {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Calculate dimensions that fit inside a bounding box while preserving aspect ratio.
- */
-export function fitImageDimensions(
-  dataUrl: string,
-  maxW: number,
-  maxH: number
-): Promise<{ w: number; h: number }> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const ratio = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
-      resolve({ w: img.naturalWidth * ratio, h: img.naturalHeight * ratio });
-    };
-    img.onerror = () => resolve({ w: maxW, h: maxH });
-    img.src = dataUrl;
-  });
-}
