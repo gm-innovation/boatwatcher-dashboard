@@ -120,6 +120,7 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
           workers: new Set(),
           onBoardNow: 0,
           firstEntry: null,
+          lastExit: null,
           totalMinutes: 0,
           dayWorkers: 0,
           nightWorkers: 0,
