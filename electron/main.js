@@ -1,3 +1,6 @@
+// Force BRT timezone so date formatting is consistent regardless of OS settings
+process.env.TZ = 'America/Sao_Paulo';
+
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
