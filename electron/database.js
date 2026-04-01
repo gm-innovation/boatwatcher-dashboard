@@ -203,6 +203,21 @@ function initDatabase(userDataPath) {
       FOREIGN KEY (project_id) REFERENCES projects(id)
     );
 
+    CREATE TABLE IF NOT EXISTS manual_access_points (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      project_id TEXT,
+      access_location TEXT DEFAULT 'bordo',
+      direction_mode TEXT DEFAULT 'both',
+      is_active INTEGER DEFAULT 1,
+      location_description TEXT,
+      client_id TEXT,
+      recognition_method TEXT DEFAULT 'code',
+      require_photo INTEGER DEFAULT 0,
+      auto_sync INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS job_functions (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
