@@ -1,48 +1,44 @@
 
 
-## Corrigir Logos Esticadas nos PDFs — Manter Proporção
+## Reformular aba "Todos Trabalhadores" — Lista de Trabalhadores que Acessaram
 
-### Problema
-Todos os PDFs usam dimensões fixas para logos (ex: `40x14mm`, `40x15mm`), ignorando a proporção real da imagem. Isso deforma as logos.
+### Contexto
+A aba "Todos Trabalhadores" atualmente exibe logs brutos de acesso (cada evento individual). O objetivo real é mostrar uma **lista deduplicada de trabalhadores únicos** que acessaram a embarcação no período selecionado, agrupados por empresa — conforme o print de referência.
 
-### Solução
-Criar uma função utilitária que calcula as dimensões respeitando o aspect ratio da imagem dentro de um bounding box (largura máxima × altura máxima). Usar em todos os pontos de inserção de logo.
+### O que muda
 
-### Função auxiliar (em `exportWorkerReportPdf.ts`)
+**Arquivo: `src/components/reports/ReportsList.tsx`** — reescrever completamente
 
-```typescript
-function fitImageDimensions(
-  dataUrl: string,
-  maxW: number,
-  maxH: number
-): Promise<{ w: number; h: number }> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const ratio = Math.min(maxW / img.width, maxH / img.height);
-      resolve({ w: img.width * ratio, h: img.height * ratio });
-    };
-    img.onerror = () => resolve({ w: maxW, h: maxH });
-    img.src = dataUrl;
-  });
-}
+1. **Dados**: Continuar usando `useAccessLogs` para buscar os logs do período, mas processar client-side para extrair trabalhadores únicos
+2. **Deduplicação**: Agrupar logs por `worker_id`, extraindo de cada grupo: `worker_name`, `worker_document`, `company_name` (via lookup), `code` e `job_function`
+   - Para obter empresa e função, buscar workers via `useWorkers` (ou dados já disponíveis nos logs)
+   - Precisarei consultar a tabela `workers` para obter `code` e `job_function_id`, e `companies` para nome da empresa
+3. **Agrupamento por empresa**: Renderizar seção por empresa com logo e nome (como no print), listando os trabalhadores daquela empresa
+4. **Colunas da tabela**: Nº (code serial), Nome, Empresa, CPF, Função
+5. **Busca**: Filtro por nome/CPF mantido
+6. **Título**: "Todos os Trabalhadores com Acesso"
+7. **Exports PDF/Excel**: Atualizar para exportar a lista deduplicada (não logs brutos)
+
+### Dados necessários (hooks adicionais)
+- `useWorkers(projectId)` — para obter `code`, `company_id`, `job_function_id`
+- `useCompanies()` — para nome da empresa
+- `useJobFunctions()` — para nome da função
+
+### Lógica de processamento
+```text
+accessLogs (período) 
+  → extrair worker_ids únicos com access_status === 'granted'
+  → cruzar com workers table para code, company_id, job_function_id
+  → agrupar por company_id
+  → renderizar seções por empresa
 ```
 
-### Arquivos a alterar
+### Layout (conforme print)
+- Header: "Todos os Trabalhadores com Acesso"
+- Para cada empresa: logo + nome como sub-header
+- Tabela: Nº | Nome | Empresa | CPF | Função
+- Botões: Exportar CSV, Exportar PDF
 
-1. **`src/utils/exportWorkerReportPdf.ts`**
-   - Adicionar e exportar `fitImageDimensions`
-   - Atualizar `drawLogos` para ser `async` e usar `fitImageDimensions` antes de `addImage`
-
-2. **`src/utils/exportReportPdf.ts`**
-   - Importar `fitImageDimensions`
-   - Atualizar inserção de logos em `exportCompanyReportPdf` para usar a função
-
-3. **`src/utils/exportReports.ts`**
-   - Importar `fitImageDimensions`
-   - Atualizar `exportToPDF` para usar a função nos dois logos (inmeta e cliente)
-
-### Impacto
-- Logos centralizam verticalmente no bounding box mantendo proporção
-- Nenhuma mudança visual além de corrigir a deformação
+### Arquivo alterado
+- `src/components/reports/ReportsList.tsx` — reescrita completa do componente
 
