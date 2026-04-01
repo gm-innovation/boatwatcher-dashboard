@@ -1159,6 +1159,20 @@ serve(async (req) => {
       return new Response(JSON.stringify({ access_logs: logs || [], timestamp: new Date().toISOString() }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    // GET /download-manual-access-points — download manual access points for agent's project
+    if (req.method === 'GET' && action === 'download-manual-access-points') {
+      if (!agent.project_id) {
+        return new Response(JSON.stringify({ manual_access_points: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+      const { data, error: mapError } = await supabase
+        .from('manual_access_points')
+        .select('id, name, project_id, access_location, direction_mode, is_active, location_description, client_id, recognition_method, require_photo, auto_sync, created_at')
+        .eq('project_id', agent.project_id)
+      if (mapError) throw mapError
+      console.log(`[agent-sync/download-manual-access-points] agent=${agent.id} project=${agent.project_id} found=${(data || []).length}`)
+      return new Response(JSON.stringify({ manual_access_points: data || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (e: unknown) {
     console.error('agent-sync error:', e)

@@ -203,6 +203,21 @@ function initDatabase(userDataPath) {
       FOREIGN KEY (project_id) REFERENCES projects(id)
     );
 
+    CREATE TABLE IF NOT EXISTS manual_access_points (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      project_id TEXT,
+      access_location TEXT DEFAULT 'bordo',
+      direction_mode TEXT DEFAULT 'both',
+      is_active INTEGER DEFAULT 1,
+      location_description TEXT,
+      client_id TEXT,
+      recognition_method TEXT DEFAULT 'code',
+      require_photo INTEGER DEFAULT 0,
+      auto_sync INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS job_functions (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -1172,15 +1187,19 @@ function createDatabaseAPI(db, startCode) {
           locationLabel = 'Bordo';
         }
 
-        // Normalize timestamps
-        let entryTime = state.entry_time;
-        if (entryTime && !entryTime.includes('Z') && !entryTime.includes('+') && !entryTime.includes('-', 10)) {
-          entryTime = entryTime + '-03:00';
+        // Force BRT display — convert any UTC timestamp to BRT offset string
+        // so date-fns format() shows correct BRT time regardless of OS timezone
+        function utcToBRT(isoString) {
+          if (!isoString) return isoString;
+          const d = new Date(isoString);
+          if (isNaN(d.getTime())) return isoString;
+          const brtMs = d.getTime() - 3 * 3600 * 1000;
+          const brt = new Date(brtMs);
+          const pad = (n) => String(n).padStart(2, '0');
+          return `${brt.getUTCFullYear()}-${pad(brt.getUTCMonth()+1)}-${pad(brt.getUTCDate())}T${pad(brt.getUTCHours())}:${pad(brt.getUTCMinutes())}:${pad(brt.getUTCSeconds())}-03:00`;
         }
-        let firstEntryTime = firstEntryMap.get(key) || entryTime;
-        if (firstEntryTime && !firstEntryTime.includes('Z') && !firstEntryTime.includes('+') && !firstEntryTime.includes('-', 10)) {
-          firstEntryTime = firstEntryTime + '-03:00';
-        }
+        let entryTime = utcToBRT(state.entry_time);
+        let firstEntryTime = utcToBRT(firstEntryMap.get(key) || state.entry_time);
 
         onBoard.push({
           id: state.worker_id,
@@ -1725,6 +1744,34 @@ function createDatabaseAPI(db, startCode) {
         VALUES (?, ?, ?, ?, ?)
       `).run(id, name, project_ids, status, last_sync);
       return this.getAgentInfo();
+    },
+
+    upsertManualAccessPointFromCloud(data) {
+      if (!data.id) return;
+      const existing = db.prepare('SELECT id FROM manual_access_points WHERE id = ?').get(data.id);
+      if (existing) {
+        db.prepare(`
+          UPDATE manual_access_points SET name=?, project_id=?, access_location=?, direction_mode=?, is_active=?,
+          location_description=?, client_id=?, recognition_method=?, require_photo=?, auto_sync=?
+          WHERE id=?
+        `).run(
+          data.name, data.project_id || null, data.access_location || 'bordo', data.direction_mode || 'both',
+          data.is_active ? 1 : 0, data.location_description || null, data.client_id || null,
+          data.recognition_method || 'code', data.require_photo ? 1 : 0, data.auto_sync !== false ? 1 : 0,
+          data.id
+        );
+      } else {
+        db.prepare(`
+          INSERT INTO manual_access_points (id, name, project_id, access_location, direction_mode, is_active,
+          location_description, client_id, recognition_method, require_photo, auto_sync, created_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+        `).run(
+          data.id, data.name, data.project_id || null, data.access_location || 'bordo', data.direction_mode || 'both',
+          data.is_active ? 1 : 0, data.location_description || null, data.client_id || null,
+          data.recognition_method || 'code', data.require_photo ? 1 : 0, data.auto_sync !== false ? 1 : 0,
+          data.created_at || new Date().toISOString()
+        );
+      }
     },
 
     getRawDb() {
