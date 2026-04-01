@@ -76,10 +76,11 @@ export const exportToPDF = async (
     
     try {
       const inmetaLogoData = await loadImage(inmetaLogoUrl);
-      doc.addImage(inmetaLogoData, 'PNG', margin, yPosition, 40, 15);
+      const { w, h } = await fitImageDimensions(inmetaLogoData, 40, 15);
+      const yOffset = yPosition + (15 - h) / 2;
+      doc.addImage(inmetaLogoData, 'PNG', margin, yOffset, w, h);
     } catch (logoError) {
       console.error('Failed to load Inmeta logo:', logoError);
-      // Continue without the logo
     }
 
     // Add client logo if available
