@@ -22,15 +22,7 @@ function validateTimestamp(ts: string): { valid: boolean; timestamp: string; rea
     return { valid: false, timestamp: ts, reason: `timestamp ${Math.round(diffMs / 60000)}min in the future` };
   }
 
-  // Detect BRT offset: timestamp is 2h50m–3h10m behind server time
-  // This means the agent sent local BRT time without UTC conversion
-  const lagMs = now - parsed.getTime();
-  if (lagMs > 170 * 60 * 1000 && lagMs < 190 * 60 * 1000) {
-    const corrected = new Date(parsed.getTime() + 3 * 3600 * 1000);
-    console.log(`[validateTimestamp] BRT correction applied: ${ts} → ${corrected.toISOString()} (lag=${Math.round(lagMs/60000)}min)`);
-    return { valid: true, timestamp: corrected.toISOString() };
-  }
-
+  // No automatic BRT correction — the agent is responsible for proper UTC conversion
   return { valid: true, timestamp: ts };
 }
 

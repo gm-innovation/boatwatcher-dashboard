@@ -321,10 +321,15 @@ class SyncEngine {
       const response = await this.callEdgeFunction(`agent-sync/download-access-logs?since=${since}`, 'GET');
       if (response.access_logs && Array.isArray(response.access_logs)) {
         let count = 0;
+        let maxCreatedAt = since;
         for (const log of response.access_logs) {
           try {
             this.db.upsertAccessLogFromCloud?.(log);
             count++;
+            // Track the latest created_at to enable incremental pagination
+            if (log.created_at && log.created_at > maxCreatedAt) {
+              maxCreatedAt = log.created_at;
+            }
           } catch (err) {
             console.error(`[sync] access_log upsert failed for ${log.id}:`, err.message);
           }
@@ -334,8 +339,10 @@ class SyncEngine {
           console.log(`[sync] Downloaded ${count} access logs from cloud`);
         }
         this._lastDownloadLogsError = null;
+        // Use the last record's created_at instead of now() to support pagination
+        // for datasets larger than the 500-row limit per request
+        this.db.setSyncMeta('last_download_access_logs', maxCreatedAt);
       }
-      this.db.setSyncMeta('last_download_access_logs', new Date().toISOString());
     } catch (err) {
       this._lastDownloadLogsError = `${new Date().toISOString()}: ${err.message}`;
       console.error('[sync] Download access logs error:', err.message);
@@ -515,6 +522,11 @@ class SyncEngine {
             this.db.setSyncMeta?.('has_manual_points', 'true');
             this.db.setSyncMeta?.('last_download_access_logs', '1970-01-01T00:00:00Z');
             console.log('[sync] Manual access points detected — resetting access logs checkpoint for full re-download');
+          }
+          // Also check if we still have pending batches (pagination not yet complete)
+          const currentCheckpoint = this.db.getSyncMeta?.('last_download_access_logs') || '';
+          if (currentCheckpoint && currentCheckpoint < new Date(Date.now() - 60000).toISOString()) {
+            console.log('[sync] Access logs checkpoint is behind — will continue pagination on next cycle');
           }
         }
       }

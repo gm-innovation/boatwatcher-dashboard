@@ -57,12 +57,13 @@ function normalizeTimestamp(event) {
     return isNaN(ms) ? null : new Date(ms).toISOString();
   }
 
-  // No timezone — treat as wall-clock time, store as-is in ISO format
+  // No timezone — interpret as BRT (UTC-3), convert to true UTC by adding 3h
+  // ControlID devices send local Brazilian time without timezone markers
   const match = raw.match(/(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/);
   if (match) {
     const [, yr, mo, dy, hr, mn, sc] = match.map(Number);
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${yr}-${pad(mo)}-${pad(dy)}T${pad(hr)}:${pad(mn)}:${pad(sc)}.000Z`;
+    const utcDate = new Date(Date.UTC(yr, mo - 1, dy, hr + 3, mn, sc));
+    return utcDate.toISOString();
   }
 
   // Fallback
