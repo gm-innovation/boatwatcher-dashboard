@@ -68,7 +68,7 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
     queryFn: async () => {
       const { data, error } = await supabase
         .from('workers')
-        .select('id, name, role, company_id, job_function_id, document_number, companies(id, name), job_functions(id, name)')
+        .select('id, name, code, role, company_id, job_function_id, document_number, companies(id, name), job_functions(id, name)')
         .order('name');
       if (error) throw error;
       return data;
