@@ -312,10 +312,23 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
             <Download className="h-4 w-4" />
             CSV
           </Button>
-          <Button variant="outline" size="sm" className="gap-1" onClick={handleExportPdf}>
-            <FileDown className="h-4 w-4" />
-            PDF
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1">
+                <FileDown className="h-4 w-4" />
+                PDF
+                <ChevronDown className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportStandardPdf}>
+                PDF Padrão (resumido)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportDetailedPdf}>
+                PDF Detalhado (completo)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
