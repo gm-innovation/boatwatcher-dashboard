@@ -1187,15 +1187,19 @@ function createDatabaseAPI(db, startCode) {
           locationLabel = 'Bordo';
         }
 
-        // Normalize timestamps
-        let entryTime = state.entry_time;
-        if (entryTime && !entryTime.includes('Z') && !entryTime.includes('+') && !entryTime.includes('-', 10)) {
-          entryTime = entryTime + '-03:00';
+        // Force BRT display — convert any UTC timestamp to BRT offset string
+        // so date-fns format() shows correct BRT time regardless of OS timezone
+        function utcToBRT(isoString) {
+          if (!isoString) return isoString;
+          const d = new Date(isoString);
+          if (isNaN(d.getTime())) return isoString;
+          const brtMs = d.getTime() - 3 * 3600 * 1000;
+          const brt = new Date(brtMs);
+          const pad = (n) => String(n).padStart(2, '0');
+          return `${brt.getUTCFullYear()}-${pad(brt.getUTCMonth()+1)}-${pad(brt.getUTCDate())}T${pad(brt.getUTCHours())}:${pad(brt.getUTCMinutes())}:${pad(brt.getUTCSeconds())}-03:00`;
         }
-        let firstEntryTime = firstEntryMap.get(key) || entryTime;
-        if (firstEntryTime && !firstEntryTime.includes('Z') && !firstEntryTime.includes('+') && !firstEntryTime.includes('-', 10)) {
-          firstEntryTime = firstEntryTime + '-03:00';
-        }
+        let entryTime = utcToBRT(state.entry_time);
+        let firstEntryTime = utcToBRT(firstEntryMap.get(key) || state.entry_time);
 
         onBoard.push({
           id: state.worker_id,
