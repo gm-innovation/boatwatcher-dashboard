@@ -1113,7 +1113,7 @@ function createDatabaseAPI(db, startCode) {
         WHERE al.timestamp >= ?
           AND al.timestamp <= ?
           AND al.access_status = 'granted'
-          AND al.worker_id IS NOT NULL
+          AND (al.worker_id IS NOT NULL OR al.worker_name IS NOT NULL)
           ${deviceFilter}
         ORDER BY al.created_at ASC
       `).all(...params);
