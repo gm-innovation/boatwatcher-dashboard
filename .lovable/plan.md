@@ -1,50 +1,56 @@
 
 
-## Diagnóstico Confirmado
+## Problema
 
-**Dados do Postgres**: ZERO eventos faciais desde 14:08 UTC. ZERO chamadas de `upload-logs`. A telemetria confirma `captured=0, unsynced=0, uploaded=0`.
+Os relatórios usam `fetchAccessLogs` (em `src/hooks/useDataProvider.ts`, linha 382-394) que filtra eventos por `device_id IN (deviceIds do projeto)`. Eventos manuais têm `device_id = null` e usam `device_name = "Manual - NomeTerminal"` — são completamente excluídos da query.
 
-**Causa raiz**: O agente está rodando, faz login nos 2 dispositivos com sucesso, mas o `lastEventId` armazenado no SQLite local é maior ou igual ao ID máximo atual no buffer do ControlID. A query `WHERE id > lastEventId` retorna 0 eventos. O agente acha que não há eventos novos, quando na verdade os IDs foram resetados ou o cursor está obsoleto.
+O dashboard (`fetchWorkersOnBoardFromCloud` em `useSupabase.ts`) já resolve isso consultando `manual_access_points` e filtrando por `device_name`. Os relatórios não fazem isso.
 
-As screenshots do usuário confirmam que os dispositivos TÊM eventos (94 e 299 acessos registrados). O problema é exclusivamente no cursor do agente.
+## Correção — 1 arquivo
 
----
+### `src/hooks/useDataProvider.ts` — Incluir logs manuais na query de relatórios
 
-## Correção: `electron/agent.js` — Auto-recuperação do cursor
+Modificar `fetchAccessLogs` (linhas 382-394) para, quando há `projectId`:
 
-### Mudança no método `pollDevice` (linhas 334-424)
+1. Buscar os `manual_access_points` do projeto (mesma lógica do dashboard)
+2. Construir os nomes de dispositivo manual (`"Manual - {name}"`)
+3. Fazer duas queries em paralelo:
+   - Logs com `device_id IN deviceIds` (eventos do hardware)
+   - Logs com `device_id IS NULL` e `device_name IN manualDeviceNames` (eventos manuais)
+4. Combinar e ordenar por timestamp
 
-Quando `load_objects.fcgi` retorna 0 eventos e `lastEventId > 0`, fazer uma segunda consulta **sem filtro de ID** para verificar se existem eventos no dispositivo:
+```typescript
+if (filters?.projectId) {
+  // Hardware devices
+  const { data: devices } = await supabase
+    .from('devices').select('id').eq('project_id', filters.projectId);
+  const deviceIds = (devices || []).map(d => d.id);
 
-```javascript
-// Após processar events (linha 396-411):
+  // Manual access points
+  const { data: manualPoints } = await supabase
+    .from('manual_access_points').select('name').eq('project_id', filters.projectId);
+  const manualNames = (manualPoints || []).map(p => `Manual - ${p.name}`);
 
-if (events.length === 0 && lastEventId > 0) {
-  // Possible stale cursor — query without ID filter to check
-  const fallbackPayload = JSON.stringify({ object: 'access_logs' });
-  // ... fazer nova request sem WHERE clause
-  // Se encontrar eventos com max ID < lastEventId → resetar cursor para 0
-  // Se encontrar eventos com max ID >= lastEventId → cursor está correto, sem novos eventos
+  if (deviceIds.length === 0 && manualNames.length === 0) return [];
+
+  // Fetch both in parallel
+  const [deviceLogs, manualLogs] = await Promise.all([
+    deviceIds.length > 0
+      ? baseQuery.in('device_id', deviceIds)
+      : Promise.resolve({ data: [], error: null }),
+    manualNames.length > 0
+      ? baseQuery2.is('device_id', null).in('device_name', manualNames)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  // Merge and sort
+  return [...(deviceLogs.data || []), ...(manualLogs.data || [])]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, filters?.limit || 100);
 }
 ```
 
-A lógica concreta:
-1. Se `events.length === 0` e `lastEventId > 0`, refaz a consulta sem `where`
-2. Se a consulta retorna eventos, pega o `maxId` deles
-3. Se `maxId < lastEventId` → o dispositivo resetou seus IDs → `setLastEventId(device, 0)` e reprocessa
-4. Se `maxId >= lastEventId` → nenhum evento novo de fato, tudo certo
+### Efeito
 
-### Proteção adicional: auto-reset periódico
-
-No `pollDevices()`, se `_capturedCount === 0` por mais de 10 minutos de uptime, resetar todos os cursores automaticamente. Isso garante recuperação mesmo em cenários inesperados.
-
-### Resumo
-
-| Cenário | Comportamento atual | Após correção |
-|---|---|---|
-| ControlID resetou buffer de IDs | Cursor > max ID → 0 eventos eternamente | Detecta e reseta cursor |
-| Cursor ficou alto por bug anterior | Idem | Auto-reset após 10min sem capturas |
-| Nenhum evento novo de fato | 0 eventos (correto) | Verifica sem filtro, confirma, não faz nada |
-
-**Nota**: Esta mudança só terá efeito após rebuild do Desktop. Mas é a única peça que falta — manual já funciona em ambas as plataformas, a autocorreção BRT está deployada, o cloud-first está ativo.
+Todas as 5 abas de relatório (Trabalhadores, Empresas, Todos Trabalhadores, Visão Geral, Controle de Pernoite) passam a incluir eventos manuais automaticamente, sem alterar nenhum componente de relatório — a correção é na camada de dados compartilhada.
 
