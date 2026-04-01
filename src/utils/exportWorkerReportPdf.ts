@@ -107,16 +107,24 @@ function checkPageBreak(doc: jsPDF, y: number, needed: number): number {
   return y;
 }
 
-function drawLogos(doc: jsPDF, clientLogo?: string, systemLogo?: string) {
+async function drawLogos(doc: jsPDF, clientLogo?: string, systemLogo?: string) {
   const pageWidth = doc.internal.pageSize.getWidth();
-  const logoH = 14;
   const logoMaxW = 40;
+  const logoMaxH = 14;
 
   if (clientLogo) {
-    try { doc.addImage(clientLogo, 'PNG', MARGIN, 8, logoMaxW, logoH); } catch {}
+    try {
+      const { w, h } = await fitImageDimensions(clientLogo, logoMaxW, logoMaxH);
+      const yOffset = 8 + (logoMaxH - h) / 2;
+      doc.addImage(clientLogo, 'PNG', MARGIN, yOffset, w, h);
+    } catch {}
   }
   if (systemLogo) {
-    try { doc.addImage(systemLogo, 'PNG', pageWidth - MARGIN - logoMaxW, 8, logoMaxW, logoH); } catch {}
+    try {
+      const { w, h } = await fitImageDimensions(systemLogo, logoMaxW, logoMaxH);
+      const yOffset = 8 + (logoMaxH - h) / 2;
+      doc.addImage(systemLogo, 'PNG', pageWidth - MARGIN - w, yOffset, w, h);
+    } catch {}
   }
 }
 
