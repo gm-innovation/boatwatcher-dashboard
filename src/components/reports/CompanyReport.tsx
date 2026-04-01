@@ -22,6 +22,7 @@ interface CompanyData {
   totalWorkers: number;
   onBoardNow: number;
   firstEntry: Date | null;
+  lastExit: Date | null;
   allExited: boolean;
   totalMinutes: number;
   dayWorkers: number;
