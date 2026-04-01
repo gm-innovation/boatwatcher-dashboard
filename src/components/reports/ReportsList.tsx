@@ -3,11 +3,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAccessLogs } from '@/hooks/useControlID';
-import { useWorkers, useCompanies } from '@/hooks/useSupabase';
+import { useWorkers, useCompanies, useProjects } from '@/hooks/useSupabase';
 import { useJobFunctions } from '@/hooks/useJobFunctions';
+import { useSystemSetting } from '@/hooks/useSystemSettings';
 import { FileText, Download, Search, Users } from 'lucide-react';
-import { exportAccessLogsToPdf, exportAccessLogsToExcel } from '@/utils/exportReports';
-import type { AccessLog } from '@/types/supabase';
+import { exportAccessLogsToExcel } from '@/utils/exportReports';
+import { exportAllWorkersReportPdf, loadImageAsDataUrl } from '@/utils/exportWorkerReportPdf';
+import { toast } from '@/components/ui/use-toast';
 
 interface ReportsListProps {
   projectId: string;
@@ -31,8 +33,16 @@ export const ReportsList = ({ projectId, startDate, endDate }: ReportsListProps)
   const { data: workers = [], isLoading: workersLoading } = useWorkers();
   const { data: companies = [] } = useCompanies();
   const { data: jobFunctions = [] } = useJobFunctions();
+  const { data: projects = [] } = useProjects();
+  const { data: systemLogoSetting } = useSystemSetting('system_logo');
 
   const isLoading = logsLoading || workersLoading;
+
+  const currentProject = useMemo(() => projects.find(p => p.id === projectId), [projects, projectId]);
+  const clientCompany = useMemo(() => {
+    if (!currentProject?.client_id) return null;
+    return companies.find(c => c.id === currentProject.client_id) || null;
+  }, [currentProject, companies]);
 
   // Deduplicate: extract unique workers who had granted access
   const { uniqueWorkers, groupedByCompany } = useMemo(() => {
@@ -73,7 +83,6 @@ export const ReportsList = ({ projectId, startDate, endDate }: ReportsListProps)
       grouped.get(key)!.workers.push(w);
     }
 
-    // Sort workers inside each group by code
     for (const group of grouped.values()) {
       group.workers.sort((a, b) => (a.code ?? 9999) - (b.code ?? 9999));
     }
@@ -109,10 +118,36 @@ export const ReportsList = ({ projectId, startDate, endDate }: ReportsListProps)
     return count;
   }, [filteredGroups]);
 
-  const handleExportPdf = () => {
-    // Re-use existing function with the raw granted logs
-    const grantedLogs = accessLogs.filter(log => log.access_status === 'granted');
-    exportAccessLogsToPdf(grantedLogs, 'Relatório de Trabalhadores', startDate, endDate);
+  const handleExportPdf = async () => {
+    try {
+      // Load logos as base64
+      let clientLogoDataUrl: string | null = null;
+      let systemLogoDataUrl: string | null = null;
+
+      const clientLogoUrl = clientCompany?.logo_url_light;
+      if (clientLogoUrl) {
+        clientLogoDataUrl = await loadImageAsDataUrl(clientLogoUrl);
+      }
+
+      const systemLogoValue = systemLogoSetting?.value as Record<string, string> | null;
+      const sysLogoUrl = systemLogoValue?.light || systemLogoValue?.dark;
+      if (sysLogoUrl) {
+        systemLogoDataUrl = await loadImageAsDataUrl(sysLogoUrl);
+      }
+
+      await exportAllWorkersReportPdf({
+        workers: uniqueWorkers,
+        startDate,
+        endDate,
+        projectName: currentProject?.name,
+        projectLocation: currentProject?.location || undefined,
+        clientLogoDataUrl: clientLogoDataUrl || undefined,
+        systemLogoDataUrl: systemLogoDataUrl || undefined,
+      });
+    } catch (err) {
+      console.error('Erro ao gerar PDF:', err);
+      toast({ title: 'Erro ao gerar PDF', variant: 'destructive' });
+    }
   };
 
   const handleExportExcel = () => {
@@ -170,7 +205,6 @@ export const ReportsList = ({ projectId, startDate, endDate }: ReportsListProps)
             <div className="divide-y">
               {Array.from(filteredGroups.entries()).map(([companyKey, group]) => (
                 <div key={companyKey}>
-                  {/* Company header */}
                   <div className="bg-muted/50 px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
                     <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
                       {group.companyName.charAt(0).toUpperCase()}
@@ -182,8 +216,6 @@ export const ReportsList = ({ projectId, startDate, endDate }: ReportsListProps)
                       </span>
                     </div>
                   </div>
-
-                  {/* Workers table */}
                   <table className="w-full">
                     <thead>
                       <tr className="border-b">
