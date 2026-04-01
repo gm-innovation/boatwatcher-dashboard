@@ -310,14 +310,14 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{company.name}</span>
                         {company.onBoardNow > 0 && (
-                          <Badge className="bg-green-600 hover:bg-green-700 text-white text-[10px] px-1.5 py-0">
+                          <Badge className="border border-green-500 text-green-600 bg-green-50 hover:bg-green-100 text-[10px] px-1.5 py-0">
                             {company.onBoardNow} a bordo
                           </Badge>
                         )}
                       </div>
                     </td>
                     <td className="p-3 text-center">
-                      <Badge variant="secondary">{company.totalWorkers}</Badge>
+                      <span className="font-semibold">{company.totalWorkers}</span>
                     </td>
                     <td className="p-3 text-center text-sm">
                       {company.firstEntry
@@ -328,13 +328,13 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
                       {company.allExited ? (
                         <span className="text-sm text-muted-foreground">Todos saíram</span>
                       ) : (
-                        <Badge className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-1.5 py-0">
+                        <Badge className="border border-green-500 text-green-600 bg-transparent hover:bg-green-50 text-[10px] px-1.5 py-0">
                           A bordo
                         </Badge>
                       )}
                     </td>
                     <td className="p-3 text-center">
-                      <Badge variant="outline" className="font-mono text-xs">
+                      <Badge variant="outline" className={`font-mono text-xs ${company.onBoardNow > 0 ? 'border-green-500 text-green-600 bg-green-50' : ''}`}>
                         {formatDuration(company.totalMinutes)}
                       </Badge>
                     </td>
@@ -344,12 +344,15 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
                 <tr className="bg-muted/50 font-semibold border-t-2">
                   <td className="p-3">TOTAL</td>
                   <td className="p-3 text-center">{totalWorkers}</td>
-                  <td className="p-3 text-center text-sm">
-                    Diurno: {totalDay} / Noturno: {totalNight}
+                  <td className="p-3 text-center">
+                    <div className="flex flex-col items-center text-[11px] leading-tight">
+                      <span className="text-red-500 font-bold">Diurno: {totalDay}</span>
+                      <span className="text-muted-foreground">Noturno: {totalNight}</span>
+                    </div>
                   </td>
                   <td className="p-3 text-center">
                     {totalOnBoard > 0 && (
-                      <Badge className="bg-green-600 hover:bg-green-700 text-white text-xs">
+                      <Badge className="border border-green-500 text-green-600 bg-green-50 hover:bg-green-100 text-xs">
                         A bordo agora: {totalOnBoard}
                       </Badge>
                     )}
