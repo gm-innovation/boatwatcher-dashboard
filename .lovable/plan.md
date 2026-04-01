@@ -1,56 +1,52 @@
 
 
-## Problema
+## Relatórios PDF de Trabalhadores — Padrão e Detalhado
 
-Os relatórios usam `fetchAccessLogs` (em `src/hooks/useDataProvider.ts`, linha 382-394) que filtra eventos por `device_id IN (deviceIds do projeto)`. Eventos manuais têm `device_id = null` e usam `device_name = "Manual - NomeTerminal"` — são completamente excluídos da query.
+### Resumo
 
-O dashboard (`fetchWorkersOnBoardFromCloud` em `useSupabase.ts`) já resolve isso consultando `manual_access_points` e filtrando por `device_name`. Os relatórios não fazem isso.
+Substituir o botão "PDF" único por dois botões: **PDF Padrão** (tabela resumida com primeira entrada, última saída, tempo bruto) e **PDF Detalhado** (ficha por trabalhador com todos os eventos individuais e tempo efetivo descontando ausências).
 
-## Correção — 1 arquivo
+### Arquivos
 
-### `src/hooks/useDataProvider.ts` — Incluir logs manuais na query de relatórios
+| Arquivo | Ação |
+|---------|------|
+| `src/utils/exportWorkerReportPdf.ts` | **Novo** — duas funções de geração PDF |
+| `src/components/reports/WorkerTimeReport.tsx` | Modificar — adicionar CPF ao data model, dois botões PDF, calcular tempo efetivo |
 
-Modificar `fetchAccessLogs` (linhas 382-394) para, quando há `projectId`:
+### 1. Novo utilitário `exportWorkerReportPdf.ts`
 
-1. Buscar os `manual_access_points` do projeto (mesma lógica do dashboard)
-2. Construir os nomes de dispositivo manual (`"Manual - {name}"`)
-3. Fazer duas queries em paralelo:
-   - Logs com `device_id IN deviceIds` (eventos do hardware)
-   - Logs com `device_id IS NULL` e `device_name IN manualDeviceNames` (eventos manuais)
-4. Combinar e ordenar por timestamp
+**`exportStandardWorkerPdf(options)`** — PDF Padrão:
+- Cabeçalho: título, projeto, período, data de geração
+- Resumo: total trabalhadores, a bordo, total empresas
+- Tabela única com colunas: Nº, Nome, CPF, Função, Empresa, Entrada (primeira), Saída (última), Total (tempo bruto = última saída - primeira entrada)
+- Agrupado por empresa (linha de cabeçalho com nome da empresa)
+- Landscape A4 para caber todas as colunas
 
-```typescript
-if (filters?.projectId) {
-  // Hardware devices
-  const { data: devices } = await supabase
-    .from('devices').select('id').eq('project_id', filters.projectId);
-  const deviceIds = (devices || []).map(d => d.id);
+**`exportDetailedWorkerPdf(options)`** — PDF Detalhado:
+- Cabeçalho igual ao padrão
+- Para cada trabalhador, seção individual com:
+  - Dados: Nº, Nome, CPF, Função, Empresa
+  - Tabela de todos os eventos individuais: Data/Hora, Tipo (Entrada/Saída), Dispositivo
+  - Tempo bruto (última saída - primeira entrada)
+  - **Tempo efetivo**: soma dos pares entrada→saída individuais (desconta ausências)
+  - Indicador "A bordo" se última ação foi entrada
+- Quebra de página entre trabalhadores (ou agrupamento compacto se poucos eventos)
 
-  // Manual access points
-  const { data: manualPoints } = await supabase
-    .from('manual_access_points').select('name').eq('project_id', filters.projectId);
-  const manualNames = (manualPoints || []).map(p => `Manual - ${p.name}`);
+### 2. Mudanças em `WorkerTimeReport.tsx`
 
-  if (deviceIds.length === 0 && manualNames.length === 0) return [];
+- Adicionar `documentNumber` (CPF) ao interface `WorkerTimeRow` e ao `useMemo` de processamento (já disponível via query de workers: `document_number`)
+- Adicionar cálculo de `effectiveMinutes` (soma dos pares entry→exit individuais) ao `WorkerTimeRow`
+- Substituir botão "PDF" por dropdown com duas opções:
+  - "PDF Padrão" → chama `exportStandardWorkerPdf`
+  - "PDF Detalhado" → chama `exportDetailedWorkerPdf`
+- Passar dados já processados (filteredRows com rawLogs, grouped) para as funções de PDF
 
-  // Fetch both in parallel
-  const [deviceLogs, manualLogs] = await Promise.all([
-    deviceIds.length > 0
-      ? baseQuery.in('device_id', deviceIds)
-      : Promise.resolve({ data: [], error: null }),
-    manualNames.length > 0
-      ? baseQuery2.is('device_id', null).in('device_name', manualNames)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
+### Detalhes técnicos
 
-  // Merge and sort
-  return [...(deviceLogs.data || []), ...(manualLogs.data || [])]
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, filters?.limit || 100);
-}
-```
-
-### Efeito
-
-Todas as 5 abas de relatório (Trabalhadores, Empresas, Todos Trabalhadores, Visão Geral, Controle de Pernoite) passam a incluir eventos manuais automaticamente, sem alterar nenhum componente de relatório — a correção é na camada de dados compartilhada.
+- Usa `jsPDF` (já instalado) com layout manual
+- Tempo bruto = `lastExit - firstEntry` (já calculado como `totalMinutes`)
+- Tempo efetivo = soma de `(exit[i].timestamp - entry[i].timestamp)` para cada par alternado nos rawLogs
+- CPF vem do campo `document_number` do worker, já disponível na query existente
+- Não precisa de queries adicionais ao banco — todos os dados já estão carregados no componente
+- Os PDFs são gerados client-side e baixados diretamente
 
