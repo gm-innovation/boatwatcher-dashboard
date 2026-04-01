@@ -176,37 +176,7 @@ async function fetchWorkersOnBoardFromCloud(
     // Temporal ceiling: ignore timestamps more than 2 min in the future
     const maxTimestamp = new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
-    // --- Physical device logs ---
-    let entryLogs: any[] = [];
-    let exitLogs: any[] = [];
-
-    if (deviceIds.length > 0) {
-      const { data: devEntries, error: entryError } = await supabase
-        .from('access_logs')
-        .select('worker_id, worker_name, device_name, device_id, timestamp')
-        .eq('direction', 'entry')
-        .eq('access_status', 'granted')
-        .in('device_id', deviceIds)
-        .gte('timestamp', startTimestamp)
-        .lte('timestamp', maxTimestamp)
-        .order('timestamp', { ascending: true });
-
-      if (entryError) throw entryError;
-      entryLogs = devEntries || [];
-
-      const { data: devExits, error: exitError } = await supabase
-        .from('access_logs')
-        .select('worker_id, worker_name, timestamp')
-        .eq('direction', 'exit')
-        .in('device_id', deviceIds)
-        .gte('timestamp', startTimestamp)
-        .lte('timestamp', maxTimestamp);
-
-      if (exitError) throw exitError;
-      exitLogs = devExits || [];
-    }
-
-    // --- Manual access point logs ---
+    // --- Manual access point metadata ---
     const { data: manualPoints } = await supabase
       .from('manual_access_points')
       .select('name, access_location')
@@ -222,67 +192,65 @@ async function fetchWorkersOnBoardFromCloud(
       ])
     );
 
-    if (manualDeviceNames.length > 0) {
-      const { data: manualEntries } = await supabase
-        .from('access_logs')
-        .select('worker_id, worker_name, device_name, device_id, timestamp')
-        .eq('direction', 'entry')
-        .eq('access_status', 'granted')
-        .is('device_id', null)
-        .in('device_name', manualDeviceNames)
-        .gte('timestamp', startTimestamp)
-        .lte('timestamp', maxTimestamp)
-        .order('timestamp', { ascending: true });
-
-      if (manualEntries) entryLogs = [...entryLogs, ...manualEntries];
-
-      const { data: manualExits } = await supabase
-        .from('access_logs')
-        .select('worker_id, worker_name, timestamp')
-        .eq('direction', 'exit')
-        .is('device_id', null)
-        .in('device_name', manualDeviceNames)
-        .gte('timestamp', startTimestamp)
-        .lte('timestamp', maxTimestamp);
-
-      if (manualExits) exitLogs = [...exitLogs, ...manualExits];
-    }
-
     if (deviceIds.length === 0 && manualDeviceNames.length === 0) return [];
 
-    // Use worker_name as the primary key for matching entries/exits (handles UUID mismatch)
-    const workersOnBoard = new Map<string, any>();
+    // Fetch ALL events (entry + exit) for the day, ordered by created_at (cloud arrival order)
+    const { data: allLogs, error: logsError } = await supabase
+      .from('access_logs')
+      .select('worker_id, worker_name, device_name, device_id, timestamp, direction, created_at')
+      .eq('access_status', 'granted')
+      .gte('timestamp', startTimestamp)
+      .lte('timestamp', maxTimestamp)
+      .order('created_at', { ascending: true });
 
-    for (const entry of entryLogs || []) {
-      const key = entry.worker_name || entry.worker_id || '';
+    if (logsError) throw logsError;
+
+    // Filter to only logs belonging to this project's devices or manual points
+    const relevantLogs = (allLogs || []).filter(log =>
+      (log.device_id && deviceIds.includes(log.device_id)) ||
+      (!log.device_id && log.device_name && manualDeviceNames.includes(log.device_name))
+    );
+
+    // Process worker state chronologically by created_at (cloud arrival order)
+    const workerState = new Map<string, any>();
+    for (const log of relevantLogs) {
+      const key = log.worker_name || log.worker_id || '';
       if (!key) continue;
 
-      // Match exit by worker_name first, fallback to worker_id
-      const hasExit = exitLogs?.some(exit => {
-        const nameMatch = entry.worker_name && exit.worker_name && exit.worker_name === entry.worker_name;
-        const idMatch = exit.worker_id === entry.worker_id;
-        return (nameMatch || idMatch) && new Date(exit.timestamp) > new Date(entry.timestamp);
-      });
-
-      if (!hasExit && !workersOnBoard.has(key)) {
-        workersOnBoard.set(key, {
-          worker_id: entry.worker_id,
-          worker_name: entry.worker_name,
-          device_name: entry.device_name,
-          device_id: entry.device_id,
-          entry_time: entry.timestamp,
+      if (log.direction === 'entry') {
+        workerState.set(key, {
+          worker_id: log.worker_id,
+          worker_name: log.worker_name,
+          device_name: log.device_name,
+          device_id: log.device_id,
+          entry_time: log.timestamp,
+          isOnBoard: true,
         });
+      } else if (log.direction === 'exit') {
+        const existing = workerState.get(key);
+        if (existing) {
+          existing.isOnBoard = false;
+        }
+      }
+    }
+
+    // Keep only workers whose final state is on-board
+    const workersOnBoard = new Map<string, any>();
+    for (const [key, state] of workerState) {
+      if (state.isOnBoard) {
+        workersOnBoard.set(key, state);
       }
     }
 
     if (workersOnBoard.size === 0) return [];
 
-    // Build first entry map (entryLogs is ascending)
+    // Build first entry map from relevantLogs (already ordered by created_at ASC)
     const firstEntryMap = new Map<string, string>();
-    for (const entry of entryLogs || []) {
-      const key = entry.worker_name || entry.worker_id || '';
+    for (const log of relevantLogs) {
+      if (log.direction !== 'entry') continue;
+      const key = log.worker_name || log.worker_id || '';
       if (key && !firstEntryMap.has(key)) {
-        firstEntryMap.set(key, entry.timestamp);
+        firstEntryMap.set(key, log.timestamp);
       }
     }
 
