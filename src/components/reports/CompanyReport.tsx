@@ -228,7 +228,7 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
       data: filtered.map(c => ({
         ...c,
         firstEntryStr: c.firstEntry ? format(c.firstEntry, 'dd/MM/yyyy HH:mm') : '-',
-        exitStatus: c.allExited ? 'Todos saíram' : `A bordo (${c.onBoardNow})`,
+        exitStatus: c.allExited ? (c.lastExit ? format(c.lastExit, 'dd/MM/yyyy HH:mm') : 'Todos saíram') : `A bordo (${c.onBoardNow})`,
         duration: formatDuration(c.totalMinutes),
       })),
       filename: `relatorio-empresa-${startDate}-${endDate}.pdf`,
