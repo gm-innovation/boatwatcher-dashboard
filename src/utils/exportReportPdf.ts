@@ -140,3 +140,222 @@ export function exportReportPdf({
 
   doc.save(filename);
 }
+
+/* ═══════════════════════════════════════════════════
+   PDF DE EMPRESAS — Seguindo padrão do relatório de trabalhadores
+   ═══════════════════════════════════════════════════ */
+
+interface CompanyPdfRow {
+  name: string;
+  totalWorkers: number;
+  firstEntry: Date | null;
+  lastExit: Date | null;
+  allExited: boolean;
+  onBoardNow: number;
+  totalMinutes: number;
+  dayWorkers: number;
+  nightWorkers: number;
+}
+
+interface CompanyPdfOptions {
+  companies: CompanyPdfRow[];
+  startDate: string;
+  endDate: string;
+  projectName?: string;
+  projectLocation?: string;
+  clientLogoDataUrl?: string;
+  systemLogoDataUrl?: string;
+}
+
+const MARGIN = 14;
+const CLR = {
+  dark: [40, 40, 40] as const,
+  medium: [100, 100, 100] as const,
+  light: [160, 160, 160] as const,
+  white: [255, 255, 255] as const,
+  headerBg: [50, 50, 50] as const,
+  altRowBg: [248, 248, 248] as const,
+  summaryBg: [240, 245, 250] as const,
+  separator: [180, 200, 220] as const,
+  onBoardColor: [22, 163, 74] as const,
+};
+
+function fmtDuration(mins: number): string {
+  if (mins <= 0) return '-';
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+function fmtShort(date: Date | null): string {
+  if (!date) return '-';
+  return format(date, 'dd/MM HH:mm');
+}
+
+export function exportCompanyReportPdf(opts: CompanyPdfOptions) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const availableWidth = pageWidth - MARGIN * 2;
+
+  // --- Logos ---
+  const logoH = 14;
+  const logoMaxW = 40;
+  if (opts.clientLogoDataUrl) {
+    try { doc.addImage(opts.clientLogoDataUrl, 'PNG', MARGIN, 8, logoMaxW, logoH); } catch {}
+  }
+  if (opts.systemLogoDataUrl) {
+    try { doc.addImage(opts.systemLogoDataUrl, 'PNG', pageWidth - MARGIN - logoMaxW, 8, logoMaxW, logoH); } catch {}
+  }
+
+  let y = 26;
+
+  // --- Title ---
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...CLR.dark);
+  doc.text('Relatório de Empresas', pageWidth / 2, y, { align: 'center' });
+  y += 6;
+
+  // --- Project + Location ---
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...CLR.medium);
+  const projectLine = [
+    opts.projectName ? `Projeto: ${opts.projectName}` : null,
+    opts.projectLocation ? `Local: ${opts.projectLocation}` : null,
+  ].filter(Boolean).join(' | ');
+  if (projectLine) {
+    doc.text(projectLine, pageWidth / 2, y, { align: 'center' });
+    y += 5;
+  }
+
+  // --- Period ---
+  const period = `Período: ${format(new Date(opts.startDate), 'dd/MM/yyyy')} a ${format(new Date(opts.endDate), 'dd/MM/yyyy')}`;
+  doc.text(period, pageWidth / 2, y, { align: 'center' });
+  y += 6;
+
+  // --- Summary bar ---
+  const totalWorkers = opts.companies.reduce((s, c) => s + c.totalWorkers, 0);
+  const totalDay = opts.companies.reduce((s, c) => s + c.dayWorkers, 0);
+  const totalNight = opts.companies.reduce((s, c) => s + c.nightWorkers, 0);
+  const totalOnBoard = opts.companies.reduce((s, c) => s + c.onBoardNow, 0);
+
+  doc.setFillColor(...CLR.summaryBg);
+  doc.roundedRect(MARGIN, y - 3, availableWidth, 10, 1, 1, 'F');
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...CLR.dark);
+  const summaryText = `Total de Empresas: ${opts.companies.length}  |  Funcionários: ${totalWorkers} (Diurnos: ${totalDay}, Noturnos: ${totalNight})  |  A bordo: ${totalOnBoard}`;
+  doc.text(summaryText, pageWidth / 2, y + 4, { align: 'center' });
+  y += 12;
+
+  // --- Separator ---
+  doc.setDrawColor(...CLR.separator);
+  doc.setLineWidth(0.5);
+  doc.line(MARGIN, y, pageWidth - MARGIN, y);
+  y += 6;
+
+  // --- Column definitions ---
+  const cols = [
+    { header: 'Empresa', width: 0, align: 'left' as const },
+    { header: 'Func.', width: 18, align: 'center' as const },
+    { header: 'Entrada', width: 28, align: 'center' as const },
+    { header: 'Saída', width: 28, align: 'center' as const },
+    { header: 'Permanência', width: 28, align: 'center' as const },
+  ];
+  const fixedWidth = cols.reduce((s, c) => s + c.width, 0);
+  const nameWidth = availableWidth - fixedWidth;
+  const colWidths = cols.map(c => c.width || nameWidth);
+
+  const drawTableHeader = (cy: number) => {
+    doc.setFillColor(...CLR.headerBg);
+    doc.rect(MARGIN, cy, availableWidth, 7, 'F');
+    doc.setTextColor(...CLR.white);
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    let cx = MARGIN;
+    cols.forEach((col, i) => {
+      const tx = col.align === 'center' ? cx + colWidths[i] / 2 : cx + 2;
+      doc.text(col.header, tx, cy + 5, { align: col.align === 'center' ? 'center' : 'left' });
+      cx += colWidths[i];
+    });
+    return cy + 7;
+  };
+
+  y = drawTableHeader(y);
+
+  // --- Rows ---
+  opts.companies.forEach((company, ri) => {
+    if (y + 6 > pageHeight - 20) {
+      doc.addPage();
+      y = 18;
+      y = drawTableHeader(y);
+    }
+
+    if (ri % 2 === 0) {
+      doc.setFillColor(...CLR.altRowBg);
+      doc.rect(MARGIN, y, availableWidth, 6, 'F');
+    }
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...CLR.dark);
+
+    const exitText = company.allExited
+      ? fmtShort(company.lastExit)
+      : 'A bordo';
+
+    const values = [
+      company.name,
+      String(company.totalWorkers),
+      fmtShort(company.firstEntry),
+      exitText,
+      fmtDuration(company.totalMinutes),
+    ];
+
+    let cx = MARGIN;
+    cols.forEach((col, i) => {
+      const tx = col.align === 'center' ? cx + colWidths[i] / 2 : cx + 2;
+      const maxW = colWidths[i] - 3;
+      let val = values[i];
+      if (doc.getTextWidth(val) > maxW) {
+        while (doc.getTextWidth(val + '…') > maxW && val.length > 1) val = val.slice(0, -1);
+        val += '…';
+      }
+
+      // Highlight "A bordo"
+      if (i === 3 && !company.allExited) {
+        doc.setTextColor(...CLR.onBoardColor);
+        doc.setFont('helvetica', 'bold');
+      }
+
+      doc.text(val, tx, y + 4, { align: col.align === 'center' ? 'center' : 'left' });
+      doc.setTextColor(...CLR.dark);
+      doc.setFont('helvetica', 'normal');
+      cx += colWidths[i];
+    });
+
+    y += 6;
+  });
+
+  // --- Total row ---
+  y += 2;
+  doc.setFillColor(...CLR.summaryBg);
+  doc.rect(MARGIN, y, availableWidth, 7, 'F');
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...CLR.dark);
+  doc.text(`Total de Empresas: ${opts.companies.length}`, MARGIN + 3, y + 5);
+  doc.text(`Funcionários: ${totalWorkers}`, MARGIN + availableWidth / 2, y + 5);
+
+  // --- Footers ---
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setTextColor(...CLR.light);
+    doc.text(`Página ${i} de ${totalPages}`, pageWidth - MARGIN, pageHeight - 8, { align: 'right' });
+    doc.text(`Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, MARGIN, pageHeight - 8);
+  }
+
+  doc.save(`relatorio-empresas-${opts.startDate}-${opts.endDate}.pdf`);
+}
