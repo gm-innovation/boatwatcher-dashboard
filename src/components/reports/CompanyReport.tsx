@@ -344,8 +344,11 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
                 <tr className="bg-muted/50 font-semibold border-t-2">
                   <td className="p-3">TOTAL</td>
                   <td className="p-3 text-center">{totalWorkers}</td>
-                  <td className="p-3 text-center text-sm">
-                    Diurno: {totalDay} / Noturno: {totalNight}
+                  <td className="p-3 text-center">
+                    <div className="flex flex-col items-center text-[11px] leading-tight">
+                      <span className="text-red-500 font-bold">Diurno: {totalDay}</span>
+                      <span className="text-muted-foreground">Noturno: {totalNight}</span>
+                    </div>
                   </td>
                   <td className="p-3 text-center">
                     {totalOnBoard > 0 && (
