@@ -11,7 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Download, FileDown, Search, Users, Building2, ChevronDown, ChevronRight } from 'lucide-react';
-import { exportReportPdf } from '@/utils/exportReportPdf';
+import { exportStandardWorkerPdf, exportDetailedWorkerPdf } from '@/utils/exportWorkerReportPdf';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -30,12 +31,15 @@ interface RawLog {
 interface WorkerTimeRow {
   workerId: string;
   workerName: string;
+  workerCode?: number;
+  documentNumber: string;
   role: string;
   companyId: string;
   companyName: string;
   firstEntry: Date | null;
   lastExit: Date | null;
   totalMinutes: number;
+  effectiveMinutes: number;
   isOnBoard: boolean;
   rawLogs: RawLog[];
 }
@@ -64,7 +68,7 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
     queryFn: async () => {
       const { data, error } = await supabase
         .from('workers')
-        .select('id, name, role, company_id, job_function_id, document_number, companies(id, name), job_functions(id, name)')
+        .select('id, name, code, role, company_id, job_function_id, document_number, companies(id, name), job_functions(id, name)')
         .order('name');
       if (error) throw error;
       return data;
@@ -131,6 +135,15 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
         totalMinutes = diffMs > 0 ? Math.round(diffMs / 60000) : 0;
       }
 
+      // Effective minutes: sum of individual entry→exit pairs
+      let effectiveMinutes = 0;
+      for (let i = 0; i < alternating.length - 1; i += 2) {
+        if (alternating[i].direction === 'entry' && alternating[i + 1]?.direction === 'exit') {
+          const pairMs = new Date(alternating[i + 1].timestamp).getTime() - new Date(alternating[i].timestamp).getTime();
+          if (pairMs > 0) effectiveMinutes += Math.round(pairMs / 60000);
+        }
+      }
+
       const worker = workerById.get(key) || findWorker(logs[0]);
       const companyObj = worker?.companies as any;
       const jobObj = worker?.job_functions as any;
@@ -138,12 +151,15 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
       results.push({
         workerId: worker?.id || key,
         workerName: worker?.name || logs[0]?.worker_name || 'Desconhecido',
+        workerCode: worker?.code,
+        documentNumber: worker?.document_number || '',
         role: jobObj?.name || worker?.role || '-',
         companyId: companyObj?.id || worker?.company_id || '',
         companyName: companyObj?.name || 'Sem empresa',
         firstEntry,
         lastExit: isOnBoard ? null : lastExit,
         totalMinutes,
+        effectiveMinutes,
         isOnBoard,
         rawLogs: normalizeAlternatingLogs(
           sorted.filter(l => l.access_status === 'granted' && (l.direction === 'entry' || l.direction === 'exit'))
@@ -220,33 +236,21 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
     link.click();
   };
 
-  const handleExportPdf = () => {
-    exportReportPdf({
-      title: 'Tempo de Trabalho por Trabalhador',
-      subtitle: `Período: ${format(new Date(startDate), 'dd/MM/yyyy')} a ${format(new Date(endDate), 'dd/MM/yyyy')}`,
-      columns: [
-        { header: 'Nº', key: 'num', width: 10, align: 'center' },
-        { header: 'Nome', key: 'name' },
-        { header: 'Função', key: 'role', width: 25 },
-        { header: 'Empresa', key: 'company', width: 25 },
-        { header: 'Entrada', key: 'entry', width: 18, align: 'center' },
-        { header: 'Saída', key: 'exit', width: 18, align: 'center' },
-        { header: 'Total', key: 'total', width: 18, align: 'center' },
-      ],
-      data: filteredRows.map((row, i) => ({
-        num: String(i + 1),
-        name: row.workerName + (row.isOnBoard ? ' (A bordo)' : ''),
-        role: row.role,
-        company: row.companyName,
-        entry: formatTime(row.firstEntry),
-        exit: formatTime(row.lastExit),
-        total: formatDuration(row.totalMinutes),
-      })),
-      filename: `trabalhadores-${startDate}-${endDate}.pdf`,
-      summaryRows: [
-        { label: 'Total trabalhadores', value: String(filteredRows.length) },
-        { label: 'A bordo', value: String(filteredRows.filter(r => r.isOnBoard).length) },
-      ],
+  const handleExportStandardPdf = () => {
+    exportStandardWorkerPdf({
+      rows: filteredRows,
+      grouped,
+      startDate,
+      endDate,
+    });
+  };
+
+  const handleExportDetailedPdf = () => {
+    exportDetailedWorkerPdf({
+      rows: filteredRows,
+      grouped,
+      startDate,
+      endDate,
     });
   };
 
@@ -308,10 +312,23 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
             <Download className="h-4 w-4" />
             CSV
           </Button>
-          <Button variant="outline" size="sm" className="gap-1" onClick={handleExportPdf}>
-            <FileDown className="h-4 w-4" />
-            PDF
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1">
+                <FileDown className="h-4 w-4" />
+                PDF
+                <ChevronDown className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportStandardPdf}>
+                PDF Padrão (resumido)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportDetailedPdf}>
+                PDF Detalhado (completo)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
