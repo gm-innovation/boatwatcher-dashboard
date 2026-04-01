@@ -22,6 +22,7 @@ interface CompanyData {
   totalWorkers: number;
   onBoardNow: number;
   firstEntry: Date | null;
+  lastExit: Date | null;
   allExited: boolean;
   totalMinutes: number;
   dayWorkers: number;
@@ -105,10 +106,11 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
       workers: Set<string>;
       onBoardNow: number;
       firstEntry: Date | null;
+      lastExit: Date | null;
       totalMinutes: number;
       dayWorkers: number;
       nightWorkers: number;
-      workerExitStatus: Map<string, boolean>; // workerId -> hasExited
+      workerExitStatus: Map<string, boolean>;
     }>();
 
     workerLogs.forEach((logs, workerId) => {
@@ -119,6 +121,7 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
           workers: new Set(),
           onBoardNow: 0,
           firstEntry: null,
+          lastExit: null,
           totalMinutes: 0,
           dayWorkers: 0,
           nightWorkers: 0,
@@ -153,38 +156,34 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
       stats.workerExitStatus.set(workerId, !isOnBoard);
       if (isOnBoard) stats.onBoardNow++;
 
-      // Calculate total minutes from entry→exit pairs
-      let lastEntry: string | null = null;
-      for (const log of sorted) {
-        if (log.direction === 'entry') {
-          lastEntry = log.timestamp;
-        } else if (log.direction === 'exit' && lastEntry) {
-          const mins = differenceInMinutes(parseISO(log.timestamp), parseISO(lastEntry));
-          if (mins > 0 && mins < 1440) {
-            stats.totalMinutes += mins;
-          }
-          lastEntry = null;
-        }
-      }
-      // If still on board, add time from last entry to now
-      if (isOnBoard && lastEntry) {
-        const mins = differenceInMinutes(new Date(), parseISO(lastEntry));
-        if (mins > 0 && mins < 1440) {
-          stats.totalMinutes += mins;
+      // Track last exit for this worker
+      const exitLogs = sorted.filter(l => l.direction === 'exit');
+      if (exitLogs.length > 0) {
+        const lastExitDate = new Date(exitLogs[exitLogs.length - 1].timestamp);
+        if (!stats.lastExit || lastExitDate > stats.lastExit) {
+          stats.lastExit = lastExitDate;
         }
       }
     });
 
-    return Array.from(companyStats.entries()).map(([name, stats]) => ({
-      name,
-      totalWorkers: stats.workers.size,
-      onBoardNow: stats.onBoardNow,
-      firstEntry: stats.firstEntry,
-      allExited: stats.onBoardNow === 0,
-      totalMinutes: stats.totalMinutes,
-      dayWorkers: stats.dayWorkers,
-      nightWorkers: stats.nightWorkers,
-    })).sort((a, b) => b.totalWorkers - a.totalWorkers);
+    return Array.from(companyStats.entries()).map(([name, stats]) => {
+      const allExited = stats.onBoardNow === 0;
+      const endTime = allExited ? stats.lastExit : new Date();
+      const totalMinutes = stats.firstEntry && endTime
+        ? differenceInMinutes(endTime, stats.firstEntry)
+        : 0;
+      return {
+        name,
+        totalWorkers: stats.workers.size,
+        onBoardNow: stats.onBoardNow,
+        firstEntry: stats.firstEntry,
+        lastExit: stats.lastExit,
+        allExited,
+        totalMinutes: Math.max(0, totalMinutes),
+        dayWorkers: stats.dayWorkers,
+        nightWorkers: stats.nightWorkers,
+      };
+    }).sort((a, b) => b.totalWorkers - a.totalWorkers);
   }, [accessLogs, workers]);
 
   const filtered = useMemo(() => {
@@ -205,7 +204,7 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
         c.totalWorkers,
         c.onBoardNow,
         c.firstEntry ? format(c.firstEntry, 'dd/MM/yyyy HH:mm') : '-',
-        c.allExited ? 'Todos saíram' : 'A bordo',
+        c.allExited ? (c.lastExit ? format(c.lastExit, 'dd/MM/yyyy HH:mm') : 'Todos saíram') : 'A bordo',
         formatDuration(c.totalMinutes),
       ].join(','))
     ].join('\n');
@@ -230,7 +229,7 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
       data: filtered.map(c => ({
         ...c,
         firstEntryStr: c.firstEntry ? format(c.firstEntry, 'dd/MM/yyyy HH:mm') : '-',
-        exitStatus: c.allExited ? 'Todos saíram' : `A bordo (${c.onBoardNow})`,
+        exitStatus: c.allExited ? (c.lastExit ? format(c.lastExit, 'dd/MM/yyyy HH:mm') : 'Todos saíram') : `A bordo (${c.onBoardNow})`,
         duration: formatDuration(c.totalMinutes),
       })),
       filename: `relatorio-empresa-${startDate}-${endDate}.pdf`,
@@ -326,7 +325,9 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
                     </td>
                     <td className="p-3 text-center">
                       {company.allExited ? (
-                        <span className="text-sm text-muted-foreground">Todos saíram</span>
+                        <span className="text-sm text-muted-foreground">
+                          {company.lastExit ? format(company.lastExit, "dd/MM/yyyy HH:mm", { locale: ptBR }) : 'Todos saíram'}
+                        </span>
                       ) : (
                         <Badge className="border border-green-500 text-green-600 bg-transparent hover:bg-green-50 text-[10px] px-1.5 py-0">
                           A bordo
