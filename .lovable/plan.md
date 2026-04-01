@@ -1,58 +1,24 @@
 
 
-## Redesign da Aba de Empresas — Layout conforme o print
+## Ajustes na Tabela de Empresas — Conforme Print
 
-### O que o print mostra
+### Diferenças identificadas no print vs código atual
 
-- Título "Tempo de Trabalho por Empresa" com logo do cliente (OceanPact) abaixo
-- Barra de busca por empresa + botões "Exportar CSV" e "Exportar PDF"
-- Tabela com colunas: **Empresa**, **Funcionários**, **Entrada**, **Saída**, **Permanência**
-- Cada empresa mostra: nome + badge "X a bordo" (verde), count de workers, data/hora da primeira entrada, badge "A bordo" (azul) se ainda dentro, tempo total formatado (ex: "572h 10m")
-- Linha **TOTAL** no rodapé: total funcionários, "Diurno: X / Noturno: Y", badge "A bordo agora: X" (verde), sem permanência
-- Remove os 3 summary cards (Empresas, Total Trabalhadores, Total Acessos)
-- Remove o card wrapper com CardHeader — layout mais limpo e direto
+| Elemento | Print | Atual |
+|----------|-------|-------|
+| Badge "X a bordo" (empresa) | Verde outline (borda verde, fundo claro) | Verde sólido (`bg-green-600 text-white`) |
+| Funcionários | Texto simples bold, sem badge | `Badge variant="secondary"` |
+| Badge "A bordo" (coluna Saída) | Verde outline | Azul sólido (`bg-blue-600`) |
+| Permanência | Badge com borda roxa/verde | `Badge variant="outline"` cinza |
+| TOTAL - "A bordo agora" | Verde outline | Verde sólido |
+| TOTAL - Diurno/Noturno | "Diurno: 1" em vermelho, "Noturno: 0" em linha separada | Texto simples inline |
 
-### Mudanças no data model
+### Arquivo: `src/components/reports/CompanyReport.tsx`
 
-O `CompanyData` atual tem `name, totalWorkers, totalHours, entries`. Precisa mudar para:
-
-```typescript
-interface CompanyData {
-  name: string;
-  totalWorkers: number;
-  onBoardNow: number;           // quantos estão a bordo agora
-  firstEntry: Date | null;       // primeira entrada de qualquer worker da empresa
-  allExited: boolean;            // true se todos saíram
-  totalMinutes: number;          // permanência total (soma de todos os workers)
-  dayWorkers: number;            // workers com primeira entrada diurna
-  nightWorkers: number;          // workers com primeira entrada noturna
-}
-```
-
-A lógica de `companyData` já agrupa logs por worker e empresa — precisa adicionar:
-- Rastrear `isOnBoard` por worker (última ação = entry)
-- Calcular `firstEntry` (menor timestamp de entry da empresa)
-- Calcular permanência como soma dos pares entry→exit + tempo aberto para quem está a bordo
-- Classificar diurno/noturno pela hora da primeira entrada do worker
-
-### Arquivo alterado
-
-| Arquivo | Mudança |
-|---------|------|
-| `src/components/reports/CompanyReport.tsx` | Reescrever completamente: remover summary cards, novo layout de tabela, novo data model, busca por empresa, logo do cliente, linha TOTAL |
-
-### Layout da tabela
-
-- Sem cards de resumo no topo
-- Busca + botões de export no topo
-- Título "Tempo de Trabalho por Empresa" com logo do cliente (via query do projeto como já feito no WorkerTimeReport)
-- Tabela simples e limpa com as 5 colunas
-- Badges: "X a bordo" (verde, ao lado do nome), "A bordo" (azul, coluna Saída), tempo formatado "Xh Ym" (badge cinza, coluna Permanência)
-- Rodapé TOTAL com contagens diurno/noturno e "A bordo agora: X"
-
-### Dados necessários
-
-- Reutilizar query de `workers` já existente
-- Adicionar query do projeto (para logo do cliente) — mesmo padrão do WorkerTimeReport
-- `useAccessLogs` já em uso
+1. **Badge "X a bordo"** (linha 313): trocar para `border border-green-500 text-green-600 bg-green-50 hover:bg-green-100`
+2. **Funcionários** (linha 320): trocar `<Badge variant="secondary">` por `<span className="font-semibold">`
+3. **Badge "A bordo" na Saída** (linha 331): trocar `bg-blue-600` para `border border-green-500 text-green-600 bg-transparent hover:bg-green-50`
+4. **Permanência** (linha 337): adicionar cor condicional — se `onBoardNow > 0` usar borda verde, senão manter outline cinza
+5. **TOTAL "A bordo agora"** (linha 352): trocar para verde outline
+6. **TOTAL Diurno/Noturno** (linha 348): separar em duas linhas com "Diurno:" em vermelho e "Noturno:" abaixo
 
