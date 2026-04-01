@@ -45,6 +45,7 @@ function classifyShift(hour: number): 'day' | 'night' {
 export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const { data: accessLogs = [], isLoading } = useAccessLogs(projectId, startDate, endDate, 1000);
+  const { data: systemLogoSetting } = useSystemSetting('system_logo');
 
   const { data: project } = useQuery({
     queryKey: ['project-for-company-report', projectId],
