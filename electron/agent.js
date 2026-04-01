@@ -346,7 +346,55 @@ class AgentController {
     } catch { /* ignore */ }
   }
 
-  async pollDevice(device, _retried = false) {
+  /**
+   * Fetch the maximum event ID currently on the device (without any filter).
+   * Used to detect stale cursors when the device has reset its event buffer.
+   */
+  async fetchMaxEventId(device, session, creds) {
+    const ip = device.controlid_ip_address;
+    const postData = JSON.stringify({ object: 'access_logs' });
+
+    return new Promise((resolve, reject) => {
+      const req = http.request({
+        hostname: ip,
+        port: creds.port,
+        path: `/load_objects.fcgi?session=${session}`,
+        method: 'POST',
+        timeout: 5000,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            const response = JSON.parse(data);
+            const events = response.access_logs || response.events || [];
+            if (!Array.isArray(events) || events.length === 0) {
+              resolve(null);
+              return;
+            }
+            let maxId = 0;
+            for (const evt of events) {
+              const id = evt.id || 0;
+              if (id > maxId) maxId = id;
+            }
+            resolve(maxId);
+          } catch {
+            reject(new Error('Failed to parse fallback response'));
+          }
+        });
+      });
+      req.on('error', reject);
+      req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+      req.write(postData);
+      req.end();
+    });
+  }
+
+
     const ip = device.controlid_ip_address;
     if (!ip) throw new Error('No IP');
 
