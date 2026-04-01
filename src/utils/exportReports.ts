@@ -87,10 +87,11 @@ export const exportToPDF = async (
     if (clientLogoUrl) {
       try {
         const clientLogoData = await loadImage(clientLogoUrl);
-        doc.addImage(clientLogoData, 'PNG', pageWidth - 60, yPosition, 40, 15);
+        const { w, h } = await fitImageDimensions(clientLogoData, 40, 15);
+        const yOffset = yPosition + (15 - h) / 2;
+        doc.addImage(clientLogoData, 'PNG', pageWidth - margin - w, yOffset, w, h);
       } catch (clientLogoError) {
         console.error('Failed to load client logo:', clientLogoError);
-        // Continue without the client logo
       }
     }
 
