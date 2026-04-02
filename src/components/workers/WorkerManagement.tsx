@@ -800,59 +800,59 @@ export const WorkerManagement = () => {
       }
 
       // Name (rotated -90°)
-      doc.setFontSize(12);
+      doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
       const cleanName = removeAccents(displayName);
       const nameLines: string[] = doc.splitTextToSize(cleanName, 45) as string[];
-      if (nameLines.length > 2) doc.setFontSize(10);
+      if (nameLines.length > 2) doc.setFontSize(14);
       nameLines.forEach((line: string, i: number) => {
-        doc.text(line, 50 - (i * 5), 5, { angle: -90 });
+        doc.text(line, 36 - (i * 7), 5, { angle: -90 });
       });
 
       // Job function
       const jobFn = jobFunctions.find(jf => jf.id === (worker as any).job_function_id);
       const jobFunctionName = jobFn?.name || (worker as any).role || 'Funcao nao informada';
-      doc.setFontSize(8);
+      doc.setFontSize(12);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(0, 0, 0);
-      doc.text(removeAccents(String(jobFunctionName)), 40, 5, { angle: -90 });
+      doc.text(removeAccents(String(jobFunctionName)), 30, 5, { angle: -90 });
 
       // Company
       const companyName = getCompanyName(worker.company_id);
-      doc.setFontSize(7);
-      doc.text(removeAccents(companyName === '-' ? 'Empresa nao informada' : companyName), 36, 5, { angle: -90 });
+      doc.setFontSize(10);
+      doc.text(removeAccents(companyName === '-' ? 'Empresa nao informada' : companyName), 26, 5, { angle: -90 });
 
       // Project name
-      doc.setFontSize(projectFontSize > 12 ? 10 : projectFontSize);
+      doc.setFontSize(projectFontSize);
       doc.setFont('helvetica', 'bold');
-      doc.text(removeAccents(combinedProjectName), 25, 5, { angle: -90 });
+      doc.text(removeAccents(combinedProjectName), 14, 5, { angle: -90 });
 
       // Project type
-      doc.setFontSize(8);
+      doc.setFontSize(12);
       doc.setFont('helvetica', 'normal');
-      doc.text(removeAccents(projectType), 20, 5, { angle: -90 });
+      doc.text(removeAccents(projectType), 8, 5, { angle: -90 });
 
       // Circle with code
-      const circleX = 44;
+      const circleX = 40;
       const circleY = 80;
-      const radius = 13;
+      const radius = 16;
       doc.setFillColor(255, 255, 255);
       doc.setDrawColor(0, 0, 0);
       doc.setLineWidth(0.5);
       doc.circle(circleX, circleY, radius, 'FD');
 
       const code = String((worker as any).code || '1').padStart(4, '0');
-      doc.setFontSize(18);
+      doc.setFontSize(25);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
-      doc.text(code, circleX + 3, circleY, { align: 'center', angle: -90 });
+      doc.text(code, circleX + 5, circleY, { align: 'center', angle: -90 });
 
       // Powered by
-      doc.setFontSize(5);
+      doc.setFontSize(6);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(120, 120, 120);
-      doc.text('Powered by Googlemarine', 5, 5, { angle: -90 });
+      doc.text('Powered by Googlemarine', 5, 40, { angle: -90 });
 
       // Blood type
       const bloodType = (worker as any).blood_type;
@@ -860,13 +860,13 @@ export const WorkerManagement = () => {
         bloodType.trim() !== '' && !['nao informado', 'não informado', 'n/a', 'null', 'undefined']
           .includes(bloodType.trim().toLowerCase());
       if (isValidBloodType) {
-        doc.setFontSize(6);
+        doc.setFontSize(7);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(0, 0, 0);
-        doc.text('Tipo Sanguineo', 16, 78, { angle: -90 });
-        doc.setFontSize(10);
+        doc.text('Tipo Sanguineo', 16, 75, { angle: -90 });
+        doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
-        doc.text(bloodType.trim(), 12, 82, { angle: -90 });
+        doc.text(bloodType.trim(), 12, 80, { angle: -90 });
       }
     });
 
