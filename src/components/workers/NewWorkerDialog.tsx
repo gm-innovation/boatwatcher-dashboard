@@ -625,7 +625,7 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                         <Droplets className="h-4 w-4" />
                         Tipo Sanguíneo
                       </Label>
-                      <Select onValueChange={(v) => setValue('blood_type', v)}>
+                      <Select value={watchedBloodType || ''} onValueChange={(v) => setValue('blood_type', v)}>
                         <SelectTrigger>
                           <SelectValue placeholder="Não informado" />
                         </SelectTrigger>
