@@ -799,8 +799,8 @@ export const WorkerManagement = () => {
           logoImg.src = logoDataUrl;
           const naturalW = logoImg.naturalWidth || 1;
           const naturalH = logoImg.naturalHeight || 1;
-          const logoMaxH = 20;
-          const logoMaxW = 12;
+          const logoMaxH = 24;
+          const logoMaxW = 14;
           const ratio = naturalW / naturalH;
           let logoW = logoMaxH * ratio;
           let logoH = logoMaxH;
@@ -808,7 +808,7 @@ export const WorkerManagement = () => {
             logoW = logoMaxW;
             logoH = logoW / ratio;
           }
-          doc.addImage(logoDataUrl, 'PNG', 48, 5, logoW, logoH);
+          doc.addImage(logoDataUrl, 'PNG', 44, 5, logoW, logoH);
         } catch {}
       }
 
@@ -844,7 +844,7 @@ export const WorkerManagement = () => {
       // Project type
       doc.setFontSize(11);
       doc.setFont('helvetica', 'normal');
-      doc.text(removeAccents(projectType), 9, 5, { angle: -90 });
+      doc.text(removeAccents(projectType), 6, 5, { angle: -90 });
 
       // Circle with code
       const circleX = 40;
@@ -859,7 +859,7 @@ export const WorkerManagement = () => {
       doc.setFontSize(25);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
-      doc.text(code, circleX + 7, 75, { align: 'center', angle: -90 });
+      doc.text(code, circleX + 7, 71, { align: 'center', angle: -90 });
 
       // Powered by
       doc.setFontSize(7);
