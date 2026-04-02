@@ -137,7 +137,7 @@ export const ReportScheduler = () => {
       project_id: projectId || null,
       filters: {
         send_time: sendTime,
-        lookback_days: lookbackDays,
+        lookback_days: FREQUENCY_LOOKBACK[frequency]?.days ?? 1,
         report_types: selectedTypes,
       },
     };
