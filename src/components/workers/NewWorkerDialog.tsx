@@ -194,6 +194,105 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
     setPhotoPreview(null);
   };
 
+  // Normalize company name for matching
+  const normalizeCompanyName = (name: string): string => {
+    return name
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove accents
+      .replace(/\b(ltda|me|eireli|epp|s\.?a\.?|s\/a)\b/gi, '')
+      .replace(/[.\-\/,]/g, '')
+      .trim()
+      .replace(/\s+/g, ' ');
+  };
+
+  const consolidateExtractedData = (documents: UploadedDocument[]) => {
+    // Sort by priority: ASO first, then identity docs, then NRs
+    const docsWithData = documents
+      .filter(d => d.extractedData && Object.keys(d.extractedData).length > 0)
+      .sort((a, b) => getDocumentPriority(b.type) - getDocumentPriority(a.type));
+
+    // Reset form fields that will be filled by consolidation
+    // (only fill, never clear what user already typed manually)
+
+    for (const doc of docsWithData) {
+      const data = doc.extractedData!;
+      
+      // Promote face photo
+      if (isPhotoDocument(doc.type) && doc.file && !photoPreview) {
+        setPhotoFile(doc.file);
+        const reader = new FileReader();
+        reader.onloadend = () => setPhotoPreview(reader.result as string);
+        reader.readAsDataURL(doc.file);
+        continue; // Face photos don't have other useful data
+      }
+
+      // Name
+      if (data.full_name && !watch('name')) setValue('name', data.full_name);
+
+      // CPF
+      if (data.document_number && !watch('document_number')) {
+        const cleanCpf = String(data.document_number).replace(/\D/g, '');
+        if (cleanCpf.length >= 11) setValue('document_number', cleanCpf);
+      }
+
+      // Birth date
+      if (data.birth_date && !watch('birth_date')) setValue('birth_date', data.birth_date);
+
+      // Gender
+      if (data.gender && !watch('gender')) {
+        const genderLower = String(data.gender).toLowerCase();
+        if (genderLower.includes('masc') || genderLower === 'm') {
+          setValue('gender', 'masculino');
+        } else if (genderLower.includes('fem') || genderLower === 'f') {
+          setValue('gender', 'feminino');
+        }
+      }
+
+      // Blood type
+      if (data.blood_type && !watch('blood_type')) {
+        setValue('blood_type', data.blood_type);
+      }
+
+      // Role/Job function — only from high-priority docs (ASO, identity)
+      if (data.job_function && !watch('role') && getDocumentPriority(doc.type) >= 70) {
+        const extractedRole = String(data.job_function).trim();
+        // Skip generic roles like "Aluno" from NR certificates
+        if (extractedRole.toLowerCase() !== 'aluno') {
+          const extractedRoleLower = extractedRole.toLowerCase();
+          const matched = jobFunctions.find((jf: any) => {
+            const jfLower = jf.name.toLowerCase().trim();
+            return jfLower === extractedRoleLower || jfLower.includes(extractedRoleLower) || extractedRoleLower.includes(jfLower);
+          });
+          if (matched) {
+            setValue('role', matched.name);
+          } else {
+            // Auto-create the job function
+            createJobFunction.mutateAsync({ name: extractedRole }).then(() => {
+              setValue('role', extractedRole);
+            }).catch((e) => {
+              console.error('Failed to auto-create job function:', e);
+              setValue('role', extractedRole);
+            });
+          }
+        }
+      }
+
+      // Company — only from high-priority docs
+      if (data.company_name && !watch('company_id') && getDocumentPriority(doc.type) >= 70) {
+        const normalizedExtracted = normalizeCompanyName(String(data.company_name));
+        const matched = companies.find(c => {
+          const normalizedExisting = normalizeCompanyName(c.name);
+          return normalizedExisting === normalizedExtracted ||
+            normalizedExisting.includes(normalizedExtracted) ||
+            normalizedExtracted.includes(normalizedExisting);
+        });
+        if (matched) {
+          setValue('company_id', matched.id);
+        }
+      }
+    }
+  };
+
   const processDocument = async (file: File, docId: string) => {
     setUploadedDocuments(prev => prev.map(doc =>
       doc.id === docId ? { ...doc, isExtracting: true, error: null } : doc
@@ -209,86 +308,23 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
         return;
       }
 
-      setUploadedDocuments(prev => prev.map(doc =>
-        doc.id === docId
-          ? {
-              ...doc,
-              file_url: result.file_url,
-              type: result.document_type || 'Documento',
-              completion_date: result.completion_date,
-              expiry_date: result.expiry_date,
-              extractedData: result.extracted_data,
-              isExtracting: false,
-              error: null
-            }
-          : doc
-      ));
-
-      const data = result.extracted_data;
-      if (data) {
-        // Name
-        if (data.full_name && !watch('name')) setValue('name', data.full_name);
-        
-        // CPF - clean to numbers only
-        if (data.document_number && !watch('document_number')) {
-          const cleanCpf = String(data.document_number).replace(/\D/g, '');
-          setValue('document_number', cleanCpf);
-        }
-        
-        // Birth date
-        if (data.birth_date && !watch('birth_date')) setValue('birth_date', data.birth_date);
-        
-        // Gender - normalize to lowercase values matching Select options
-        if (data.gender && !watch('gender')) {
-          const genderLower = String(data.gender).toLowerCase();
-          if (genderLower.includes('masc') || genderLower === 'm') {
-            setValue('gender', 'masculino');
-          } else if (genderLower.includes('fem') || genderLower === 'f') {
-            setValue('gender', 'feminino');
-          }
-        }
-        
-        // Blood type - keep as-is (A+, B-, etc.)
-        if (data.blood_type && !watch('blood_type')) {
-          setValue('blood_type', data.blood_type);
-        }
-        
-        // Role/Job function - try to match existing, or auto-create
-        if (data.job_function && !watch('role')) {
-          const extractedRole = String(data.job_function).trim();
-          const extractedRoleLower = extractedRole.toLowerCase();
-          const matched = jobFunctions.find((jf: any) => 
-            jf.name.toLowerCase().trim() === extractedRoleLower ||
-            jf.name.toLowerCase().includes(extractedRoleLower) ||
-            extractedRoleLower.includes(jf.name.toLowerCase())
-          );
-          if (matched) {
-            setValue('role', matched.name);
-          } else {
-            // Auto-create the job function
-            try {
-              await createJobFunction.mutateAsync({ name: extractedRole });
-              setValue('role', extractedRole);
-            } catch (e) {
-              console.error('Failed to auto-create job function:', e);
-              setValue('role', extractedRole);
-            }
-          }
-        }
-        
-        // Company - try to match by name
-        if (data.company_name && !watch('company_id')) {
-          const extractedCompany = String(data.company_name).toLowerCase().trim();
-          const matched = companies.find(c => 
-            c.name.toLowerCase().trim() === extractedCompany ||
-            c.name.toLowerCase().includes(extractedCompany) ||
-            extractedCompany.includes(c.name.toLowerCase())
-          );
-          if (matched) {
-            setValue('company_id', matched.id);
-          }
-        }
-      }
+      setUploadedDocuments(prev => {
+        const updated = prev.map(doc =>
+          doc.id === docId
+            ? {
+                ...doc,
+                file_url: result.file_url,
+                type: result.document_type || 'Documento',
+                completion_date: result.completion_date,
+                expiry_date: result.expiry_date,
+                extractedData: result.extracted_data,
+                isExtracting: false,
+                error: null
+              }
+            : doc
+        );
+        return updated;
+      });
     } catch (error) {
       console.error('Document processing error:', error);
       setUploadedDocuments(prev => prev.map(doc =>
@@ -317,6 +353,16 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
     }
 
     e.target.value = '';
+
+    // After all documents are processed, consolidate with priority
+    // Use a small delay to ensure state is updated
+    setTimeout(() => {
+      setUploadedDocuments(current => {
+        // Run consolidation with the latest state
+        consolidateExtractedData(current);
+        return current;
+      });
+    }, 100);
 
     // Auto-clear success count after 5s
     setTimeout(() => setUploadSuccessCount(0), 5000);
