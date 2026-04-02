@@ -59,7 +59,7 @@ const workerSchema = z.object({
   document_number: z.string().min(11, 'CPF inválido'),
   role: z.string().optional(),
   company_id: z.string().optional(),
-  status: z.string().default('pending_review'),
+  status: z.string().default('active'),
   birth_date: z.string().optional(),
   gender: z.string().optional(),
   blood_type: z.string().optional(),
@@ -169,7 +169,7 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<WorkerFormData>({
     resolver: zodResolver(workerSchema),
     defaultValues: {
-      status: 'pending_review',
+      status: 'active',
     }
   });
 
