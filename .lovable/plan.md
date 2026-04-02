@@ -1,28 +1,31 @@
 
 
-## Corrigir abertura do PDF de etiquetas (bloqueado pelo navegador)
+## Corrigir coordenadas da etiqueta PDF para jsPDF v3
 
 ### Problema
-O `window.open(blobUrl)` está sendo bloqueado pelo Chrome (popup blocker ou extensões de adblock). O erro "ERR_BLOCKED_BY_CLIENT" impede a visualização do PDF.
+As coordenadas do código de produção (jsPDF v2.5.1) não funcionam no jsPDF v3 instalado no projeto. O parâmetro `angle: -90` trata as coordenadas (x, y) de forma diferente entre versões — no v3, o X controla a posição horizontal (esquerda-direita) diretamente.
 
-### Solução
-Substituir `window.open()` por download direto usando `doc.save()`, que é mais confiável e não é bloqueado por popup blockers. Alternativamente, criar um link temporário (`<a>` com `target="_blank"`) e clicar programaticamente, que contorna bloqueios de popup por ser iniciado por ação do usuário.
+### Validação
+Testei iterativamente com jsPDF v3 no sandbox e encontrei as coordenadas corretas que reproduzem o layout da referência.
 
-**Arquivo: `src/components/workers/WorkerManagement.tsx`** (linhas ~875-879)
+### Alterações em `src/components/workers/WorkerManagement.tsx`
 
-Substituir o bloco `try { window.open(bloburl) }` por:
-```typescript
-// Criar link temporário para abrir o PDF sem ser bloqueado
-const blob = doc.output('blob');
-const url = URL.createObjectURL(blob);
-const link = document.createElement('a');
-link.href = url;
-link.target = '_blank';
-link.rel = 'noopener';
-link.click();
-// Fallback: se não abrir, fazer download
-setTimeout(() => URL.revokeObjectURL(url), 10000);
-```
+Reescrever a seção de coordenadas da função `handlePrintLabels` (~linhas 802-871):
 
-Se ainda for bloqueado, usar `doc.save('etiquetas.pdf')` como método principal (download direto, nunca bloqueado).
+| Elemento | Coordenadas atuais | Coordenadas corretas |
+|---|---|---|
+| Nome | x=36-(i*7), y=5 | x=48-(i*7), y=5 |
+| Função | x=30, y=5 | x=42, y=5 |
+| Empresa | x=26, y=5 | x=37, y=5 |
+| Projeto | x=14, y=5 | x=22, y=5 |
+| Tipo projeto | x=8, y=5 | x=16, y=5 |
+| Código (font) | 25pt, x=circleX+5 | 20pt, x=43, y=80 |
+| Powered by | x=5, y=40 | x=5, y=30 |
+| Tipo sanguíneo label | x=16, y=75 | x=18, y=78 |
+| Tipo sanguíneo valor | x=12, y=80 | x=13, y=82 |
+| Função (font) | 12pt | 10pt |
+| Empresa (font) | 10pt | 9pt |
+
+### Resultado esperado
+Layout idêntico às imagens de referência: nome grande à direita, dados empilhados para a esquerda, código dentro do círculo centralizado, logo no canto superior direito.
 
