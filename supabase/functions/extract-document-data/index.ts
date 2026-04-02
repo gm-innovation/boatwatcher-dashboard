@@ -6,40 +6,33 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const getExtractionSchema = (documentType: string) => {
-  const baseProperties = {
-    document_type: {
-      type: "string",
-      enum: ["ASO", "NR10", "NR33", "NR35", "RG", "CPF", "CNH", "Outros"],
-      description: "Tipo do documento identificado. RETORNE APENAS um destes valores exatos."
-    },
-    completion_date: {
-      type: "string",
-      description: "Data de emissão, conclusão ou realização. Formato: YYYY-MM-DD"
-    },
-    expiry_date: {
-      type: "string",
-      description: "Data de validade ou vencimento. Formato: YYYY-MM-DD"
+// Always use the full schema so we extract all possible fields regardless of document type
+const getExtractionSchema = () => {
+  return {
+    type: "object",
+    properties: {
+      document_type: {
+        type: "string",
+        enum: ["ASO", "NR10", "NR33", "NR35", "RG", "CPF", "CNH", "Outros"],
+        description: "Tipo do documento identificado. RETORNE APENAS um destes valores exatos."
+      },
+      completion_date: {
+        type: "string",
+        description: "Data de emissão, conclusão ou realização. Formato: YYYY-MM-DD"
+      },
+      expiry_date: {
+        type: "string",
+        description: "Data de validade ou vencimento. Formato: YYYY-MM-DD"
+      },
+      full_name: { type: "string", description: "Nome completo do trabalhador/pessoa" },
+      document_number: { type: "string", description: "CPF (apenas números, sem pontos ou traços)" },
+      birth_date: { type: "string", description: "Data de nascimento. Formato: YYYY-MM-DD" },
+      gender: { type: "string", enum: ["Masculino", "Feminino"], description: "Gênero/Sexo" },
+      blood_type: { type: "string", enum: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"], description: "Tipo sanguíneo" },
+      job_function: { type: "string", description: "Cargo ou função profissional" },
+      company_name: { type: "string", description: "Nome da empresa/empregador mencionado no documento" }
     }
   };
-
-  if (['ASO', 'RG', 'CPF', 'CNH'].includes(documentType) || !documentType) {
-    return {
-      type: "object",
-      properties: {
-        ...baseProperties,
-        full_name: { type: "string", description: "Nome completo do trabalhador/pessoa" },
-        document_number: { type: "string", description: "CPF (apenas números, sem pontos ou traços)" },
-        birth_date: { type: "string", description: "Data de nascimento. Formato: YYYY-MM-DD" },
-        gender: { type: "string", enum: ["Masculino", "Feminino"], description: "Gênero/Sexo" },
-        blood_type: { type: "string", enum: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"], description: "Tipo sanguíneo" },
-        job_function: { type: "string", description: "Cargo ou função profissional" },
-        company_name: { type: "string", description: "Nome da empresa/empregador mencionado no documento" }
-      }
-    };
-  }
-
-  return { type: "object", properties: baseProperties };
 };
 
 const identifyDocumentType = (filename: string): string => {
@@ -54,7 +47,6 @@ const identifyDocumentType = (filename: string): string => {
   return 'Outros';
 };
 
-// Download file and convert to base64 data URL
 async function fileToDataUrl(fileUrl: string, filename: string): Promise<{ dataUrl: string; mimeType: string }> {
   const response = await fetch(fileUrl);
   if (!response.ok) {
@@ -64,14 +56,12 @@ async function fileToDataUrl(fileUrl: string, filename: string): Promise<{ dataU
   const arrayBuffer = await response.arrayBuffer();
   const uint8Array = new Uint8Array(arrayBuffer);
   
-  // Convert to base64
   let binary = '';
   for (let i = 0; i < uint8Array.length; i++) {
     binary += String.fromCharCode(uint8Array[i]);
   }
   const base64 = btoa(binary);
 
-  // Determine MIME type
   const ext = (filename || fileUrl).split('.').pop()?.toLowerCase() || '';
   const mimeMap: Record<string, string> = {
     'pdf': 'application/pdf',
@@ -111,12 +101,12 @@ serve(async (req) => {
 
     console.log('[extract-document-data] Iniciando extração de:', filename);
 
-    const detectedType = document_type || identifyDocumentType(filename || '');
-    console.log('[extract-document-data] Tipo detectado:', detectedType);
+    const hintType = document_type || identifyDocumentType(filename || '');
+    console.log('[extract-document-data] Hint de tipo pelo nome do arquivo:', hintType);
 
-    const extractionSchema = getExtractionSchema(detectedType);
+    // Always use full schema
+    const extractionSchema = getExtractionSchema();
 
-    // Download file and convert to base64 data URL (fixes PDF support)
     const { dataUrl, mimeType } = await fileToDataUrl(file_url, filename || '');
     console.log('[extract-document-data] File MIME type:', mimeType, 'base64 length:', dataUrl.length);
 
@@ -124,13 +114,15 @@ serve(async (req) => {
 
 INSTRUÇÕES IMPORTANTES:
 1. Analise cuidadosamente a imagem/PDF do documento
-2. Extraia APENAS as informações que você consegue identificar claramente
-3. Se não encontrar algum campo, deixe-o vazio ou null
-4. NÃO INVENTE dados - se não estiver claro, não preencha
-5. Para datas, use o formato YYYY-MM-DD
-6. Para CPF, retorne apenas números (sem pontos ou traços)
-7. Para gênero, identifique pelo campo "Sexo" ou por indicadores no documento (M=Masculino, F=Feminino)
-8. Para tipo sanguíneo, procure por campos como "Tipo Sang.", "Grupo Sang.", etc.
+2. PRIMEIRO identifique o tipo real do documento pelo seu CONTEÚDO, não pelo nome do arquivo
+3. Extraia TODAS as informações que você consegue identificar claramente
+4. Se não encontrar algum campo, deixe-o vazio ou null
+5. NÃO INVENTE dados - se não estiver claro, não preencha
+6. Para datas, use o formato YYYY-MM-DD
+7. Para CPF, retorne apenas números (sem pontos ou traços)
+8. Para gênero, identifique pelo campo "Sexo" ou por indicadores no documento (M=Masculino, F=Feminino)
+9. Para tipo sanguíneo, procure por campos como "Tipo Sang.", "Grupo Sang.", etc.
+10. Extraia SEMPRE o nome completo, CPF, data de nascimento, gênero, tipo sanguíneo, cargo/função e empresa quando presentes no documento, INDEPENDENTE do tipo de documento
 
 TIPOS DE DOCUMENTO:
 - ASO: Atestado de Saúde Ocupacional (contém dados pessoais + data de validade geralmente 1 ano)
@@ -141,10 +133,12 @@ TIPOS DE DOCUMENTO:
 - CPF: Cadastro de Pessoa Física
 - CNH: Carteira Nacional de Habilitação`;
 
-    const userPrompt = `Analise este documento e extraia as informações de acordo com o schema fornecido.
-    
-Documento: ${filename || 'sem nome'}
-Tipo esperado: ${detectedType}
+    const userPrompt = `Analise este documento e extraia TODAS as informações possíveis.
+
+IMPORTANTE: O nome do arquivo é "${filename || 'sem nome'}" mas isso pode NÃO refletir o tipo real do documento. Identifique o tipo pelo CONTEÚDO do documento.
+${hintType !== 'Outros' ? `Dica: o nome do arquivo sugere "${hintType}", mas confirme pelo conteúdo.` : 'O nome do arquivo é genérico - identifique o tipo pelo conteúdo.'}
+
+Extraia: tipo do documento, nome completo, CPF, data de nascimento, gênero, tipo sanguíneo, cargo/função, empresa, data de emissão e data de validade.
 
 Retorne APENAS um JSON válido com os dados extraídos.`;
 
@@ -241,8 +235,10 @@ Retorne APENAS um JSON válido com os dados extraídos.`;
       else if (typeUpper.includes('NR33') || typeUpper.includes('NR-33')) extractedData.document_type = 'NR33';
       else if (typeUpper.includes('NR35') || typeUpper.includes('NR-35')) extractedData.document_type = 'NR35';
     } else {
-      extractedData.document_type = detectedType;
+      extractedData.document_type = hintType;
     }
+
+    const detectedType = extractedData.document_type || hintType;
 
     // Atualizar trabalhador se worker_id fornecido
     if (worker_id && Object.keys(extractedData).length > 0) {
