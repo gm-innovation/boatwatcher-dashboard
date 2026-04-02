@@ -1,21 +1,22 @@
 
 
-## Plano: Status ativo para admin + ordenação por código
+## Corrigir status padrão do trabalhador
 
-### Problema 1: Status padrão "pending_review" para cadastros feitos pelo admin
-O `NewWorkerDialog.tsx` define `status: 'pending_review'` como default na linha 62/172. Cadastros feitos por admin na plataforma devem ser `active` direto. O status `pending_review` só fará sentido quando vier do portal da empresa terceirizada ou do trabalhador (módulos futuros).
+### Causa raiz
+O `z.string().default('active')` do Zod nem sempre funciona como valor inicial do react-hook-form quando o campo não é "tocado". O `watchedStatus` pode ser `undefined`, e o Radix Select com `value={undefined}` pode se comportar de forma inconsistente ao submeter.
 
-**Correção em `src/components/workers/NewWorkerDialog.tsx`:**
-- Mudar o default de `status` no schema e no `defaultValues` de `'pending_review'` para `'active'`
-- Manter o Select de status no formulário para que o admin possa alterar se quiser
+O worker #6 (ADRIANO MOURA VALE) foi criado hoje às 16:11 já com `pending_review`, confirmando que o bug persiste apesar da mudança anterior.
 
-### Problema 2: Lista de trabalhadores ordenada alfabeticamente em vez de por código
-Em `src/hooks/useDataProvider.ts` linha 161, o query faz `.order('name')`. Precisa ordenar por `code`.
+### Correção
 
-**Correção em `src/hooks/useDataProvider.ts`:**
-- Mudar `.order('name')` para `.order('code', { ascending: true })`
+**Arquivo: `src/components/workers/NewWorkerDialog.tsx`**
+
+1. Reordenar as opções do Select para que "Ativo" seja a primeira (visualmente coerente com o default)
+2. Usar fallback explícito no `value` do Select: `value={watchedStatus || 'active'}` 
+3. Garantir que no `onSubmit`, o status tenha fallback: `status: data.status || 'active'`
+
+Essas 3 mudanças eliminam qualquer cenário onde o status possa ser `undefined` ou cair no primeiro item da lista.
 
 ### Arquivos alterados
-- `src/components/workers/NewWorkerDialog.tsx` — default status → `'active'`
-- `src/hooks/useDataProvider.ts` — ordenação por `code`
+- `src/components/workers/NewWorkerDialog.tsx` — 3 linhas ajustadas
 
