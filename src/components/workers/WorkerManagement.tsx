@@ -799,7 +799,7 @@ export const WorkerManagement = () => {
           logoImg.src = logoDataUrl;
           const naturalW = logoImg.naturalWidth || 1;
           const naturalH = logoImg.naturalHeight || 1;
-          const logoMaxH = 30;
+          const logoMaxH = 38;
           const logoMaxW = 14;
           const ratio = naturalW / naturalH;
           let logoW = logoMaxH * ratio;
@@ -813,15 +813,16 @@ export const WorkerManagement = () => {
       }
 
       // Name (rotated -90°)
-      doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
       const cleanName = removeAccents(displayName);
-      const nameLines: string[] = doc.splitTextToSize(cleanName, 45) as string[];
-      if (nameLines.length > 2) doc.setFontSize(14);
-      nameLines.forEach((line: string, i: number) => {
-        doc.text(line, 32 - (i * 7), 5, { angle: -90 });
-      });
+      let nameFontSize = 16;
+      doc.setFontSize(nameFontSize);
+      while (doc.getTextWidth(cleanName) > 45 && nameFontSize > 10) {
+        nameFontSize -= 1;
+        doc.setFontSize(nameFontSize);
+      }
+      doc.text(cleanName, 32, 5, { angle: -90 });
 
       // Job function
       const jobFn = jobFunctions.find(jf => jf.id === (worker as any).job_function_id);
