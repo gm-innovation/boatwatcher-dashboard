@@ -799,7 +799,7 @@ export const WorkerManagement = () => {
           logoImg.src = logoDataUrl;
           const naturalW = logoImg.naturalWidth || 1;
           const naturalH = logoImg.naturalHeight || 1;
-          const logoMaxH = 24;
+          const logoMaxH = 30;
           const logoMaxW = 14;
           const ratio = naturalW / naturalH;
           let logoW = logoMaxH * ratio;
@@ -808,7 +808,7 @@ export const WorkerManagement = () => {
             logoW = logoMaxW;
             logoH = logoW / ratio;
           }
-          doc.addImage(logoDataUrl, 'PNG', 44, 5, logoW, logoH);
+          doc.addImage(logoDataUrl, 'PNG', 41, 5, logoW, logoH);
         } catch {}
       }
 
