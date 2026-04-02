@@ -1,48 +1,54 @@
 
 
-## Corrigir PDFs — Adicionar Logos, Cabeçalho e Layout Correto
+## Reformular aba "Visão Geral" — Dashboard Estatístico Completo
 
-### Problema
-Os PDFs exportados na aba "Todos Trabalhadores" (`ReportsList.tsx`) usam a função genérica `exportAccessLogsToPdf` que não tem logos, info do projeto, nem o layout correto. O PDF deveria seguir o mesmo padrão dos relatórios de trabalhadores e empresas (logos, título, projeto, local, resumo, tabela estilizada).
+### Objetivo
+Transformar a aba "Visão Geral" (atualmente `PresenceReport`) de uma simples tabela de presença em um painel estatístico completo do projeto, conforme o modelo de referência enviado.
 
-### Solução
+### Layout (baseado no print)
 
-#### 1. Criar `exportAllWorkersReportPdf` em `src/utils/exportWorkerReportPdf.ts`
+**1. Cabeçalho**
+- Título: "Visão Geral do Projeto: {nome}" + período + botão "Abrir para Impressão"
 
-Nova função dedicada que recebe a lista deduplicada de trabalhadores (não logs brutos) e gera o PDF seguindo o padrão existente:
+**2. Cards de Resumo (linha 1 — 4 cards)**
+- Total de Acessos (entradas granted)
+- Trabalhadores Únicos (distinct worker_id)
+- Empresas (distinct companies dos trabalhadores)
+- Média Diária de acessos
 
-- **Logos**: Cliente (esquerda) e Sistema (direita) — usando `drawLogos` já existente
-- **Título**: "Relatório de Todos os Trabalhadores Registrados"
-- **Metadados**: "Projeto: X | Local: Y", "Gerado em: dd/MM/yyyy HH:mm:ss"
-- **Resumo**: "Total de Trabalhadores: X | Total de Empresas: Y"
-- **Tabela**: Cabeçalho escuro, colunas: Nº, Nome, Empresa, CPF, Função
-- **Paginação**: "Página X de Y" no rodapé
+**3. Cards de Resumo (linha 2 — 2 cards)**
+- Dia com Mais Acessos (data + contagem)
+- Dia com Menos Acessos (data + contagem)
 
-Interface:
-```typescript
-interface AllWorkersReportOptions {
-  workers: { code: number | null; name: string; companyName: string; document: string; jobFunction: string }[];
-  projectName?: string;
-  projectLocation?: string;
-  clientLogoDataUrl?: string;
-  systemLogoDataUrl?: string;
-}
-```
+**4. Gráfico: Acessos por Dia**
+- Line chart com eixo X = datas do período, Y = total de acessos/dia
 
-#### 2. Atualizar `ReportsList.tsx`
+**5. Gráficos lado a lado**
+- Quantidade por Semana (bar chart)
+- Distribuição por Dia da Semana (bar chart — Seg a Dom)
 
-- Importar `exportAllWorkersReportPdf` e `loadImageAsDataUrl` de `exportWorkerReportPdf`
-- Receber `projectName`, `projectLocation`, `clientLogoUrl` como props (ou via contexto)
-- Tornar `handleExportPdf` async
-- Pré-carregar logos como Base64
-- Chamar `exportAllWorkersReportPdf` com dados deduplicados + logos + info do projeto
-- Adicionar `useSystemSettings` para buscar logo do sistema
+**6. Gráficos lado a lado**
+- Dias Úteis vs Fins de Semana (pie/donut chart)
+- Distribuição por Cargos/Funções (horizontal bar chart)
 
-#### 3. Atualizar componente pai para passar props necessárias
+**7. Top 10 Empresas por Nº de Trabalhadores**
+- Tabela simples: Empresa | Trabalhadores
 
-Verificar onde `ReportsList` é renderizado para garantir que `projectName`, `projectLocation`, e `clientLogoUrl` estão disponíveis.
+### Dados necessários
+- `useAccessLogs(projectId, startDate, endDate, 5000)` — logs do período
+- `useWorkers()` — para company_id e job_function_id
+- `useCompanies()` — nomes das empresas
+- `useJobFunctions()` — nomes das funções
+- `useProjects()` — nome/location do projeto
 
-### Arquivos alterados
-- `src/utils/exportWorkerReportPdf.ts` — adicionar `exportAllWorkersReportPdf`
-- `src/components/reports/ReportsList.tsx` — refazer exports com logos e layout
+Toda a computação estatística será feita client-side via `useMemo`.
+
+### Gráficos
+Usar **recharts** (já disponível no projeto como dependência shadcn/ui chart). Componentes: `LineChart`, `BarChart`, `PieChart` do recharts.
+
+### Arquivo alterado
+- `src/components/reports/PresenceReport.tsx` — reescrita completa
+
+### Complexidade
+Componente único, ~400-500 linhas, sem novos hooks ou utilitários. Apenas processamento de dados existentes e renderização com recharts.
 
