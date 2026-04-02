@@ -139,8 +139,18 @@
   color: #e2e8f0;
 }
 
+/* Print-only header (logos) — hidden on screen, visible on print & capture */
+.print-only-header {
+  display: none;
+}
+
 /* Print styles for reports */
 @media print {
+  /* Show print-only header */
+  .print-only-header {
+    display: flex !important;
+  }
+
   /* Hide app shell */
   [data-sidebar],
   header,
