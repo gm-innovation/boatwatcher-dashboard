@@ -1,27 +1,22 @@
 
 
-## Adicionar área de etiquetas com nome customizado
+## Corrigir scroll e ajustar modal de detalhes do trabalhador
 
-### O que fazer
-**Arquivo: `src/components/workers/WorkerManagement.tsx`**
+### Problema
+O modal usa `ScrollArea` do Radix, que conforme padrão já estabelecido neste projeto, causa bugs de cálculo de altura dinâmica impedindo o scroll. O modal também precisa de ajustes visuais para ficar mais fiel ao modelo.
 
-Inserir entre os stats cards (linha 809) e os filtros (linha 811) uma barra de etiquetas contendo:
+### Correções
 
-1. **Layout**: `div` com borda, padding, flex horizontal, items-center, gap
-2. **Label**: "Projetos para etiquetas:"
-3. **Select de projeto**: Select simples (não multi) com os projetos disponíveis
-4. **Campo "Nome customizado (opcional)"**: Input text que aparece **somente quando `selectedWorkerIds.length === 1`** — placeholder "Ex: João Silva (deixe vazio para usar Primeiro)"
-5. **Botão verde**: "Imprimir Etiquetas (N)" onde N = `selectedWorkerIds.length`, alinhado à direita
+**Arquivo: `src/components/workers/WorkerDetailsDialog.tsx`**
 
-### Estado adicional
-- `selectedProjectForLabels: string` (id do projeto selecionado)
-- `customLabelName: string` (nome customizado, só usado quando 1 trabalhador selecionado)
+1. **Scroll**: Substituir `<ScrollArea className="flex-1 pr-4">` (linha 254) por `<div className="flex-1 overflow-y-auto pr-4">` — padrão nativo já adotado no projeto para modais complexos.
 
-### Regra de negócio
-- Quando **mais de 1** trabalhador selecionado: campo de nome customizado fica oculto, etiquetas usam nomes cadastrados
-- Quando **exatamente 1** trabalhador selecionado: campo de nome customizado aparece; se preenchido, usa esse nome na etiqueta em vez do cadastrado
-- Botão desabilitado se nenhum trabalhador selecionado ou nenhum projeto selecionado
+2. **Footer sticky**: Mover os botões "Salvar Alterações" e "Fechar" para fora do scroll mas dentro do flex container, mantendo `flex-shrink-0` (já está correto nas linhas 673-683).
 
-### Arquivos alterados
-- `src/components/workers/WorkerManagement.tsx`
+3. **Remover import não utilizado**: Remover `ScrollArea` do import se não for mais usado no componente (ainda é usado no diálogo interno de projetos na linha 641, então manter).
+
+### Resultado
+- Scroll funciona corretamente com `overflow-y-auto` nativo
+- Footer com botões fica fixo na parte inferior do modal
+- Todas as seções (Documentos, Strikes) ficam acessíveis por rolagem
 
