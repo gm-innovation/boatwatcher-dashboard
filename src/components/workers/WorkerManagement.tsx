@@ -1007,9 +1007,7 @@ export const WorkerManagement = () => {
           <Button
             disabled={selectedWorkerIds.length === 0 || !selectedProjectForLabels}
             className="bg-green-600 hover:bg-green-700 text-white"
-            onClick={() => {
-              toast({ title: `Gerando ${selectedWorkerIds.length} etiqueta(s)...` });
-            }}
+            onClick={handlePrintLabels}
           >
             <Printer className="h-4 w-4 mr-2" />
             Imprimir Etiquetas ({selectedWorkerIds.length})
