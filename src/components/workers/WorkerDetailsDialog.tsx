@@ -251,7 +251,7 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
+        <div className="flex-1 overflow-y-auto pr-4">
           <div className="space-y-6 pb-4">
             {/* Basic Info Card */}
             <Card>
@@ -630,7 +630,7 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
               </CardContent>
             </Card>
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Manage Projects Dialog */}
         <Dialog open={isManagingProjects} onOpenChange={setIsManagingProjects}>
