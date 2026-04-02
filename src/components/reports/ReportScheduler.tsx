@@ -49,10 +49,18 @@ import { toast } from 'sonner';
 
 const REPORT_TYPES = [
   { value: 'presence', label: 'Visão Geral' },
-  { value: 'company', label: 'Relatório por Empresa' },
-  { value: 'compliance', label: 'Relatório de Conformidade' },
-  { value: 'device', label: 'Relatório de Dispositivos' },
+  { value: 'workers_simple', label: 'Trabalhadores Simples' },
+  { value: 'workers_detailed', label: 'Trabalhadores Detalhado' },
+  { value: 'company', label: 'Empresas' },
+  { value: 'all_workers', label: 'Todos Trabalhadores' },
 ];
+
+const FREQUENCY_LOOKBACK: Record<string, { days: number; label: string }> = {
+  daily: { days: 1, label: 'O relatório incluirá dados do dia anterior' },
+  weekly: { days: 7, label: 'O relatório incluirá dados dos últimos 7 dias' },
+  biweekly: { days: 15, label: 'O relatório incluirá dados dos últimos 15 dias' },
+  monthly: { days: 30, label: 'O relatório incluirá dados do mês anterior completo' },
+};
 
 const FREQUENCIES = [
   { value: 'daily', label: 'Diário' },
@@ -85,7 +93,7 @@ export const ReportScheduler = () => {
   const [selectedTypes, setSelectedTypes] = useState<string[]>(['presence']);
   const [frequency, setFrequency] = useState<string>('daily');
   const [sendTime, setSendTime] = useState('06:00');
-  const [lookbackDays, setLookbackDays] = useState(1);
+  
   const [recipients, setRecipients] = useState<string[]>([]);
   const [recipientInput, setRecipientInput] = useState('');
 
@@ -95,7 +103,7 @@ export const ReportScheduler = () => {
     setSelectedTypes(['presence']);
     setFrequency('daily');
     setSendTime('06:00');
-    setLookbackDays(1);
+    
     setRecipients([]);
     setRecipientInput('');
   };
@@ -129,7 +137,7 @@ export const ReportScheduler = () => {
       project_id: projectId || null,
       filters: {
         send_time: sendTime,
-        lookback_days: lookbackDays,
+        lookback_days: FREQUENCY_LOOKBACK[frequency]?.days ?? 1,
         report_types: selectedTypes,
       },
     };
@@ -363,20 +371,9 @@ export const ReportScheduler = () => {
               </div>
             </div>
 
-            {/* Row 3: Lookback days */}
-            <div className="grid grid-cols-12 gap-4">
-              <div className="col-span-4 space-y-1.5">
-                <Label>Dias Retroativos</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={lookbackDays}
-                  onChange={(e) => setLookbackDays(Number(e.target.value))}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Quantidade de dias anteriores incluídos no relatório
-                </p>
-              </div>
+            {/* Row 3: Período informativo */}
+            <div className="rounded-md border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+              {FREQUENCY_LOOKBACK[frequency]?.label}
             </div>
 
             {/* Row 4: Recipients */}
