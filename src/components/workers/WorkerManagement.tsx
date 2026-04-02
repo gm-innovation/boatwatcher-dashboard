@@ -871,13 +871,16 @@ export const WorkerManagement = () => {
       }
     });
 
-    // Open in new tab for preview, fallback to save
-    try {
-      const blobUrl = doc.output('bloburl');
-      window.open(blobUrl as unknown as string, '_blank');
-    } catch {
-      doc.save('etiquetas.pdf');
-    }
+    // Download direto para evitar bloqueio de popup
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'etiquetas.pdf';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
     toast({ title: `${selectedWorkers.length} etiqueta(s) gerada(s) com sucesso!` });
   };
 
