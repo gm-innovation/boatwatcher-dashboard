@@ -1,24 +1,17 @@
 
 
-## Ajustes na etiqueta PDF
+## Correções na etiqueta PDF
 
-**Arquivo:** `src/components/workers/WorkerManagement.tsx`, linhas 796-824
+**Arquivo:** `src/components/workers/WorkerManagement.tsx`
 
-### Alterações
+### Problemas identificados
 
-1. **Aumentar altura da logo**
-   - `logoMaxH` de `30` → `38`
-   - Manter `logoMaxW = 14` e a lógica proporcional existente
+1. **Logo achatada**: `logoMaxW = 14` está muito restritivo — limita a largura e achata a imagem. Precisa aumentar para ~22 para que a proporção natural da logo seja respeitada.
 
-2. **Nome: ajuste automático de fonte para caber em 1 linha**
-   - Atualmente usa `splitTextToSize` que permite quebra de linha — isso causa o nome "descer" para segunda linha
-   - Nova lógica: começar com `fontSize = 16`, medir a largura do texto com `doc.getTextWidth(cleanName)`. Se ultrapassar o espaço disponível (~45mm), reduzir a fonte progressivamente (loop: -1pt) até caber em uma única linha (mínimo ~10pt)
-   - Remover o `splitTextToSize` e o loop de múltiplas linhas — desenhar apenas 1 linha com `doc.text(cleanName, 32, 5, { angle: -90 })`
+2. **Nome muito pequeno**: O espaço disponível está configurado como `45mm`, mas o círculo começa em `y = 64` (centro 80 - raio 16). O nome começa em `y = 5`, então há ~59mm disponíveis. Com margem de segurança, podemos usar `55mm` — isso permite que nomes mais longos mantenham uma fonte maior.
 
-### Resumo
+### Alterações (linhas 802-824)
 
-| Elemento | Antes | Depois |
-|---|---|---|
-| Logo `logoMaxH` | `30` | `38` |
-| Nome | `splitTextToSize` + multi-linha | Loop reduz fonte até caber em 1 linha |
+1. **Logo** — `logoMaxW` de `14` → `22` (mantém `logoMaxH = 38`)
+2. **Nome** — espaço máximo de `45` → `55` no loop de redução de fonte, e fonte mínima de `10` → `8` como fallback extremo
 
