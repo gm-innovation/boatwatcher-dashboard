@@ -1,10 +1,12 @@
 
 
-## Reduzir altura da logo na etiqueta
+## Ajustar dimensões da logo na etiqueta
 
-**Arquivo:** `src/components/workers/WorkerManagement.tsx`
+**Arquivo:** `src/components/workers/WorkerManagement.tsx`, linhas 800-801
 
-**Alteração:** `logoH` de `46` → `42`
+**Alterações:**
+- `logoW` de `14` → `8`
+- `logoH` de `42` → `24`
 
-Largura (`logoW = 14`) e posicionamento permanecem iguais.
+Posicionamento (`logoX = pageWidth - 5 - logoW`) se ajusta automaticamente.
 
