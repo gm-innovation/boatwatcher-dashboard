@@ -425,12 +425,20 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
   const onSubmit = async (data: WorkerFormData) => {
     setIsSubmitting(true);
     try {
+      // Resolve job_function_id from role name
+      let jobFunctionId: string | null = null;
+      if (data.role) {
+        const matched = jobFunctions.find((jf: any) => jf.name === data.role);
+        if (matched) jobFunctionId = matched.id;
+      }
+
       const { data: newWorker, error } = await supabase
         .from('workers')
         .insert({
           name: data.name,
           document_number: data.document_number,
           role: data.role || null,
+          job_function_id: jobFunctionId,
           company_id: data.company_id || null,
           status: data.status,
           allowed_project_ids: selectedProjects,
