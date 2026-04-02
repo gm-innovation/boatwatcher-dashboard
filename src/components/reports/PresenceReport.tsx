@@ -241,8 +241,8 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       </div>
 
       {/* KPI Cards Row 1 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 print:grid-cols-4">
+        <Card className="print-no-break">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10">
