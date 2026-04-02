@@ -1,54 +1,45 @@
 
 
-## Reformular aba "Visão Geral" — Dashboard Estatístico Completo
+## Melhorar Impressão do Relatório Visão Geral
 
-### Objetivo
-Transformar a aba "Visão Geral" (atualmente `PresenceReport`) de uma simples tabela de presença em um painel estatístico completo do projeto, conforme o modelo de referência enviado.
+### Problema
+O `window.print()` imprime a página inteira (sidebar, header, filtros, tabs) e os gráficos/cards são cortados entre páginas.
 
-### Layout (baseado no print)
+### Solução
 
-**1. Cabeçalho**
-- Título: "Visão Geral do Projeto: {nome}" + período + botão "Abrir para Impressão"
+**1. Adicionar estilos `@media print` em `src/index.css`**
+- Esconder sidebar, header global, filtros, tabs e botão de imprimir
+- Forçar fundo branco, sem sombras
+- `page-break-inside: avoid` em cada Card para que gráficos e tabelas nunca sejam cortados
+- Garantir que os charts tenham tamanho fixo para impressão
+- Remover scroll containers que impedem renderização completa
 
-**2. Cards de Resumo (linha 1 — 4 cards)**
-- Total de Acessos (entradas granted)
-- Trabalhadores Únicos (distinct worker_id)
-- Empresas (distinct companies dos trabalhadores)
-- Média Diária de acessos
+**2. Atualizar `src/components/reports/PresenceReport.tsx`**
+- Adicionar classe `print:break-inside-avoid` em cada `<Card>`
+- Nos grids de 2 colunas, usar `print:grid-cols-1` para evitar compressão lateral
+- Remover `ScrollArea` wrapper se existir
 
-**3. Cards de Resumo (linha 2 — 2 cards)**
-- Dia com Mais Acessos (data + contagem)
-- Dia com Menos Acessos (data + contagem)
+### CSS Print Rules (index.css)
+```css
+@media print {
+  /* Hide app shell */
+  [data-sidebar], header, nav, .print\\:hidden { display: none !important; }
+  
+  /* Full width content */
+  main { margin: 0 !important; padding: 0 !important; width: 100% !important; max-width: 100% !important; }
+  
+  /* Prevent cutting cards/charts */
+  .print-no-break { break-inside: avoid; page-break-inside: avoid; }
+  
+  /* White background */
+  body, * { background: white !important; color: black !important; }
+  
+  /* Charts fixed size for print */
+  .recharts-responsive-container { height: 250px !important; }
+}
+```
 
-**4. Gráfico: Acessos por Dia**
-- Line chart com eixo X = datas do período, Y = total de acessos/dia
-
-**5. Gráficos lado a lado**
-- Quantidade por Semana (bar chart)
-- Distribuição por Dia da Semana (bar chart — Seg a Dom)
-
-**6. Gráficos lado a lado**
-- Dias Úteis vs Fins de Semana (pie/donut chart)
-- Distribuição por Cargos/Funções (horizontal bar chart)
-
-**7. Top 10 Empresas por Nº de Trabalhadores**
-- Tabela simples: Empresa | Trabalhadores
-
-### Dados necessários
-- `useAccessLogs(projectId, startDate, endDate, 5000)` — logs do período
-- `useWorkers()` — para company_id e job_function_id
-- `useCompanies()` — nomes das empresas
-- `useJobFunctions()` — nomes das funções
-- `useProjects()` — nome/location do projeto
-
-Toda a computação estatística será feita client-side via `useMemo`.
-
-### Gráficos
-Usar **recharts** (já disponível no projeto como dependência shadcn/ui chart). Componentes: `LineChart`, `BarChart`, `PieChart` do recharts.
-
-### Arquivo alterado
-- `src/components/reports/PresenceReport.tsx` — reescrita completa
-
-### Complexidade
-Componente único, ~400-500 linhas, sem novos hooks ou utilitários. Apenas processamento de dados existentes e renderização com recharts.
+### Arquivos alterados
+- `src/index.css` — adicionar bloco `@media print`
+- `src/components/reports/PresenceReport.tsx` — adicionar classes `print-no-break` e `print:grid-cols-1` nos cards e grids
 
