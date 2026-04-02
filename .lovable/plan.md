@@ -1,39 +1,36 @@
 
 
-## Abrir diálogo de impressão diretamente
+## Corrigir impressão direta das etiquetas
+
+### Problema
+O iframe com `display: none` não permite que `window.print()` funcione na maioria dos navegadores.
+
+### Solução
+Usar a mesma abordagem do relatório de Visão Geral: abrir o PDF em uma nova aba com `window.open()` e chamar `print()` nessa janela. Simples e funcional.
 
 ### Alteração
 
-Trocar o download do PDF por abertura direta do diálogo de impressão do navegador, usando um iframe oculto.
+**Arquivo:** `src/components/workers/WorkerManagement.tsx` (linhas 879-892)
 
-### Mudança em `WorkerManagement.tsx` (linhas 879-888)
-
-Substituir o bloco de download:
-
-```typescript
-// Antes: download do arquivo
-const blob = doc.output('blob');
-const link = document.createElement('a');
-...
-```
-
-Por impressão direta via iframe:
+Substituir o bloco do iframe por:
 
 ```typescript
 const blob = doc.output('blob');
 const url = URL.createObjectURL(blob);
-const iframe = document.createElement('iframe');
-iframe.style.display = 'none';
-iframe.src = url;
-document.body.appendChild(iframe);
-iframe.onload = () => {
-  iframe.contentWindow?.print();
-  setTimeout(() => {
-    document.body.removeChild(iframe);
-    URL.revokeObjectURL(url);
-  }, 60000);
-};
+const printWindow = window.open(url, '_blank');
+if (printWindow) {
+  printWindow.onload = () => {
+    printWindow.print();
+  };
+} else {
+  // Fallback: download se popup bloqueado
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `etiquetas.pdf`;
+  link.click();
+}
+setTimeout(() => URL.revokeObjectURL(url), 120000);
 ```
 
-Isso abre o diálogo de impressão do navegador diretamente com o PDF da etiqueta, sem baixar arquivo. Funciona tanto para o botão da lista quanto para o botão no modal de detalhes, já que ambos chamam `generateLabels`.
+Isso abre o PDF numa nova aba e dispara o diálogo de impressão automaticamente — igual ao comportamento do relatório de Visão Geral.
 
