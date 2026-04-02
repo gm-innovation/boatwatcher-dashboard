@@ -807,32 +807,31 @@ export const WorkerManagement = () => {
       const nameLines: string[] = doc.splitTextToSize(cleanName, 45) as string[];
       if (nameLines.length > 2) doc.setFontSize(14);
       nameLines.forEach((line: string, i: number) => {
-        // Each subsequent line moves left (decreasing X) by ~7mm for proper vertical stacking
-        doc.text(line, 36 - (i * 7), 5, { angle: -90 });
+        doc.text(line, 48 - (i * 7), 5, { angle: -90 });
       });
 
       // Job function
       const jobFn = jobFunctions.find(jf => jf.id === (worker as any).job_function_id);
       const jobFunctionName = jobFn?.name || (worker as any).role || 'Funcao nao informada';
-      doc.setFontSize(12);
+      doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(0, 0, 0);
-      doc.text(removeAccents(String(jobFunctionName)), 30, 5, { angle: -90 });
+      doc.text(removeAccents(String(jobFunctionName)), 42, 5, { angle: -90 });
 
       // Company
       const companyName = getCompanyName(worker.company_id);
-      doc.setFontSize(10);
-      doc.text(removeAccents(companyName === '-' ? 'Empresa nao informada' : companyName), 26, 5, { angle: -90 });
+      doc.setFontSize(9);
+      doc.text(removeAccents(companyName === '-' ? 'Empresa nao informada' : companyName), 37, 5, { angle: -90 });
 
       // Project name
       doc.setFontSize(projectFontSize);
       doc.setFont('helvetica', 'bold');
-      doc.text(removeAccents(combinedProjectName), 14, 5, { angle: -90 });
+      doc.text(removeAccents(combinedProjectName), 22, 5, { angle: -90 });
 
       // Project type
       doc.setFontSize(12);
       doc.setFont('helvetica', 'normal');
-      doc.text(removeAccents(projectType), 8, 5, { angle: -90 });
+      doc.text(removeAccents(projectType), 16, 5, { angle: -90 });
 
       // Circle with code
       const circleX = 40;
@@ -844,16 +843,16 @@ export const WorkerManagement = () => {
       doc.circle(circleX, circleY, radius, 'FD');
 
       const code = String((worker as any).code || '1').padStart(4, '0');
-      doc.setFontSize(25);
+      doc.setFontSize(20);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
-      doc.text(code, circleX + 5, circleY, { align: 'center', angle: -90 });
+      doc.text(code, 43, circleY, { align: 'center', angle: -90 });
 
       // Powered by
       doc.setFontSize(6);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(120, 120, 120);
-      doc.text('Powered by Googlemarine', 5, 40, { angle: -90 });
+      doc.text('Powered by Googlemarine', 5, 30, { angle: -90 });
 
       // Blood type
       const bloodType = (worker as any).blood_type;
@@ -864,10 +863,10 @@ export const WorkerManagement = () => {
         doc.setFontSize(7);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(0, 0, 0);
-        doc.text('Tipo Sanguineo', 16, 75, { angle: -90 });
+        doc.text('Tipo Sanguineo', 18, 78, { angle: -90 });
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
-        doc.text(bloodType.trim(), 12, 80, { angle: -90 });
+        doc.text(bloodType.trim(), 13, 82, { angle: -90 });
       }
     });
 
