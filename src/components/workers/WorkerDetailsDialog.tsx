@@ -630,7 +630,7 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
               </CardContent>
             </Card>
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Manage Projects Dialog */}
         <Dialog open={isManagingProjects} onOpenChange={setIsManagingProjects}>
