@@ -513,7 +513,14 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
                     dot={{ r: 3 }}
                     activeDot={{ r: 5 }}
                     name="Acessos"
-                  />
+                  >
+                    <LabelList
+                      dataKey="acessos"
+                      position="top"
+                      fontSize={10}
+                      formatter={(v: number) => v > 0 ? v : ''}
+                    />
+                  </Line>
                 </LineChart>
               </ResponsiveContainer>
             </div>
