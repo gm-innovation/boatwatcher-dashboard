@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadFile } from '@/lib/storageProvider';
 import { useCompanies, useProjects } from '@/hooks/useSupabase';
-import { useJobFunctions } from '@/hooks/useJobFunctions';
+import { useJobFunctions, useCreateJobFunction } from '@/hooks/useJobFunctions';
 import { useCreateWorkerDocument } from '@/hooks/useWorkerDocuments';
 import { useDocumentExtraction, ProcessedDocument } from '@/hooks/useDocumentExtraction';
 import { toast } from '@/hooks/use-toast';
