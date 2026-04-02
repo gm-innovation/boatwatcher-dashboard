@@ -21,13 +21,13 @@ const Reports = () => {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="print:hidden">
         <h1 className="text-2xl font-bold">Relatórios de Acesso</h1>
         <p className="text-muted-foreground">Visualize e exporte relatórios do sistema</p>
       </div>
 
       {/* Global Filters */}
-      <div className="flex flex-wrap items-end gap-4 p-4 bg-card rounded-lg border">
+      <div className="flex flex-wrap items-end gap-4 p-4 bg-card rounded-lg border print:hidden">
         <div className="flex-1 min-w-[200px]">
           <label className="text-sm font-medium mb-2 block">Projeto *</label>
           <Select value={selectedProject} onValueChange={setSelectedProject}>
@@ -67,7 +67,7 @@ const Reports = () => {
       </div>
 
       <Tabs defaultValue="workers" className="space-y-6">
-        <TabsList className="flex-wrap">
+        <TabsList className="flex-wrap print:hidden">
           <TabsTrigger value="workers" className="gap-2">
             <Users className="h-4 w-4" />
             Trabalhadores
