@@ -797,8 +797,8 @@ export const WorkerManagement = () => {
         try {
           const logoImg = new Image();
           logoImg.src = logoDataUrl;
-          const logoW = 14;
-          const logoH = 42;
+          const logoW = 8;
+          const logoH = 24;
           const logoX = pageWidth - 5 - logoW;
           doc.addImage(logoDataUrl, 'PNG', logoX, 5, logoW, logoH);
         } catch {}
