@@ -804,11 +804,11 @@ export const WorkerManagement = () => {
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
       const cleanName = removeAccents(displayName);
-      const nameLines = doc.splitTextToSize(cleanName, 45);
+      const nameLines: string[] = doc.splitTextToSize(cleanName, 45) as string[];
       if (nameLines.length > 2) doc.setFontSize(14);
-      let startY = 5;
       nameLines.forEach((line: string, i: number) => {
-        doc.text(line, 36, startY + (i * 24), { angle: -90 });
+        // Each subsequent line moves left (decreasing X) by ~7mm for proper vertical stacking
+        doc.text(line, 36 - (i * 7), 5, { angle: -90 });
       });
 
       // Job function
