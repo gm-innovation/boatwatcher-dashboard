@@ -1,20 +1,13 @@
 
 
-## Ajustes na etiqueta PDF
+## Ajustes na logo da etiqueta PDF
 
-**Arquivo:** `src/components/workers/WorkerManagement.tsx`
+**Arquivo:** `src/components/workers/WorkerManagement.tsx`, linhas 802-811
 
-### 3 alterações pontuais
+### Alterações
 
-1. **Logo — manter altura original, aumentar largura, mover 4pt para a esquerda**
-   - Linha 802-811: voltar `logoMaxH = 24` (altura original que estava correta), aumentar `logoMaxW` de `12` para `14`, e mover x de `48` para `44`
-   - `doc.addImage(logoDataUrl, 'PNG', 44, 5, logoW, logoH)`
+1. **Aumentar altura da logo**: `logoMaxH` de `24` → `30`
+2. **Mover 3 pontos para a esquerda**: x de `44` → `41`
 
-2. **"Docagem" (tipo do projeto) — mover 3pt para a esquerda**
-   - Linha 847: x de `9` → `6`
-   - `doc.text(removeAccents(projectType), 6, 5, { angle: -90 })`
-
-3. **Número dentro do círculo — mover 4pt para cima**
-   - Linha 862: y de `75` → `71`
-   - `doc.text(code, circleX + 7, 71, { align: 'center', angle: -90 })`
+Resultado: `doc.addImage(logoDataUrl, 'PNG', 41, 5, logoW, logoH)` com `logoMaxH = 30`.
 
