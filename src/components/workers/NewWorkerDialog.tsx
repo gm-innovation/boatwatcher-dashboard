@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadFile } from '@/lib/storageProvider';
 import { useCompanies, useProjects } from '@/hooks/useSupabase';
-import { useJobFunctions } from '@/hooks/useJobFunctions';
+import { useJobFunctions, useCreateJobFunction } from '@/hooks/useJobFunctions';
 import { useCreateWorkerDocument } from '@/hooks/useWorkerDocuments';
 import { useDocumentExtraction, ProcessedDocument } from '@/hooks/useDocumentExtraction';
 import { toast } from '@/hooks/use-toast';
@@ -163,6 +163,7 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
   const queryClient = useQueryClient();
 
   const { extractDocument, isExtracting } = useDocumentExtraction();
+  const createJobFunction = useCreateJobFunction();
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<WorkerFormData>({
     resolver: zodResolver(workerSchema),
@@ -251,15 +252,27 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
           setValue('blood_type', data.blood_type);
         }
         
-        // Role/Job function - try to match existing job functions
+        // Role/Job function - try to match existing, or auto-create
         if (data.job_function && !watch('role')) {
-          const extractedRole = String(data.job_function).toLowerCase().trim();
+          const extractedRole = String(data.job_function).trim();
+          const extractedRoleLower = extractedRole.toLowerCase();
           const matched = jobFunctions.find((jf: any) => 
-            jf.name.toLowerCase().trim() === extractedRole ||
-            jf.name.toLowerCase().includes(extractedRole) ||
-            extractedRole.includes(jf.name.toLowerCase())
+            jf.name.toLowerCase().trim() === extractedRoleLower ||
+            jf.name.toLowerCase().includes(extractedRoleLower) ||
+            extractedRoleLower.includes(jf.name.toLowerCase())
           );
-          setValue('role', matched ? matched.name : data.job_function);
+          if (matched) {
+            setValue('role', matched.name);
+          } else {
+            // Auto-create the job function
+            try {
+              await createJobFunction.mutateAsync({ name: extractedRole });
+              setValue('role', extractedRole);
+            } catch (e) {
+              console.error('Failed to auto-create job function:', e);
+              setValue('role', extractedRole);
+            }
+          }
         }
         
         // Company - try to match by name
@@ -569,6 +582,9 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                         {jobFunctions.map((jf: any) => (
                           <SelectItem key={jf.id} value={jf.name}>{jf.name}</SelectItem>
                         ))}
+                        {watchedRole && !jobFunctions.some((jf: any) => jf.name === watchedRole) && (
+                          <SelectItem key="extracted-role" value={watchedRole}>{watchedRole}</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -609,6 +625,7 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                     <div className="relative">
                       <label
                         htmlFor="worker-photo-upload"
+                        onClick={(e) => e.stopPropagation()}
                         className="block h-24 w-24 rounded-lg border-2 border-dashed border-muted-foreground/30 cursor-pointer hover:border-primary/50 transition-colors overflow-hidden bg-muted"
                       >
                         {photoPreview ? (
@@ -629,10 +646,18 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                         </button>
                       )}
                     </div>
-                    <label htmlFor="worker-photo-upload" className="text-xs text-primary hover:underline cursor-pointer block">
+                    <label htmlFor="worker-photo-upload" onClick={(e) => e.stopPropagation()} className="text-xs text-primary hover:underline cursor-pointer block">
                       {photoPreview ? 'Alterar Foto' : 'Adicionar Foto'}
                     </label>
-                    <input id="worker-photo-upload" type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                    <input
+                      id="worker-photo-upload"
+                      key="worker-photo-input"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handlePhotoChange}
+                      onClick={(e) => e.stopPropagation()}
+                    />
                   </div>
 
                   {/* Other fields */}

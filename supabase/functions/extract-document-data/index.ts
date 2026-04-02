@@ -13,8 +13,7 @@ const getExtractionSchema = () => {
     properties: {
       document_type: {
         type: "string",
-        enum: ["ASO", "NR10", "NR33", "NR35", "RG", "CPF", "CNH", "Outros"],
-        description: "Tipo do documento identificado. RETORNE APENAS um destes valores exatos."
+        description: "Tipo do documento identificado pelo CONTEÚDO (ex: ASO, NR10, NR33, NR35, RG, CPF, CNH, Certificado de Segurança, Atestado Médico, etc). NUNCA retorne 'Outros' — sempre identifique o nome real/descritivo do documento."
       },
       completion_date: {
         type: "string",
@@ -115,23 +114,25 @@ serve(async (req) => {
 INSTRUÇÕES IMPORTANTES:
 1. Analise cuidadosamente a imagem/PDF do documento
 2. PRIMEIRO identifique o tipo real do documento pelo seu CONTEÚDO, não pelo nome do arquivo
-3. Extraia TODAS as informações que você consegue identificar claramente
-4. Se não encontrar algum campo, deixe-o vazio ou null
-5. NÃO INVENTE dados - se não estiver claro, não preencha
-6. Para datas, use o formato YYYY-MM-DD
-7. Para CPF, retorne apenas números (sem pontos ou traços)
-8. Para gênero, identifique pelo campo "Sexo" ou por indicadores no documento (M=Masculino, F=Feminino)
-9. Para tipo sanguíneo, procure por campos como "Tipo Sang.", "Grupo Sang.", etc.
-10. Extraia SEMPRE o nome completo, CPF, data de nascimento, gênero, tipo sanguíneo, cargo/função e empresa quando presentes no documento, INDEPENDENTE do tipo de documento
+3. Para document_type, NUNCA retorne "Outros". Sempre identifique o tipo real pelo conteúdo (ASO, NR10, NR33, NR35, RG, CPF, CNH, Certificado de Segurança, etc.)
+4. Extraia TODAS as informações que você consegue identificar claramente
+5. Se não encontrar algum campo, deixe-o vazio ou null
+6. NÃO INVENTE dados - se não estiver claro, não preencha
+7. Para datas, use o formato YYYY-MM-DD
+8. Para CPF, retorne apenas números (sem pontos ou traços)
+9. Para gênero, identifique pelo campo "Sexo" ou por indicadores no documento (M=Masculino, F=Feminino)
+10. Para tipo sanguíneo, procure por campos como "Tipo Sang.", "Grupo Sang.", etc.
+11. Extraia SEMPRE o nome completo, CPF, data de nascimento, gênero, tipo sanguíneo, cargo/função e empresa quando presentes no documento, INDEPENDENTE do tipo de documento
 
-TIPOS DE DOCUMENTO:
+TIPOS COMUNS DE DOCUMENTO:
 - ASO: Atestado de Saúde Ocupacional (contém dados pessoais + data de validade geralmente 1 ano)
 - NR10: Certificado de Segurança em Instalações Elétricas
 - NR33: Certificado de Espaços Confinados
 - NR35: Certificado de Trabalho em Altura
 - RG: Documento de Identidade
 - CPF: Cadastro de Pessoa Física
-- CNH: Carteira Nacional de Habilitação`;
+- CNH: Carteira Nacional de Habilitação
+Se o documento não se encaixar nesses tipos, retorne o nome descritivo real do documento.`;
 
     const userPrompt = `Analise este documento e extraia TODAS as informações possíveis.
 
@@ -227,15 +228,16 @@ Retorne APENAS um JSON válido com os dados extraídos.`;
       }
     }
 
-    // Normalizar tipo de documento
+    // Normalizar tipo de documento — nunca "Outros"
     if (extractedData.document_type) {
       const typeUpper = String(extractedData.document_type).toUpperCase();
       if (typeUpper.includes('ASO') || typeUpper.includes('ATESTADO')) extractedData.document_type = 'ASO';
       else if (typeUpper.includes('NR10') || typeUpper.includes('NR-10')) extractedData.document_type = 'NR10';
       else if (typeUpper.includes('NR33') || typeUpper.includes('NR-33')) extractedData.document_type = 'NR33';
       else if (typeUpper.includes('NR35') || typeUpper.includes('NR-35')) extractedData.document_type = 'NR35';
+      else if (typeUpper === 'OUTROS') extractedData.document_type = hintType !== 'Outros' ? hintType : 'Documento';
     } else {
-      extractedData.document_type = hintType;
+      extractedData.document_type = hintType !== 'Outros' ? hintType : 'Documento';
     }
 
     const detectedType = extractedData.document_type || hintType;
