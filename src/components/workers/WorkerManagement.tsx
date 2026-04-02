@@ -799,16 +799,17 @@ export const WorkerManagement = () => {
           logoImg.src = logoDataUrl;
           const naturalW = logoImg.naturalWidth || 1;
           const naturalH = logoImg.naturalHeight || 1;
-          const logoMaxH = 38;
-          const logoMaxW = 22;
+          const logoMaxW = 14;
+          const logoMaxH = 46;
           const ratio = naturalW / naturalH;
-          let logoW = logoMaxH * ratio;
-          let logoH = logoMaxH;
-          if (logoW > logoMaxW) {
-            logoW = logoMaxW;
-            logoH = logoW / ratio;
+          let logoW = logoMaxW;
+          let logoH = logoW / ratio;
+          if (logoH > logoMaxH) {
+            logoH = logoMaxH;
+            logoW = logoH * ratio;
           }
-          doc.addImage(logoDataUrl, 'PNG', 41, 5, logoW, logoH);
+          const logoX = pageWidth - 5 - logoW;
+          doc.addImage(logoDataUrl, 'PNG', logoX, 5, logoW, logoH);
         } catch {}
       }
 
