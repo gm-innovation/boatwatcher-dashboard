@@ -17,13 +17,13 @@ import {
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer,
-  Tooltip, Legend,
+  Tooltip, Legend, LabelList,
 } from 'recharts';
 import {
   Calendar, TrendingUp, Users, Building2, BarChart3,
   ArrowUp, ArrowDown, Printer, Download,
 } from 'lucide-react';
-import { format, parseISO, getISOWeek, getDay, differenceInDays } from 'date-fns';
+import { format, parseISO, getISOWeek, getDay, differenceInDays, startOfWeek, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -136,31 +136,50 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       acessos: count,
     }));
 
-    // By week
-    const byWeek: Record<string, number> = {};
+    // By week — format "Sem DD/MM" using start of week (Sunday)
+    const byWeekMap: Record<string, { count: number; weekStart: Date }> = {};
     granted.forEach((l: any) => {
-      const w = getISOWeek(new Date(l.timestamp));
-      const key = `Sem ${w}`;
-      byWeek[key] = (byWeek[key] || 0) + 1;
+      const ts = new Date(l.timestamp);
+      const ws = startOfWeek(ts, { weekStartsOn: 0 });
+      const key = ws.toISOString();
+      if (!byWeekMap[key]) byWeekMap[key] = { count: 0, weekStart: ws };
+      byWeekMap[key].count++;
     });
-    const weeklyChart = Object.entries(byWeek)
-      .sort(([a], [b]) => {
-        const na = parseInt(a.replace('Sem ', ''));
-        const nb = parseInt(b.replace('Sem ', ''));
-        return na - nb;
-      })
-      .map(([week, count]) => ({ semana: week, acessos: count }));
+    const weeklyChart = Object.values(byWeekMap)
+      .sort((a, b) => a.weekStart.getTime() - b.weekStart.getTime())
+      .map(({ weekStart, count }) => ({
+        semana: `Sem ${format(weekStart, 'dd/MM')}`,
+        acessos: count,
+      }));
 
-    // By day of week
+    // By day of week (simple)
     const byDayOfWeek: number[] = [0, 0, 0, 0, 0, 0, 0];
     granted.forEach((l: any) => {
       const d = getDay(new Date(l.timestamp));
       byDayOfWeek[d]++;
     });
-    const dayOfWeekChart = DAY_NAMES.map((name, i) => ({
-      dia: name,
-      acessos: byDayOfWeek[i],
-    }));
+
+    // Stacked chart: distribution by day of week per week
+    const weeklyByDay: Record<string, { weekStart: Date; days: number[] }> = {};
+    granted.forEach((l: any) => {
+      const ts = new Date(l.timestamp);
+      const ws = startOfWeek(ts, { weekStartsOn: 0 });
+      const key = ws.toISOString();
+      if (!weeklyByDay[key]) weeklyByDay[key] = { weekStart: ws, days: [0, 0, 0, 0, 0, 0, 0] };
+      weeklyByDay[key].days[getDay(ts)]++;
+    });
+    const weeklyByDayChart = Object.values(weeklyByDay)
+      .sort((a, b) => a.weekStart.getTime() - b.weekStart.getTime())
+      .map(({ weekStart, days }) => ({
+        semana: `Sem ${format(weekStart, 'dd/MM')}`,
+        Domingo: days[0],
+        Segunda: days[1],
+        Terça: days[2],
+        Quarta: days[3],
+        Quinta: days[4],
+        Sexta: days[5],
+        Sábado: days[6],
+      }));
 
     // Weekday vs Weekend
     const weekdayCount = byDayOfWeek.slice(1, 6).reduce((s, v) => s + v, 0);
@@ -215,7 +234,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       lowDay,
       dailyChart,
       weeklyChart,
-      dayOfWeekChart,
+      weeklyByDayChart,
       weekdayVsWeekend,
       jobFunctionChart,
       top10Companies,
@@ -494,7 +513,14 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
                     dot={{ r: 3 }}
                     activeDot={{ r: 5 }}
                     name="Acessos"
-                  />
+                  >
+                    <LabelList
+                      dataKey="acessos"
+                      position="top"
+                      fontSize={10}
+                      formatter={(v: number) => v > 0 ? v : ''}
+                    />
+                  </Line>
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -509,6 +535,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
         <Card className="print-no-break">
           <CardHeader>
             <CardTitle className="text-base">Quantidade por Semana</CardTitle>
+            <p className="text-xs text-muted-foreground">Semanas iniciando aos Domingos</p>
           </CardHeader>
           <CardContent>
             {dashboard.weeklyChart.length > 0 ? (
@@ -516,7 +543,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={dashboard.weeklyChart}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-                    <XAxis dataKey="semana" tick={{ fontSize: 11 }} className="fill-muted-foreground" />
+                    <XAxis dataKey="semana" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
                     <YAxis tick={{ fontSize: 11 }} className="fill-muted-foreground" />
                     <Tooltip
                       contentStyle={{
@@ -526,7 +553,9 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
                         fontSize: 12,
                       }}
                     />
-                    <Bar dataKey="acessos" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Acessos" />
+                    <Bar dataKey="acessos" fill="#22c55e" radius={[4, 4, 0, 0]} name="Acessos">
+                      <LabelList dataKey="acessos" position="top" fontSize={10} />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -538,27 +567,38 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
 
         <Card className="print-no-break">
           <CardHeader>
-            <CardTitle className="text-base">Distribuição por Dia da Semana</CardTitle>
+            <CardTitle className="text-base">Distribuição por Dia da Semana (Por Semana)</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[250px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dashboard.dayOfWeekChart}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-                  <XAxis dataKey="dia" tick={{ fontSize: 11 }} className="fill-muted-foreground" />
-                  <YAxis tick={{ fontSize: 11 }} className="fill-muted-foreground" />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--background))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px',
-                      fontSize: 12,
-                    }}
-                  />
-                  <Bar dataKey="acessos" fill={CHART_COLORS[1]} radius={[4, 4, 0, 0]} name="Acessos" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {dashboard.weeklyByDayChart.length > 0 ? (
+              <div className="h-[250px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dashboard.weeklyByDayChart}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
+                    <XAxis dataKey="semana" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
+                    <YAxis tick={{ fontSize: 11 }} className="fill-muted-foreground" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--background))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px',
+                        fontSize: 12,
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="Domingo" stackId="a" fill="#3b82f6" name="Dom" />
+                    <Bar dataKey="Segunda" stackId="a" fill="#22c55e" name="Seg" />
+                    <Bar dataKey="Terça" stackId="a" fill="#f97316" name="Ter" />
+                    <Bar dataKey="Quarta" stackId="a" fill="#ef4444" name="Qua" />
+                    <Bar dataKey="Quinta" stackId="a" fill="#a855f7" name="Qui" />
+                    <Bar dataKey="Sexta" stackId="a" fill="#14b8a6" name="Sex" />
+                    <Bar dataKey="Sábado" stackId="a" fill="#78716c" name="Sáb" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <p className="text-center py-8 text-muted-foreground text-sm">Sem dados</p>
+            )}
           </CardContent>
         </Card>
       </div>
