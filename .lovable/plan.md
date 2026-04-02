@@ -1,47 +1,39 @@
 
 
-## Redirecionar "Imprimir Crachá" para a mesma lógica de etiquetas
+## Abrir diálogo de impressão diretamente
 
-### Abordagem
+### Alteração
 
-Nenhum código novo de geração PDF. Apenas passar um callback `onPrintLabel` do `WorkerManagement` para o `WorkerDetailsDialog` que reutiliza o `handlePrintLabels` existente.
+Trocar o download do PDF por abertura direta do diálogo de impressão do navegador, usando um iframe oculto.
 
-### Alterações
+### Mudança em `WorkerManagement.tsx` (linhas 879-888)
 
-**1. `WorkerManagement.tsx`** (~1071-1076)
+Substituir o bloco de download:
 
-Criar uma função wrapper que temporariamente seleciona o trabalhador do modal e chama `handlePrintLabels`. Passar como prop:
-
-```tsx
-<WorkerDetailsDialog
-  worker={selectedWorker}
-  open={isDetailsOpen}
-  onOpenChange={setIsDetailsOpen}
-  onUpdate={() => refetch()}
-  onPrintLabel={(worker) => {
-    // Salva estado atual, seleciona só este worker, e chama handlePrintLabels
-    // Ou cria uma versão simplificada que gera etiqueta para um único worker
-  }}
-/>
+```typescript
+// Antes: download do arquivo
+const blob = doc.output('blob');
+const link = document.createElement('a');
+...
 ```
 
-Na prática, como `handlePrintLabels` depende de `selectedWorkerIds` e `selectedProjectForLabels`, a forma mais limpa é extrair a lógica interna de geração para uma função auxiliar local (ex: `generateLabelsForWorkers(workersList, projectId)`) que tanto o botão da lista quanto o callback do modal chamam. Isso não cria um novo arquivo — apenas reorganiza o código dentro do mesmo componente.
+Por impressão direta via iframe:
 
-**2. `WorkerDetailsDialog.tsx`**
+```typescript
+const blob = doc.output('blob');
+const url = URL.createObjectURL(blob);
+const iframe = document.createElement('iframe');
+iframe.style.display = 'none';
+iframe.src = url;
+document.body.appendChild(iframe);
+iframe.onload = () => {
+  iframe.contentWindow?.print();
+  setTimeout(() => {
+    document.body.removeChild(iframe);
+    URL.revokeObjectURL(url);
+  }, 60000);
+};
+```
 
-- Adicionar prop `onPrintLabel?: (worker: Worker) => void` na interface
-- Substituir `<BadgePrinter .../>` por um botão simples que chama `onPrintLabel(worker)`
-- Remover import do `BadgePrinter`
-
-**3. `BadgePrinter.tsx`**
-
-- Remover o arquivo (não será mais usado)
-
-### Questão: projeto para a etiqueta
-
-O `handlePrintLabels` requer um projeto selecionado (`selectedProjectForLabels`). Quando o botão está no modal, podemos:
-- Usar o primeiro projeto autorizado do trabalhador (`worker.allowed_project_ids[0]`)
-- Ou usar o projeto selecionado no contexto global (`useProject`)
-
-Vou usar o projeto do contexto global, que é o mais intuitivo.
+Isso abre o diálogo de impressão do navegador diretamente com o PDF da etiqueta, sem baixar arquivo. Funciona tanto para o botão da lista quanto para o botão no modal de detalhes, já que ambos chamam `generateLabels`.
 
