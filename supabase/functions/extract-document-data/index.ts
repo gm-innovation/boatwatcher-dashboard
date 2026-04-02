@@ -228,14 +228,19 @@ Retorne APENAS um JSON válido com os dados extraídos.`;
       }
     }
 
-    // Normalizar tipo de documento — nunca "Outros"
+    // Normalize well-known types, preserve everything else as-is (never collapse to "Outros")
     if (extractedData.document_type) {
       const typeUpper = String(extractedData.document_type).toUpperCase();
       if (typeUpper.includes('ASO') || typeUpper.includes('ATESTADO')) extractedData.document_type = 'ASO';
       else if (typeUpper.includes('NR10') || typeUpper.includes('NR-10')) extractedData.document_type = 'NR10';
       else if (typeUpper.includes('NR33') || typeUpper.includes('NR-33')) extractedData.document_type = 'NR33';
+      else if (typeUpper.includes('NR34') || typeUpper.includes('NR-34')) extractedData.document_type = 'NR34';
       else if (typeUpper.includes('NR35') || typeUpper.includes('NR-35')) extractedData.document_type = 'NR35';
-      else if (typeUpper === 'OUTROS') extractedData.document_type = hintType !== 'Outros' ? hintType : 'Documento';
+      else if (typeUpper === 'OUTROS' || typeUpper === 'OUTRO') {
+        // AI returned generic — try to use a better hint or keep as descriptive
+        extractedData.document_type = hintType !== 'Outros' ? hintType : 'Documento';
+      }
+      // Otherwise keep whatever the AI returned (e.g. "Foto de rosto", "Certificado de Segurança", etc.)
     } else {
       extractedData.document_type = hintType !== 'Outros' ? hintType : 'Documento';
     }
