@@ -818,7 +818,7 @@ export const WorkerManagement = () => {
       const cleanName = removeAccents(displayName);
       let nameFontSize = 16;
       doc.setFontSize(nameFontSize);
-      while (doc.getTextWidth(cleanName) > 45 && nameFontSize > 10) {
+      while (doc.getTextWidth(cleanName) > 55 && nameFontSize > 8) {
         nameFontSize -= 1;
         doc.setFontSize(nameFontSize);
       }
