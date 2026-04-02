@@ -800,7 +800,7 @@ export const WorkerManagement = () => {
           const naturalW = logoImg.naturalWidth || 1;
           const naturalH = logoImg.naturalHeight || 1;
           const logoMaxW = 14;
-          const logoMaxH = 46;
+          const logoMaxH = 51;
           const ratio = naturalW / naturalH;
           let logoW = logoMaxW;
           let logoH = logoW / ratio;
