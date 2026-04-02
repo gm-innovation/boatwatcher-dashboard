@@ -800,7 +800,7 @@ export const WorkerManagement = () => {
           const naturalW = logoImg.naturalWidth || 1;
           const naturalH = logoImg.naturalHeight || 1;
           const logoMaxH = 38;
-          const logoMaxW = 14;
+          const logoMaxW = 22;
           const ratio = naturalW / naturalH;
           let logoW = logoMaxH * ratio;
           let logoH = logoMaxH;
@@ -818,7 +818,7 @@ export const WorkerManagement = () => {
       const cleanName = removeAccents(displayName);
       let nameFontSize = 16;
       doc.setFontSize(nameFontSize);
-      while (doc.getTextWidth(cleanName) > 45 && nameFontSize > 10) {
+      while (doc.getTextWidth(cleanName) > 55 && nameFontSize > 8) {
         nameFontSize -= 1;
         doc.setFontSize(nameFontSize);
       }
