@@ -2,35 +2,35 @@
 
 ## Corrigir impressão direta das etiquetas
 
-### Problema
-O iframe com `display: none` não permite que `window.print()` funcione na maioria dos navegadores.
+### Situação real
+O botão "Imprimir" do relatório Visão Geral usa `window.print()` — imprime o HTML da página, não um PDF. Para etiquetas, o PDF é gerado via jsPDF (62x100mm com textos rotacionados) e não existe como HTML.
 
-### Solução
-Usar a mesma abordagem do relatório de Visão Geral: abrir o PDF em uma nova aba com `window.open()` e chamar `print()` nessa janela. Simples e funcional.
+### Abordagem viável
+Usar `window.open()` com **data URI** em vez de blob URL. Data URIs não são bloqueados pela mesma política de segurança que bloqueia blob URLs em iframes do Lovable. Se ainda assim for bloqueado, fazer fallback para download.
 
 ### Alteração
 
-**Arquivo:** `src/components/workers/WorkerManagement.tsx` (linhas 879-892)
+**Arquivo:** `src/components/workers/WorkerManagement.tsx` (linhas 879-895)
 
-Substituir o bloco do iframe por:
+Substituir o bloco atual por:
 
 ```typescript
-const blob = doc.output('blob');
-const url = URL.createObjectURL(blob);
-const printWindow = window.open(url, '_blank');
+const dataUri = doc.output('dataurlstring');
+const printWindow = window.open(dataUri);
 if (printWindow) {
-  printWindow.onload = () => {
-    printWindow.print();
-  };
+  printWindow.addEventListener('load', () => {
+    setTimeout(() => {
+      printWindow.print();
+    }, 500);
+  });
 } else {
   // Fallback: download se popup bloqueado
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `etiquetas.pdf`;
-  link.click();
+  doc.save('etiquetas.pdf');
 }
-setTimeout(() => URL.revokeObjectURL(url), 120000);
+toast({ title: `${workerList.length} etiqueta(s) gerada(s) com sucesso!` });
 ```
 
-Isso abre o PDF numa nova aba e dispara o diálogo de impressão automaticamente — igual ao comportamento do relatório de Visão Geral.
+Diferença-chave: `doc.output('dataurlstring')` gera uma data URI completa (`data:application/pdf;base64,...`) que não é bloqueada como blob URLs. O `setTimeout` de 500ms garante que o PDF renderize antes de disparar a impressão.
+
+Se no ambiente Lovable o popup ainda for bloqueado, funcionará no ambiente real (published/desktop). O fallback `doc.save()` garante que o usuário sempre recebe o PDF.
 
