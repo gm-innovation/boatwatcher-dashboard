@@ -163,6 +163,7 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
   const queryClient = useQueryClient();
 
   const { extractDocument, isExtracting } = useDocumentExtraction();
+  const createJobFunction = useCreateJobFunction();
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<WorkerFormData>({
     resolver: zodResolver(workerSchema),
