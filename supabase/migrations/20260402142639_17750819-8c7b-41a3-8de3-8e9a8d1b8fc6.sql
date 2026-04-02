@@ -1,0 +1,1 @@
+ALTER TABLE public.report_schedules DROP CONSTRAINT report_schedules_report_type_check;
