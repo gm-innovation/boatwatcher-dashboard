@@ -518,7 +518,7 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                   </div>
                   <div className="space-y-2">
                     <Label>Cargo/Função</Label>
-                    <Select onValueChange={(value) => setValue('role', value)}>
+                    <Select value={watchedRole || ''} onValueChange={(value) => setValue('role', value)}>
                       <SelectTrigger>
                         <SelectValue placeholder={isDocumentMode ? 'Será preenchido pelos documentos' : 'Selecione a função'} />
                       </SelectTrigger>
