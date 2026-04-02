@@ -1177,7 +1177,7 @@ export const WorkerManagement = () => {
                       )) : <span className="text-xs text-muted-foreground">-</span>}
                     </div>
                   </td>
-                  <td className="p-4 text-sm text-muted-foreground">{worker.role || '-'}</td>
+                  <td className="p-4 text-sm text-muted-foreground whitespace-nowrap">{normalizeName(worker.role)}</td>
                   <td className="p-4 text-center">{getStatusBadge(worker.status)}</td>
                   <td className="p-4">
                     <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>

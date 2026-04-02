@@ -229,11 +229,11 @@ export const ReportsList = ({ projectId, startDate, endDate }: ReportsListProps)
                     <tbody>
                       {group.workers.map((worker) => (
                         <tr key={worker.workerId} className="border-b border-border/50 hover:bg-muted/30">
-                          <td className="px-4 py-2 text-sm font-mono text-muted-foreground">{worker.code ?? '-'}</td>
-                          <td className="px-4 py-2 text-sm font-medium">{worker.name}</td>
-                          <td className="px-4 py-2 text-sm text-muted-foreground">{worker.companyName}</td>
-                          <td className="px-4 py-2 text-sm text-muted-foreground">{worker.document}</td>
-                          <td className="px-4 py-2 text-sm text-muted-foreground">{worker.jobFunction}</td>
+                          <td className="px-4 py-2 text-sm font-mono text-muted-foreground whitespace-nowrap">{formatWorkerCode(worker.code)}</td>
+                          <td className="px-4 py-2 text-sm font-medium whitespace-nowrap">{normalizeName(worker.name)}</td>
+                          <td className="px-4 py-2 text-sm text-muted-foreground whitespace-nowrap">{normalizeName(worker.companyName)}</td>
+                          <td className="px-4 py-2 text-sm text-muted-foreground whitespace-nowrap">{formatCpf(worker.document)}</td>
+                          <td className="px-4 py-2 text-sm text-muted-foreground whitespace-nowrap">{normalizeName(worker.jobFunction)}</td>
                         </tr>
                       ))}
                     </tbody>
