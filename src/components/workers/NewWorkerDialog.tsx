@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadFile } from '@/lib/storageProvider';
 import { useCompanies, useProjects } from '@/hooks/useSupabase';
+import { useJobFunctions } from '@/hooks/useJobFunctions';
 import { useCreateWorkerDocument } from '@/hooks/useWorkerDocuments';
 import { useDocumentExtraction, ProcessedDocument } from '@/hooks/useDocumentExtraction';
 import { toast } from '@/hooks/use-toast';
@@ -20,7 +21,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -33,12 +33,18 @@ import {
   Upload,
   Plus,
   ArrowLeft,
-  Info,
   Sparkles,
   X,
   Loader2,
   RefreshCw,
   AlertCircle,
+  Edit3,
+  Eye,
+  Download,
+  Trash2,
+  Globe,
+  CheckCircle2,
+  FileUp,
 } from 'lucide-react';
 
 interface NewWorkerDialogProps {
@@ -52,7 +58,7 @@ const workerSchema = z.object({
   document_number: z.string().min(11, 'CPF inválido'),
   role: z.string().optional(),
   company_id: z.string().optional(),
-  status: z.string().default('active'),
+  status: z.string().default('pending_review'),
   birth_date: z.string().optional(),
   gender: z.string().optional(),
   blood_type: z.string().optional(),
@@ -60,6 +66,8 @@ const workerSchema = z.object({
 });
 
 type WorkerFormData = z.infer<typeof workerSchema>;
+
+type Step = 'method-select' | 'manual' | 'document';
 
 interface UploadedDocument {
   id: string;
@@ -73,72 +81,133 @@ interface UploadedDocument {
   error?: 'auth' | 'server' | null;
 }
 
+const DOC_TYPE_COLORS: Record<string, string> = {
+  aso: 'border-l-orange-500',
+  nr10: 'border-l-blue-500',
+  nr33: 'border-l-purple-500',
+  nr34: 'border-l-emerald-500',
+  nr35: 'border-l-green-500',
+  rg: 'border-l-slate-500',
+  cpf: 'border-l-slate-400',
+  cnh: 'border-l-yellow-500',
+};
+
+function getDocBorderColor(type: string) {
+  const key = type.toLowerCase().replace(/\s+/g, '');
+  for (const [k, v] of Object.entries(DOC_TYPE_COLORS)) {
+    if (key.includes(k)) return v;
+  }
+  return 'border-l-gray-400';
+}
+
+function getDocStatusBadge(doc: UploadedDocument) {
+  if (doc.isExtracting) {
+    return (
+      <Badge variant="outline" className="gap-1 text-xs">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Extraindo...
+      </Badge>
+    );
+  }
+
+  if (doc.error === 'auth') {
+    return (
+      <Badge variant="destructive" className="gap-1 text-xs">
+        <AlertCircle className="h-3 w-3" />
+        Sessão expirada
+      </Badge>
+    );
+  }
+
+  if (doc.error === 'server') {
+    return (
+      <Badge variant="destructive" className="gap-1 text-xs">
+        <AlertCircle className="h-3 w-3" />
+        Erro
+      </Badge>
+    );
+  }
+
+  if (doc.expiry_date) {
+    const isExpired = new Date(doc.expiry_date) < new Date();
+    if (isExpired) {
+      return <Badge variant="destructive" className="text-xs">Vencido</Badge>;
+    }
+    return <Badge className="bg-green-500/10 text-green-600 border-green-500/20 text-xs">Válido</Badge>;
+  }
+
+  if (doc.extractedData && Object.keys(doc.extractedData).length > 0) {
+    return <Badge className="bg-green-500/10 text-green-600 border-green-500/20 text-xs">Dados extraídos</Badge>;
+  }
+
+  return <Badge variant="secondary" className="text-xs">Não informado</Badge>;
+}
+
 export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDialogProps) => {
-  const [isDocumentMode, setIsDocumentMode] = useState(false);
+  const [step, setStep] = useState<Step>('method-select');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadedDocuments, setUploadedDocuments] = useState<UploadedDocument[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [isManagingProjects, setIsManagingProjects] = useState(false);
-  
+  const [uploadSuccessCount, setUploadSuccessCount] = useState(0);
+  const [isManualDocMode, setIsManualDocMode] = useState(false);
+
   const photoInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
-  
+
   const { data: companies = [] } = useCompanies();
   const { data: projects = [] } = useProjects();
+  const { data: jobFunctions = [] } = useJobFunctions();
   const createDocument = useCreateWorkerDocument();
   const queryClient = useQueryClient();
-  
-  // Use the extraction hook that handles auth and proper payload
-  const { extractDocument, isExtracting, progress } = useDocumentExtraction();
+
+  const { extractDocument, isExtracting } = useDocumentExtraction();
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<WorkerFormData>({
     resolver: zodResolver(workerSchema),
     defaultValues: {
-      status: 'active',
+      status: 'pending_review',
     }
   });
+
+  const watchedStatus = watch('status');
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setPhotoFile(file);
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoPreview(reader.result as string);
-      };
+      reader.onloadend = () => setPhotoPreview(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
 
-  // Process a single document using the extraction hook
+  const removePhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+  };
+
   const processDocument = async (file: File, docId: string) => {
-    // Mark as extracting
-    setUploadedDocuments(prev => prev.map(doc => 
-      doc.id === docId 
-        ? { ...doc, isExtracting: true, error: null }
-        : doc
+    setUploadedDocuments(prev => prev.map(doc =>
+      doc.id === docId ? { ...doc, isExtracting: true, error: null } : doc
     ));
 
     try {
       const result = await extractDocument(file);
-      
+
       if (!result) {
-        // extractDocument returns null on auth failure or other critical errors
-        setUploadedDocuments(prev => prev.map(doc => 
-          doc.id === docId 
-            ? { ...doc, isExtracting: false, error: 'auth' as const }
-            : doc
+        setUploadedDocuments(prev => prev.map(doc =>
+          doc.id === docId ? { ...doc, isExtracting: false, error: 'auth' as const } : doc
         ));
         return;
       }
 
-      // Update document with extracted data
-      setUploadedDocuments(prev => prev.map(doc => 
-        doc.id === docId 
-          ? { 
-              ...doc, 
+      setUploadedDocuments(prev => prev.map(doc =>
+        doc.id === docId
+          ? {
+              ...doc,
               file_url: result.file_url,
               type: result.document_type || 'Documento',
               completion_date: result.completion_date,
@@ -150,7 +219,6 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
           : doc
       ));
 
-      // Auto-fill form with extracted data
       const data = result.extracted_data;
       if (data) {
         if (data.full_name) setValue('name', data.full_name);
@@ -160,16 +228,10 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
         if (data.gender) setValue('gender', data.gender?.toLowerCase());
         if (data.blood_type) setValue('blood_type', data.blood_type);
       }
-
-      if (Object.keys(result.extracted_data || {}).length > 0) {
-        toast({ title: 'Dados extraídos com sucesso' });
-      }
     } catch (error) {
       console.error('Document processing error:', error);
-      setUploadedDocuments(prev => prev.map(doc => 
-        doc.id === docId 
-          ? { ...doc, isExtracting: false, error: 'server' as const }
-          : doc
+      setUploadedDocuments(prev => prev.map(doc =>
+        doc.id === docId ? { ...doc, isExtracting: false, error: 'server' as const } : doc
       ));
     }
   };
@@ -178,7 +240,6 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
     const files = e.target.files;
     if (!files) return;
 
-    // Add all files to state first
     const newDocs: UploadedDocument[] = Array.from(files).map(file => ({
       id: crypto.randomUUID(),
       file,
@@ -186,23 +247,23 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
       isExtracting: true,
       error: null,
     }));
-    
-    setUploadedDocuments(prev => [...prev, ...newDocs]);
 
-    // Process each document
+    setUploadedDocuments(prev => [...prev, ...newDocs]);
+    setUploadSuccessCount(newDocs.length);
+
     for (const doc of newDocs) {
       await processDocument(doc.file, doc.id);
     }
-    
-    // Reset input so the same files can be selected again if needed
+
     e.target.value = '';
+
+    // Auto-clear success count after 5s
+    setTimeout(() => setUploadSuccessCount(0), 5000);
   };
 
   const retryExtraction = async (docId: string) => {
     const doc = uploadedDocuments.find(d => d.id === docId);
-    if (doc) {
-      await processDocument(doc.file, docId);
-    }
+    if (doc) await processDocument(doc.file, docId);
   };
 
   const removeDocument = (docId: string) => {
@@ -211,54 +272,32 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
 
   const uploadPhoto = async (workerId: string): Promise<string | null> => {
     if (!photoFile) return null;
-
-    // Validate session before upload
     const validSession = await ensureValidSession();
     if (!validSession) {
-      toast({
-        title: 'Sessão expirada',
-        description: 'Sua sessão expirou. Faça login novamente.',
-        variant: 'destructive'
-      });
+      toast({ title: 'Sessão expirada', description: 'Faça login novamente.', variant: 'destructive' });
       return null;
     }
-
     const fileExt = photoFile.name.split('.').pop();
     const fileName = `${workerId}.${fileExt}`;
     const filePath = `workers/${fileName}`;
-
     const result = await uploadFile('worker-photos', filePath, photoFile, { upsert: true });
-
     if (!result) {
-      toast({
-        title: 'Erro no upload da foto',
-        description: 'Não foi possível salvar a foto do trabalhador.',
-        variant: 'destructive'
-      });
+      toast({ title: 'Erro no upload da foto', variant: 'destructive' });
     }
-
     return result;
   };
 
   const saveDocuments = async (workerId: string) => {
     for (const doc of uploadedDocuments) {
-      // Use file_url from extraction if available (already uploaded)
-      // Otherwise, upload the file now
       let documentUrl = doc.file_url;
-      
+
       if (!documentUrl) {
         const fileExt = doc.file.name.split('.').pop();
         const fileName = `${workerId}/${doc.id}.${fileExt}`;
-
         const { error: uploadError } = await supabase.storage
           .from('worker-documents')
           .upload(fileName, doc.file, { upsert: true });
-
-        if (uploadError) {
-          console.error('Document upload error:', uploadError);
-          continue;
-        }
-
+        if (uploadError) { console.error('Document upload error:', uploadError); continue; }
         const { data: urlData } = await supabase.storage.from('worker-documents').createSignedUrl(fileName, 3600);
         documentUrl = urlData?.signedUrl || null;
       }
@@ -298,7 +337,6 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
 
       if (error) throw error;
 
-      // Upload photo
       if (photoFile && newWorker) {
         const photoUrl = await uploadPhoto(newWorker.id);
         if (photoUrl) {
@@ -306,22 +344,13 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
         }
       }
 
-      // Save documents (uses already uploaded files when available)
       if (uploadedDocuments.length > 0 && newWorker) {
         await saveDocuments(newWorker.id);
       }
 
       toast({ title: 'Trabalhador cadastrado com sucesso' });
       queryClient.invalidateQueries({ queryKey: ['workers'] });
-      
-      // Reset form
-      reset();
-      setPhotoFile(null);
-      setPhotoPreview(null);
-      setUploadedDocuments([]);
-      setSelectedProjects([]);
-      setIsDocumentMode(false);
-      
+      resetAll();
       onOpenChange(false);
       onSuccess?.();
     } catch (error: any) {
@@ -331,182 +360,124 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
     }
   };
 
-  const handleClose = () => {
+  const resetAll = () => {
     reset();
     setPhotoFile(null);
     setPhotoPreview(null);
     setUploadedDocuments([]);
     setSelectedProjects([]);
-    setIsDocumentMode(false);
+    setStep('method-select');
+    setUploadSuccessCount(0);
+    setIsManualDocMode(false);
+  };
+
+  const handleClose = () => {
+    resetAll();
     onOpenChange(false);
   };
 
-  // Get status badge for document
-  const getDocumentStatusBadge = (doc: UploadedDocument) => {
-    if (doc.isExtracting) {
-      return (
-        <Badge variant="outline" className="gap-1">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          Extraindo...
-        </Badge>
-      );
-    }
-    
-    if (doc.error === 'auth') {
-      return (
-        <Badge variant="destructive" className="gap-1">
-          <AlertCircle className="h-3 w-3" />
-          Sessão expirada
-        </Badge>
-      );
-    }
-    
-    if (doc.error === 'server') {
-      return (
-        <Badge variant="destructive" className="gap-1">
-          <AlertCircle className="h-3 w-3" />
-          Erro no servidor
-        </Badge>
-      );
-    }
-    
-    if (doc.extractedData && Object.keys(doc.extractedData).length > 0) {
-      return <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Dados extraídos</Badge>;
-    }
-    
-    return <Badge variant="secondary">Sem extração</Badge>;
-  };
+  const isDocumentMode = step === 'document';
+  const anyExtracting = uploadedDocuments.some(d => d.isExtracting);
 
-  // Documents card component
-  const DocumentsCard = () => (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Documentos
-            <Badge variant="secondary">{uploadedDocuments.length}</Badge>
-          </CardTitle>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => documentInputRef.current?.click()}
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Adicionar Documentos
-          </Button>
-          <input
-            ref={documentInputRef}
-            type="file"
-            accept="image/*,.pdf"
-            multiple
-            className="hidden"
-            onChange={handleDocumentUpload}
-          />
-        </div>
-      </CardHeader>
-      <CardContent>
-        {uploadedDocuments.length === 0 ? (
-          <div
-            className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
-            onClick={() => documentInputRef.current?.click()}
-          >
-            <Sparkles className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
-            <p className="text-sm font-medium">Arraste documentos ou clique para enviar</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              A IA irá extrair automaticamente os dados dos documentos
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {uploadedDocuments.map(doc => (
-              <div key={doc.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium text-sm">{doc.file.name}</p>
-                    <p className="text-xs text-muted-foreground">{doc.type}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {getDocumentStatusBadge(doc)}
-                  {doc.error && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => retryExtraction(doc.id)}
-                      title="Tentar novamente"
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeDocument(doc.id)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-
-  return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl max-h-[95vh] overflow-hidden flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <div className="flex items-center justify-between">
+  // ─── Method Selection Screen ───
+  if (step === 'method-select') {
+    return (
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <User className="h-5 w-5 text-primary" />
               Cadastrar Novo Trabalhador
             </DialogTitle>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="document-mode" className="text-sm text-muted-foreground">
-                Cadastro por Documentos
-              </Label>
-              <Switch
-                id="document-mode"
-                checked={isDocumentMode}
-                onCheckedChange={setIsDocumentMode}
-              />
-            </div>
+            <DialogDescription>
+              Como deseja cadastrar o trabalhador?
+            </DialogDescription>
+          </DialogHeader>
+
+          <p className="text-sm text-muted-foreground">Escolha o método de cadastro que preferir usar.</p>
+
+          <div className="grid grid-cols-2 gap-4 mt-2">
+            {/* Manual Card */}
+            <button
+              type="button"
+              onClick={() => setStep('manual')}
+              className="flex flex-col items-center gap-3 rounded-lg border-2 border-muted bg-card p-6 text-center transition-all hover:border-primary hover:shadow-md"
+            >
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+                <Edit3 className="h-7 w-7 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm">Cadastro Manual</p>
+                <p className="text-xs text-muted-foreground mt-1">Preencha todos os campos manualmente</p>
+              </div>
+            </button>
+
+            {/* Document Card */}
+            <button
+              type="button"
+              onClick={() => setStep('document')}
+              className="flex flex-col items-center gap-3 rounded-lg border-2 border-muted bg-card p-6 text-center transition-all hover:border-primary hover:shadow-md"
+            >
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+                <FileText className="h-7 w-7 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm">Por Documentos</p>
+                <p className="text-xs text-muted-foreground mt-1">Envie documentos e a IA preenche os dados</p>
+              </div>
+            </button>
           </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // ─── Form Screen (Manual or Document) ───
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-3xl max-h-[95vh] overflow-hidden flex flex-col">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle className="flex items-center gap-2">
+            <button type="button" onClick={() => setStep('method-select')} className="hover:opacity-70 transition-opacity">
+              <ArrowLeft className="h-5 w-5 text-muted-foreground" />
+            </button>
+            {isDocumentMode ? 'Cadastro por Documentos' : 'Cadastro Manual'}
+          </DialogTitle>
           <DialogDescription>
-            Preencha os dados do novo trabalhador. Os campos obrigatórios estão marcados com (*)
+            {isDocumentMode
+              ? 'Envie documentos do trabalhador e os dados serão extraídos automaticamente.'
+              : 'Preencha os dados do novo trabalhador. Os campos obrigatórios estão marcados com (*)'}
           </DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="flex-1 min-h-0 h-[calc(95vh-180px)] pr-4">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 pb-4">
+
+            {/* ── Documents Card (document mode: shown first) ── */}
             {isDocumentMode && (
-              <>
-                <Alert className="bg-blue-500/10 border-blue-500/20">
-                  <Info className="h-4 w-4 text-blue-600" />
-                  <AlertDescription className="text-blue-600">
-                    Envie documentos do trabalhador (RG, CPF, ASO, certificados) e a IA irá extrair os dados automaticamente.
-                  </AlertDescription>
-                </Alert>
-                
-                {/* Documents Card - appears first in document mode */}
-                <DocumentsCard />
-              </>
+              <DocumentsSection
+                uploadedDocuments={uploadedDocuments}
+                documentInputRef={documentInputRef}
+                handleDocumentUpload={handleDocumentUpload}
+                removeDocument={removeDocument}
+                retryExtraction={retryExtraction}
+                isManualDocMode={isManualDocMode}
+                setIsManualDocMode={setIsManualDocMode}
+                uploadSuccessCount={uploadSuccessCount}
+                anyExtracting={anyExtracting}
+              />
             )}
 
-            {/* Worker Data Card */}
+            {/* ── Informações Básicas ── */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Dados do Trabalhador {isDocumentMode && '(Extraídos/Editáveis)'}
-                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Informações Básicas
+                  </CardTitle>
+                  <Badge variant="outline" className="text-xs font-normal">Editável</Badge>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -529,10 +500,10 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                     {errors.document_number && <p className="text-sm text-destructive">{errors.document_number.message}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="company_id">Empresa</Label>
+                    <Label>Empresa</Label>
                     <Select onValueChange={(value) => setValue('company_id', value)}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma empresa" />
+                        <SelectValue placeholder={isDocumentMode ? 'Selecione ou será preenchido' : 'Selecione uma empresa'} />
                       </SelectTrigger>
                       <SelectContent>
                         {companies.map(company => (
@@ -542,60 +513,84 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="role">Cargo/Função</Label>
-                    <Input
-                      id="role"
-                      {...register('role')}
-                      placeholder={isDocumentMode ? 'Será preenchido pelos documentos' : 'Ex: Eletricista'}
-                    />
+                    <Label>Cargo/Função</Label>
+                    <Select onValueChange={(value) => setValue('role', value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={isDocumentMode ? 'Será preenchido pelos documentos' : 'Selecione a função'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {jobFunctions.map((jf: any) => (
+                          <SelectItem key={jf.id} value={jf.name}>{jf.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Status</Label>
-                  <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
-                    Pendente de Análise
-                  </Badge>
+                  <Select value={watchedStatus} onValueChange={(value) => setValue('status', value)}>
+                    <SelectTrigger className="w-[220px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending_review">Pendente de Análise</SelectItem>
+                      <SelectItem value="active">Ativo</SelectItem>
+                      <SelectItem value="inactive">Inativo</SelectItem>
+                      <SelectItem value="blocked">Bloqueado</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Additional Data Card */}
+            {/* ── Dados Adicionais ── */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  Dados Adicionais
-                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Dados Adicionais
+                  </CardTitle>
+                  <Badge variant="outline" className="text-xs font-normal">Editável</Badge>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="flex gap-6">
-                  <div 
-                    className="flex-shrink-0 cursor-pointer group"
-                    onClick={() => photoInputRef.current?.click()}
-                  >
+                  {/* Photo section */}
+                  <div className="flex-shrink-0 space-y-2">
+                    <Label>Foto</Label>
                     <div className="relative">
-                      <Avatar className="h-24 w-24">
+                      <div
+                        className="h-24 w-24 rounded-lg border-2 border-dashed border-muted-foreground/30 flex items-center justify-center overflow-hidden bg-muted cursor-pointer hover:border-primary/50 transition-colors"
+                        onClick={() => photoInputRef.current?.click()}
+                      >
                         {photoPreview ? (
-                          <AvatarImage src={photoPreview} alt="Foto" />
+                          <img src={photoPreview} alt="Foto" className="h-full w-full object-cover" />
                         ) : (
-                          <AvatarFallback className="bg-muted">
-                            <Camera className="h-8 w-8 text-muted-foreground" />
-                          </AvatarFallback>
+                          <Camera className="h-8 w-8 text-muted-foreground" />
                         )}
-                      </Avatar>
-                      <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Upload className="h-6 w-6 text-white" />
                       </div>
+                      {photoPreview && (
+                        <button
+                          type="button"
+                          onClick={removePhoto}
+                          className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center hover:bg-destructive/90"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
-                    <p className="text-xs text-center text-muted-foreground mt-2">Clique para enviar</p>
-                    <input
-                      ref={photoInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handlePhotoChange}
-                    />
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:underline"
+                      onClick={() => photoInputRef.current?.click()}
+                    >
+                      {photoPreview ? 'Alterar Foto' : 'Adicionar Foto'}
+                    </button>
+                    <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
                   </div>
+
+                  {/* Other fields */}
                   <div className="flex-1 grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
@@ -611,9 +606,10 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                       </Label>
                       <Select onValueChange={(v) => setValue('gender', v)}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
+                          <SelectValue placeholder="Não informado" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="nao_informado">Não informado</SelectItem>
                           <SelectItem value="masculino">Masculino</SelectItem>
                           <SelectItem value="feminino">Feminino</SelectItem>
                           <SelectItem value="outro">Outro</SelectItem>
@@ -627,9 +623,10 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                       </Label>
                       <Select onValueChange={(v) => setValue('blood_type', v)}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
+                          <SelectValue placeholder="Não informado" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="nao_informado">Não informado</SelectItem>
                           <SelectItem value="A+">A+</SelectItem>
                           <SelectItem value="A-">A-</SelectItem>
                           <SelectItem value="B+">B+</SelectItem>
@@ -650,13 +647,15 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
 
                 <Separator className="my-4" />
 
+                {/* Projetos Autorizados */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="flex items-center gap-2">
                       <Building2 className="h-4 w-4" />
                       Projetos Autorizados
                     </Label>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setIsManagingProjects(true)}>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setIsManagingProjects(true)} className="gap-1">
+                      <Globe className="h-3.5 w-3.5" />
                       Gerenciar
                     </Button>
                   </div>
@@ -675,15 +674,27 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                         ) : null;
                       })
                     ) : (
-                      <p className="text-sm text-muted-foreground">Clique em "Gerenciar" para adicionar projetos</p>
+                      <p className="text-sm text-muted-foreground">Nenhum projeto selecionado</p>
                     )}
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Documents Card - appears at end in manual mode */}
-            {!isDocumentMode && <DocumentsCard />}
+            {/* ── Documents Card (manual mode: shown last) ── */}
+            {!isDocumentMode && (
+              <DocumentsSection
+                uploadedDocuments={uploadedDocuments}
+                documentInputRef={documentInputRef}
+                handleDocumentUpload={handleDocumentUpload}
+                removeDocument={removeDocument}
+                retryExtraction={retryExtraction}
+                isManualDocMode={isManualDocMode}
+                setIsManualDocMode={setIsManualDocMode}
+                uploadSuccessCount={uploadSuccessCount}
+                anyExtracting={anyExtracting}
+              />
+            )}
           </form>
         </ScrollArea>
 
@@ -735,19 +746,27 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
           </DialogContent>
         </Dialog>
 
+        {/* Footer */}
         <div className="flex justify-end gap-2 pt-4 border-t flex-shrink-0">
-          <Button type="button" variant="outline" onClick={handleClose}>
+          <Button type="button" variant="outline" onClick={() => setStep('method-select')}>
             <ArrowLeft className="h-4 w-4 mr-1" />
             Voltar
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>
+          <Button
+            onClick={handleSubmit(onSubmit)}
+            disabled={isSubmitting}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                 Criando...
               </>
             ) : (
-              'Criar Trabalhador'
+              <>
+                <Sparkles className="h-4 w-4 mr-1" />
+                Criar Trabalhador
+              </>
             )}
           </Button>
         </div>
@@ -755,3 +774,150 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
     </Dialog>
   );
 };
+
+// ─── Documents Section Component ───
+interface DocumentsSectionProps {
+  uploadedDocuments: UploadedDocument[];
+  documentInputRef: React.RefObject<HTMLInputElement>;
+  handleDocumentUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  removeDocument: (docId: string) => void;
+  retryExtraction: (docId: string) => void;
+  isManualDocMode: boolean;
+  setIsManualDocMode: (v: boolean) => void;
+  uploadSuccessCount: number;
+  anyExtracting: boolean;
+}
+
+function DocumentsSection({
+  uploadedDocuments,
+  documentInputRef,
+  handleDocumentUpload,
+  removeDocument,
+  retryExtraction,
+  isManualDocMode,
+  setIsManualDocMode,
+  uploadSuccessCount,
+  anyExtracting,
+}: DocumentsSectionProps) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Documentos
+            {uploadedDocuments.length > 0 && (
+              <Badge variant="secondary">{uploadedDocuments.length}</Badge>
+            )}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant={isManualDocMode ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setIsManualDocMode(!isManualDocMode)}
+              className="gap-1 text-xs"
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+              Manual
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => documentInputRef.current?.click()}
+              className="gap-1 text-xs"
+            >
+              <FileUp className="h-3.5 w-3.5" />
+              Adicionar Documentos
+            </Button>
+          </div>
+          <input
+            ref={documentInputRef}
+            type="file"
+            accept="image/*,.pdf"
+            multiple
+            className="hidden"
+            onChange={handleDocumentUpload}
+          />
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* Success banner */}
+        {uploadSuccessCount > 0 && (
+          <Alert className="mb-4 bg-green-500/10 border-green-500/30">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <AlertDescription className="text-green-700">
+              <span className="font-medium">Sucesso</span> — {uploadSuccessCount} arquivo(s) enviados e adicionados à fila de processamento.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Extracting indicator */}
+        {anyExtracting && (
+          <div className="flex items-center justify-between mb-4 p-3 rounded-lg bg-muted/50">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <span className="text-sm">Extraindo dados dos documentos...</span>
+            </div>
+          </div>
+        )}
+
+        {uploadedDocuments.length === 0 ? (
+          <div
+            className="border-2 border-dashed rounded-lg p-10 text-center cursor-pointer hover:border-primary/50 transition-colors"
+            onClick={() => documentInputRef.current?.click()}
+          >
+            <FileText className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+            <p className="text-sm text-muted-foreground">Nenhum documento cadastrado</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {uploadedDocuments.map(doc => (
+              <div
+                key={doc.id}
+                className={`flex items-center justify-between p-3 rounded-lg bg-muted/30 border-l-4 ${getDocBorderColor(doc.type)}`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm truncate">{doc.type !== 'Documento' ? doc.type : doc.file.name}</p>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      {doc.completion_date && (
+                        <span>Emissão: {new Date(doc.completion_date).toLocaleDateString('pt-BR')}</span>
+                      )}
+                      {doc.expiry_date && (
+                        <span>Validade: {new Date(doc.expiry_date).toLocaleDateString('pt-BR')}</span>
+                      )}
+                      {!doc.completion_date && !doc.expiry_date && (
+                        <span className="truncate">{doc.file.name}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {getDocStatusBadge(doc)}
+                  {doc.error && (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => retryExtraction(doc.id)} title="Tentar novamente" className="h-8 w-8 p-0">
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {doc.file_url && (
+                    <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" asChild>
+                      <a href={doc.file_url} target="_blank" rel="noopener noreferrer" title="Visualizar">
+                        <Eye className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  )}
+                  <Button type="button" variant="ghost" size="sm" onClick={() => removeDocument(doc.id)} className="h-8 w-8 p-0 text-destructive hover:text-destructive">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
