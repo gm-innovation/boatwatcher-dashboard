@@ -85,6 +85,8 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
   const [strikeForm, setStrikeForm] = useState<{ reason: string; description: string; severity: 'warning' | 'serious' | 'critical' }>({ reason: '', description: '', severity: 'warning' });
   const [isManagingProjects, setIsManagingProjects] = useState(false);
   const [selectedProjects, setSelectedProjects] = useState<string[]>(worker?.allowed_project_ids || []);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const photoInputRef = React.useRef<HTMLInputElement>(null);
 
   const { data: companies = [] } = useCompanies();
   const { data: projects = [] } = useProjects();
@@ -188,6 +190,40 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
     }
   };
 
+  const handleRemoveProject = async (projectId: string) => {
+    if (!worker) return;
+    const updated = (worker.allowed_project_ids || []).filter(id => id !== projectId);
+    try {
+      await updateWorker(worker.id, { allowed_project_ids: updated });
+      queryClient.invalidateQueries({ queryKey: ['workers'] });
+      onUpdate?.();
+    } catch (error: any) {
+      toast({ title: 'Erro ao remover projeto', description: error.message, variant: 'destructive' });
+    }
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !worker) return;
+    setIsUploadingPhoto(true);
+    try {
+      const { uploadFile: upload } = await import('@/lib/storageProvider');
+      const fileExt = file.name.split('.').pop();
+      const filePath = `workers/${worker.id}.${fileExt}`;
+      const result = await upload('worker-photos', filePath, file, { upsert: true });
+      if (result) {
+        await updateWorker(worker.id, { photo_url: result });
+        queryClient.invalidateQueries({ queryKey: ['workers'] });
+        onUpdate?.();
+        toast({ title: 'Foto atualizada com sucesso' });
+      }
+    } catch (error: any) {
+      toast({ title: 'Erro ao enviar foto', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
   if (!worker) return null;
 
   return (
@@ -199,8 +235,19 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
             Detalhes do Trabalhador - {worker.name}
           </DialogTitle>
           <p className="text-sm text-muted-foreground">Visualize e edite as informações do trabalhador</p>
-          <div className="mt-2">
+          <div className="flex items-center gap-2 mt-2">
             <BadgePrinter worker={worker} companyName={companyName} jobFunctionName={worker.role || undefined} />
+            <Button
+              variant={isEditingAdditional ? "destructive" : "outline"}
+              size="sm"
+              onClick={() => {
+                if (isEditingAdditional) reset();
+                setIsEditingAdditional(!isEditingAdditional);
+              }}
+            >
+              {isEditingAdditional ? <X className="h-4 w-4 mr-1" /> : <Edit className="h-4 w-4 mr-1" />}
+              {isEditingAdditional ? 'Cancelar Edição' : 'Editar Dados Básicos'}
+            </Button>
           </div>
         </DialogHeader>
 
@@ -269,26 +316,21 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
                   <CardTitle className="text-base flex items-center gap-2">
                     <Users className="h-4 w-4" />
                     Dados Adicionais
+                    {isEditingAdditional && <Badge variant="secondary">Editável</Badge>}
                   </CardTitle>
-                  <Button
-                    variant={isEditingAdditional ? "destructive" : "outline"}
-                    size="sm"
-                    onClick={() => {
-                      if (isEditingAdditional) {
-                        reset();
-                      }
-                      setIsEditingAdditional(!isEditingAdditional);
-                    }}
-                  >
-                    {isEditingAdditional ? <X className="h-4 w-4 mr-1" /> : <Edit className="h-4 w-4 mr-1" />}
-                    {isEditingAdditional ? 'Cancelar' : 'Editar'}
-                  </Button>
+                  {isEditingAdditional && (
+                    <Button variant="ghost" size="sm" onClick={() => { reset(); setIsEditingAdditional(false); }}>
+                      <X className="h-4 w-4 mr-1" />
+                      Cancelar Edição
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit(onSaveAdditionalData)}>
                   <div className="flex gap-6">
-                    <div className="flex-shrink-0">
+                    {/* Photo section */}
+                    <div className="flex-shrink-0 flex flex-col items-center gap-2">
                       <Avatar className="h-24 w-24">
                         {resolvedPhotoUrl ? (
                           <AvatarImage src={resolvedPhotoUrl} alt={worker.name} />
@@ -298,7 +340,25 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
                           </AvatarFallback>
                         )}
                       </Avatar>
+                      <input
+                        ref={photoInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handlePhotoUpload}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isUploadingPhoto}
+                        onClick={() => photoInputRef.current?.click()}
+                      >
+                        <Camera className="h-4 w-4 mr-1" />
+                        {isUploadingPhoto ? 'Enviando...' : 'Alterar Foto'}
+                      </Button>
                     </div>
+
                     <div className="flex-1 grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="flex items-center gap-2">
@@ -387,7 +447,16 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
                         worker.allowed_project_ids?.map(projectId => {
                           const project = projects.find(p => p.id === projectId);
                           return project ? (
-                            <Badge key={projectId} variant="secondary">{project.name}</Badge>
+                            <Badge key={projectId} variant="secondary" className="flex items-center gap-1">
+                              {project.name}
+                              <button
+                                type="button"
+                                className="ml-1 hover:text-destructive"
+                                onClick={() => handleRemoveProject(projectId)}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
                           ) : null;
                         })
                       ) : (
@@ -414,6 +483,16 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
                     Documentos
                     <Badge variant="secondary">{documents.length}</Badge>
                   </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm">
+                      <FileText className="h-4 w-4 mr-1" />
+                      Manual
+                    </Button>
+                    <Button variant="outline" size="sm">
+                      <Plus className="h-4 w-4 mr-1" />
+                      Adicionar Documentos
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -591,7 +670,13 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
           </DialogContent>
         </Dialog>
 
-        <div className="flex justify-end pt-4 border-t flex-shrink-0">
+        {/* Sticky Footer */}
+        <div className="flex justify-end gap-2 pt-4 border-t flex-shrink-0">
+          {isEditingAdditional && (
+            <Button onClick={handleSubmit(onSaveAdditionalData)}>
+              Salvar Alterações
+            </Button>
+          )}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Fechar
           </Button>

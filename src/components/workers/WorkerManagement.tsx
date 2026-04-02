@@ -695,8 +695,12 @@ export const WorkerManagement = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [enrollingWorker, setEnrollingWorker] = useState<Worker | null>(null);
   const [autoEnrollData, setAutoEnrollData] = useState<{ workerName: string; commandIds: string[] } | null>(null);
+  const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [companyFilter, setCompanyFilter] = useState<string>('all');
   const { data: workers = [], isLoading, refetch } = useWorkers();
   const { data: companies = [] } = useCompanies();
+  const { data: projects = [] } = useProjects();
   const queryClient = useQueryClient();
 
   const handleDelete = async (worker: Worker) => {
@@ -726,6 +730,262 @@ export const WorkerManagement = () => {
     return companies.find(c => c.id === companyId)?.name || '-';
   };
 
+  const getProjectNames = (projectIds: string[] | null) => {
+    if (!projectIds || projectIds.length === 0) return [];
+    return projectIds
+      .map(id => projects.find(p => p.id === id)?.name)
+      .filter(Boolean) as string[];
+  };
+
+  // Stats
+  const activeCount = workers.filter(w => w.status === 'active').length;
+  const inactiveCount = workers.filter(w => w.status !== 'active').length;
+  const uniqueCompanyCount = new Set(workers.map(w => w.company_id).filter(Boolean)).size;
+
+  // Filter
+  const filteredWorkers = workers.filter(w => {
+    const matchesCompany = companyFilter === 'all' || w.company_id === companyFilter;
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = !term ||
+      w.name.toLowerCase().includes(term) ||
+      (w.document_number && w.document_number.toLowerCase().includes(term)) ||
+      (w.role && w.role.toLowerCase().includes(term)) ||
+      ((w as any).code && String((w as any).code).includes(term)) ||
+      getCompanyName(w.company_id).toLowerCase().includes(term);
+    return matchesCompany && matchesSearch;
+  });
+
+  // Selection
+  const allSelected = filteredWorkers.length > 0 && filteredWorkers.every(w => selectedWorkerIds.includes(w.id));
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedWorkerIds([]);
+    } else {
+      setSelectedWorkerIds(filteredWorkers.map(w => w.id));
+    }
+  };
+  const toggleWorker = (id: string) => {
+    setSelectedWorkerIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold">Trabalhadores Cadastrados</h2>
+          <p className="text-sm text-muted-foreground">Gerencie os trabalhadores do sistema</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => refetch()}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Atualizar Lista
+          </Button>
+          <Button onClick={() => setIsNewDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Trabalhador
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-card border rounded-lg p-4 shadow-sm">
+          <p className="text-sm text-muted-foreground">Total de Trabalhadores</p>
+          <p className="text-2xl font-bold text-foreground">{workers.length}</p>
+        </div>
+        <div className="bg-card border rounded-lg p-4 shadow-sm">
+          <p className="text-sm text-muted-foreground">Ativos</p>
+          <p className="text-2xl font-bold text-green-600">{activeCount}</p>
+        </div>
+        <div className="bg-card border rounded-lg p-4 shadow-sm">
+          <p className="text-sm text-muted-foreground">Inativos / Outros</p>
+          <p className="text-2xl font-bold text-muted-foreground">{inactiveCount}</p>
+        </div>
+        <div className="bg-card border rounded-lg p-4 shadow-sm">
+          <p className="text-sm text-muted-foreground">Empresas</p>
+          <p className="text-2xl font-bold text-foreground">{uniqueCompanyCount}</p>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-4">
+        <div className="flex-1">
+          <Input
+            placeholder="Buscar por nome, código, cargo, empresa ou CPF..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <Select value={companyFilter} onValueChange={setCompanyFilter}>
+          <SelectTrigger className="w-[220px]">
+            <SelectValue placeholder="Todas as Empresas" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as Empresas</SelectItem>
+            {companies.map(c => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* List title */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-muted-foreground">
+          Lista de Trabalhadores ({filteredWorkers.length})
+        </p>
+        {selectedWorkerIds.length > 0 && (
+          <p className="text-sm text-primary">{selectedWorkerIds.length} selecionado(s)</p>
+        )}
+      </div>
+
+      {/* Dialogs */}
+      <NewWorkerDialog
+        open={isNewDialogOpen}
+        onOpenChange={setIsNewDialogOpen}
+        onSuccess={() => refetch()}
+      />
+      <WorkerDetailsDialog
+        worker={selectedWorker}
+        open={isDetailsOpen}
+        onOpenChange={setIsDetailsOpen}
+        onUpdate={() => refetch()}
+      />
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Editar Trabalhador</DialogTitle>
+          </DialogHeader>
+          <WorkerForm 
+            worker={editingWorker} 
+            onSuccess={(autoEnrollResult) => {
+              setIsEditDialogOpen(false);
+              setEditingWorker(null);
+              if (autoEnrollResult) {
+                setAutoEnrollData({
+                  workerName: autoEnrollResult.workerName,
+                  commandIds: autoEnrollResult.commandIds,
+                });
+              }
+            }}
+            onCancel={() => {
+              setIsEditDialogOpen(false);
+              setEditingWorker(null);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!autoEnrollData} onOpenChange={(open) => !open && setAutoEnrollData(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Re-sincronização Biométrica</DialogTitle>
+          </DialogHeader>
+          {autoEnrollData && (
+            <EnrollmentTracker
+              commandIds={autoEnrollData.commandIds}
+              workerName={autoEnrollData.workerName}
+              onClose={() => setAutoEnrollData(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!enrollingWorker} onOpenChange={(open) => !open && setEnrollingWorker(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enrollment Biométrico</DialogTitle>
+          </DialogHeader>
+          {enrollingWorker && (
+            <EnrollmentDialog worker={enrollingWorker} onClose={() => setEnrollingWorker(null)} />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Table */}
+      <ScrollArea className="h-[500px] border rounded-lg">
+        <table className="w-full">
+          <thead className="sticky top-0 bg-card border-b">
+            <tr>
+              <th className="p-4 w-10">
+                <Checkbox
+                  checked={allSelected}
+                  onCheckedChange={toggleAll}
+                />
+              </th>
+              <th className="text-left p-4 text-xs font-medium text-muted-foreground">Código</th>
+              <th className="text-left p-4 text-xs font-medium text-muted-foreground">Trabalhador</th>
+              <th className="text-left p-4 text-xs font-medium text-muted-foreground">CPF</th>
+              <th className="text-left p-4 text-xs font-medium text-muted-foreground">Empresa</th>
+              <th className="text-left p-4 text-xs font-medium text-muted-foreground">Projetos Autorizados</th>
+              <th className="text-left p-4 text-xs font-medium text-muted-foreground">Função</th>
+              <th className="text-center p-4 text-xs font-medium text-muted-foreground">Status</th>
+              <th className="text-center p-4 text-xs font-medium text-muted-foreground">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredWorkers.map(worker => {
+              const projectNames = getProjectNames(worker.allowed_project_ids);
+              return (
+                <tr key={worker.id} className="border-b hover:bg-muted/50 cursor-pointer" onClick={() => { setSelectedWorker(worker); setIsDetailsOpen(true); }}>
+                  <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selectedWorkerIds.includes(worker.id)}
+                      onCheckedChange={() => toggleWorker(worker.id)}
+                    />
+                  </td>
+                  <td className="p-4 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Hash className="h-3 w-3" />
+                      {(worker as any).code || '-'}
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <div className="flex items-center gap-3">
+                      <ResolvedAvatar
+                        className="h-8 w-8"
+                        photoUrl={worker.photo_url}
+                        name={worker.name}
+                        iconClassName="h-4 w-4"
+                      />
+                      <span className="font-medium text-sm">{worker.name}</span>
+                    </div>
+                  </td>
+                  <td className="p-4 text-sm text-muted-foreground">{worker.document_number || '-'}</td>
+                  <td className="p-4 text-sm text-muted-foreground">{getCompanyName(worker.company_id)}</td>
+                  <td className="p-4">
+                    <div className="flex flex-wrap gap-1">
+                      {projectNames.length > 0 ? projectNames.map((name, i) => (
+                        <Badge key={i} variant="secondary" className="text-xs">{name}</Badge>
+                      )) : <span className="text-xs text-muted-foreground">-</span>}
+                    </div>
+                  </td>
+                  <td className="p-4 text-sm text-muted-foreground">{worker.role || '-'}</td>
+                  <td className="p-4 text-center">{getStatusBadge(worker.status)}</td>
+                  <td className="p-4">
+                    <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
+                      <Button size="sm" variant="outline" onClick={() => { setSelectedWorker(worker); setIsDetailsOpen(true); }}>
+                        <Edit className="h-4 w-4 mr-1" />
+                        Editar
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {filteredWorkers.length === 0 && !isLoading && (
+              <tr>
+                <td colSpan={9} className="p-8 text-center text-muted-foreground">
+                  <User className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Nenhum trabalhador encontrado</p>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </ScrollArea>
+    </div>
+  );
+};
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
