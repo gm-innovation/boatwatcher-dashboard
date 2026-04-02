@@ -792,10 +792,23 @@ export const WorkerManagement = () => {
       doc.setLineWidth(0.5);
       doc.rect(3, 3, pageWidth - 6, pageHeight - 6);
 
-      // Logo
+      // Logo (proportional, moved left)
       if (logoDataUrl) {
         try {
-          doc.addImage(logoDataUrl, 'PNG', 52, 5, 8, 24);
+          const logoImg = new Image();
+          logoImg.src = logoDataUrl;
+          const naturalW = logoImg.naturalWidth || 1;
+          const naturalH = logoImg.naturalHeight || 1;
+          const logoMaxH = 20;
+          const logoMaxW = 12;
+          const ratio = naturalW / naturalH;
+          let logoW = logoMaxH * ratio;
+          let logoH = logoMaxH;
+          if (logoW > logoMaxW) {
+            logoW = logoMaxW;
+            logoH = logoW / ratio;
+          }
+          doc.addImage(logoDataUrl, 'PNG', 48, 5, logoW, logoH);
         } catch {}
       }
 
@@ -807,7 +820,7 @@ export const WorkerManagement = () => {
       const nameLines: string[] = doc.splitTextToSize(cleanName, 45) as string[];
       if (nameLines.length > 2) doc.setFontSize(14);
       nameLines.forEach((line: string, i: number) => {
-        doc.text(line, 36 - (i * 7), 5, { angle: -90 });
+        doc.text(line, 32 - (i * 7), 5, { angle: -90 });
       });
 
       // Job function
@@ -816,22 +829,22 @@ export const WorkerManagement = () => {
       doc.setFontSize(12);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(0, 0, 0);
-      doc.text(removeAccents(String(jobFunctionName)), 30, 5, { angle: -90 });
+      doc.text(removeAccents(String(jobFunctionName)), 26, 5, { angle: -90 });
 
       // Company
       const companyName = getCompanyName(worker.company_id);
       doc.setFontSize(10);
-      doc.text(removeAccents(companyName === '-' ? 'Empresa nao informada' : companyName), 26, 5, { angle: -90 });
+      doc.text(removeAccents(companyName === '-' ? 'Empresa nao informada' : companyName), 22, 5, { angle: -90 });
 
       // Project name
       doc.setFontSize(projectFontSize);
       doc.setFont('helvetica', 'bold');
-      doc.text(removeAccents(combinedProjectName), 14, 5, { angle: -90 });
+      doc.text(removeAccents(combinedProjectName), 10, 5, { angle: -90 });
 
       // Project type
-      doc.setFontSize(12);
+      doc.setFontSize(11);
       doc.setFont('helvetica', 'normal');
-      doc.text(removeAccents(projectType), 8, 5, { angle: -90 });
+      doc.text(removeAccents(projectType), 9, 5, { angle: -90 });
 
       // Circle with code
       const circleX = 40;
@@ -846,10 +859,10 @@ export const WorkerManagement = () => {
       doc.setFontSize(25);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
-      doc.text(code, circleX + 5, circleY, { align: 'center', angle: -90 });
+      doc.text(code, circleX + 7, 75, { align: 'center', angle: -90 });
 
       // Powered by
-      doc.setFontSize(6);
+      doc.setFontSize(7);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(120, 120, 120);
       doc.text('Powered by Googlemarine', 5, 40, { angle: -90 });
