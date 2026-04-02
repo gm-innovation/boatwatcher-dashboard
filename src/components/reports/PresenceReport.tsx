@@ -23,7 +23,7 @@ import {
   Calendar, TrendingUp, Users, Building2, BarChart3,
   ArrowUp, ArrowDown, Printer, Download,
 } from 'lucide-react';
-import { format, parseISO, getISOWeek, getDay, differenceInDays } from 'date-fns';
+import { format, parseISO, getISOWeek, getDay, differenceInDays, startOfWeek, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
