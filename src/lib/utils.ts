@@ -14,7 +14,18 @@ export function formatWorkerCode(code: number | string | null | undefined): stri
 
 export function normalizeName(text: string | null | undefined): string {
   if (!text) return '-';
-  return text.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  const romanNumerals = new Set(['I','II','III','IV','V','VI','VII','VIII','IX','X']);
+  const lowerWords = new Set([
+    'de','do','da','dos','das','e','em','no','na','nos','nas',
+    'por','para','com','sem','sob','sobre','entre','até','ao','aos','à','às',
+  ]);
+  return text.split(/\s+/).map((word, i) => {
+    const upper = word.toUpperCase();
+    if (romanNumerals.has(upper)) return upper;
+    const lower = word.toLowerCase();
+    if (i > 0 && lowerWords.has(lower)) return lower;
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  }).join(' ');
 }
 
 export function formatCpf(value: string | null | undefined): string {
