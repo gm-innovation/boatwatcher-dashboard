@@ -776,11 +776,12 @@ export const WorkerManagement = () => {
     const pageHeight = 100;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pageWidth, pageHeight] });
 
-    selectedWorkers.forEach((worker, idx) => {
+    workerList.forEach((worker, idx) => {
       if (idx > 0) doc.addPage([pageWidth, pageHeight]);
 
       let displayName: string;
-      if (customLabelName && customLabelName.trim() !== '' && selectedWorkers.length === 1) {
+      const effectiveCustomName = overrideCustomName !== undefined ? overrideCustomName : customLabelName;
+      if (effectiveCustomName && effectiveCustomName.trim() !== '' && workerList.length === 1) {
         displayName = customLabelName.trim();
       } else {
         displayName = formatNameForLabel(worker.name);
