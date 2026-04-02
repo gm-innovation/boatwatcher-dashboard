@@ -234,7 +234,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       lowDay,
       dailyChart,
       weeklyChart,
-      dayOfWeekChart,
+      weeklyByDayChart,
       weekdayVsWeekend,
       jobFunctionChart,
       top10Companies,
