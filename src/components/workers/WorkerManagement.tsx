@@ -844,7 +844,7 @@ export const WorkerManagement = () => {
       // Project type
       doc.setFontSize(11);
       doc.setFont('helvetica', 'normal');
-      doc.text(removeAccents(projectType), 9, 5, { angle: -90 });
+      doc.text(removeAccents(projectType), 6, 5, { angle: -90 });
 
       // Circle with code
       const circleX = 40;
