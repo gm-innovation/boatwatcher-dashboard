@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useCompanies } from '@/hooks/useSupabase';
 import { useAccessLogs } from '@/hooks/useControlID';
 import { useJobFunctions } from '@/hooks/useJobFunctions';
+import { useSystemSetting } from '@/hooks/useSystemSettings';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,10 +21,12 @@ import {
 } from 'recharts';
 import {
   Calendar, TrendingUp, Users, Building2, BarChart3,
-  ArrowUp, ArrowDown, Printer,
+  ArrowUp, ArrowDown, Printer, Download,
 } from 'lucide-react';
 import { format, parseISO, getISOWeek, getDay, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { exportOverviewReportPdf } from '@/utils/exportReportPdf';
+import { toast } from '@/components/ui/use-toast';
 
 interface PresenceReportProps {
   projectId: string;

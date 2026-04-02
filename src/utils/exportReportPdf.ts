@@ -368,3 +368,260 @@ export async function exportCompanyReportPdf(opts: CompanyPdfOptions) {
 
   doc.save(`relatorio-empresas-${opts.startDate}-${opts.endDate}.pdf`);
 }
+
+/* ═══════════════════════════════════════════════════
+   PDF VISÃO GERAL — Dashboard overview
+   ═══════════════════════════════════════════════════ */
+
+interface OverviewKpi {
+  label: string;
+  value: string;
+}
+
+interface OverviewDayOfWeekRow {
+  dia: string;
+  acessos: number;
+}
+
+interface OverviewCompanyRow {
+  name: string;
+  workers: number;
+}
+
+interface OverviewPdfOptions {
+  projectName?: string;
+  projectLocation?: string;
+  startDate: string;
+  endDate: string;
+  clientLogoDataUrl?: string;
+  systemLogoDataUrl?: string;
+  kpis: OverviewKpi[];
+  peakDay: { label: string; count: number };
+  lowDay: { label: string; count: number };
+  dayOfWeekData: OverviewDayOfWeekRow[];
+  top10Companies: OverviewCompanyRow[];
+  jobFunctionData: { cargo: string; acessos: number }[];
+}
+
+export async function exportOverviewReportPdf(opts: OverviewPdfOptions) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const availableWidth = pageWidth - MARGIN * 2;
+
+  // --- Logos ---
+  const logoMaxW = 40;
+  const logoMaxH = 14;
+  if (opts.clientLogoDataUrl) {
+    try {
+      const { w, h } = await fitImageDimensions(opts.clientLogoDataUrl, logoMaxW, logoMaxH);
+      const yOffset = 8 + (logoMaxH - h) / 2;
+      doc.addImage(opts.clientLogoDataUrl, 'PNG', MARGIN, yOffset, w, h);
+    } catch {}
+  }
+  if (opts.systemLogoDataUrl) {
+    try {
+      const { w, h } = await fitImageDimensions(opts.systemLogoDataUrl, logoMaxW, logoMaxH);
+      const yOffset = 8 + (logoMaxH - h) / 2;
+      doc.addImage(opts.systemLogoDataUrl, 'PNG', pageWidth - MARGIN - w, yOffset, w, h);
+    } catch {}
+  }
+
+  let y = 26;
+
+  // --- Title ---
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...CLR.dark);
+  doc.text('Relatório Visão Geral', pageWidth / 2, y, { align: 'center' });
+  y += 6;
+
+  // --- Project + Location ---
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...CLR.medium);
+  const projectLine = [
+    opts.projectName ? `Projeto: ${opts.projectName}` : null,
+    opts.projectLocation ? `Local: ${opts.projectLocation}` : null,
+  ].filter(Boolean).join(' | ');
+  if (projectLine) {
+    doc.text(projectLine, pageWidth / 2, y, { align: 'center' });
+    y += 5;
+  }
+
+  // --- Period ---
+  const period = `Período: ${format(new Date(opts.startDate), 'dd/MM/yyyy')} a ${format(new Date(opts.endDate), 'dd/MM/yyyy')}`;
+  doc.text(period, pageWidth / 2, y, { align: 'center' });
+  y += 8;
+
+  // --- KPI grid (2 rows x 3 cols) ---
+  doc.setDrawColor(...CLR.separator);
+  const kpiW = availableWidth / 3;
+  const kpiH = 14;
+  const allKpis = [
+    ...opts.kpis,
+    { label: 'Dia Pico', value: `${opts.peakDay.label} (${opts.peakDay.count})` },
+    { label: 'Dia Baixo', value: `${opts.lowDay.label} (${opts.lowDay.count})` },
+  ];
+  allKpis.forEach((kpi, i) => {
+    const col = i % 3;
+    const row = Math.floor(i / 3);
+    const kx = MARGIN + col * kpiW;
+    const ky = y + row * kpiH;
+    doc.setFillColor(...CLR.summaryBg);
+    doc.rect(kx, ky, kpiW, kpiH, 'F');
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...CLR.medium);
+    doc.text(kpi.label, kx + kpiW / 2, ky + 5, { align: 'center' });
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...CLR.dark);
+    doc.text(kpi.value, kx + kpiW / 2, ky + 11, { align: 'center' });
+  });
+  y += Math.ceil(allKpis.length / 3) * kpiH + 6;
+
+  // --- Separator ---
+  doc.setDrawColor(...CLR.separator);
+  doc.setLineWidth(0.5);
+  doc.line(MARGIN, y, pageWidth - MARGIN, y);
+  y += 6;
+
+  // --- Day of week table ---
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...CLR.dark);
+  doc.text('Acessos por Dia da Semana', MARGIN, y + 1);
+  y += 6;
+
+  const dowCols = [
+    { header: 'Dia', width: 0, align: 'left' as const },
+    { header: 'Acessos', width: 30, align: 'center' as const },
+  ];
+  const dowFixedW = dowCols.reduce((s, c) => s + c.width, 0);
+  const dowNameW = availableWidth - dowFixedW;
+  const dowWidths = dowCols.map(c => c.width || dowNameW);
+
+  // header row
+  doc.setFillColor(...CLR.headerBg);
+  doc.rect(MARGIN, y, availableWidth, 7, 'F');
+  doc.setTextColor(...CLR.white);
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'bold');
+  let cx = MARGIN;
+  dowCols.forEach((col, i) => {
+    const tx = col.align === 'center' ? cx + dowWidths[i] / 2 : cx + 2;
+    doc.text(col.header, tx, y + 5, { align: col.align === 'center' ? 'center' : 'left' });
+    cx += dowWidths[i];
+  });
+  y += 7;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  opts.dayOfWeekData.forEach((row, ri) => {
+    if (ri % 2 === 0) {
+      doc.setFillColor(...CLR.altRowBg);
+      doc.rect(MARGIN, y, availableWidth, 6, 'F');
+    }
+    doc.setTextColor(...CLR.dark);
+    doc.text(row.dia, MARGIN + 2, y + 4);
+    doc.text(String(row.acessos), MARGIN + dowNameW + 15, y + 4, { align: 'center' });
+    y += 6;
+  });
+  y += 6;
+
+  // --- Top 10 Companies table ---
+  if (opts.top10Companies.length > 0) {
+    if (y + 20 > pageHeight - 20) { doc.addPage(); y = 18; }
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...CLR.dark);
+    doc.text('Top 10 Empresas por Nº de Trabalhadores', MARGIN, y + 1);
+    y += 6;
+
+    const compCols = [
+      { header: '#', width: 10, align: 'center' as const },
+      { header: 'Empresa', width: 0, align: 'left' as const },
+      { header: 'Trabalhadores', width: 30, align: 'center' as const },
+    ];
+    const compFixedW = compCols.reduce((s, c) => s + c.width, 0);
+    const compNameW = availableWidth - compFixedW;
+    const compWidths = compCols.map(c => c.width || compNameW);
+
+    doc.setFillColor(...CLR.headerBg);
+    doc.rect(MARGIN, y, availableWidth, 7, 'F');
+    doc.setTextColor(...CLR.white);
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    cx = MARGIN;
+    compCols.forEach((col, i) => {
+      const tx = col.align === 'center' ? cx + compWidths[i] / 2 : cx + 2;
+      doc.text(col.header, tx, y + 5, { align: col.align === 'center' ? 'center' : 'left' });
+      cx += compWidths[i];
+    });
+    y += 7;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    opts.top10Companies.forEach((comp, ri) => {
+      if (y + 6 > pageHeight - 20) { doc.addPage(); y = 18; }
+      if (ri % 2 === 0) {
+        doc.setFillColor(...CLR.altRowBg);
+        doc.rect(MARGIN, y, availableWidth, 6, 'F');
+      }
+      doc.setTextColor(...CLR.dark);
+      doc.text(String(ri + 1), MARGIN + 5, y + 4, { align: 'center' });
+      doc.text(comp.name, MARGIN + 10 + 2, y + 4);
+      doc.text(String(comp.workers), MARGIN + 10 + compNameW + 15, y + 4, { align: 'center' });
+      y += 6;
+    });
+    y += 6;
+  }
+
+  // --- Job functions table ---
+  if (opts.jobFunctionData.length > 0) {
+    if (y + 20 > pageHeight - 20) { doc.addPage(); y = 18; }
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...CLR.dark);
+    doc.text('Distribuição por Cargo/Função', MARGIN, y + 1);
+    y += 6;
+
+    doc.setFillColor(...CLR.headerBg);
+    doc.rect(MARGIN, y, availableWidth, 7, 'F');
+    doc.setTextColor(...CLR.white);
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Cargo', MARGIN + 2, y + 5);
+    doc.text('Acessos', MARGIN + availableWidth - 15, y + 5, { align: 'center' });
+    y += 7;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    opts.jobFunctionData.forEach((row, ri) => {
+      if (y + 6 > pageHeight - 20) { doc.addPage(); y = 18; }
+      if (ri % 2 === 0) {
+        doc.setFillColor(...CLR.altRowBg);
+        doc.rect(MARGIN, y, availableWidth, 6, 'F');
+      }
+      doc.setTextColor(...CLR.dark);
+      doc.text(row.cargo, MARGIN + 2, y + 4);
+      doc.text(String(row.acessos), MARGIN + availableWidth - 15, y + 4, { align: 'center' });
+      y += 6;
+    });
+  }
+
+  // --- Footers ---
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setTextColor(...CLR.light);
+    doc.text(`Página ${i} de ${totalPages}`, pageWidth - MARGIN, pageHeight - 8, { align: 'right' });
+    doc.text(`Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, MARGIN, pageHeight - 8);
+  }
+
+  doc.save(`visao-geral-${opts.startDate}-${opts.endDate}.pdf`);
+}
