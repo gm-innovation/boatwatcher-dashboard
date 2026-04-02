@@ -625,6 +625,7 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                     <div className="relative">
                       <label
                         htmlFor="worker-photo-upload"
+                        onClick={(e) => e.stopPropagation()}
                         className="block h-24 w-24 rounded-lg border-2 border-dashed border-muted-foreground/30 cursor-pointer hover:border-primary/50 transition-colors overflow-hidden bg-muted"
                       >
                         {photoPreview ? (
@@ -645,10 +646,18 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                         </button>
                       )}
                     </div>
-                    <label htmlFor="worker-photo-upload" className="text-xs text-primary hover:underline cursor-pointer block">
+                    <label htmlFor="worker-photo-upload" onClick={(e) => e.stopPropagation()} className="text-xs text-primary hover:underline cursor-pointer block">
                       {photoPreview ? 'Alterar Foto' : 'Adicionar Foto'}
                     </label>
-                    <input id="worker-photo-upload" type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                    <input
+                      id="worker-photo-upload"
+                      key="worker-photo-input"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handlePhotoChange}
+                      onClick={(e) => e.stopPropagation()}
+                    />
                   </div>
 
                   {/* Other fields */}
