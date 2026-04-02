@@ -1,35 +1,74 @@
 
 
-## Corrigir tipos de relatório e lógica de dias retroativos
+## Alinhar modal de cadastro de trabalhador com os prints de referência
 
-### Problema
-Os tipos de relatório estão incorretos (Conformidade e Dispositivos não existem). Os tipos corretos são: Trabalhadores Simples, Trabalhadores Detalhado, Empresas, Todos Trabalhadores e Visão Geral. Além disso, o campo "Dias Retroativos" deve ser automático conforme a frequência.
+### Diferenças identificadas entre o código atual e os prints
 
-### Mudanças
+1. **Tela de seleção de método**: Atualmente usa um Switch toggle no header. Os prints mostram dois cards grandes clicáveis ("Cadastro Manual" com ícone de edição e "Por Documentos" com ícone de documento) em uma tela intermediária com título "Como deseja cadastrar o trabalhador?"
 
-**Arquivo: `src/components/reports/ReportScheduler.tsx`**
+2. **Headers das seções**: Os prints mostram "Informações Básicas" e "Dados Adicionais" com badge "Editável" ao lado do título. O código atual usa "Dados do Trabalhador" e "Dados Adicionais" sem badges.
 
-1. **Corrigir `REPORT_TYPES`**:
-```ts
-const REPORT_TYPES = [
-  { value: 'presence', label: 'Visão Geral' },
-  { value: 'workers_simple', label: 'Trabalhadores Simples' },
-  { value: 'workers_detailed', label: 'Trabalhadores Detalhado' },
-  { value: 'company', label: 'Empresas' },
-  { value: 'all_workers', label: 'Todos Trabalhadores' },
-];
-```
+3. **Campo Status**: Nos prints é um Select dropdown mostrando "Pendente de Análise". No código atual é apenas um Badge estático amarelo.
 
-2. **Remover campo "Dias Retroativos" manual** — substituir por lógica automática baseada na frequência:
-   - Diário → dados do dia anterior (1 dia)
-   - Semanal → últimos 7 dias
-   - Quinzenal → últimos 15 dias
-   - Mensal → mês inteiro anterior
+4. **Layout Empresa/Cargo**: Nos prints, Empresa tem placeholder "Selecione ou será preenchido" no modo documento. O Cargo/Função usa um Select com opções (não Input livre).
 
-3. **Substituir o input de "Dias Retroativos" por um texto informativo** mostrando o período que será coberto conforme a frequência selecionada (ex: "O relatório incluirá dados do dia anterior").
+5. **Seção de Foto**: Nos prints mostra label "Foto", avatar quadrado com ícone de câmera, e botão "Adicionar Foto" / "Alterar Foto" abaixo. Tem botão X vermelho para remover foto quando presente. Layout diferente do atual.
 
-4. **Ao salvar**, calcular `lookback_days` automaticamente no `filters` com base na frequência escolhida (1, 7, 15, 30).
+6. **Gender/Blood type defaults**: Nos prints mostram "Não informado" como valor default nos selects.
 
-### Arquivos alterados
-- `src/components/reports/ReportScheduler.tsx`
+7. **Projetos Autorizados**: Nos prints mostra "Nenhum projeto selecionado" como texto quando vazio, com botão "Gerenciar" com ícone de globo.
+
+8. **Seção de Documentos**: Nos prints tem dois botões no header: "Manual" (toggle com ícone) e "Adicionar Documentos" (com ícone). Quando vazio mostra ícone de documento grande centralizado com "Nenhum documento cadastrado".
+
+9. **Lista de documentos**: Nos prints cada documento tem borda colorida à esquerda por tipo (ASO=laranja, NR10=azul, NR34=verde, NR35=verde, Outros=cinza), mostra datas de emissão/validade, badge de status (Vencido em vermelho), e ícones de visualizar/download/deletar.
+
+10. **Feedback de upload**: Banner verde "Sucesso - 5 arquivo(s) enviados e adicionados à fila de processamento", spinner "Extraindo dados dos documentos..." e botão "Cancelar Processamento".
+
+11. **Botão "Criar Trabalhador"**: Verde com ícone de sparkle, ao lado de botão "Voltar" outline.
+
+12. **Modo documento - header**: Mostra "Cadastro por Documentos" com seta "Voltar" que retorna à tela de seleção de método (não ao dialog anterior).
+
+### Plano de implementação
+
+**Arquivo: `src/components/workers/NewWorkerDialog.tsx`** (rewrite completo)
+
+1. **Adicionar estado `step`** com 3 fases:
+   - `'method-select'` — tela com os dois cards de seleção
+   - `'manual'` — formulário de cadastro manual
+   - `'document'` — formulário de cadastro por documentos
+
+2. **Tela de seleção de método** (`step === 'method-select'`):
+   - Título "Como deseja cadastrar o trabalhador?"
+   - Subtítulo "Escolha o método de cadastro que preferir usar."
+   - Dois cards lado a lado com ícone, título e descrição
+   - Card "Cadastro Manual" → seta para `step = 'manual'`
+   - Card "Por Documentos" → seta para `step = 'document'`
+
+3. **Reformular seção "Informações Básicas"**:
+   - CardTitle com badge "Editável"
+   - Status como Select dropdown (Pendente de Análise, Ativo, Inativo, Bloqueado)
+   - Empresa com placeholder contextual por modo
+   - Cargo/Função como Select populado com job functions existentes (com fallback para input livre)
+
+4. **Reformular seção "Dados Adicionais"**:
+   - CardTitle com badge "Editável"
+   - Foto: layout com label "Foto", avatar com botão X para remover, texto "Adicionar Foto"/"Alterar Foto"
+   - Gender e Blood Type com opção "Não informado" como default
+
+5. **Reformular seção "Documentos"**:
+   - Header com botões "Manual" (toggle) e "Adicionar Documentos"
+   - Estado vazio: ícone de documento centralizado + "Nenhum documento cadastrado"
+   - Lista: cards com borda colorida por tipo, datas emissão/validade, badges de status (Vencido/Válido/Não informado), ícones de ação (olho, download, lixeira)
+
+6. **Feedback de extração**:
+   - Alert verde de sucesso com contagem de arquivos
+   - Spinner com texto "Extraindo dados dos documentos..."
+   - Botão "Cancelar Processamento"
+
+7. **Botão "Voltar"** no modo manual/documento retorna para `step = 'method-select'`
+
+8. **Footer**: Botão "Criar Trabalhador" verde com ícone Sparkles + "Voltar" outline
+
+### Arquivo alterado
+- `src/components/workers/NewWorkerDialog.tsx`
 
