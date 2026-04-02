@@ -38,6 +38,7 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
+  Printer,
 } from 'lucide-react';
 import type { Worker, WorkerStatus } from '@/types/supabase';
 import { WorkerDetailsDialog } from './WorkerDetailsDialog';
@@ -696,6 +697,8 @@ export const WorkerManagement = () => {
   const [enrollingWorker, setEnrollingWorker] = useState<Worker | null>(null);
   const [autoEnrollData, setAutoEnrollData] = useState<{ workerName: string; commandIds: string[] } | null>(null);
   const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
+  const [selectedProjectForLabels, setSelectedProjectForLabels] = useState<string>('');
+  const [customLabelName, setCustomLabelName] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [companyFilter, setCompanyFilter] = useState<string>('all');
   const { data: workers = [], isLoading, refetch } = useWorkers();
@@ -805,6 +808,43 @@ export const WorkerManagement = () => {
         <div className="bg-card border rounded-lg p-4 shadow-sm">
           <p className="text-sm text-muted-foreground">Empresas</p>
           <p className="text-2xl font-bold text-foreground">{uniqueCompanyCount}</p>
+        </div>
+      </div>
+
+      {/* Labels / Etiquetas */}
+      <div className="flex items-center gap-4 bg-card border rounded-lg p-4 shadow-sm flex-wrap">
+        <span className="text-sm font-medium text-foreground whitespace-nowrap">Projetos para etiquetas:</span>
+        <Select value={selectedProjectForLabels} onValueChange={setSelectedProjectForLabels}>
+          <SelectTrigger className="w-[260px]">
+            <SelectValue placeholder="Selecione o projeto..." />
+          </SelectTrigger>
+          <SelectContent>
+            {projects.map((p: any) => (
+              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {selectedWorkerIds.length === 1 && (
+          <Input
+            placeholder="Nome customizado (opcional)"
+            value={customLabelName}
+            onChange={(e) => setCustomLabelName(e.target.value)}
+            className="w-[260px]"
+          />
+        )}
+
+        <div className="ml-auto">
+          <Button
+            disabled={selectedWorkerIds.length === 0 || !selectedProjectForLabels}
+            className="bg-green-600 hover:bg-green-700 text-white"
+            onClick={() => {
+              toast({ title: `Gerando ${selectedWorkerIds.length} etiqueta(s)...` });
+            }}
+          >
+            <Printer className="h-4 w-4 mr-2" />
+            Imprimir Etiquetas ({selectedWorkerIds.length})
+          </Button>
         </div>
       </div>
 
