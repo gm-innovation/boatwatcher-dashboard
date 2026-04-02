@@ -316,7 +316,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="print-no-break">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-orange-500/10">
