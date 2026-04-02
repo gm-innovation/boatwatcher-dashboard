@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { useCompanies } from '@/hooks/useSupabase';
 import { useAccessLogs } from '@/hooks/useControlID';
 import { useJobFunctions } from '@/hooks/useJobFunctions';
@@ -25,7 +25,8 @@ import {
 } from 'lucide-react';
 import { format, parseISO, getISOWeek, getDay, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { exportOverviewReportPdf } from '@/utils/exportReportPdf';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { toast } from '@/components/ui/use-toast';
 
 interface PresenceReportProps {
@@ -56,6 +57,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
   const { data: systemLogoSetting } = useSystemSetting('system_logo');
 
   const [exporting, setExporting] = useState(false);
+  const reportContainerRef = useRef<HTMLDivElement>(null);
 
   const { data: workers = [] } = useQuery({
     queryKey: ['workers-list'],
@@ -84,6 +86,11 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
   const clientCompany = currentProject?.client_id
     ? companies.find(c => c.id === currentProject.client_id)
     : null;
+
+  // Logo URLs
+  const systemLogoValue = systemLogoSetting?.value as Record<string, any> | null;
+  const systemLogoUrl = systemLogoValue?.light_url || systemLogoValue?.url;
+  const clientLogoUrl = clientCompany?.logo_url_light;
 
   const dashboard = useMemo(() => {
     const granted = accessLogs.filter((l: any) => l.access_status === 'granted');
@@ -178,19 +185,23 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       .slice(0, 8)
       .map(([name, count]) => ({ cargo: name, acessos: count }));
 
-    // Top 10 companies
+    // Top 10 companies — with access count and avg daily
     const companyWorkerCount: Record<string, Set<string>> = {};
+    const companyAccessCount: Record<string, number> = {};
     granted.forEach((l: any) => {
       const w = l.worker_id ? workerById.get(l.worker_id) : null;
       if (w?.company_id) {
         if (!companyWorkerCount[w.company_id]) companyWorkerCount[w.company_id] = new Set();
         companyWorkerCount[w.company_id].add(w.id);
+        companyAccessCount[w.company_id] = (companyAccessCount[w.company_id] || 0) + 1;
       }
     });
     const top10Companies = Object.entries(companyWorkerCount)
       .map(([companyId, workerSet]) => ({
         name: companies.find(c => c.id === companyId)?.name || 'Desconhecida',
         workers: workerSet.size,
+        totalAccesses: companyAccessCount[companyId] || 0,
+        avgDaily: Math.round((companyAccessCount[companyId] || 0) / totalDays),
       }))
       .sort((a, b) => b.workers - a.workers)
       .slice(0, 10);
@@ -215,64 +226,86 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
     window.print();
   };
 
-  const loadImageAsDataUrl = async (url: string | null | undefined): Promise<string | undefined> => {
-    if (!url) return undefined;
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = 'Anonymous';
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { resolve(undefined); return; }
-        ctx.drawImage(img, 0, 0);
-        try { resolve(canvas.toDataURL('image/png')); } catch { resolve(undefined); }
-      };
-      img.onerror = () => resolve(undefined);
-      img.src = `${url}?t=${Date.now()}`;
-    });
-  };
-
   const handleExportPdf = async () => {
+    if (!reportContainerRef.current) return;
     setExporting(true);
     try {
-      // Load logos
-      const systemLogoValue = systemLogoSetting?.value as Record<string, any> | null;
-      const systemLogoUrl = systemLogoValue?.light_url || systemLogoValue?.url;
-      const clientLogoUrl = clientCompany?.logo_url_light;
+      const container = reportContainerRef.current;
 
-      const [systemLogoDataUrl, clientLogoDataUrl] = await Promise.all([
-        loadImageAsDataUrl(systemLogoUrl),
-        loadImageAsDataUrl(clientLogoUrl),
-      ]);
+      // Show the print-only header for capture
+      const printHeader = container.querySelector('.print-only-header') as HTMLElement | null;
+      if (printHeader) printHeader.style.display = 'flex';
 
-      const peakLabel = dashboard.peakDay.date !== '-'
-        ? format(parseISO(dashboard.peakDay.date), 'dd/MM (EEE)', { locale: ptBR })
-        : '-';
-      const lowLabel = dashboard.lowDay.date !== '-'
-        ? format(parseISO(dashboard.lowDay.date), 'dd/MM (EEE)', { locale: ptBR })
-        : '-';
+      // Hide buttons
+      const buttons = container.querySelectorAll('.print\\:hidden, .no-print');
+      buttons.forEach(b => (b as HTMLElement).style.display = 'none');
 
-      await exportOverviewReportPdf({
-        projectName: currentProject?.name,
-        projectLocation: currentProject?.location ?? undefined,
-        startDate,
-        endDate,
-        clientLogoDataUrl,
-        systemLogoDataUrl,
-        kpis: [
-          { label: 'Total de Acessos', value: dashboard.totalAccesses.toLocaleString() },
-          { label: 'Trabalhadores Únicos', value: String(dashboard.uniqueWorkers) },
-          { label: 'Empresas', value: String(dashboard.uniqueCompanies) },
-          { label: 'Média Diária', value: String(dashboard.avgDaily) },
-        ],
-        peakDay: { label: peakLabel, count: dashboard.peakDay.count },
-        lowDay: { label: lowLabel, count: dashboard.lowDay.count },
-        dayOfWeekData: dashboard.dayOfWeekChart,
-        top10Companies: dashboard.top10Companies,
-        jobFunctionData: dashboard.jobFunctionChart,
+      // Force white background for capture
+      const origBg = container.style.background;
+      container.style.background = 'white';
+
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: 1200,
       });
+
+      // Restore
+      container.style.background = origBg;
+      buttons.forEach(b => (b as HTMLElement).style.display = '');
+      if (printHeader) printHeader.style.display = 'none';
+
+      // Build PDF from canvas
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfPageW = pdf.internal.pageSize.getWidth();
+      const pdfPageH = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const usableW = pdfPageW - margin * 2;
+      const usableH = pdfPageH - margin * 2 - 8; // 8mm for footer
+
+      const imgW = canvas.width;
+      const imgH = canvas.height;
+      const ratio = usableW / imgW;
+      const scaledH = imgH * ratio;
+
+      // How many pages?
+      const totalPages = Math.ceil(scaledH / usableH);
+
+      for (let page = 0; page < totalPages; page++) {
+        if (page > 0) pdf.addPage();
+
+        // Source slice in canvas pixels
+        const srcY = page * (usableH / ratio);
+        const srcH = Math.min(imgH - srcY, usableH / ratio);
+
+        // Create a slice canvas
+        const sliceCanvas = document.createElement('canvas');
+        sliceCanvas.width = imgW;
+        sliceCanvas.height = srcH;
+        const ctx = sliceCanvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(canvas, 0, srcY, imgW, srcH, 0, 0, imgW, srcH);
+        }
+
+        const sliceData = sliceCanvas.toDataURL('image/png');
+        const sliceScaledH = srcH * ratio;
+        pdf.addImage(sliceData, 'PNG', margin, margin, usableW, sliceScaledH);
+
+        // Footer
+        pdf.setFontSize(7);
+        pdf.setTextColor(160);
+        pdf.text(`Página ${page + 1} de ${totalPages}`, pdfPageW - margin, pdfPageH - 6, { align: 'right' });
+        pdf.text(
+          `Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+          margin,
+          pdfPageH - 6
+        );
+      }
+
+      pdf.save(`visao-geral-${startDate}-${endDate}.pdf`);
     } catch (e: any) {
       toast({ title: 'Erro ao gerar PDF', description: e.message, variant: 'destructive' });
     } finally {
@@ -298,7 +331,21 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
   }
 
   return (
-    <div className="space-y-6 print:space-y-4">
+    <div ref={reportContainerRef} className="space-y-6 print:space-y-4">
+      {/* Print-only header with logos */}
+      <div className="print-only-header hidden print:flex items-center justify-between mb-6">
+        {clientLogoUrl ? (
+          <img src={clientLogoUrl} alt="Logo Cliente" className="max-h-14 max-w-[160px] object-contain" />
+        ) : (
+          <div />
+        )}
+        {systemLogoUrl ? (
+          <img src={systemLogoUrl} alt="Logo Sistema" className="max-h-14 max-w-[160px] object-contain" />
+        ) : (
+          <div />
+        )}
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -310,12 +357,12 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
             {currentProject?.location && ` • ${currentProject.location}`}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExportPdf} disabled={exporting} className="print:hidden">
+        <div className="flex gap-2 print:hidden">
+          <Button variant="outline" onClick={handleExportPdf} disabled={exporting}>
             <Download className="h-4 w-4 mr-2" />
             {exporting ? 'Gerando...' : 'Baixar PDF'}
           </Button>
-          <Button variant="outline" onClick={handlePrint} className="print:hidden">
+          <Button variant="outline" onClick={handlePrint}>
             <Printer className="h-4 w-4 mr-2" />
             Imprimir
           </Button>
@@ -606,6 +653,8 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
                     <th className="text-left p-3 text-sm font-medium text-muted-foreground">#</th>
                     <th className="text-left p-3 text-sm font-medium text-muted-foreground">Empresa</th>
                     <th className="text-center p-3 text-sm font-medium text-muted-foreground">Trabalhadores</th>
+                    <th className="text-center p-3 text-sm font-medium text-muted-foreground">Total Acessos</th>
+                    <th className="text-center p-3 text-sm font-medium text-muted-foreground">Média Diária</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -616,6 +665,8 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
                       <td className="p-3 text-center">
                         <Badge variant="secondary">{company.workers}</Badge>
                       </td>
+                      <td className="p-3 text-center text-sm">{company.totalAccesses.toLocaleString()}</td>
+                      <td className="p-3 text-center text-sm">{company.avgDaily}</td>
                     </tr>
                   ))}
                 </tbody>
