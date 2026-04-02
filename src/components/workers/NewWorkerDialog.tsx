@@ -608,16 +608,18 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                   <div className="flex-shrink-0 space-y-2">
                     <Label>Foto</Label>
                     <div className="relative">
-                      <div
-                        className="h-24 w-24 rounded-lg border-2 border-dashed border-muted-foreground/30 flex items-center justify-center overflow-hidden bg-muted cursor-pointer hover:border-primary/50 transition-colors"
-                        onClick={() => photoInputRef.current?.click()}
+                      <label
+                        htmlFor="worker-photo-upload"
+                        className="block h-24 w-24 rounded-lg border-2 border-dashed border-muted-foreground/30 cursor-pointer hover:border-primary/50 transition-colors overflow-hidden bg-muted"
                       >
                         {photoPreview ? (
                           <img src={photoPreview} alt="Foto" className="h-full w-full object-cover" />
                         ) : (
-                          <Camera className="h-8 w-8 text-muted-foreground" />
+                          <div className="h-full w-full flex items-center justify-center">
+                            <Camera className="h-8 w-8 text-muted-foreground" />
+                          </div>
                         )}
-                      </div>
+                      </label>
                       {photoPreview && (
                         <button
                           type="button"
@@ -628,14 +630,10 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                         </button>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      className="text-xs text-primary hover:underline"
-                      onClick={() => photoInputRef.current?.click()}
-                    >
+                    <label htmlFor="worker-photo-upload" className="text-xs text-primary hover:underline cursor-pointer block">
                       {photoPreview ? 'Alterar Foto' : 'Adicionar Foto'}
-                    </button>
-                    <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                    </label>
+                    <input id="worker-photo-upload" type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
                   </div>
 
                   {/* Other fields */}
