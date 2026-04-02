@@ -871,7 +871,13 @@ export const WorkerManagement = () => {
       }
     });
 
-    doc.save('etiquetas.pdf');
+    // Open in new tab for preview, fallback to save
+    try {
+      const blobUrl = doc.output('bloburl');
+      window.open(blobUrl as unknown as string, '_blank');
+    } catch {
+      doc.save('etiquetas.pdf');
+    }
     toast({ title: `${selectedWorkers.length} etiqueta(s) gerada(s) com sucesso!` });
   };
 
