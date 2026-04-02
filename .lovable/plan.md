@@ -1,42 +1,35 @@
 
 
-## Redesign da aba Agendamentos conforme referência
+## Corrigir tipos de relatório e lógica de dias retroativos
+
+### Problema
+Os tipos de relatório estão incorretos (Conformidade e Dispositivos não existem). Os tipos corretos são: Trabalhadores Simples, Trabalhadores Detalhado, Empresas, Todos Trabalhadores e Visão Geral. Além disso, o campo "Dias Retroativos" deve ser automático conforme a frequência.
 
 ### Mudanças
 
-**1. Formulário inline (substituir Dialog modal)**
-- Botão "Novo Agendamento" alterna visibilidade de um Card de formulário inline
-- Layout em grid conforme print:
-  - Linha 1: Nome do Agendamento (col-span-7) | Projeto (col-span-5, Select com projetos via `useSupabase`)
-  - Linha 2: Tipos de Relatório (multi-select com Checkboxes) | Frequência (Select) | Horário de Envio (time input)
-  - Linha 3: Dias Retroativos (number input) — campo que define quantos dias anteriores o relatório cobre (ex: 1 = relatório do dia anterior)
-  - Linha 4: Destinatários de Email (full width) com botão "+ Adicionar Email"
-- Rodapé: "Testar Envio" | "Forçar Execução" (ghost) | "Cancelar" (outline) | "Salvar" (primary)
+**Arquivo: `src/components/reports/ReportScheduler.tsx`**
 
-**2. Tipo de relatório: multi-select com checkboxes**
-- Substituir Select único por lista de checkboxes (usando componente Checkbox)
-- Tipos disponíveis: Visão Geral, Relatório por Empresa, Relatório de Conformidade, Relatório de Dispositivos
-- `report_type` passa a ser armazenado como string separada por vírgula (ex: `"presence,company"`) no campo existente, ou como array no `filters.report_types`
-- Na listagem, exibir múltiplos badges
+1. **Corrigir `REPORT_TYPES`**:
+```ts
+const REPORT_TYPES = [
+  { value: 'presence', label: 'Visão Geral' },
+  { value: 'workers_simple', label: 'Trabalhadores Simples' },
+  { value: 'workers_detailed', label: 'Trabalhadores Detalhado' },
+  { value: 'company', label: 'Empresas' },
+  { value: 'all_workers', label: 'Todos Trabalhadores' },
+];
+```
 
-**3. Frequência: adicionar "Quinzenal"**
-- Opções: Diário, Semanal, Quinzenal, Mensal
-- Adicionar `{ value: 'biweekly', label: 'Quinzenal' }`
+2. **Remover campo "Dias Retroativos" manual** — substituir por lógica automática baseada na frequência:
+   - Diário → dados do dia anterior (1 dia)
+   - Semanal → últimos 7 dias
+   - Quinzenal → últimos 15 dias
+   - Mensal → mês inteiro anterior
 
-**4. Novos campos armazenados em `filters` (JSON)**
-- `send_time` (string, ex: "06:00")
-- `lookback_days` (number, ex: 1) — dias retroativos
-- `report_types` (string[], ex: ["presence", "company"]) — tipos selecionados
+3. **Substituir o input de "Dias Retroativos" por um texto informativo** mostrando o período que será coberto conforme a frequência selecionada (ex: "O relatório incluirá dados do dia anterior").
 
-**5. Listagem com abas Ativos/Inativos**
-- Usar `Tabs` para separar "Agendamentos Ativos" e "Agendamentos Inativos"
-- Filtrar por `is_active`
+4. **Ao salvar**, calcular `lookback_days` automaticamente no `filters` com base na frequência escolhida (1, 7, 15, 30).
 
 ### Arquivos alterados
-
-- `src/components/reports/ReportScheduler.tsx` — reescrever layout completo
-- `src/hooks/useReportSchedules.ts` — atualizar tipos (`CreateReportScheduleInput` para incluir `filters` com os novos campos)
-
-### Sem migração
-Campos novos (`send_time`, `lookback_days`, `report_types`) ficam no campo JSON `filters` que já existe.
+- `src/components/reports/ReportScheduler.tsx`
 
