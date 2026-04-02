@@ -1,38 +1,47 @@
 
 
-## Corrigir `normalizeName`: preposições em minúsculas
+## Redirecionar "Imprimir Crachá" para a mesma lógica de etiquetas
 
-### Problema
+### Abordagem
 
-A função atual capitaliza todas as palavras, incluindo preposições e artigos ("De", "Em", "Do", "Da", "E", etc.), quando deveriam ficar em minúsculas em português.
+Nenhum código novo de geração PDF. Apenas passar um callback `onPrintLabel` do `WorkerManagement` para o `WorkerDetailsDialog` que reutiliza o `handlePrintLabels` existente.
 
-### Alteração
+### Alterações
 
-**Arquivo:** `src/lib/utils.ts`, função `normalizeName`
+**1. `WorkerManagement.tsx`** (~1071-1076)
 
-Adicionar um `Set` de palavras que devem permanecer em minúsculas (preposições, artigos, conjunções) e só capitalizar a primeira palavra da frase:
+Criar uma função wrapper que temporariamente seleciona o trabalhador do modal e chama `handlePrintLabels`. Passar como prop:
 
-```typescript
-export function normalizeName(text: string | null | undefined): string {
-  if (!text) return '-';
-  const romanNumerals = new Set(['I','II','III','IV','V','VI','VII','VIII','IX','X']);
-  const lowerWords = new Set([
-    'de','do','da','dos','das','e','em','no','na','nos','nas',
-    'por','para','com','sem','sob','sobre','entre','até','ao','aos','à','às',
-  ]);
-  return text.split(/\s+/).map((word, i) => {
-    const upper = word.toUpperCase();
-    if (romanNumerals.has(upper)) return upper;
-    const lower = word.toLowerCase();
-    if (i > 0 && lowerWords.has(lower)) return lower;
-    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-  }).join(' ');
-}
+```tsx
+<WorkerDetailsDialog
+  worker={selectedWorker}
+  open={isDetailsOpen}
+  onOpenChange={setIsDetailsOpen}
+  onUpdate={() => refetch()}
+  onPrintLabel={(worker) => {
+    // Salva estado atual, seleciona só este worker, e chama handlePrintLabels
+    // Ou cria uma versão simplificada que gera etiqueta para um único worker
+  }}
+/>
 ```
 
-Resultados:
-- "TÉCNICO EM ELETRÔNICA" → "Técnico em Eletrônica"
-- "ANALISTA DE INOVAÇÃO" → "Analista de Inovação"
-- "FASE II" → "Fase II"
-- "DE SOUZA" (início) → "De Souza" (primeira palavra sempre capitalizada)
+Na prática, como `handlePrintLabels` depende de `selectedWorkerIds` e `selectedProjectForLabels`, a forma mais limpa é extrair a lógica interna de geração para uma função auxiliar local (ex: `generateLabelsForWorkers(workersList, projectId)`) que tanto o botão da lista quanto o callback do modal chamam. Isso não cria um novo arquivo — apenas reorganiza o código dentro do mesmo componente.
+
+**2. `WorkerDetailsDialog.tsx`**
+
+- Adicionar prop `onPrintLabel?: (worker: Worker) => void` na interface
+- Substituir `<BadgePrinter .../>` por um botão simples que chama `onPrintLabel(worker)`
+- Remover import do `BadgePrinter`
+
+**3. `BadgePrinter.tsx`**
+
+- Remover o arquivo (não será mais usado)
+
+### Questão: projeto para a etiqueta
+
+O `handlePrintLabels` requer um projeto selecionado (`selectedProjectForLabels`). Quando o botão está no modal, podemos:
+- Usar o primeiro projeto autorizado do trabalhador (`worker.allowed_project_ids[0]`)
+- Ou usar o projeto selecionado no contexto global (`useProject`)
+
+Vou usar o projeto do contexto global, que é o mais intuitivo.
 
