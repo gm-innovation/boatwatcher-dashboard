@@ -1,19 +1,37 @@
 
 
-## Esconder filtros e título da página na impressão
+## Adicionar botão "Baixar PDF" e logos no relatório Visão Geral
 
-### Problema
-O PDF de impressão ainda mostra o bloco de filtros (Projeto, Data Início, Data Fim, Buscar Dados), o título "Relatórios de Acesso" e as abas — elementos que não fazem sentido em um documento impresso.
+### O que será feito
 
-### Solução
+1. **Botão "Baixar PDF"** ao lado do botão "Imprimir" existente, usando `jsPDF` para gerar um PDF completo do dashboard (não depender de `window.print()`).
 
-**Arquivo: `src/pages/Reports.tsx`**
-- Adicionar `print:hidden` no título/subtítulo da página
-- Adicionar `print:hidden` no bloco de filtros (div com Projeto, datas, Buscar Dados)
-- Adicionar `print:hidden` na TabsList (abas)
+2. **Logos no cabeçalho do PDF** — logo do cliente (da empresa/projeto) e logo do sistema, seguindo o mesmo padrão já usado em `CompanyReport` e `WorkerTimeReport`.
 
-Isso faz com que apenas o conteúdo do relatório (PresenceReport) apareça na impressão, que já tem seu próprio cabeçalho com nome do projeto e período.
+3. **Conteúdo do PDF gerado**:
+   - Cabeçalho com logos + título + período + local
+   - Cards de KPI (Total Acessos, Trabalhadores, Empresas, Média Diária, Dia Pico, Dia Baixo)
+   - Tabela Top 10 Empresas
+   - Resumo textual dos dados estatísticos (gráficos recharts não são exportáveis para jsPDF diretamente, então os dados serão apresentados em tabelas)
 
 ### Arquivos alterados
-- `src/pages/Reports.tsx` — 3 classes `print:hidden` adicionadas
+
+**`src/components/reports/PresenceReport.tsx`**
+- Importar `useSystemSetting`, `loadImageAsDataUrl`, `exportReportPdf`
+- Buscar `systemLogoSetting` e logo do cliente (via company do projeto)
+- Adicionar função `handleExportPdf` que:
+  - Carrega logos como base64
+  - Monta o PDF com jsPDF usando `exportReportPdf` para tabelas e layout manual para KPIs
+- Adicionar botão `<Download>` ao lado do botão Imprimir
+
+**`src/utils/exportReportPdf.ts`**
+- Criar nova função `exportOverviewReportPdf` que recebe os dados do dashboard e gera um PDF formatado com:
+  - Logos no cabeçalho (reusando `fitImageDimensions`)
+  - Bloco de KPIs
+  - Tabela de acessos por dia da semana
+  - Tabela Top 10 empresas
+  - Rodapé com data/página
+
+### Padrão seguido
+Mesmo padrão de `exportCompanyReportPdf` — logos, cores, tipografia, rodapé.
 
