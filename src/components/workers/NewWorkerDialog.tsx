@@ -582,6 +582,9 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                         {jobFunctions.map((jf: any) => (
                           <SelectItem key={jf.id} value={jf.name}>{jf.name}</SelectItem>
                         ))}
+                        {watchedRole && !jobFunctions.some((jf: any) => jf.name === watchedRole) && (
+                          <SelectItem key="extracted-role" value={watchedRole}>{watchedRole}</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
