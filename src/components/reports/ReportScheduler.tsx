@@ -49,10 +49,18 @@ import { toast } from 'sonner';
 
 const REPORT_TYPES = [
   { value: 'presence', label: 'Visão Geral' },
-  { value: 'company', label: 'Relatório por Empresa' },
-  { value: 'compliance', label: 'Relatório de Conformidade' },
-  { value: 'device', label: 'Relatório de Dispositivos' },
+  { value: 'workers_simple', label: 'Trabalhadores Simples' },
+  { value: 'workers_detailed', label: 'Trabalhadores Detalhado' },
+  { value: 'company', label: 'Empresas' },
+  { value: 'all_workers', label: 'Todos Trabalhadores' },
 ];
+
+const FREQUENCY_LOOKBACK: Record<string, { days: number; label: string }> = {
+  daily: { days: 1, label: 'O relatório incluirá dados do dia anterior' },
+  weekly: { days: 7, label: 'O relatório incluirá dados dos últimos 7 dias' },
+  biweekly: { days: 15, label: 'O relatório incluirá dados dos últimos 15 dias' },
+  monthly: { days: 30, label: 'O relatório incluirá dados do mês anterior completo' },
+};
 
 const FREQUENCIES = [
   { value: 'daily', label: 'Diário' },
