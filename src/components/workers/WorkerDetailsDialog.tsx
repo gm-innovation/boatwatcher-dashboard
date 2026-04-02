@@ -69,6 +69,7 @@ interface WorkerDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUpdate?: () => void;
+  onPrintLabel?: (worker: Worker) => void;
 }
 
 const additionalDataSchema = z.object({
