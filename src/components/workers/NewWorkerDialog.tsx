@@ -154,7 +154,6 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
   const [uploadSuccessCount, setUploadSuccessCount] = useState(0);
   const [isManualDocMode, setIsManualDocMode] = useState(false);
 
-  const photoInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
 
   const { data: companies = [] } = useCompanies();
@@ -225,12 +224,56 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
 
       const data = result.extracted_data;
       if (data) {
-        if (data.full_name) setValue('name', data.full_name);
-        if (data.document_number) setValue('document_number', data.document_number);
-        if (data.birth_date) setValue('birth_date', data.birth_date);
-        if (data.job_function) setValue('role', data.job_function);
-        if (data.gender) setValue('gender', data.gender?.toLowerCase());
-        if (data.blood_type) setValue('blood_type', data.blood_type);
+        // Name
+        if (data.full_name && !watch('name')) setValue('name', data.full_name);
+        
+        // CPF - clean to numbers only
+        if (data.document_number && !watch('document_number')) {
+          const cleanCpf = String(data.document_number).replace(/\D/g, '');
+          setValue('document_number', cleanCpf);
+        }
+        
+        // Birth date
+        if (data.birth_date && !watch('birth_date')) setValue('birth_date', data.birth_date);
+        
+        // Gender - normalize to lowercase values matching Select options
+        if (data.gender && !watch('gender')) {
+          const genderLower = String(data.gender).toLowerCase();
+          if (genderLower.includes('masc') || genderLower === 'm') {
+            setValue('gender', 'masculino');
+          } else if (genderLower.includes('fem') || genderLower === 'f') {
+            setValue('gender', 'feminino');
+          }
+        }
+        
+        // Blood type - keep as-is (A+, B-, etc.)
+        if (data.blood_type && !watch('blood_type')) {
+          setValue('blood_type', data.blood_type);
+        }
+        
+        // Role/Job function - try to match existing job functions
+        if (data.job_function && !watch('role')) {
+          const extractedRole = String(data.job_function).toLowerCase().trim();
+          const matched = jobFunctions.find((jf: any) => 
+            jf.name.toLowerCase().trim() === extractedRole ||
+            jf.name.toLowerCase().includes(extractedRole) ||
+            extractedRole.includes(jf.name.toLowerCase())
+          );
+          setValue('role', matched ? matched.name : data.job_function);
+        }
+        
+        // Company - try to match by name
+        if (data.company_name && !watch('company_id')) {
+          const extractedCompany = String(data.company_name).toLowerCase().trim();
+          const matched = companies.find(c => 
+            c.name.toLowerCase().trim() === extractedCompany ||
+            c.name.toLowerCase().includes(extractedCompany) ||
+            extractedCompany.includes(c.name.toLowerCase())
+          );
+          if (matched) {
+            setValue('company_id', matched.id);
+          }
+        }
       }
     } catch (error) {
       console.error('Document processing error:', error);
@@ -564,16 +607,18 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                   <div className="flex-shrink-0 space-y-2">
                     <Label>Foto</Label>
                     <div className="relative">
-                      <div
-                        className="h-24 w-24 rounded-lg border-2 border-dashed border-muted-foreground/30 flex items-center justify-center overflow-hidden bg-muted cursor-pointer hover:border-primary/50 transition-colors"
-                        onClick={() => photoInputRef.current?.click()}
+                      <label
+                        htmlFor="worker-photo-upload"
+                        className="block h-24 w-24 rounded-lg border-2 border-dashed border-muted-foreground/30 cursor-pointer hover:border-primary/50 transition-colors overflow-hidden bg-muted"
                       >
                         {photoPreview ? (
                           <img src={photoPreview} alt="Foto" className="h-full w-full object-cover" />
                         ) : (
-                          <Camera className="h-8 w-8 text-muted-foreground" />
+                          <div className="h-full w-full flex items-center justify-center">
+                            <Camera className="h-8 w-8 text-muted-foreground" />
+                          </div>
                         )}
-                      </div>
+                      </label>
                       {photoPreview && (
                         <button
                           type="button"
@@ -584,14 +629,10 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                         </button>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      className="text-xs text-primary hover:underline"
-                      onClick={() => photoInputRef.current?.click()}
-                    >
+                    <label htmlFor="worker-photo-upload" className="text-xs text-primary hover:underline cursor-pointer block">
                       {photoPreview ? 'Alterar Foto' : 'Adicionar Foto'}
-                    </button>
-                    <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                    </label>
+                    <input id="worker-photo-upload" type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
                   </div>
 
                   {/* Other fields */}
