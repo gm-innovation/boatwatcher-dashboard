@@ -1,22 +1,48 @@
 
 
-## Corrigir scroll e ajustar modal de detalhes do trabalhador
+## Implementar geração de etiquetas PDF no formato do sistema em produção
 
-### Problema
-O modal usa `ScrollArea` do Radix, que conforme padrão já estabelecido neste projeto, causa bugs de cálculo de altura dinâmica impedindo o scroll. O modal também precisa de ajustes visuais para ficar mais fiel ao modelo.
+### Contexto
+A imagem fornecida mostra uma etiqueta vertical (62×100mm) com texto rotacionado -90°, contendo: nome do trabalhador (bold), função, empresa, nome do projeto, tipo do projeto, logo rotacionada do cliente, código dentro de um círculo, tipo sanguíneo e "Powered by Googlemarine".
 
-### Correções
+O código de referência (Deno edge function) já implementa essa lógica. Preciso replicá-la no front-end usando jsPDF (já instalado no projeto, usado em `BadgePrinter.tsx`).
 
-**Arquivo: `src/components/workers/WorkerDetailsDialog.tsx`**
+### Implementação
 
-1. **Scroll**: Substituir `<ScrollArea className="flex-1 pr-4">` (linha 254) por `<div className="flex-1 overflow-y-auto pr-4">` — padrão nativo já adotado no projeto para modais complexos.
+**Arquivo: `src/components/workers/WorkerManagement.tsx`**
 
-2. **Footer sticky**: Mover os botões "Salvar Alterações" e "Fechar" para fora do scroll mas dentro do flex container, mantendo `flex-shrink-0` (já está correto nas linhas 673-683).
+1. Criar função `handlePrintLabels` que:
+   - Busca o projeto selecionado e seu `client_id`
+   - Busca o cliente (company com type=client) para obter `logo_url_rotated`
+   - Busca job functions para mapear `job_function_id` → nome
+   - Busca companies para mapear `company_id` → nome
+   - Gera PDF com jsPDF no formato 62×100mm (portrait)
 
-3. **Remover import não utilizado**: Remover `ScrollArea` do import se não for mais usado no componente (ainda é usado no diálogo interno de projetos na linha 641, então manter).
+2. Para cada trabalhador selecionado, gerar uma página com:
+   - Borda retangular (rect 3,3 até pageWidth-6, pageHeight-6)
+   - Logo rotacionada do cliente (canto superior direito, 8×24mm)
+   - Nome (formatado: primeiro + último nome, ou customName se 1 trabalhador) — rotacionado -90°, font 16 bold
+   - Função (job_function) — rotacionado -90°, font 12
+   - Empresa — rotacionado -90°, font 10
+   - Nome do projeto — rotacionado -90°, font dinâmico (9-14 conforme comprimento)
+   - Tipo do projeto (Docagem/Mobilização/Projeto) — rotacionado -90°, font 12
+   - Círculo com código (4 dígitos, padStart '0') — centro em (40,80), raio 16
+   - "Powered by Googlemarine" — font 6, cor cinza
+   - Tipo sanguíneo (se válido) — label + valor
 
-### Resultado
-- Scroll funciona corretamente com `overflow-y-auto` nativo
-- Footer com botões fica fixo na parte inferior do modal
-- Todas as seções (Documentos, Strikes) ficam acessíveis por rolagem
+3. Atualizar o `onClick` do botão "Imprimir Etiquetas" para chamar `handlePrintLabels`
+
+### Dados necessários (já disponíveis no componente)
+- `workers` — lista completa com `blood_type`, `job_function_id`, `company_id`, `code`, `name`
+- `companies` — para mapear company_id → name
+- `projects` — para obter projeto, client_id, project_type
+- Job functions: adicionar `useJobFunctions()` do hook existente
+
+### Dependências
+- `jsPDF` — já instalado (usado em BadgePrinter)
+- `resolveFileUrl` — para resolver a URL da logo rotacionada do cliente
+- Remoção de acentos com `normalize('NFD')`
+
+### Arquivos alterados
+- `src/components/workers/WorkerManagement.tsx` — adicionar import de useJobFunctions, adicionar função de geração PDF, conectar ao botão
 
