@@ -473,7 +473,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="print-no-break">
           <CardHeader>
             <CardTitle className="text-base">Distribuição por Cargo/Função</CardTitle>
           </CardHeader>
