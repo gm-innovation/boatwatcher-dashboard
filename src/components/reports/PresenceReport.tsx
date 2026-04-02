@@ -241,8 +241,8 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       </div>
 
       {/* KPI Cards Row 1 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 print:grid-cols-4">
+        <Card className="print-no-break">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10">
@@ -255,7 +255,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="print-no-break">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10">
@@ -268,7 +268,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="print-no-break">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10">
@@ -281,7 +281,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="print-no-break">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10">
@@ -297,8 +297,8 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       </div>
 
       {/* KPI Cards Row 2 — Peak & Low */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:grid-cols-2">
+        <Card className="print-no-break">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-green-500/10">
@@ -316,7 +316,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="print-no-break">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-orange-500/10">
@@ -337,7 +337,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       </div>
 
       {/* Daily Access Chart */}
-      <Card>
+      <Card className="print-no-break">
         <CardHeader>
           <CardTitle className="text-base">Acessos por Dia</CardTitle>
         </CardHeader>
@@ -376,8 +376,8 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       </Card>
 
       {/* Weekly + Day of Week Charts */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:grid-cols-1">
+        <Card className="print-no-break">
           <CardHeader>
             <CardTitle className="text-base">Quantidade por Semana</CardTitle>
           </CardHeader>
@@ -407,7 +407,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="print-no-break">
           <CardHeader>
             <CardTitle className="text-base">Distribuição por Dia da Semana</CardTitle>
           </CardHeader>
@@ -435,8 +435,8 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       </div>
 
       {/* Weekday vs Weekend + Job Functions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:grid-cols-1">
+        <Card className="print-no-break">
           <CardHeader>
             <CardTitle className="text-base">Dias Úteis vs Fins de Semana</CardTitle>
           </CardHeader>
@@ -473,7 +473,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="print-no-break">
           <CardHeader>
             <CardTitle className="text-base">Distribuição por Cargo/Função</CardTitle>
           </CardHeader>
@@ -511,7 +511,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       </div>
 
       {/* Top 10 Companies */}
-      <Card>
+      <Card className="print-no-break">
         <CardHeader>
           <CardTitle className="text-base">Top 10 Empresas por Nº de Trabalhadores</CardTitle>
         </CardHeader>

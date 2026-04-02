@@ -138,3 +138,56 @@
   background: #1e293b;
   color: #e2e8f0;
 }
+
+/* Print styles for reports */
+@media print {
+  /* Hide app shell */
+  [data-sidebar],
+  header,
+  nav,
+  .print\:hidden,
+  [role="tablist"],
+  .sidebar-wrapper {
+    display: none !important;
+  }
+
+  /* Full width content */
+  body {
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  main,
+  [role="main"],
+  .flex-1 {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Remove shadows and borders for cleaner print */
+  .shadow, .shadow-sm, .shadow-md, .shadow-lg {
+    box-shadow: none !important;
+  }
+
+  /* Prevent cutting cards/charts across pages */
+  .print-no-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 8px;
+  }
+
+  /* Charts: force fixed height and ensure SVG renders */
+  .recharts-responsive-container {
+    height: 250px !important;
+    min-height: 250px !important;
+  }
+
+  .recharts-wrapper {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
