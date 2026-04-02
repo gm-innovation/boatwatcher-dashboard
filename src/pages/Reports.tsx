@@ -67,7 +67,7 @@ const Reports = () => {
       </div>
 
       <Tabs defaultValue="workers" className="space-y-6">
-        <TabsList className="flex-wrap">
+        <TabsList className="flex-wrap print:hidden">
           <TabsTrigger value="workers" className="gap-2">
             <Users className="h-4 w-4" />
             Trabalhadores
