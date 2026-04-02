@@ -1078,17 +1078,12 @@ export const WorkerManagement = () => {
         onOpenChange={setIsDetailsOpen}
         onUpdate={() => refetch()}
         onPrintLabel={(w) => {
-          const projectId = selectedProjectForLabels || (w.allowed_project_ids?.[0]) || '';
-          if (!projectId) {
+          const labelProjectId = selectedProjectForLabels || (w.allowed_project_ids?.[0]) || '';
+          if (!labelProjectId) {
             toast({ title: 'Selecione um projeto para gerar a etiqueta', variant: 'destructive' });
             return;
           }
-          const projectId = selectedProjectForLabels || (w.allowed_project_ids?.[0]) || '';
-          if (!projectId) {
-            toast({ title: 'Selecione um projeto para gerar a etiqueta', variant: 'destructive' });
-            return;
-          }
-          generateLabels([w], projectId, '');
+          generateLabels([w as any], labelProjectId, '');
         }}
       />
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
