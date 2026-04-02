@@ -17,7 +17,7 @@ import {
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer,
-  Tooltip, Legend,
+  Tooltip, Legend, LabelList,
 } from 'recharts';
 import {
   Calendar, TrendingUp, Users, Building2, BarChart3,
