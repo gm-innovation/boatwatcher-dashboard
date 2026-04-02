@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useCompanies } from '@/hooks/useSupabase';
 import { useAccessLogs } from '@/hooks/useControlID';
 import { useJobFunctions } from '@/hooks/useJobFunctions';
+import { useSystemSetting } from '@/hooks/useSystemSettings';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,10 +21,12 @@ import {
 } from 'recharts';
 import {
   Calendar, TrendingUp, Users, Building2, BarChart3,
-  ArrowUp, ArrowDown, Printer,
+  ArrowUp, ArrowDown, Printer, Download,
 } from 'lucide-react';
 import { format, parseISO, getISOWeek, getDay, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { exportOverviewReportPdf } from '@/utils/exportReportPdf';
+import { toast } from '@/components/ui/use-toast';
 
 interface PresenceReportProps {
   projectId: string;
@@ -50,6 +53,9 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
   const { data: companies = [] } = useCompanies();
   const { data: accessLogs = [], isLoading } = useAccessLogs(projectId || null, startDate, endDate, 5000);
   const { data: jobFunctions = [] } = useJobFunctions();
+  const { data: systemLogoSetting } = useSystemSetting('system_logo');
+
+  const [exporting, setExporting] = useState(false);
 
   const { data: workers = [] } = useQuery({
     queryKey: ['workers-list'],
@@ -66,13 +72,18 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
   const { data: projects = [] } = useQuery({
     queryKey: ['projects-list'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('projects').select('id, name, location');
+      const { data, error } = await supabase.from('projects').select('id, name, location, client_id');
       if (error) throw error;
       return data;
     },
   });
 
   const currentProject = projects.find(p => p.id === projectId);
+
+  // Get client company logo
+  const clientCompany = currentProject?.client_id
+    ? companies.find(c => c.id === currentProject.client_id)
+    : null;
 
   const dashboard = useMemo(() => {
     const granted = accessLogs.filter((l: any) => l.access_status === 'granted');
@@ -204,6 +215,71 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
     window.print();
   };
 
+  const loadImageAsDataUrl = async (url: string | null | undefined): Promise<string | undefined> => {
+    if (!url) return undefined;
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { resolve(undefined); return; }
+        ctx.drawImage(img, 0, 0);
+        try { resolve(canvas.toDataURL('image/png')); } catch { resolve(undefined); }
+      };
+      img.onerror = () => resolve(undefined);
+      img.src = `${url}?t=${Date.now()}`;
+    });
+  };
+
+  const handleExportPdf = async () => {
+    setExporting(true);
+    try {
+      // Load logos
+      const systemLogoValue = systemLogoSetting?.value as Record<string, any> | null;
+      const systemLogoUrl = systemLogoValue?.light_url || systemLogoValue?.url;
+      const clientLogoUrl = clientCompany?.logo_url_light;
+
+      const [systemLogoDataUrl, clientLogoDataUrl] = await Promise.all([
+        loadImageAsDataUrl(systemLogoUrl),
+        loadImageAsDataUrl(clientLogoUrl),
+      ]);
+
+      const peakLabel = dashboard.peakDay.date !== '-'
+        ? format(parseISO(dashboard.peakDay.date), 'dd/MM (EEE)', { locale: ptBR })
+        : '-';
+      const lowLabel = dashboard.lowDay.date !== '-'
+        ? format(parseISO(dashboard.lowDay.date), 'dd/MM (EEE)', { locale: ptBR })
+        : '-';
+
+      await exportOverviewReportPdf({
+        projectName: currentProject?.name,
+        projectLocation: currentProject?.location ?? undefined,
+        startDate,
+        endDate,
+        clientLogoDataUrl,
+        systemLogoDataUrl,
+        kpis: [
+          { label: 'Total de Acessos', value: dashboard.totalAccesses.toLocaleString() },
+          { label: 'Trabalhadores Únicos', value: String(dashboard.uniqueWorkers) },
+          { label: 'Empresas', value: String(dashboard.uniqueCompanies) },
+          { label: 'Média Diária', value: String(dashboard.avgDaily) },
+        ],
+        peakDay: { label: peakLabel, count: dashboard.peakDay.count },
+        lowDay: { label: lowLabel, count: dashboard.lowDay.count },
+        dayOfWeekData: dashboard.dayOfWeekChart,
+        top10Companies: dashboard.top10Companies,
+        jobFunctionData: dashboard.jobFunctionChart,
+      });
+    } catch (e: any) {
+      toast({ title: 'Erro ao gerar PDF', description: e.message, variant: 'destructive' });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (!projectId) {
     return (
       <div className="text-center py-12 text-muted-foreground border rounded-lg">
@@ -234,10 +310,16 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
             {currentProject?.location && ` • ${currentProject.location}`}
           </p>
         </div>
-        <Button variant="outline" onClick={handlePrint} className="print:hidden">
-          <Printer className="h-4 w-4 mr-2" />
-          Imprimir
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExportPdf} disabled={exporting} className="print:hidden">
+            <Download className="h-4 w-4 mr-2" />
+            {exporting ? 'Gerando...' : 'Baixar PDF'}
+          </Button>
+          <Button variant="outline" onClick={handlePrint} className="print:hidden">
+            <Printer className="h-4 w-4 mr-2" />
+            Imprimir
+          </Button>
+        </div>
       </div>
 
       {/* KPI Cards Row 1 */}
