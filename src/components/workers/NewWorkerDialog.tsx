@@ -169,7 +169,7 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<WorkerFormData>({
     resolver: zodResolver(workerSchema),
     defaultValues: {
-      status: 'pending_review',
+      status: 'active',
     }
   });
 
