@@ -16,8 +16,20 @@ import { format, parseISO } from "date-fns";
 const Reports = () => {
   const { data: projects = [] } = useProjects();
   const [selectedProject, setSelectedProject] = useState<string>('');
-  const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // When project changes, set dates to cover full project period
+  useEffect(() => {
+    if (!selectedProject) return;
+    const project = projects.find(p => p.id === selectedProject);
+    if (!project) return;
+    const projectStart = project.start_date || project.created_at;
+    if (projectStart) {
+      setStartDate(format(parseISO(projectStart), 'yyyy-MM-dd'));
+    }
+    setEndDate(format(new Date(), 'yyyy-MM-dd'));
+  }, [selectedProject, projects]);
 
   return (
     <div className="space-y-6">
