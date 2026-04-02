@@ -228,15 +228,16 @@ Retorne APENAS um JSON válido com os dados extraídos.`;
       }
     }
 
-    // Normalizar tipo de documento
+    // Normalizar tipo de documento — nunca "Outros"
     if (extractedData.document_type) {
       const typeUpper = String(extractedData.document_type).toUpperCase();
       if (typeUpper.includes('ASO') || typeUpper.includes('ATESTADO')) extractedData.document_type = 'ASO';
       else if (typeUpper.includes('NR10') || typeUpper.includes('NR-10')) extractedData.document_type = 'NR10';
       else if (typeUpper.includes('NR33') || typeUpper.includes('NR-33')) extractedData.document_type = 'NR33';
       else if (typeUpper.includes('NR35') || typeUpper.includes('NR-35')) extractedData.document_type = 'NR35';
+      else if (typeUpper === 'OUTROS') extractedData.document_type = hintType !== 'Outros' ? hintType : 'Documento';
     } else {
-      extractedData.document_type = hintType;
+      extractedData.document_type = hintType !== 'Outros' ? hintType : 'Documento';
     }
 
     const detectedType = extractedData.document_type || hintType;
