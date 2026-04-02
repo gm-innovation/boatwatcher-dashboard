@@ -511,7 +511,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       </div>
 
       {/* Top 10 Companies */}
-      <Card>
+      <Card className="print-no-break">
         <CardHeader>
           <CardTitle className="text-base">Top 10 Empresas por Nº de Trabalhadores</CardTitle>
         </CardHeader>
