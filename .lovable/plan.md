@@ -1,17 +1,32 @@
 
+## Correção da logo da etiqueta
 
-## Correções na etiqueta PDF
+**Arquivo:** `src/components/workers/WorkerManagement.tsx` (trecho da geração da etiqueta PDF)
 
-**Arquivo:** `src/components/workers/WorkerManagement.tsx`
+### O problema
+A lógica atual foi ajustada como se o aumento precisasse acontecer no sentido horizontal. Pela sua referência, a logo está visualmente rotacionada no canto superior direito, então o ajuste correto é:
+- diminuir a largura no topo
+- aumentar a altura descendo pela lateral
+- manter a logo ancorada no canto superior direito
 
-### Problemas identificados
+### Ajustes propostos
+1. **Corrigir a lógica proporcional da logo para a orientação visual dela**
+   - Revisar o cálculo de proporção para considerar a logo no sentido rotacionado/vertical.
+   - Se necessário, usar as dimensões “invertidas” da imagem no cálculo de encaixe proporcional.
 
-1. **Logo achatada**: `logoMaxW = 14` está muito restritivo — limita a largura e achata a imagem. Precisa aumentar para ~22 para que a proporção natural da logo seja respeitada.
+2. **Diminuir a largura máxima da logo**
+   - Reduzir `logoMaxW` (hoje `22`) para uma faixa mais estreita, perto de `14–16`.
 
-2. **Nome muito pequeno**: O espaço disponível está configurado como `45mm`, mas o círculo começa em `y = 64` (centro 80 - raio 16). O nome começa em `y = 5`, então há ~59mm disponíveis. Com margem de segurança, podemos usar `55mm` — isso permite que nomes mais longos mantenham uma fonte maior.
+3. **Aumentar a altura máxima da logo**
+   - Elevar `logoMaxH` (hoje `38`) para uma faixa maior, perto de `44–46`.
 
-### Alterações (linhas 802-824)
+4. **Ancorar pela borda direita, não por `x` fixo**
+   - Em vez de manter `x = 41`, calcular `x` com base em `pageWidth - margem - logoW`.
+   - Isso garante que, mesmo ficando mais estreita, a logo continue encostada visualmente no canto superior direito.
 
-1. **Logo** — `logoMaxW` de `14` → `22` (mantém `logoMaxH = 38`)
-2. **Nome** — espaço máximo de `45` → `55` no loop de redução de fonte, e fonte mínima de `10` → `8` como fallback extremo
+5. **Manter a proporção sem achatamento**
+   - Continuar usando redimensionamento proporcional.
+   - Não aumentar largura para “compensar”; o crescimento deve acontecer na altura visual da logo.
 
+### Resultado esperado
+A logo ficará **mais alta e mais estreita**, respeitando o canto superior direito e sem aparência achatada.
