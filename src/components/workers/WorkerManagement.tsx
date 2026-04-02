@@ -696,6 +696,8 @@ export const WorkerManagement = () => {
   const [enrollingWorker, setEnrollingWorker] = useState<Worker | null>(null);
   const [autoEnrollData, setAutoEnrollData] = useState<{ workerName: string; commandIds: string[] } | null>(null);
   const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
+  const [selectedProjectForLabels, setSelectedProjectForLabels] = useState<string>('');
+  const [customLabelName, setCustomLabelName] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [companyFilter, setCompanyFilter] = useState<string>('all');
   const { data: workers = [], isLoading, refetch } = useWorkers();
