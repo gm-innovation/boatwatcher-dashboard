@@ -876,16 +876,20 @@ export const WorkerManagement = () => {
       }
     });
 
-    // Download direto para evitar bloqueio de popup
+    // Abrir diálogo de impressão diretamente via iframe oculto
     const blob = doc.output('blob');
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'etiquetas.pdf';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = url;
+    document.body.appendChild(iframe);
+    iframe.onload = () => {
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+        URL.revokeObjectURL(url);
+      }, 60000);
+    };
     toast({ title: `${workerList.length} etiqueta(s) gerada(s) com sucesso!` });
   };
 
