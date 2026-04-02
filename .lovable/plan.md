@@ -1,12 +1,11 @@
 
 
-## Ajustar dimensões da logo na etiqueta
+## Ajustar logo na etiqueta: largura e posição
 
-**Arquivo:** `src/components/workers/WorkerManagement.tsx`, linhas 800-801
+**Arquivo:** `src/components/workers/WorkerManagement.tsx`, linhas 800-802
 
 **Alterações:**
-- `logoW` de `14` → `8`
-- `logoH` de `42` → `24`
-
-Posicionamento (`logoX = pageWidth - 5 - logoW`) se ajusta automaticamente.
+- `logoW` de `8` → `12`
+- `logoX` de `pageWidth - 5 - logoW` → `pageWidth - 9 - logoW` (4 pontos a mais para a esquerda)
+- `logoH` permanece `24`
 
