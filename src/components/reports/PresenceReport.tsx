@@ -53,6 +53,9 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
   const { data: companies = [] } = useCompanies();
   const { data: accessLogs = [], isLoading } = useAccessLogs(projectId || null, startDate, endDate, 5000);
   const { data: jobFunctions = [] } = useJobFunctions();
+  const { data: systemLogoSetting } = useSystemSetting('system_logo');
+
+  const [exporting, setExporting] = useState(false);
 
   const { data: workers = [] } = useQuery({
     queryKey: ['workers-list'],
@@ -69,13 +72,18 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
   const { data: projects = [] } = useQuery({
     queryKey: ['projects-list'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('projects').select('id, name, location');
+      const { data, error } = await supabase.from('projects').select('id, name, location, client_id');
       if (error) throw error;
       return data;
     },
   });
 
   const currentProject = projects.find(p => p.id === projectId);
+
+  // Get client company logo
+  const clientCompany = currentProject?.client_id
+    ? companies.find(c => c.id === currentProject.client_id)
+    : null;
 
   const dashboard = useMemo(() => {
     const granted = accessLogs.filter((l: any) => l.access_status === 'granted');
