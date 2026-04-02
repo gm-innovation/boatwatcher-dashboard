@@ -720,12 +720,10 @@ export const WorkerManagement = () => {
     return `${parts[0]} ${parts[parts.length - 1]}`;
   };
 
-  const handlePrintLabels = async () => {
-    const selectedProject = projects.find((p: any) => p.id === selectedProjectForLabels);
+  const generateLabels = async (workerList: typeof workers, projectId: string, overrideCustomName?: string) => {
+    const selectedProject = projects.find((p: any) => p.id === projectId);
     if (!selectedProject) return;
-
-    const selectedWorkers = workers.filter(w => selectedWorkerIds.includes(w.id));
-    if (selectedWorkers.length === 0) return;
+    if (workerList.length === 0) return;
 
     toast({ title: `Gerando ${selectedWorkers.length} etiqueta(s)...` });
 
