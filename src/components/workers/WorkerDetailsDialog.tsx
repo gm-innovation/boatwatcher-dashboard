@@ -81,7 +81,7 @@ const additionalDataSchema = z.object({
 
 type AdditionalDataForm = z.infer<typeof additionalDataSchema>;
 
-export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: WorkerDetailsDialogProps) => {
+export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate, onPrintLabel }: WorkerDetailsDialogProps) => {
   const [isEditingAdditional, setIsEditingAdditional] = useState(false);
   const [isAddingStrike, setIsAddingStrike] = useState(false);
   const [strikeForm, setStrikeForm] = useState<{ reason: string; description: string; severity: 'warning' | 'serious' | 'critical' }>({ reason: '', description: '', severity: 'warning' });
