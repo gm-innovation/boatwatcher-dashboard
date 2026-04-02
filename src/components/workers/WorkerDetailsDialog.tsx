@@ -238,7 +238,12 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate, onPr
           </DialogTitle>
           <p className="text-sm text-muted-foreground">Visualize e edite as informações do trabalhador</p>
           <div className="flex items-center gap-2 mt-2">
-            <BadgePrinter worker={worker} companyName={companyName} jobFunctionName={worker.role || undefined} />
+            {onPrintLabel && (
+              <Button variant="outline" size="sm" onClick={() => onPrintLabel(worker)} className="gap-2">
+                <Printer className="h-4 w-4" />
+                Imprimir Crachá
+              </Button>
+            )}
             <Button
               variant={isEditingAdditional ? "destructive" : "outline"}
               size="sm"

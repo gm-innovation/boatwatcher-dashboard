@@ -1073,6 +1073,25 @@ export const WorkerManagement = () => {
         open={isDetailsOpen}
         onOpenChange={setIsDetailsOpen}
         onUpdate={() => refetch()}
+        onPrintLabel={(w) => {
+          const projectId = selectedProjectForLabels || (w.allowed_project_ids?.[0]) || '';
+          if (!projectId) {
+            toast({ title: 'Selecione um projeto para gerar a etiqueta', variant: 'destructive' });
+            return;
+          }
+          const prevIds = selectedWorkerIds;
+          const prevProject = selectedProjectForLabels;
+          const prevCustom = customLabelName;
+          setSelectedWorkerIds([w.id]);
+          setSelectedProjectForLabels(projectId);
+          setCustomLabelName('');
+          setTimeout(async () => {
+            await handlePrintLabels();
+            setSelectedWorkerIds(prevIds);
+            setSelectedProjectForLabels(prevProject);
+            setCustomLabelName(prevCustom);
+          }, 0);
+        }}
       />
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-lg">
