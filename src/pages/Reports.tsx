@@ -21,7 +21,7 @@ const Reports = () => {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="print:hidden">
         <h1 className="text-2xl font-bold">Relatórios de Acesso</h1>
         <p className="text-muted-foreground">Visualize e exporte relatórios do sistema</p>
       </div>
