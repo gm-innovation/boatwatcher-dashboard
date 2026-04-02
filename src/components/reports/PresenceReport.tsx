@@ -535,6 +535,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
         <Card className="print-no-break">
           <CardHeader>
             <CardTitle className="text-base">Quantidade por Semana</CardTitle>
+            <p className="text-xs text-muted-foreground">Semanas iniciando aos Domingos</p>
           </CardHeader>
           <CardContent>
             {dashboard.weeklyChart.length > 0 ? (
@@ -542,7 +543,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={dashboard.weeklyChart}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-                    <XAxis dataKey="semana" tick={{ fontSize: 11 }} className="fill-muted-foreground" />
+                    <XAxis dataKey="semana" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
                     <YAxis tick={{ fontSize: 11 }} className="fill-muted-foreground" />
                     <Tooltip
                       contentStyle={{
@@ -552,7 +553,9 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
                         fontSize: 12,
                       }}
                     />
-                    <Bar dataKey="acessos" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Acessos" />
+                    <Bar dataKey="acessos" fill="#22c55e" radius={[4, 4, 0, 0]} name="Acessos">
+                      <LabelList dataKey="acessos" position="top" fontSize={10} />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -564,27 +567,38 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
 
         <Card className="print-no-break">
           <CardHeader>
-            <CardTitle className="text-base">Distribuição por Dia da Semana</CardTitle>
+            <CardTitle className="text-base">Distribuição por Dia da Semana (Por Semana)</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[250px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dashboard.dayOfWeekChart}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-                  <XAxis dataKey="dia" tick={{ fontSize: 11 }} className="fill-muted-foreground" />
-                  <YAxis tick={{ fontSize: 11 }} className="fill-muted-foreground" />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--background))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px',
-                      fontSize: 12,
-                    }}
-                  />
-                  <Bar dataKey="acessos" fill={CHART_COLORS[1]} radius={[4, 4, 0, 0]} name="Acessos" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {dashboard.weeklyByDayChart.length > 0 ? (
+              <div className="h-[250px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dashboard.weeklyByDayChart}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
+                    <XAxis dataKey="semana" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
+                    <YAxis tick={{ fontSize: 11 }} className="fill-muted-foreground" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--background))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px',
+                        fontSize: 12,
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="Domingo" stackId="a" fill="#3b82f6" name="Dom" />
+                    <Bar dataKey="Segunda" stackId="a" fill="#22c55e" name="Seg" />
+                    <Bar dataKey="Terça" stackId="a" fill="#f97316" name="Ter" />
+                    <Bar dataKey="Quarta" stackId="a" fill="#ef4444" name="Qua" />
+                    <Bar dataKey="Quinta" stackId="a" fill="#a855f7" name="Qui" />
+                    <Bar dataKey="Sexta" stackId="a" fill="#14b8a6" name="Sex" />
+                    <Bar dataKey="Sábado" stackId="a" fill="#78716c" name="Sáb" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <p className="text-center py-8 text-muted-foreground text-sm">Sem dados</p>
+            )}
           </CardContent>
         </Card>
       </div>
