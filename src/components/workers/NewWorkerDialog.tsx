@@ -440,7 +440,7 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
           role: data.role || null,
           job_function_id: jobFunctionId,
           company_id: data.company_id || null,
-          status: data.status,
+          status: data.status || 'active',
           allowed_project_ids: selectedProjects,
           birth_date: data.birth_date || null,
           gender: data.gender || null,
