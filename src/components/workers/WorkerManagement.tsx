@@ -876,22 +876,19 @@ export const WorkerManagement = () => {
       }
     });
 
-    // Abrir PDF em nova aba e disparar impressão (mesma lógica do relatório Visão Geral)
-    const blob = doc.output('blob');
-    const url = URL.createObjectURL(blob);
-    const printWindow = window.open(url, '_blank');
+    // Abrir PDF via data URI e disparar impressão
+    const dataUri = doc.output('dataurlstring');
+    const printWindow = window.open(dataUri);
     if (printWindow) {
-      printWindow.onload = () => {
-        printWindow.print();
-      };
+      printWindow.addEventListener('load', () => {
+        setTimeout(() => {
+          printWindow.print();
+        }, 500);
+      });
     } else {
       // Fallback: download se popup bloqueado
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `etiquetas.pdf`;
-      link.click();
+      doc.save('etiquetas.pdf');
     }
-    setTimeout(() => URL.revokeObjectURL(url), 120000);
     toast({ title: `${workerList.length} etiqueta(s) gerada(s) com sucesso!` });
   };
 
