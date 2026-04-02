@@ -886,7 +886,12 @@ export const WorkerManagement = () => {
     link.click();
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-    toast({ title: `${selectedWorkers.length} etiqueta(s) gerada(s) com sucesso!` });
+    toast({ title: `${workerList.length} etiqueta(s) gerada(s) com sucesso!` });
+  };
+
+  const handlePrintLabels = () => {
+    const selected = workers.filter(w => selectedWorkerIds.includes(w.id));
+    return generateLabels(selected, selectedProjectForLabels);
   };
 
   const handleDelete = async (worker: Worker) => {
