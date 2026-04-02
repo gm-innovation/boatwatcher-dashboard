@@ -13,8 +13,7 @@ const getExtractionSchema = () => {
     properties: {
       document_type: {
         type: "string",
-        enum: ["ASO", "NR10", "NR33", "NR35", "RG", "CPF", "CNH", "Outros"],
-        description: "Tipo do documento identificado. RETORNE APENAS um destes valores exatos."
+        description: "Tipo do documento identificado pelo CONTEÚDO (ex: ASO, NR10, NR33, NR35, RG, CPF, CNH, Certificado de Segurança, Atestado Médico, etc). NUNCA retorne 'Outros' — sempre identifique o nome real/descritivo do documento."
       },
       completion_date: {
         type: "string",
