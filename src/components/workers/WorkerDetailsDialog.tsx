@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Printer } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -45,7 +46,7 @@ import {
   Shield,
   FileWarning,
 } from 'lucide-react';
-import { BadgePrinter } from './BadgePrinter';
+
 
 interface Worker {
   id: string;
@@ -68,6 +69,7 @@ interface WorkerDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUpdate?: () => void;
+  onPrintLabel?: (worker: Worker) => void;
 }
 
 const additionalDataSchema = z.object({
@@ -79,7 +81,7 @@ const additionalDataSchema = z.object({
 
 type AdditionalDataForm = z.infer<typeof additionalDataSchema>;
 
-export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: WorkerDetailsDialogProps) => {
+export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate, onPrintLabel }: WorkerDetailsDialogProps) => {
   const [isEditingAdditional, setIsEditingAdditional] = useState(false);
   const [isAddingStrike, setIsAddingStrike] = useState(false);
   const [strikeForm, setStrikeForm] = useState<{ reason: string; description: string; severity: 'warning' | 'serious' | 'critical' }>({ reason: '', description: '', severity: 'warning' });
@@ -236,7 +238,12 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate }: Wo
           </DialogTitle>
           <p className="text-sm text-muted-foreground">Visualize e edite as informações do trabalhador</p>
           <div className="flex items-center gap-2 mt-2">
-            <BadgePrinter worker={worker} companyName={companyName} jobFunctionName={worker.role || undefined} />
+            {onPrintLabel && (
+              <Button variant="outline" size="sm" onClick={() => onPrintLabel(worker)} className="gap-2">
+                <Printer className="h-4 w-4" />
+                Imprimir Crachá
+              </Button>
+            )}
             <Button
               variant={isEditingAdditional ? "destructive" : "outline"}
               size="sm"

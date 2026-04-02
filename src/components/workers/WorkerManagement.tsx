@@ -720,14 +720,12 @@ export const WorkerManagement = () => {
     return `${parts[0]} ${parts[parts.length - 1]}`;
   };
 
-  const handlePrintLabels = async () => {
-    const selectedProject = projects.find((p: any) => p.id === selectedProjectForLabels);
+  const generateLabels = async (workerList: typeof workers, projectId: string, overrideCustomName?: string) => {
+    const selectedProject = projects.find((p: any) => p.id === projectId);
     if (!selectedProject) return;
+    if (workerList.length === 0) return;
 
-    const selectedWorkers = workers.filter(w => selectedWorkerIds.includes(w.id));
-    if (selectedWorkers.length === 0) return;
-
-    toast({ title: `Gerando ${selectedWorkers.length} etiqueta(s)...` });
+    toast({ title: `Gerando ${workerList.length} etiqueta(s)...` });
 
     // Fetch client logo
     let logoDataUrl: string | null = null;
@@ -778,11 +776,12 @@ export const WorkerManagement = () => {
     const pageHeight = 100;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pageWidth, pageHeight] });
 
-    selectedWorkers.forEach((worker, idx) => {
+    workerList.forEach((worker, idx) => {
       if (idx > 0) doc.addPage([pageWidth, pageHeight]);
 
       let displayName: string;
-      if (customLabelName && customLabelName.trim() !== '' && selectedWorkers.length === 1) {
+      const effectiveCustomName = overrideCustomName !== undefined ? overrideCustomName : customLabelName;
+      if (effectiveCustomName && effectiveCustomName.trim() !== '' && workerList.length === 1) {
         displayName = customLabelName.trim();
       } else {
         displayName = formatNameForLabel(worker.name);
@@ -887,7 +886,12 @@ export const WorkerManagement = () => {
     link.click();
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-    toast({ title: `${selectedWorkers.length} etiqueta(s) gerada(s) com sucesso!` });
+    toast({ title: `${workerList.length} etiqueta(s) gerada(s) com sucesso!` });
+  };
+
+  const handlePrintLabels = () => {
+    const selected = workers.filter(w => selectedWorkerIds.includes(w.id));
+    return generateLabels(selected, selectedProjectForLabels);
   };
 
   const handleDelete = async (worker: Worker) => {
@@ -1073,6 +1077,14 @@ export const WorkerManagement = () => {
         open={isDetailsOpen}
         onOpenChange={setIsDetailsOpen}
         onUpdate={() => refetch()}
+        onPrintLabel={(w) => {
+          const labelProjectId = selectedProjectForLabels || (w.allowed_project_ids?.[0]) || '';
+          if (!labelProjectId) {
+            toast({ title: 'Selecione um projeto para gerar a etiqueta', variant: 'destructive' });
+            return;
+          }
+          generateLabels([w as any], labelProjectId, '');
+        }}
       />
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-lg">
