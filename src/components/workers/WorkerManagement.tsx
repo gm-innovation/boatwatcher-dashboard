@@ -38,6 +38,7 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
+  Printer,
 } from 'lucide-react';
 import type { Worker, WorkerStatus } from '@/types/supabase';
 import { WorkerDetailsDialog } from './WorkerDetailsDialog';
