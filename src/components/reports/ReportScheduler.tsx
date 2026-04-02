@@ -93,7 +93,7 @@ export const ReportScheduler = () => {
   const [selectedTypes, setSelectedTypes] = useState<string[]>(['presence']);
   const [frequency, setFrequency] = useState<string>('daily');
   const [sendTime, setSendTime] = useState('06:00');
-  const [lookbackDays, setLookbackDays] = useState(1);
+  
   const [recipients, setRecipients] = useState<string[]>([]);
   const [recipientInput, setRecipientInput] = useState('');
 
