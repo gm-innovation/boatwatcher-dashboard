@@ -27,7 +27,7 @@ const Reports = () => {
       </div>
 
       {/* Global Filters */}
-      <div className="flex flex-wrap items-end gap-4 p-4 bg-card rounded-lg border">
+      <div className="flex flex-wrap items-end gap-4 p-4 bg-card rounded-lg border print:hidden">
         <div className="flex-1 min-w-[200px]">
           <label className="text-sm font-medium mb-2 block">Projeto *</label>
           <Select value={selectedProject} onValueChange={setSelectedProject}>
