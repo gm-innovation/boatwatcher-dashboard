@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { formatWorkerCode, normalizeName, formatCpf } from '@/lib/utils';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';

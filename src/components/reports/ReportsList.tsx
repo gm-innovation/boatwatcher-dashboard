@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { formatWorkerCode, normalizeName, formatCpf } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
