@@ -859,7 +859,7 @@ export const WorkerManagement = () => {
       doc.setFontSize(25);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
-      doc.text(code, circleX + 7, 75, { align: 'center', angle: -90 });
+      doc.text(code, circleX + 7, 71, { align: 'center', angle: -90 });
 
       // Powered by
       doc.setFontSize(7);
