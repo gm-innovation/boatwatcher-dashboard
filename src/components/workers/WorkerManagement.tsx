@@ -810,6 +810,43 @@ export const WorkerManagement = () => {
         </div>
       </div>
 
+      {/* Labels / Etiquetas */}
+      <div className="flex items-center gap-4 bg-card border rounded-lg p-4 shadow-sm flex-wrap">
+        <span className="text-sm font-medium text-foreground whitespace-nowrap">Projetos para etiquetas:</span>
+        <Select value={selectedProjectForLabels} onValueChange={setSelectedProjectForLabels}>
+          <SelectTrigger className="w-[260px]">
+            <SelectValue placeholder="Selecione o projeto..." />
+          </SelectTrigger>
+          <SelectContent>
+            {projects.map((p: any) => (
+              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {selectedWorkerIds.length === 1 && (
+          <Input
+            placeholder="Nome customizado (opcional)"
+            value={customLabelName}
+            onChange={(e) => setCustomLabelName(e.target.value)}
+            className="w-[260px]"
+          />
+        )}
+
+        <div className="ml-auto">
+          <Button
+            disabled={selectedWorkerIds.length === 0 || !selectedProjectForLabels}
+            className="bg-green-600 hover:bg-green-700 text-white"
+            onClick={() => {
+              toast({ title: `Gerando ${selectedWorkerIds.length} etiqueta(s)...` });
+            }}
+          >
+            <Printer className="h-4 w-4 mr-2" />
+            Imprimir Etiquetas ({selectedWorkerIds.length})
+          </Button>
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="flex items-center gap-4">
         <div className="flex-1">
