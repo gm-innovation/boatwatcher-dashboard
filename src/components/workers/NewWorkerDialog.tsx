@@ -700,7 +700,7 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
               />
             )}
           </form>
-        </ScrollArea>
+        </div>
 
         {/* Manage Projects Dialog */}
         <Dialog open={isManagingProjects} onOpenChange={setIsManagingProjects}>
