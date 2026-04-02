@@ -1154,13 +1154,10 @@ export const WorkerManagement = () => {
                       onCheckedChange={() => toggleWorker(worker.id)}
                     />
                   </td>
-                  <td className="p-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Hash className="h-3 w-3" />
-                      {(worker as any).code || '-'}
-                    </div>
+                  <td className="p-4 text-sm text-muted-foreground whitespace-nowrap">
+                    {formatWorkerCode((worker as any).code)}
                   </td>
-                  <td className="p-4">
+                  <td className="p-4 whitespace-nowrap">
                     <div className="flex items-center gap-3">
                       <ResolvedAvatar
                         className="h-8 w-8"
@@ -1168,11 +1165,11 @@ export const WorkerManagement = () => {
                         name={worker.name}
                         iconClassName="h-4 w-4"
                       />
-                      <span className="font-medium text-sm">{worker.name}</span>
+                      <span className="font-medium text-sm">{normalizeName(worker.name)}</span>
                     </div>
                   </td>
-                  <td className="p-4 text-sm text-muted-foreground">{worker.document_number || '-'}</td>
-                  <td className="p-4 text-sm text-muted-foreground">{getCompanyName(worker.company_id)}</td>
+                  <td className="p-4 text-sm text-muted-foreground whitespace-nowrap">{formatCpf(worker.document_number)}</td>
+                  <td className="p-4 text-sm text-muted-foreground whitespace-nowrap">{normalizeName(getCompanyName(worker.company_id))}</td>
                   <td className="p-4">
                     <div className="flex flex-wrap gap-1">
                       {projectNames.length > 0 ? projectNames.map((name, i) => (
