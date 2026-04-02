@@ -1,48 +1,28 @@
 
 
-## Implementar geração de etiquetas PDF no formato do sistema em produção
+## Corrigir geração da etiqueta PDF
 
-### Contexto
-A imagem fornecida mostra uma etiqueta vertical (62×100mm) com texto rotacionado -90°, contendo: nome do trabalhador (bold), função, empresa, nome do projeto, tipo do projeto, logo rotacionada do cliente, código dentro de um círculo, tipo sanguíneo e "Powered by Googlemarine".
+### Análise
+O código atual da função `handlePrintLabels` replica a lógica do sistema em produção, mas existem potenciais problemas com a versão do jsPDF (v3 vs v2.5.1 usada na referência) que podem afetar coordenadas de texto rotacionado e o método `splitTextToSize`.
 
-O código de referência (Deno edge function) já implementa essa lógica. Preciso replicá-la no front-end usando jsPDF (já instalado no projeto, usado em `BadgePrinter.tsx`).
-
-### Implementação
+### Correções planejadas
 
 **Arquivo: `src/components/workers/WorkerManagement.tsx`**
 
-1. Criar função `handlePrintLabels` que:
-   - Busca o projeto selecionado e seu `client_id`
-   - Busca o cliente (company com type=client) para obter `logo_url_rotated`
-   - Busca job functions para mapear `job_function_id` → nome
-   - Busca companies para mapear `company_id` → nome
-   - Gera PDF com jsPDF no formato 62×100mm (portrait)
+1. **Garantir compatibilidade com jsPDF v3**: O parâmetro `angle` na v3 pode ter comportamento diferente. Validar que `doc.text(str, x, y, { angle: -90 })` funciona corretamente, e caso necessário usar a API de transformação matricial (`doc.internal.write` com rotação manual).
 
-2. Para cada trabalhador selecionado, gerar uma página com:
-   - Borda retangular (rect 3,3 até pageWidth-6, pageHeight-6)
-   - Logo rotacionada do cliente (canto superior direito, 8×24mm)
-   - Nome (formatado: primeiro + último nome, ou customName se 1 trabalhador) — rotacionado -90°, font 16 bold
-   - Função (job_function) — rotacionado -90°, font 12
-   - Empresa — rotacionado -90°, font 10
-   - Nome do projeto — rotacionado -90°, font dinâmico (9-14 conforme comprimento)
-   - Tipo do projeto (Docagem/Mobilização/Projeto) — rotacionado -90°, font 12
-   - Círculo com código (4 dígitos, padStart '0') — centro em (40,80), raio 16
-   - "Powered by Googlemarine" — font 6, cor cinza
-   - Tipo sanguíneo (se válido) — label + valor
+2. **Corrigir coordenadas dos `nameLines`**: Na iteração das linhas do nome, o incremento `i * 24` move cada linha 24mm ao longo do eixo Y (que vira horizontal com a rotação). Se o nome tiver 2 linhas, a segunda linha ficaria a 24mm de distância — pode ser demais. Ajustar para `i * 8` (espaçamento proporcional ao tamanho da fonte 16pt ≈ 5.6mm).
 
-3. Atualizar o `onClick` do botão "Imprimir Etiquetas" para chamar `handlePrintLabels`
+3. **Adicionar tratamento robusto do `splitTextToSize`**: Forçar o tipo de retorno como `string[]` para evitar problemas com tipagem no v3.
 
-### Dados necessários (já disponíveis no componente)
-- `workers` — lista completa com `blood_type`, `job_function_id`, `company_id`, `code`, `name`
-- `companies` — para mapear company_id → name
-- `projects` — para obter projeto, client_id, project_type
-- Job functions: adicionar `useJobFunctions()` do hook existente
+4. **Abrir PDF em nova aba**: Em vez de `doc.save()`, usar `window.open(doc.output('bloburl'))` para permitir visualização antes de impressão, mantendo `doc.save()` como fallback.
 
-### Dependências
-- `jsPDF` — já instalado (usado em BadgePrinter)
-- `resolveFileUrl` — para resolver a URL da logo rotacionada do cliente
-- Remoção de acentos com `normalize('NFD')`
+### Detalhes técnicos
+
+- O `splitTextToSize(text, 45)` com texto rotacionado -90° está correto: 45mm corresponde ao espaço disponível ao longo da altura da página (de y=5 até ~y=50, antes do círculo em y=80)
+- O incremento entre linhas do nome deve ser ~6-8mm (não 24mm como no código de referência — na verdade 24mm é o espaçamento no eixo X quando o texto está rotacionado, movendo cada linha para a esquerda)
+- Verificar que `circle()` e `addImage()` funcionam identicamente na v3
 
 ### Arquivos alterados
-- `src/components/workers/WorkerManagement.tsx` — adicionar import de useJobFunctions, adicionar função de geração PDF, conectar ao botão
+- `src/components/workers/WorkerManagement.tsx` — corrigir e validar `handlePrintLabels`
 
