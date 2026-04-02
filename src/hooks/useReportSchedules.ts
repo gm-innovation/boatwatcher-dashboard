@@ -5,11 +5,16 @@ import { toast } from 'sonner';
 export interface ReportSchedule {
   id: string;
   name: string;
-  report_type: 'presence' | 'access' | 'compliance' | 'device';
-  frequency: 'daily' | 'weekly' | 'monthly';
+  report_type: string;
+  frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly';
   recipients: string[];
   project_id: string | null;
-  filters: Record<string, any>;
+  filters: {
+    send_time?: string;
+    lookback_days?: number;
+    report_types?: string[];
+    [key: string]: any;
+  };
   last_run_at: string | null;
   next_run_at: string | null;
   is_active: boolean;
@@ -20,11 +25,11 @@ export interface ReportSchedule {
 
 export interface CreateReportScheduleInput {
   name: string;
-  report_type: ReportSchedule['report_type'];
+  report_type: string;
   frequency: ReportSchedule['frequency'];
   recipients: string[];
   project_id?: string | null;
-  filters?: Record<string, any>;
+  filters?: ReportSchedule['filters'];
   is_active?: boolean;
 }
 
@@ -48,7 +53,10 @@ export const useReportSchedules = (projectId?: string | null) => {
         throw error;
       }
 
-      return data as ReportSchedule[];
+      return (data ?? []).map((d: any) => ({
+        ...d,
+        filters: d.filters ?? {},
+      })) as ReportSchedule[];
     }
   });
 };
