@@ -725,7 +725,7 @@ export const WorkerManagement = () => {
     if (!selectedProject) return;
     if (workerList.length === 0) return;
 
-    toast({ title: `Gerando ${selectedWorkers.length} etiqueta(s)...` });
+    toast({ title: `Gerando ${workerList.length} etiqueta(s)...` });
 
     // Fetch client logo
     let logoDataUrl: string | null = null;
