@@ -646,17 +646,17 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                 </div>
                 <div className="space-y-2">
                   <Label>Status</Label>
-                  <Select value={watchedStatus} onValueChange={(value) => setValue('status', value)}>
-                    <SelectTrigger className="w-[220px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending_review">Pendente de Análise</SelectItem>
-                      <SelectItem value="active">Ativo</SelectItem>
-                      <SelectItem value="inactive">Inativo</SelectItem>
-                      <SelectItem value="blocked">Bloqueado</SelectItem>
-                    </SelectContent>
-                  </Select>
+                   <Select value={watchedStatus || 'active'} onValueChange={(value) => setValue('status', value)}>
+                     <SelectTrigger className="w-[220px]">
+                       <SelectValue />
+                     </SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="active">Ativo</SelectItem>
+                       <SelectItem value="pending_review">Pendente de Análise</SelectItem>
+                       <SelectItem value="inactive">Inativo</SelectItem>
+                       <SelectItem value="blocked">Bloqueado</SelectItem>
+                     </SelectContent>
+                   </Select>
                 </div>
               </CardContent>
             </Card>
