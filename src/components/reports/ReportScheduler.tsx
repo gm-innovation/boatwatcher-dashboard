@@ -103,7 +103,7 @@ export const ReportScheduler = () => {
     setSelectedTypes(['presence']);
     setFrequency('daily');
     setSendTime('06:00');
-    setLookbackDays(1);
+    
     setRecipients([]);
     setRecipientInput('');
   };
