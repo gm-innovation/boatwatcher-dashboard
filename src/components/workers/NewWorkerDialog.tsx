@@ -154,7 +154,6 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
   const [uploadSuccessCount, setUploadSuccessCount] = useState(0);
   const [isManualDocMode, setIsManualDocMode] = useState(false);
 
-  const photoInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
 
   const { data: companies = [] } = useCompanies();
