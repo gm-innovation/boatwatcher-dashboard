@@ -707,7 +707,173 @@ export const WorkerManagement = () => {
   const { data: workers = [], isLoading, refetch } = useWorkers();
   const { data: companies = [] } = useCompanies();
   const { data: projects = [] } = useProjects();
+  const { data: jobFunctions = [] } = useJobFunctions();
   const queryClient = useQueryClient();
+
+  const removeAccents = (str: string) => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  const formatNameForLabel = (fullName: string) => {
+    if (!fullName) return 'Nome nao informado';
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length <= 2) return fullName;
+    return `${parts[0]} ${parts[parts.length - 1]}`;
+  };
+
+  const handlePrintLabels = async () => {
+    const selectedProject = projects.find((p: any) => p.id === selectedProjectForLabels);
+    if (!selectedProject) return;
+
+    const selectedWorkers = workers.filter(w => selectedWorkerIds.includes(w.id));
+    if (selectedWorkers.length === 0) return;
+
+    toast({ title: `Gerando ${selectedWorkers.length} etiqueta(s)...` });
+
+    // Fetch client logo
+    let logoDataUrl: string | null = null;
+    try {
+      const clientId = (selectedProject as any).client_id;
+      if (clientId) {
+        const client = companies.find(c => c.id === clientId);
+        const logoUrl = client?.logo_url_rotated || client?.logo_url_light;
+        if (logoUrl) {
+          const resolvedUrl = await resolveFileUrl(logoUrl);
+          if (resolvedUrl) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            try {
+              const logoResponse = await fetch(resolvedUrl, { signal: controller.signal });
+              clearTimeout(timeoutId);
+              if (logoResponse.ok) {
+                const logoBuffer = await logoResponse.arrayBuffer();
+                const logoBytes = new Uint8Array(logoBuffer);
+                let detectedFormat = 'JPEG';
+                if (logoBytes[0] === 0x89 && logoBytes[1] === 0x50) detectedFormat = 'PNG';
+                let binary = '';
+                for (let j = 0; j < logoBytes.length; j++) {
+                  binary += String.fromCharCode(logoBytes[j]);
+                }
+                logoDataUrl = `data:image/${detectedFormat.toLowerCase()};base64,${btoa(binary)}`;
+              }
+            } catch {
+              clearTimeout(timeoutId);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[LABEL] Logo error:', e);
+    }
+
+    const combinedProjectName = selectedProject.name;
+    let projectFontSize = 14;
+    if (combinedProjectName.length > 40) projectFontSize = 9;
+    else if (combinedProjectName.length > 30) projectFontSize = 10;
+    else if (combinedProjectName.length > 20) projectFontSize = 12;
+
+    const projectType = (selectedProject as any).project_type === 'docagem' ? 'Docagem' :
+      (selectedProject as any).project_type === 'mobilizacao' ? 'Mobilizacao' : 'Projeto';
+
+    const pageWidth = 62;
+    const pageHeight = 100;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pageWidth, pageHeight] });
+
+    selectedWorkers.forEach((worker, idx) => {
+      if (idx > 0) doc.addPage([pageWidth, pageHeight]);
+
+      let displayName: string;
+      if (customLabelName && customLabelName.trim() !== '' && selectedWorkers.length === 1) {
+        displayName = customLabelName.trim();
+      } else {
+        displayName = formatNameForLabel(worker.name);
+      }
+
+      // Border
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.5);
+      doc.rect(3, 3, pageWidth - 6, pageHeight - 6);
+
+      // Logo
+      if (logoDataUrl) {
+        try {
+          doc.addImage(logoDataUrl, 'PNG', 52, 5, 8, 24);
+        } catch {}
+      }
+
+      // Name (rotated -90°)
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 0, 0);
+      const cleanName = removeAccents(displayName);
+      const nameLines = doc.splitTextToSize(cleanName, 45);
+      if (nameLines.length > 2) doc.setFontSize(14);
+      let startY = 5;
+      nameLines.forEach((line: string, i: number) => {
+        doc.text(line, 36, startY + (i * 24), { angle: -90 });
+      });
+
+      // Job function
+      const jobFn = jobFunctions.find(jf => jf.id === (worker as any).job_function_id);
+      const jobFunctionName = jobFn?.name || (worker as any).role || 'Funcao nao informada';
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(0, 0, 0);
+      doc.text(removeAccents(String(jobFunctionName)), 30, 5, { angle: -90 });
+
+      // Company
+      const companyName = getCompanyName(worker.company_id);
+      doc.setFontSize(10);
+      doc.text(removeAccents(companyName === '-' ? 'Empresa nao informada' : companyName), 26, 5, { angle: -90 });
+
+      // Project name
+      doc.setFontSize(projectFontSize);
+      doc.setFont('helvetica', 'bold');
+      doc.text(removeAccents(combinedProjectName), 14, 5, { angle: -90 });
+
+      // Project type
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.text(removeAccents(projectType), 8, 5, { angle: -90 });
+
+      // Circle with code
+      const circleX = 40;
+      const circleY = 80;
+      const radius = 16;
+      doc.setFillColor(255, 255, 255);
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.5);
+      doc.circle(circleX, circleY, radius, 'FD');
+
+      const code = String((worker as any).code || '1').padStart(4, '0');
+      doc.setFontSize(25);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 0, 0);
+      doc.text(code, circleX + 5, circleY, { align: 'center', angle: -90 });
+
+      // Powered by
+      doc.setFontSize(6);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(120, 120, 120);
+      doc.text('Powered by Googlemarine', 5, 40, { angle: -90 });
+
+      // Blood type
+      const bloodType = (worker as any).blood_type;
+      const isValidBloodType = bloodType && typeof bloodType === 'string' &&
+        bloodType.trim() !== '' && !['nao informado', 'não informado', 'n/a', 'null', 'undefined']
+          .includes(bloodType.trim().toLowerCase());
+      if (isValidBloodType) {
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(0, 0, 0);
+        doc.text('Tipo Sanguineo', 16, 75, { angle: -90 });
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(bloodType.trim(), 12, 80, { angle: -90 });
+      }
+    });
+
+    doc.save('etiquetas.pdf');
+    toast({ title: `${selectedWorkers.length} etiqueta(s) gerada(s) com sucesso!` });
+  };
 
   const handleDelete = async (worker: Worker) => {
     if (!confirm(`Tem certeza que deseja remover ${worker.name}?`)) return;
