@@ -505,7 +505,7 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                   </div>
                   <div className="space-y-2">
                     <Label>Empresa</Label>
-                    <Select onValueChange={(value) => setValue('company_id', value)}>
+                    <Select value={watchedCompanyId || ''} onValueChange={(value) => setValue('company_id', value)}>
                       <SelectTrigger>
                         <SelectValue placeholder={isDocumentMode ? 'Selecione ou será preenchido' : 'Selecione uma empresa'} />
                       </SelectTrigger>
