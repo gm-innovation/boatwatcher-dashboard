@@ -454,7 +454,7 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 h-[calc(95vh-180px)] pr-4">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-4">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 pb-4">
 
             {/* ── Documents Card (document mode: shown first) ── */}
