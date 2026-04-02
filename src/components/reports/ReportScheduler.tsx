@@ -371,20 +371,9 @@ export const ReportScheduler = () => {
               </div>
             </div>
 
-            {/* Row 3: Lookback days */}
-            <div className="grid grid-cols-12 gap-4">
-              <div className="col-span-4 space-y-1.5">
-                <Label>Dias Retroativos</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={lookbackDays}
-                  onChange={(e) => setLookbackDays(Number(e.target.value))}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Quantidade de dias anteriores incluídos no relatório
-                </p>
-              </div>
+            {/* Row 3: Período informativo */}
+            <div className="rounded-md border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+              {FREQUENCY_LOOKBACK[frequency]?.label}
             </div>
 
             {/* Row 4: Recipients */}
