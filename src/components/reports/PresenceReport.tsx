@@ -136,31 +136,50 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       acessos: count,
     }));
 
-    // By week
-    const byWeek: Record<string, number> = {};
+    // By week — format "Sem DD/MM" using start of week (Sunday)
+    const byWeekMap: Record<string, { count: number; weekStart: Date }> = {};
     granted.forEach((l: any) => {
-      const w = getISOWeek(new Date(l.timestamp));
-      const key = `Sem ${w}`;
-      byWeek[key] = (byWeek[key] || 0) + 1;
+      const ts = new Date(l.timestamp);
+      const ws = startOfWeek(ts, { weekStartsOn: 0 });
+      const key = ws.toISOString();
+      if (!byWeekMap[key]) byWeekMap[key] = { count: 0, weekStart: ws };
+      byWeekMap[key].count++;
     });
-    const weeklyChart = Object.entries(byWeek)
-      .sort(([a], [b]) => {
-        const na = parseInt(a.replace('Sem ', ''));
-        const nb = parseInt(b.replace('Sem ', ''));
-        return na - nb;
-      })
-      .map(([week, count]) => ({ semana: week, acessos: count }));
+    const weeklyChart = Object.values(byWeekMap)
+      .sort((a, b) => a.weekStart.getTime() - b.weekStart.getTime())
+      .map(({ weekStart, count }) => ({
+        semana: `Sem ${format(weekStart, 'dd/MM')}`,
+        acessos: count,
+      }));
 
-    // By day of week
+    // By day of week (simple)
     const byDayOfWeek: number[] = [0, 0, 0, 0, 0, 0, 0];
     granted.forEach((l: any) => {
       const d = getDay(new Date(l.timestamp));
       byDayOfWeek[d]++;
     });
-    const dayOfWeekChart = DAY_NAMES.map((name, i) => ({
-      dia: name,
-      acessos: byDayOfWeek[i],
-    }));
+
+    // Stacked chart: distribution by day of week per week
+    const weeklyByDay: Record<string, { weekStart: Date; days: number[] }> = {};
+    granted.forEach((l: any) => {
+      const ts = new Date(l.timestamp);
+      const ws = startOfWeek(ts, { weekStartsOn: 0 });
+      const key = ws.toISOString();
+      if (!weeklyByDay[key]) weeklyByDay[key] = { weekStart: ws, days: [0, 0, 0, 0, 0, 0, 0] };
+      weeklyByDay[key].days[getDay(ts)]++;
+    });
+    const weeklyByDayChart = Object.values(weeklyByDay)
+      .sort((a, b) => a.weekStart.getTime() - b.weekStart.getTime())
+      .map(({ weekStart, days }) => ({
+        semana: `Sem ${format(weekStart, 'dd/MM')}`,
+        Domingo: days[0],
+        Segunda: days[1],
+        Terça: days[2],
+        Quarta: days[3],
+        Quinta: days[4],
+        Sexta: days[5],
+        Sábado: days[6],
+      }));
 
     // Weekday vs Weekend
     const weekdayCount = byDayOfWeek.slice(1, 6).reduce((s, v) => s + v, 0);
