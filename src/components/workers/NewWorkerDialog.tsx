@@ -608,7 +608,7 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
                         <User className="h-4 w-4" />
                         Gênero
                       </Label>
-                      <Select onValueChange={(v) => setValue('gender', v)}>
+                      <Select value={watchedGender || ''} onValueChange={(v) => setValue('gender', v)}>
                         <SelectTrigger>
                           <SelectValue placeholder="Não informado" />
                         </SelectTrigger>
