@@ -310,10 +310,16 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
             {currentProject?.location && ` • ${currentProject.location}`}
           </p>
         </div>
-        <Button variant="outline" onClick={handlePrint} className="print:hidden">
-          <Printer className="h-4 w-4 mr-2" />
-          Imprimir
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExportPdf} disabled={exporting} className="print:hidden">
+            <Download className="h-4 w-4 mr-2" />
+            {exporting ? 'Gerando...' : 'Baixar PDF'}
+          </Button>
+          <Button variant="outline" onClick={handlePrint} className="print:hidden">
+            <Printer className="h-4 w-4 mr-2" />
+            Imprimir
+          </Button>
+        </div>
       </div>
 
       {/* KPI Cards Row 1 */}
