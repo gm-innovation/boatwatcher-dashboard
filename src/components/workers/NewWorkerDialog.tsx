@@ -252,15 +252,27 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
           setValue('blood_type', data.blood_type);
         }
         
-        // Role/Job function - try to match existing job functions
+        // Role/Job function - try to match existing, or auto-create
         if (data.job_function && !watch('role')) {
-          const extractedRole = String(data.job_function).toLowerCase().trim();
+          const extractedRole = String(data.job_function).trim();
+          const extractedRoleLower = extractedRole.toLowerCase();
           const matched = jobFunctions.find((jf: any) => 
-            jf.name.toLowerCase().trim() === extractedRole ||
-            jf.name.toLowerCase().includes(extractedRole) ||
-            extractedRole.includes(jf.name.toLowerCase())
+            jf.name.toLowerCase().trim() === extractedRoleLower ||
+            jf.name.toLowerCase().includes(extractedRoleLower) ||
+            extractedRoleLower.includes(jf.name.toLowerCase())
           );
-          setValue('role', matched ? matched.name : data.job_function);
+          if (matched) {
+            setValue('role', matched.name);
+          } else {
+            // Auto-create the job function
+            try {
+              await createJobFunction.mutateAsync({ name: extractedRole });
+              setValue('role', extractedRole);
+            } catch (e) {
+              console.error('Failed to auto-create job function:', e);
+              setValue('role', extractedRole);
+            }
+          }
         }
         
         // Company - try to match by name
