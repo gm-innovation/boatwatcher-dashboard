@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { ensureValidSession } from '@/utils/ensureValidSession';
-import { identifyDocumentType, parseDocumentDate, calculateExpiryDate, normalizeDocumentType, DocumentType } from '@/utils/documentParser';
+import { parseDocumentDate, calculateExpiryDate } from '@/utils/documentParser';
 import { usesLocalServer } from '@/lib/runtimeProfile';
 
 export interface ExtractedDocumentData {
-  document_type?: DocumentType;
+  document_type?: string;
   full_name?: string;
   document_number?: string;
   birth_date?: string;
@@ -20,9 +20,10 @@ export interface ExtractedDocumentData {
 
 export interface ProcessedDocument {
   filename: string;
+  file: File;
   file_url: string;
   file_type: string;
-  document_type: DocumentType;
+  document_type: string;
   completion_date: string | null;
   expiry_date: string | null;
   extracted_data: ExtractedDocumentData;
@@ -95,8 +96,6 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
         return null;
       }
 
-      const preliminaryType = identifyDocumentType(file.name);
-
       let { data, error } = await supabase.functions.invoke('extract-document-data', {
         headers: {
           Authorization: `Bearer ${validSession.accessToken}`,
@@ -104,7 +103,6 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
         body: {
           file_url: fileUrl,
           filename: file.name,
-          document_type: preliminaryType,
           worker_id: workerId,
         },
       });
@@ -121,7 +119,6 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
             body: {
               file_url: fileUrl,
               filename: file.name,
-              document_type: preliminaryType,
               worker_id: workerId,
             },
           }));
@@ -150,9 +147,10 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
 
         return {
           filename: file.name,
+          file,
           file_url: fileUrl,
           file_type: file.type,
-          document_type: preliminaryType,
+          document_type: 'Documento',
           completion_date: null,
           expiry_date: null,
           extracted_data: {},
@@ -161,12 +159,16 @@ export const useDocumentExtraction = (): UseDocumentExtractionReturn => {
       }
 
       const extractedData: ExtractedDocumentData = data?.extracted_data || {};
+      
+      // Use the document_type directly from the AI — no collapsing to "Outros"
+      const documentType = extractedData.document_type || data?.detected_type || 'Documento';
+      
       const completionDate = parseDocumentDate(extractedData.completion_date);
-      const documentType = normalizeDocumentType(extractedData.document_type || preliminaryType);
       const expiryDate = parseDocumentDate(extractedData.expiry_date) || calculateExpiryDate(completionDate, documentType);
 
       return {
         filename: file.name,
+        file,
         file_url: fileUrl,
         file_type: file.type,
         document_type: documentType,

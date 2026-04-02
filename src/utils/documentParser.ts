@@ -1,62 +1,16 @@
-// Tipos de documento suportados
-export type DocumentType = 'ASO' | 'NR10' | 'NR33' | 'NR35' | 'RG' | 'CPF' | 'CNH' | 'Outros';
+// Tipos de documento conhecidos (para regras de validade)
+export const KNOWN_DOCUMENT_TYPES = ['ASO', 'NR10', 'NR33', 'NR34', 'NR35', 'RG', 'CPF', 'CNH'] as const;
 
-// Validade padrão em dias para cada tipo de documento
-export const DEFAULT_VALIDITY_DAYS: Record<DocumentType, number | null> = {
-  ASO: 365,      // 1 ano
-  NR10: 730,     // 2 anos
-  NR33: 365,     // 1 ano
-  NR35: 730,     // 2 anos
-  RG: null,      // Não expira
-  CPF: null,     // Não expira
-  CNH: 1825,     // 5 anos
-  Outros: 365,   // 1 ano por padrão
-};
-
-// Identificar tipo de documento pelo nome do arquivo
-export const identifyDocumentType = (filename: string): DocumentType => {
-  const lowerName = filename.toLowerCase();
-  
-  if (lowerName.includes('aso') || lowerName.includes('atestado') || lowerName.includes('saude')) {
-    return 'ASO';
-  }
-  if (lowerName.includes('nr10') || lowerName.includes('nr-10') || lowerName.includes('eletric')) {
-    return 'NR10';
-  }
-  if (lowerName.includes('nr33') || lowerName.includes('nr-33') || lowerName.includes('confin')) {
-    return 'NR33';
-  }
-  if (lowerName.includes('nr35') || lowerName.includes('nr-35') || lowerName.includes('altura')) {
-    return 'NR35';
-  }
-  if (lowerName.includes('rg') || lowerName.includes('identidade')) {
-    return 'RG';
-  }
-  if (lowerName.includes('cpf')) {
-    return 'CPF';
-  }
-  if (lowerName.includes('cnh') || lowerName.includes('habilitacao') || lowerName.includes('carteira')) {
-    return 'CNH';
-  }
-  
-  return 'Outros';
-};
-
-// Normalizar tipo de documento da IA
-export const normalizeDocumentType = (type: string | undefined): DocumentType => {
-  if (!type) return 'Outros';
-  
-  const typeUpper = String(type).toUpperCase().trim();
-  
-  if (typeUpper.includes('ASO') || typeUpper.includes('ATESTADO')) return 'ASO';
-  if (typeUpper.includes('NR10') || typeUpper.includes('NR-10')) return 'NR10';
-  if (typeUpper.includes('NR33') || typeUpper.includes('NR-33')) return 'NR33';
-  if (typeUpper.includes('NR35') || typeUpper.includes('NR-35')) return 'NR35';
-  if (typeUpper === 'RG' || typeUpper.includes('IDENTIDADE')) return 'RG';
-  if (typeUpper === 'CPF') return 'CPF';
-  if (typeUpper === 'CNH' || typeUpper.includes('HABILITACAO')) return 'CNH';
-  
-  return 'Outros';
+// Validade padrão em dias para cada tipo de documento conhecido
+export const DEFAULT_VALIDITY_DAYS: Record<string, number | null> = {
+  ASO: 365,
+  NR10: 730,
+  NR33: 365,
+  NR34: 730,
+  NR35: 730,
+  RG: null,
+  CPF: null,
+  CNH: 1825,
 };
 
 // Parsear data em vários formatos
@@ -101,11 +55,12 @@ export const parseDocumentDate = (dateString: string | undefined | null): string
 // Calcular data de validade baseada na data de emissão e tipo de documento
 export const calculateExpiryDate = (
   issueDate: string | null, 
-  documentType: DocumentType
+  documentType: string
 ): string | null => {
   if (!issueDate) return null;
   
-  const validityDays = DEFAULT_VALIDITY_DAYS[documentType];
+  const typeUpper = documentType.toUpperCase();
+  const validityDays = DEFAULT_VALIDITY_DAYS[typeUpper] ?? null;
   if (!validityDays) return null;
   
   try {
@@ -121,7 +76,7 @@ export const calculateExpiryDate = (
 export type ValidityStatus = 'valid' | 'expiring_soon' | 'expired';
 
 export const getValidityStatus = (expiryDate: string | null | undefined): ValidityStatus => {
-  if (!expiryDate) return 'valid'; // Se não tem validade, considera válido
+  if (!expiryDate) return 'valid';
   
   try {
     const expiry = new Date(expiryDate);
@@ -177,4 +132,23 @@ export const formatCPF = (cpf: string | undefined | null): string => {
 export const cleanCPF = (cpf: string | undefined | null): string => {
   if (!cpf) return '';
   return String(cpf).replace(/\D/g, '');
+};
+
+// Verificar se um tipo de documento é uma foto
+export const isPhotoDocument = (type: string): boolean => {
+  const lower = type.toLowerCase();
+  return lower.includes('foto') || lower.includes('selfie') || lower.includes('3x4') || lower.includes('retrato');
+};
+
+// Prioridade de documento para preenchimento de dados pessoais
+// ASO > RG/CNH/CPF > NRs > Outros
+export const getDocumentPriority = (type: string): number => {
+  const upper = type.toUpperCase();
+  if (upper.includes('ASO') || upper.includes('ATESTADO')) return 100;
+  if (upper === 'RG' || upper.includes('IDENTIDADE')) return 80;
+  if (upper === 'CNH' || upper.includes('HABILITACAO')) return 75;
+  if (upper === 'CPF') return 70;
+  if (upper.startsWith('NR')) return 30;
+  if (isPhotoDocument(type)) return 0;
+  return 20;
 };
