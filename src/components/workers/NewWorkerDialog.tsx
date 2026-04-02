@@ -173,6 +173,10 @@ export const NewWorkerDialog = ({ open, onOpenChange, onSuccess }: NewWorkerDial
   });
 
   const watchedStatus = watch('status');
+  const watchedCompanyId = watch('company_id');
+  const watchedRole = watch('role');
+  const watchedGender = watch('gender');
+  const watchedBloodType = watch('blood_type');
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
