@@ -6,7 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Schema de extração baseado no tipo de documento
 const getExtractionSchema = (documentType: string) => {
   const baseProperties = {
     document_type: {
@@ -24,56 +23,27 @@ const getExtractionSchema = (documentType: string) => {
     }
   };
 
-  // Campos extras para documentos pessoais (ASO, RG, CPF)
   if (['ASO', 'RG', 'CPF', 'CNH'].includes(documentType) || !documentType) {
     return {
       type: "object",
       properties: {
         ...baseProperties,
-        full_name: {
-          type: "string",
-          description: "Nome completo do trabalhador/pessoa"
-        },
-        document_number: {
-          type: "string",
-          description: "CPF (apenas números, sem pontos ou traços)"
-        },
-        birth_date: {
-          type: "string",
-          description: "Data de nascimento. Formato: YYYY-MM-DD"
-        },
-        gender: {
-          type: "string",
-          enum: ["Masculino", "Feminino"],
-          description: "Gênero/Sexo. Retorne 'Masculino' ou 'Feminino'"
-        },
-        blood_type: {
-          type: "string",
-          enum: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
-          description: "Tipo sanguíneo"
-        },
-        job_function: {
-          type: "string",
-          description: "Cargo ou função profissional"
-        },
-        company_name: {
-          type: "string",
-          description: "Nome da empresa/empregador mencionado no documento"
-        }
+        full_name: { type: "string", description: "Nome completo do trabalhador/pessoa" },
+        document_number: { type: "string", description: "CPF (apenas números, sem pontos ou traços)" },
+        birth_date: { type: "string", description: "Data de nascimento. Formato: YYYY-MM-DD" },
+        gender: { type: "string", enum: ["Masculino", "Feminino"], description: "Gênero/Sexo" },
+        blood_type: { type: "string", enum: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"], description: "Tipo sanguíneo" },
+        job_function: { type: "string", description: "Cargo ou função profissional" },
+        company_name: { type: "string", description: "Nome da empresa/empregador mencionado no documento" }
       }
     };
   }
 
-  return {
-    type: "object",
-    properties: baseProperties
-  };
+  return { type: "object", properties: baseProperties };
 };
 
-// Identificar tipo de documento pelo nome do arquivo
 const identifyDocumentType = (filename: string): string => {
   const lowerName = filename.toLowerCase();
-  
   if (lowerName.includes('aso') || lowerName.includes('atestado')) return 'ASO';
   if (lowerName.includes('nr10') || lowerName.includes('nr-10') || lowerName.includes('eletric')) return 'NR10';
   if (lowerName.includes('nr33') || lowerName.includes('nr-33') || lowerName.includes('confin')) return 'NR33';
@@ -81,16 +51,45 @@ const identifyDocumentType = (filename: string): string => {
   if (lowerName.includes('rg') || lowerName.includes('identidade')) return 'RG';
   if (lowerName.includes('cpf')) return 'CPF';
   if (lowerName.includes('cnh') || lowerName.includes('habilitacao') || lowerName.includes('carteira')) return 'CNH';
-  
   return 'Outros';
 };
 
+// Download file and convert to base64 data URL
+async function fileToDataUrl(fileUrl: string, filename: string): Promise<{ dataUrl: string; mimeType: string }> {
+  const response = await fetch(fileUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download file: ${response.status}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
+  
+  // Convert to base64
+  let binary = '';
+  for (let i = 0; i < uint8Array.length; i++) {
+    binary += String.fromCharCode(uint8Array[i]);
+  }
+  const base64 = btoa(binary);
+
+  // Determine MIME type
+  const ext = (filename || fileUrl).split('.').pop()?.toLowerCase() || '';
+  const mimeMap: Record<string, string> = {
+    'pdf': 'application/pdf',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'webp': 'image/webp',
+    'gif': 'image/gif',
+  };
+  const mimeType = mimeMap[ext] || 'application/octet-stream';
+
+  return { dataUrl: `data:${mimeType};base64,${base64}`, mimeType };
+}
+
 serve(async (req) => {
-  // Log de debug para autenticação
   const authHeader = req.headers.get('authorization');
   console.log(`[extract-document-data] ${req.method} Authorization header:`, authHeader ? 'present' : 'missing');
-  
-  // Handle CORS preflight requests
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -111,16 +110,16 @@ serve(async (req) => {
     }
 
     console.log('[extract-document-data] Iniciando extração de:', filename);
-    console.log('[extract-document-data] URL do arquivo:', file_url);
 
-    // Identificar tipo de documento
     const detectedType = document_type || identifyDocumentType(filename || '');
     console.log('[extract-document-data] Tipo detectado:', detectedType);
 
-    // Obter schema de extração
     const extractionSchema = getExtractionSchema(detectedType);
 
-    // Criar prompt para a IA
+    // Download file and convert to base64 data URL (fixes PDF support)
+    const { dataUrl, mimeType } = await fileToDataUrl(file_url, filename || '');
+    console.log('[extract-document-data] File MIME type:', mimeType, 'base64 length:', dataUrl.length);
+
     const systemPrompt = `Você é um especialista em extrair dados de documentos brasileiros como ASO (Atestado de Saúde Ocupacional), certificados NR (NR10, NR33, NR35), RG, CPF, CNH e outros documentos de trabalhadores.
 
 INSTRUÇÕES IMPORTANTES:
@@ -149,7 +148,6 @@ Tipo esperado: ${detectedType}
 
 Retorne APENAS um JSON válido com os dados extraídos.`;
 
-    // Chamar Lovable AI Gateway com suporte a imagem
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -164,7 +162,7 @@ Retorne APENAS um JSON válido com os dados extraídos.`;
             role: "user", 
             content: [
               { type: "text", text: userPrompt },
-              { type: "image_url", image_url: { url: file_url } }
+              { type: "image_url", image_url: { url: dataUrl } }
             ]
           }
         ],
@@ -191,7 +189,7 @@ Retorne APENAS um JSON válido com os dados extraídos.`;
       }
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: "Créditos insuficientes. Adicione créditos na sua conta Lovable." }),
+          JSON.stringify({ error: "Créditos insuficientes." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -201,9 +199,8 @@ Retorne APENAS um JSON válido com os dados extraídos.`;
     }
 
     const aiResponse = await response.json();
-    console.log('[extract-document-data] Resposta da IA:', JSON.stringify(aiResponse, null, 2));
+    console.log('[extract-document-data] Resposta recebida, finish_reason:', aiResponse.choices?.[0]?.finish_reason);
 
-    // Extrair dados da resposta
     let extractedData: any = {};
     
     if (aiResponse.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments) {
@@ -213,7 +210,6 @@ Retorne APENAS um JSON válido com os dados extraídos.`;
         console.error('[extract-document-data] Erro ao parsear argumentos:', e);
       }
     } else if (aiResponse.choices?.[0]?.message?.content) {
-      // Fallback: tentar extrair JSON do conteúdo
       const content = aiResponse.choices[0].message.content;
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -225,7 +221,7 @@ Retorne APENAS um JSON válido com os dados extraídos.`;
       }
     }
 
-    console.log('[extract-document-data] Dados extraídos:', extractedData);
+    console.log('[extract-document-data] Dados extraídos:', JSON.stringify(extractedData));
 
     // Normalizar gênero
     if (extractedData.gender) {
@@ -240,15 +236,10 @@ Retorne APENAS um JSON válido com os dados extraídos.`;
     // Normalizar tipo de documento
     if (extractedData.document_type) {
       const typeUpper = String(extractedData.document_type).toUpperCase();
-      if (typeUpper.includes('ASO') || typeUpper.includes('ATESTADO')) {
-        extractedData.document_type = 'ASO';
-      } else if (typeUpper.includes('NR10') || typeUpper.includes('NR-10')) {
-        extractedData.document_type = 'NR10';
-      } else if (typeUpper.includes('NR33') || typeUpper.includes('NR-33')) {
-        extractedData.document_type = 'NR33';
-      } else if (typeUpper.includes('NR35') || typeUpper.includes('NR-35')) {
-        extractedData.document_type = 'NR35';
-      }
+      if (typeUpper.includes('ASO') || typeUpper.includes('ATESTADO')) extractedData.document_type = 'ASO';
+      else if (typeUpper.includes('NR10') || typeUpper.includes('NR-10')) extractedData.document_type = 'NR10';
+      else if (typeUpper.includes('NR33') || typeUpper.includes('NR-33')) extractedData.document_type = 'NR33';
+      else if (typeUpper.includes('NR35') || typeUpper.includes('NR-35')) extractedData.document_type = 'NR35';
     } else {
       extractedData.document_type = detectedType;
     }
@@ -270,24 +261,12 @@ Retorne APENAS um JSON válido com os dados extraídos.`;
           
           if (worker) {
             const updates: any = {};
-            
-            // Preencher apenas campos vazios
-            if (extractedData.full_name && !worker.name) {
-              updates.name = extractedData.full_name;
-            }
-            if (extractedData.document_number && !worker.document_number) {
-              updates.document_number = extractedData.document_number;
-            }
-            if (extractedData.job_function && !worker.role) {
-              updates.role = extractedData.job_function;
-            }
+            if (extractedData.full_name && !worker.name) updates.name = extractedData.full_name;
+            if (extractedData.document_number && !worker.document_number) updates.document_number = extractedData.document_number;
+            if (extractedData.job_function && !worker.role) updates.role = extractedData.job_function;
             
             if (Object.keys(updates).length > 0) {
-              await supabase
-                .from('workers')
-                .update(updates)
-                .eq('id', worker_id);
-              
+              await supabase.from('workers').update(updates).eq('id', worker_id);
               console.log('[extract-document-data] Trabalhador atualizado:', updates);
             }
           }
@@ -298,22 +277,14 @@ Retorne APENAS um JSON válido com os dados extraídos.`;
     }
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        extracted_data: extractedData,
-        filename,
-        detected_type: detectedType
-      }),
+      JSON.stringify({ success: true, extracted_data: extractedData, filename, detected_type: detectedType }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
     console.error('[extract-document-data] Erro:', error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Erro desconhecido' 
-      }),
+      JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Erro desconhecido' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
