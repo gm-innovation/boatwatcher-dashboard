@@ -376,8 +376,8 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       </Card>
 
       {/* Weekly + Day of Week Charts */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:grid-cols-1">
+        <Card className="print-no-break">
           <CardHeader>
             <CardTitle className="text-base">Quantidade por Semana</CardTitle>
           </CardHeader>
