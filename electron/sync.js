@@ -920,6 +920,52 @@ class SyncEngine {
       req.end();
     });
   }
+
+  /**
+   * Full device re-sync: clears all users from a device and re-enrolls
+   * all active workers with correct codes and photos.
+   * Called via local server API: POST /api/devices/:id/full-resync
+   */
+  async fullDeviceResync(deviceId) {
+    const { clearAllUsersFromDevice, enrollUserOnDevice, loadPhotoAsBase64 } = require('../server/lib/controlid');
+
+    const device = this.db.getDeviceById?.(deviceId);
+    if (!device || !device.controlid_ip_address) {
+      throw new Error(`Dispositivo ${deviceId} não encontrado ou sem IP.`);
+    }
+
+    console.log(`[full-resync] Starting for device ${device.name}`);
+
+    // Step 1: Clear
+    const clearResult = await clearAllUsersFromDevice(device);
+    console.log(`[full-resync] Cleared ${clearResult.removed || 0} users`);
+
+    // Step 2: Re-enroll all active workers
+    const workers = this.db.getWorkers?.() || [];
+    const active = workers.filter(w => w.status === 'active' || !w.status);
+
+    let enrolled = 0;
+    let failed = 0;
+    const BATCH = 50;
+
+    for (let i = 0; i < active.length; i += BATCH) {
+      const batch = active.slice(i, i + BATCH);
+      for (const worker of batch) {
+        try {
+          let photo = null;
+          if (worker.photo_url) {
+            try { photo = await loadPhotoAsBase64(worker.photo_url); } catch {}
+          }
+          const r = await enrollUserOnDevice(device, worker, photo);
+          if (r.success) enrolled++; else failed++;
+        } catch { failed++; }
+      }
+      console.log(`[full-resync] Progress: ${Math.min(i + BATCH, active.length)}/${active.length}`);
+    }
+
+    console.log(`[full-resync] Done: ${enrolled} enrolled, ${failed} failed`);
+    return { success: true, enrolled, failed, total: active.length };
+  }
 }
 
 module.exports = { SyncEngine };
