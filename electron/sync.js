@@ -706,25 +706,24 @@ class SyncEngine {
     }
 
     let photoBase64 = null;
-    try {
-      const photoBuffer = await new Promise((resolve, reject) => {
-        const url = new URL(worker.photo_signed_url);
-        const mod = url.protocol === 'https:' ? https : require('http');
-        const req = mod.get(worker.photo_signed_url, { timeout: 15000 }, (res) => {
-          const chunks = [];
-          res.on('data', (chunk) => chunks.push(chunk));
-          res.on('end', () => resolve(Buffer.concat(chunks)));
+    if (worker.photo_signed_url) {
+      try {
+        const photoBuffer = await new Promise((resolve, reject) => {
+          const url = new URL(worker.photo_signed_url);
+          const mod = url.protocol === 'https:' ? https : require('http');
+          const req = mod.get(worker.photo_signed_url, { timeout: 15000 }, (res) => {
+            const chunks = [];
+            res.on('data', (chunk) => chunks.push(chunk));
+            res.on('end', () => resolve(Buffer.concat(chunks)));
+          });
+          req.on('error', reject);
+          req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
         });
-        req.on('error', reject);
-        req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
-      });
-      photoBase64 = photoBuffer.toString('base64');
-    } catch (err) {
-      console.error(`Auto-enroll photo download failed for worker ${worker.id}:`, err.message);
-      return;
+        photoBase64 = photoBuffer.toString('base64');
+      } catch (err) {
+        console.warn(`[auto-enroll] Photo download failed for worker ${worker.name} (code=${worker.code}): ${err.message} — enrolling without photo`);
+      }
     }
-
-    if (!photoBase64) return;
 
     const { enrollUserOnDevice } = require('../server/lib/controlid');
 
