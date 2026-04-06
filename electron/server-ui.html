@@ -650,6 +650,7 @@
         <td class="device-conn-status">${getConnStatusHtml(d.id)}</td>
         <td style="white-space:nowrap;">
           <button class="btn btn-ghost btn-sm" onclick="handleTestDevice('${esc(d.id)}', '${esc(d.controlid_ip_address)}', this)">Testar</button>
+          <button class="btn btn-primary btn-sm" onclick="handleFullDeviceResync('${esc(d.id)}', '${esc(d.name)}', this)">Resync Total</button>
           <button class="btn btn-danger btn-sm btn-icon" onclick="handleRemoveDevice('${esc(d.id)}')" title="Remover">✕</button>
         </td>
       </tr>`;
