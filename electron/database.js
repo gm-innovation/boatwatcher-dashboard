@@ -562,6 +562,23 @@ function createDatabaseAPI(db, startCode) {
       db.prepare('DELETE FROM workers WHERE id = ?').run(id);
     },
 
+    /**
+     * Get a Set of all known worker codes (integer IDs used by ControlID devices).
+     * Used by reverse sync to quickly filter unknown device users.
+     */
+    getWorkerCodes() {
+      const rows = db.prepare('SELECT code FROM workers WHERE code IS NOT NULL').all();
+      return new Set(rows.map(r => r.code));
+    },
+
+    /**
+     * Find a worker by their ControlID integer code.
+     */
+    getWorkerByCode(code) {
+      const row = db.prepare('SELECT * FROM workers WHERE code = ?').get(code);
+      return normalizeWorkerRow(row);
+    },
+
     // === Companies ===
     getCompanies() {
       return db.prepare('SELECT * FROM companies ORDER BY name').all().map(normalizeCompanyRow);

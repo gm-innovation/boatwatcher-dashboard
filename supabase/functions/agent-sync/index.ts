@@ -1173,6 +1173,117 @@ serve(async (req) => {
       return new Response(JSON.stringify({ manual_access_points: data || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    // POST /reverse-sync-workers — import workers discovered on ControlID devices
+    if (req.method === 'POST' && action === 'reverse-sync-workers') {
+      const { workers } = await req.json()
+      if (!Array.isArray(workers) || workers.length === 0) {
+        return new Response(JSON.stringify({ error: 'Empty workers array' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      let imported = 0
+      let skipped = 0
+      const mappings: { code: number; cloudId: string }[] = []
+
+      for (const w of workers) {
+        const code = Number(w.code)
+        if (!code || isNaN(code)) {
+          skipped++
+          continue
+        }
+
+        // Check if worker already exists by code
+        const { data: existingByCode } = await supabase
+          .from('workers')
+          .select('id, photo_url')
+          .eq('code', code)
+          .maybeSingle()
+
+        if (existingByCode) {
+          // Worker exists — only update photo if missing
+          if (!existingByCode.photo_url && w.photo_base64) {
+            try {
+              const photoPath = `reverse-sync/${existingByCode.id}.jpg`
+              const photoBuffer = Uint8Array.from(atob(w.photo_base64), c => c.charCodeAt(0))
+              const { error: uploadError } = await supabase.storage
+                .from('worker-photos')
+                .upload(photoPath, photoBuffer, { contentType: 'image/jpeg', upsert: true })
+              if (!uploadError) {
+                await supabase.from('workers').update({ photo_url: `storage://worker-photos/${photoPath}` }).eq('id', existingByCode.id)
+                console.log(`[reverse-sync] Updated photo for existing worker code=${code} id=${existingByCode.id}`)
+              }
+            } catch (photoErr) {
+              console.warn(`[reverse-sync] Photo upload failed for code=${code}: ${(photoErr as Error).message}`)
+            }
+          }
+          mappings.push({ code, cloudId: existingByCode.id })
+          skipped++
+          continue
+        }
+
+        // Also check by registration/document_number
+        if (w.registration) {
+          const { data: existingByDoc } = await supabase
+            .from('workers')
+            .select('id')
+            .eq('document_number', w.registration)
+            .maybeSingle()
+          if (existingByDoc) {
+            mappings.push({ code, cloudId: existingByDoc.id })
+            skipped++
+            continue
+          }
+        }
+
+        // Insert new worker
+        let photoUrl: string | null = null
+        const newWorkerId = crypto.randomUUID()
+
+        if (w.photo_base64) {
+          try {
+            const photoPath = `reverse-sync/${newWorkerId}.jpg`
+            const photoBuffer = Uint8Array.from(atob(w.photo_base64), c => c.charCodeAt(0))
+            const { error: uploadError } = await supabase.storage
+              .from('worker-photos')
+              .upload(photoPath, photoBuffer, { contentType: 'image/jpeg', upsert: true })
+            if (!uploadError) {
+              photoUrl = `storage://worker-photos/${photoPath}`
+            }
+          } catch (photoErr) {
+            console.warn(`[reverse-sync] Photo upload failed for new worker code=${code}: ${(photoErr as Error).message}`)
+          }
+        }
+
+        const { data: inserted, error: insertError } = await supabase
+          .from('workers')
+          .insert({
+            id: newWorkerId,
+            code,
+            name: w.name || `Usuário ${code}`,
+            document_number: w.registration || null,
+            photo_url: photoUrl,
+            status: 'active',
+            company_id: null,
+            allowed_project_ids: agent.project_id ? [agent.project_id] : [],
+          })
+          .select('id')
+          .single()
+
+        if (insertError) {
+          console.error(`[reverse-sync] Insert failed for code=${code}: ${insertError.message}`)
+          skipped++
+          continue
+        }
+
+        mappings.push({ code, cloudId: inserted.id })
+        imported++
+        console.log(`[reverse-sync] Imported worker code=${code} name=${w.name} id=${inserted.id}`)
+      }
+
+      console.log(`[reverse-sync] Agent ${agent.id}: imported=${imported} skipped=${skipped}`)
+
+      return new Response(JSON.stringify({ success: true, imported, skipped, mappings }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (e: unknown) {
     console.error('agent-sync error:', e)
