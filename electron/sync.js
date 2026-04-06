@@ -574,7 +574,8 @@ class SyncEngine {
         for (const worker of workersRes.workers) {
           try {
             this.db.upsertWorkerFromCloud(worker);
-            if (worker.photo_signed_url) {
+            // Skip auto-enrollment during bulk download (fullDeviceResync sets this flag)
+            if (!this._bulkDownloadMode && worker.photo_signed_url) {
               await this.autoEnrollWorkerPhoto(worker);
             }
           } catch (workerErr) {
