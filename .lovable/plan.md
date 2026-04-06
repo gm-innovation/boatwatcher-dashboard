@@ -1,62 +1,69 @@
 
 
-## Diagnóstico: Saída de Alexandre Silva não registrada
+## Problema: Códigos trocados nos dispositivos ControlID
 
-### Dados do banco de dados hoje (06/04)
+### O que aconteceu
 
-Existem **apenas 3 registros** no dia inteiro:
+Quando os 2.531 trabalhadores foram importados da plataforma legada, os códigos numéricos foram reatribuídos:
+- Alexandre Silva: era código **1**, passou a ser código **350**
+- Gustavo Magalhães: recebeu o código **1**
 
-| Hora (UTC) | Trabalhador | Direção | Dispositivo |
-|---|---|---|---|
-| 12:28 | Alexandre Silva | entry | Engenharia - Entrada |
-| 17:22 | Gustavo Magalhães | exit | Engenharia - Saída |
-| 17:24 | Gustavo Magalhães | exit | Engenharia - Saída |
+Porém, nos dispositivos ControlID, o rosto do Alexandre **ainda está cadastrado como código 1**. Quando Alexandre passa na saída, o dispositivo envia `user_id = 1`, e o sistema resolve isso como Gustavo Magalhães (que agora é código 1 no banco).
 
-**A saída do Alexandre às ~14:20 não existe no banco.** O dashboard está correto ao mostrá-lo como "a bordo" — ele simplesmente nunca recebeu o evento de saída.
+Resultado: 4 saídas de "Gustavo" são na verdade saídas de Alexandre.
 
-### Causa raiz provável
+### Correção necessária
 
-O agente local (versão 1.3.16) usa **deduplicação temporal** no `processEvent`:
+Os dispositivos precisam ser **re-sincronizados** com os códigos atualizados. Isso significa:
 
-```text
-// electron/agent.js linhas 519-529
-if (eventMs <= lastMs) → descarta o evento como duplicado
-```
+1. **Limpar todos os usuários dos dispositivos** e re-cadastrar com os códigos corretos
+2. Ou **atualizar individualmente** cada usuário no dispositivo com o novo código
 
-O problema: o `last_event_timestamp` do dispositivo de **saída** (192.168.0.129) pode ter ficado com um timestamp futuro de uma sessão anterior, fazendo com que todos os novos eventos sejam descartados como "duplicados". Isso explicaria por que a saída do Alexandre às 14:20 sumiu, mas as saídas do Gustavo às 17:22/17:24 foram capturadas (ultrapassaram o timestamp travado).
+A opção 1 é mais segura e simples para 2.500+ trabalhadores.
 
-### Plano de correção — 3 itens
+### Plano técnico
 
-**1. Corrigir deduplicação para usar o cursor `id` em vez de timestamp**
+#### 1. Criar comando "full-resync" no agente local
 
-Arquivo: `electron/agent.js`
+**Arquivo: `electron/sync.js`**
 
-O `lastEventId` (cursor incremental) já é usado para buscar novos eventos do hardware. Mas dentro do `processEvent`, a deduplicação usa `last_event_timestamp` (comparação temporal), que é frágil — um timestamp futuro anômalo bloqueia todos os eventos seguintes.
+Adicionar uma função `fullDeviceResync()` que:
+- Lista todos os usuários no dispositivo ControlID via `load_objects.fcgi` (object: `users`)
+- Remove todos via `destroy_objects.fcgi`
+- Re-cadastra todos os trabalhadores ativos do banco local com os códigos corretos usando `enrollUserOnDevice()`
+- Processa em lotes de 50 para não sobrecarregar o dispositivo
 
-Correção: remover a deduplicação por timestamp dentro do `processEvent`. O filtro `where id > lastEventId` na query já garante que não haverá duplicatas.
+#### 2. Expor comando via API do servidor local
 
-**2. Implementar carry-over de trabalhadores entre dias**
+**Arquivo: `server/routes/devices.js`**
 
-Arquivo: `src/hooks/useSupabase.ts` — função `fetchWorkersOnBoardFromCloud`
+Adicionar endpoint `POST /api/devices/:id/full-resync` que dispara o re-enrollment completo para um dispositivo específico.
 
-Adicionar uma query que busca o **último evento** de cada trabalhador nos últimos 7 dias (antes da meia-noite de hoje). Se o último evento foi "entry", inicializar o trabalhador como "a bordo" no dia atual, permitindo que saídas de hoje o removam corretamente.
+#### 3. Adicionar função de limpeza no controlid.js
 
-**3. Adicionar log de diagnóstico para eventos descartados**
+**Arquivo: `server/lib/controlid.js`**
 
-Arquivo: `electron/agent.js`
+Adicionar `clearAllUsersFromDevice(device)` que:
+- Busca todos os user IDs via `load_objects.fcgi`
+- Remove em lote via `destroy_objects.fcgi`
 
-Quando um evento é descartado pela deduplicação, logar detalhes suficientes para depuração: worker_name, direction, timestamp do evento e timestamp de referência.
+#### 4. Corrigir access_logs incorretos
+
+**Migração de dados**
+
+Os 4 registros de saída atribuídos a Gustavo Magalhães (código 1) são na verdade de Alexandre Silva (código 350). Corrigir via UPDATE no banco.
 
 ### Arquivos alterados
 
 | Arquivo | Alteração |
 |---|---|
-| `electron/agent.js` | Remover deduplicação temporal redundante no processEvent; manter apenas cursor por ID |
-| `src/hooks/useSupabase.ts` | Adicionar carry-over de trabalhadores entre dias na lógica "on board" |
+| `server/lib/controlid.js` | Adicionar `clearAllUsersFromDevice()` e `listUsersOnDevice()` |
+| `electron/sync.js` | Adicionar `fullDeviceResync()` com enrollment em lote |
+| `server/routes/devices.js` | Endpoint `POST /api/devices/:id/full-resync` |
+| Banco de dados | Corrigir worker_id nos access_logs de Gustavo→Alexandre |
 
 ### O que NÃO muda
-- Polling de eventos do hardware (já funciona)
-- Upload de logs para a nuvem (já funciona)
-- Cursor `lastEventId` (já funciona corretamente)
-- Configuração de dispositivos
+- Fluxo normal de captura de eventos
+- Polling do agente
+- Dashboard web
 
