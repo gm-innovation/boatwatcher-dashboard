@@ -214,6 +214,7 @@ class SyncEngine {
     if (!this.isConfigured() || this.status.syncing) return;
 
     this.status.syncing = true;
+    this._reverseSyncCycleCount = (this._reverseSyncCycleCount || 0) + 1;
     this.notifyListeners();
 
     try {
@@ -227,6 +228,11 @@ class SyncEngine {
       await this.uploadLogs();
       await this.downloadUpdates();
 
+      // Reverse sync: import workers from devices → cloud (every ~10 cycles ≈ 10min)
+      if (this._reverseSyncCycleCount % 10 === 0) {
+        await this.reverseSync().catch(err => console.error('[sync] reverseSync error:', err.message));
+      }
+
       this.status.lastSync = new Date().toISOString();
       this.db.setSyncMeta('last_sync', this.status.lastSync);
     } catch (err) {
@@ -235,6 +241,100 @@ class SyncEngine {
     } finally {
       this.status.syncing = false;
       this.notifyListeners();
+    }
+  }
+
+  /**
+   * Reverse Sync: import workers registered directly on ControlID devices
+   * back into the cloud database. Runs isolated — errors here never affect
+   * the main sync cycle.
+   */
+  async reverseSync() {
+    const { listDeviceUsers, listDeviceUserImages, getDeviceUserImage } = require('../server/lib/controlid');
+
+    // Get all known worker codes from local DB for fast filtering
+    const knownCodes = this.db.getWorkerCodes?.() || new Set();
+
+    // Get all devices from local DB
+    const devices = this.db.getDevices?.() || [];
+    if (devices.length === 0) return;
+
+    const newWorkers = [];
+
+    for (const device of devices) {
+      if (!device.controlid_ip_address) continue;
+
+      try {
+        // Step 1: Get all users from device
+        const deviceUsers = await listDeviceUsers(device);
+        if (!Array.isArray(deviceUsers) || deviceUsers.length === 0) continue;
+
+        // Step 2: Filter unknown users (not in our DB by code)
+        const unknownUsers = deviceUsers.filter(u => !knownCodes.has(Number(u.id)));
+        if (unknownUsers.length === 0) continue;
+
+        console.log(`[reverse-sync] Device ${device.name}: ${unknownUsers.length} unknown users found`);
+
+        // Step 3: Get list of users with photos
+        let userIdsWithPhoto = new Set();
+        try {
+          const photoIds = await listDeviceUserImages(device);
+          userIdsWithPhoto = new Set(photoIds.map(Number));
+        } catch (err) {
+          console.warn(`[reverse-sync] Could not list images from ${device.name}: ${err.message}`);
+        }
+
+        // Step 4: For each unknown user, optionally download photo
+        for (const user of unknownUsers) {
+          const userId = Number(user.id);
+          let photoBase64 = null;
+
+          if (userIdsWithPhoto.has(userId)) {
+            try {
+              const imageBuffer = await getDeviceUserImage(device, userId);
+              photoBase64 = imageBuffer.toString('base64');
+            } catch (err) {
+              console.warn(`[reverse-sync] Photo download failed for user ${userId} on ${device.name}: ${err.message}`);
+            }
+          }
+
+          newWorkers.push({
+            code: userId,
+            name: user.name || `Usuário ${userId}`,
+            registration: user.registration || null,
+            photo_base64: photoBase64,
+            source_device_id: device.id,
+            source_device_name: device.name,
+          });
+        }
+      } catch (err) {
+        console.warn(`[reverse-sync] Error reading device ${device.name}: ${err.message}`);
+      }
+    }
+
+    if (newWorkers.length === 0) {
+      console.log('[reverse-sync] No new workers to import');
+      return;
+    }
+
+    console.log(`[reverse-sync] Uploading ${newWorkers.length} new workers to cloud...`);
+
+    try {
+      const response = await this.callEdgeFunction('agent-sync/reverse-sync-workers', 'POST', {
+        workers: newWorkers,
+      });
+
+      if (response.success) {
+        console.log(`[reverse-sync] Imported ${response.imported || 0} workers, skipped ${response.skipped || 0}`);
+        // After successful import, trigger a download to get the new workers into local DB
+        if (response.imported > 0) {
+          this.db.setSyncMeta?.('last_download_workers', '1970-01-01T00:00:00Z');
+        }
+      } else {
+        console.warn('[reverse-sync] Cloud rejected import:', response.error || 'unknown error');
+      }
+    } catch (err) {
+      console.error('[reverse-sync] Upload to cloud failed:', err.message);
     }
   }
 

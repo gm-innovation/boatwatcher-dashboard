@@ -331,6 +331,48 @@ async function removeUserFromDevice(device, workerId, workerCode) {
   return { success: true };
 }
 
+/**
+ * Reverse Sync helpers — read users and photos FROM the device
+ */
+
+async function listDeviceUsers(device) {
+  const data = await controlIdRequest(device, 'load_objects.fcgi', 'POST', {
+    object: 'users',
+  });
+  // Response: { users: [ { id, name, registration, ... }, ... ] }
+  return data?.users || [];
+}
+
+async function listDeviceUserImages(device) {
+  const data = await controlIdRequest(device, 'user_list_images.fcgi', 'POST', {});
+  // Response: { user_ids: [1, 2, 3, ...] }
+  return data?.user_ids || [];
+}
+
+async function getDeviceUserImage(device, userId) {
+  let session;
+  try {
+    session = await loginToDevice(device);
+  } catch (loginErr) {
+    const err = new Error(`[phase=login.fcgi] ${loginErr.message}`);
+    err.phase = 'login.fcgi';
+    throw err;
+  }
+
+  const url = buildDeviceUrl(device, 'user_get_image.fcgi', session, `user_id=${userId}`);
+
+  const response = await fetch(url, {
+    method: 'GET',
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to get image for user ${userId} (HTTP ${response.status})`);
+  }
+
+  return Buffer.from(await response.arrayBuffer());
+}
+
 module.exports = {
   parseApiCredentials,
   controlIdRequest,
@@ -341,4 +383,7 @@ module.exports = {
   getWorkerControlIdCode,
   loginToDevice,
   invalidateSession,
+  listDeviceUsers,
+  listDeviceUserImages,
+  getDeviceUserImage,
 };
