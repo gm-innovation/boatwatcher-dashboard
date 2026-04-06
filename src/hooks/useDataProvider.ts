@@ -158,7 +158,7 @@ export async function fetchWorkers() {
   return executeWithDesktopFallback(
     () => localWorkers.list(),
     async () => {
-      const { data, error } = await supabase.from('workers').select('*, companies(name)').order('code', { ascending: true });
+      const { data, error } = await supabase.from('workers').select('*, companies(name)').order('code', { ascending: true }).range(0, 9999);
       if (error) throw error;
       return data.map((w: any) => ({ ...w, company: w.companies?.name || 'N/A' }));
     },
