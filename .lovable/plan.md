@@ -1,72 +1,65 @@
 
 
-## Por que os dados diferem entre Web e Desktop
+## Importação de Dados de Produção para o Banco de Dados
 
-### Causa raiz
+### Resumo
 
-O Desktop tem dois comportamentos que geram divergência:
+Importar empresas, funções e trabalhadores dos 4 CSVs fornecidos para o banco Supabase, preservando os códigos de produção (`worker_code`) e tratando conflitos de código conforme solicitado.
 
-1. **Agentes**: No Desktop, o hook `useLocalAgents` **nunca consulta a nuvem** — ele fabrica um "pseudo-agente" a partir do status local (`localAgent.getStatus()`), com nome fixo "Agente local do servidor", sem versão, sem IP real. Por isso o agente real "Engenharia01" (que existe na nuvem) não aparece.
+### Dados atuais no banco
 
-2. **Dispositivos**: O hook `fetchDevices` usa `executeWithDesktopFallback`, que prioriza o SQLite local (`localDevices.list()`). Se a sincronização não trouxe as últimas alterações de nome/configuração (ex: "Bordo" vs "Engenharia - Entrada"), o Desktop mostra dados desatualizados.
+| Entidade | Existentes | A importar |
+|----------|-----------|------------|
+| Empresas | 2 (DOF, Googlemarine) | ~112 do CSV |
+| Funções | 1 (TÉCNICO EM ELETRÔNICA II) | ~489 linhas (muitas duplicatas) |
+| Trabalhadores | 5 (códigos 1–5) | ~2530 do CSV |
 
-3. **Vinculação de agente nos dispositivos**: No Desktop, ao editar um dispositivo, o dropdown de agentes mostra o pseudo-agente (`id: 'local-runtime-agent'`), que não existe na nuvem. Na web, mostra o agente real "Engenharia01".
+### Lógica de importação (script Python via psql)
 
-```text
-Web:     useLocalAgents → Supabase → "Engenharia01" (real)
-Desktop: useLocalAgents → pseudo-agent → "Agente local do servidor" (fabricado)
+#### Passo 1: Empresas
+- Extrair `name` e `cnpj` do `CompanyProfile_export.csv`
+- Match por CNPJ normalizado (somente dígitos) ou nome exato
+- "DOF" já existe (sem CNPJ) → associar pelo nome e atualizar CNPJ se disponível
+- Novas empresas: `INSERT` com `type='company'`, `status='active'`
+- Construir mapa `nome_empresa → uuid`
 
-Web:     fetchDevices → Supabase → nomes atualizados
-Desktop: fetchDevices → SQLite local → nomes potencialmente desatualizados
-```
+#### Passo 2: Funções (Job Functions)
+- Deduplicar por nome (case-insensitive, trim)
+- Ignorar "Não informado"
+- Manter função existente "TÉCNICO EM ELETRÔNICA II"
+- Construir mapa `nome_função → uuid`
 
-### Solução
+#### Passo 3: Trabalhadores
+Para cada trabalhador do `ManagedWorker_export.csv`:
 
-#### 1. `useLocalAgents` — Desktop deve exibir agentes da nuvem + status local
+1. Normalizar CPF (remover pontos/traços)
+2. Se CPF já existe no banco → **atualizar `code`** para o `worker_code` do CSV
+3. Se CPF não existe:
+   - Tentar inserir com o `worker_code` do CSV
+   - **Se o código já estiver em uso** por outro trabalhador → atribuir o próximo número livre (após o maior código existente)
+4. Vincular `company_id` pelo mapa de empresas (por `company_name`)
+5. Vincular `job_function_id` pelo mapa de funções (por `job_function`)
+6. Campos: `name`, `document_number`, `code`, `status`, `birth_date`, `gender`, `blood_type`, `role` (job_function)
 
-No modo Desktop com servidor local disponível, consultar **ambas** as fontes:
-- Buscar agentes reais da nuvem (`supabase.from('local_agents')`)
-- Enriquecer o agente correspondente com status local (running/stopped, sync status, pendências)
-- Remover a criação do pseudo-agente
+#### Passo 4: Atualizar sequência
+- `SELECT setval('workers_code_seq', (SELECT MAX(code) FROM workers))`
 
-Isso garante que nomes, versões, IPs e tokens sejam os mesmos nas duas plataformas.
+### Tratamento de conflitos de código
 
-#### 2. `useControlID` (useDevices) — forçar cloud no Desktop para admin
+Os 5 trabalhadores existentes ocupam códigos 1–5. O CSV tem códigos que vão até ~2520. Se um `worker_code` do CSV colidir com um código já ocupado por outro CPF:
+- O trabalhador é colocado no **final da fila** (recebe `MAX(code) + 1`)
+- Isso garante que nenhum dado existente é sobrescrito
 
-Para a aba de **gerenciamento** de dispositivos (admin), usar `forceCloud: true` para garantir que os nomes e configurações sejam os da nuvem. O SQLite local continua sendo usado para operações em tempo real (captura de eventos, controle de acesso).
+Exemplo: se ADRIANO (CPF 08963535754, código 5 no banco) aparece no CSV com `worker_code` diferente, ele mantém o código do CSV (pois será atualizado por match de CPF).
 
-Adicionar um parâmetro opcional `forceCloud` ao `fetchDevices` e usá-lo no `DeviceManagement`:
+### Execução
 
-```typescript
-export async function fetchDevices(projectId?: string, forceCloud = false) {
-  return executeWithDesktopFallback(
-    () => localDevices.list(projectId),
-    async () => { /* supabase query */ },
-    forceCloud,
-  );
-}
-```
+Um script Python será executado no sandbox que:
+1. Lê os CSVs com `csv.DictReader`
+2. Consulta dados existentes via `psql`
+3. Gera e executa INSERTs em batches
+4. Tudo via `code--exec` — nenhum arquivo do projeto é modificado
 
-No `useDevices`, aceitar a opção e passá-la:
-```typescript
-export const useDevices = (projectId?: string | null, options?: { forceCloud?: boolean }) => {
-  queryFn: async () => {
-    const data = await fetchDevices(projectId || undefined, options?.forceCloud);
-    ...
-  }
-};
-```
-
-#### 3. `DeviceManagement.tsx` — usar cloud para gestão
-
-Passar `{ forceCloud: true }` na chamada do `useDevices` dentro do componente de gerenciamento administrativo, garantindo paridade visual com a web.
-
-### Arquivos modificados
-- `src/hooks/useLocalAgents.ts` — remover pseudo-agente, consultar nuvem + enriquecer com status local
-- `src/hooks/useDataProvider.ts` — `fetchDevices` aceitar `forceCloud`
-- `src/hooks/useControlID.ts` — `useDevices` aceitar opção `forceCloud`
-- `src/components/devices/DeviceManagement.tsx` — passar `forceCloud: true`
-
-### Resultado esperado
-Ambas as plataformas exibirão os mesmos agentes e dispositivos nas telas administrativas, com o Desktop adicionando informações de status local (running/stopped, sync) como enriquecimento visual.
+### Arquivos NÃO modificados
+Nenhum arquivo do projeto será alterado — operação puramente de dados.
 
