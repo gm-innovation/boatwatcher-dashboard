@@ -373,6 +373,55 @@ async function getDeviceUserImage(device, userId) {
   return Buffer.from(await response.arrayBuffer());
 }
 
+/**
+ * Clear ALL users from a device (for full re-sync scenarios).
+ * Steps: load all user IDs, then destroy them all.
+ */
+async function clearAllUsersFromDevice(device) {
+  if (!device.controlid_ip_address) {
+    return { success: false, error: 'Dispositivo sem IP configurado.' };
+  }
+
+  // Step 1: List all users
+  const users = await listDeviceUsers(device);
+  if (!Array.isArray(users) || users.length === 0) {
+    console.log(`[controlid] clearAll: no users found on device ${device.name}`);
+    return { success: true, removed: 0 };
+  }
+
+  const userIds = users.map(u => Number(u.id));
+  console.log(`[controlid] clearAll: removing ${userIds.length} users from device ${device.name}`);
+
+  // Step 2: Remove photos for all users (best-effort)
+  for (const uid of userIds) {
+    try {
+      await controlIdRequest(device, 'user_destroy_image.fcgi', 'POST', { user_id: uid });
+    } catch (err) {
+      // Ignore photo removal errors — user may not have a photo
+    }
+  }
+
+  // Step 3: Remove all users via destroy_objects
+  // Process in batches to avoid overwhelming the device
+  const BATCH_SIZE = 100;
+  for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
+    const batch = userIds.slice(i, i + BATCH_SIZE);
+    for (const uid of batch) {
+      try {
+        await controlIdRequest(device, 'destroy_objects.fcgi', 'POST', {
+          object: 'users',
+          where: { users: { id: uid } },
+        });
+      } catch (err) {
+        console.warn(`[controlid] clearAll: failed to remove user ${uid}: ${err.message}`);
+      }
+    }
+  }
+
+  console.log(`[controlid] clearAll: completed for device ${device.name}, removed up to ${userIds.length} users`);
+  return { success: true, removed: userIds.length };
+}
+
 module.exports = {
   parseApiCredentials,
   controlIdRequest,
@@ -386,4 +435,5 @@ module.exports = {
   listDeviceUsers,
   listDeviceUserImages,
   getDeviceUserImage,
+  clearAllUsersFromDevice,
 };
