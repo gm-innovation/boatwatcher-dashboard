@@ -1,177 +1,103 @@
 
-## Diagnóstico
+Objetivo: fazer uma investigação corretiva, com base no código e nos dados reais, para ter certeza da causa raiz. A conclusão é que o problema não está mais no dashboard nem na leitura facial em si; ele está no fluxo de sincronização local e no jeito como o “full resync” foi implementado e acionado.
 
-O comportamento que você descreveu bate com um problema no **full-resync atual**:
+1. Conclusão da investigação
+- A nuvem está correta hoje:
+  - existem 2.531 trabalhadores ativos e 2.531 códigos distintos.
+  - Alexandre Silva está com código 350.
+  - os logs recentes já aparecem como Alexandre Silva, inclusive as saídas.
+- O problema persiste no ambiente local/dispositivo:
+  - o resync completo atual baixa trabalhadores da nuvem de forma incorreta.
+  - o botão “Sync Completo” do servidor local não executa o “full device resync”; ele só reseta checkpoints e roda um sync normal.
+  - o sync normal faz auto-enrollment durante o download e pode reenviar um conjunto parcial/sujo para o dispositivo.
+  - por isso o dispositivo ficou com poucos usuários e duplicações.
 
-- os dispositivos ficaram com **apenas 9 cadastros**
-- esses 9 aparecem **duplicados**
-- Alexandre continua sendo reconhecido como Gustavo
+2. Causa raiz confirmada
+Há 3 falhas concretas no código atual:
 
-Pelo código atual, a re-sincronização total **não busca os 2.531 trabalhadores diretamente do backend**. Ela usa a base local do agente:
+- Falha A: paginação quebrada no fullDeviceResync
+  - Em `electron/sync.js`, o método `fullDeviceResync()` reseta `last_download_workers` para epoch, mas depois de cada página salva `last_download_workers = now()`.
+  - Como o endpoint `agent-sync/download-workers?since=...` filtra por `updated_at >= since`, a próxima chamada passa a buscar “a partir de agora”, pulando quase toda a base.
+  - Resultado prático: em vez de baixar 2.531 trabalhadores, ele tende a pegar só a primeira leva e depois parar.
 
-- `server/routes/devices.js` → `req.db.getWorkers()`
-- `electron/sync.js` → `this.db.getWorkers()`
+- Falha B: o botão “Sync Completo” não limpa nem recadastra os dispositivos
+  - Em `electron/server-ui.html`, o botão chama `window.serverAPI.resetAndFullSync()`.
+  - Isso vai para `resetAndFullSync()` em `electron/sync.js`, que apenas reseta checkpoints e roda `triggerSync()`.
+  - Ou seja: ele não chama `POST /api/devices/:id/full-resync` e não executa `fullDeviceResync(deviceId)`.
+  - Então o operador acha que fez uma limpeza total do dispositivo, mas na prática só rodou um sync geral.
 
-Ou seja: se o banco local do servidor tiver só 9 trabalhadores, o resync:
-1. apaga o dispositivo
-2. recadastra apenas esses 9
-3. mantém o problema de mapeamento errado
+- Falha C: auto-enrollment durante download pode repovoar o hardware com base incompleta
+  - Em `downloadUpdates()`, cada trabalhador baixado chama `autoEnrollWorkerPhoto(worker)`.
+  - Se o download estiver parcial ou sujo, o sistema já vai cadastrando esse subconjunto no dispositivo.
+  - Isso explica o cenário de poucos usuários cadastrados e duplicações observadas no hardware.
 
-## O que provavelmente aconteceu
-
-Há dois efeitos combinados:
-
-1. **Fonte errada no full-resync**  
-   O resync está usando o cache local do agente, não a fonte completa e confiável.
-
-2. **Reverse sync contaminando a base local/cloud**  
-   Existe uma rotina de reverse sync em `electron/sync.js` que lê usuários do dispositivo e envia de volta para a nuvem os “desconhecidos”.  
-   Como o dispositivo já estava com IDs errados/duplicados, isso pode ter reforçado registros inconsistentes em vez de corrigi-los.
-
-## Evidências no código
-
-### Full-resync atual
-```text
-server/routes/devices.js
-const workers = req.db.getWorkers?.() || [];
-const activeWorkers = workers.filter(...)
-```
-
-```text
-electron/sync.js
-const workers = this.db.getWorkers?.() || [];
-const active = workers.filter(...)
-```
-
-### Download normal de trabalhadores
-Já existe um fluxo correto para baixar trabalhadores da nuvem em massa:
-```text
-supabase/functions/agent-sync/index.ts
-GET /download-workers
-```
-
-Esse endpoint foi feito justamente para baixar todos os trabalhadores ativos paginados.
-
-### Reverse sync ativo
-Também existe:
-```text
-electron/sync.js -> reverseSync()
-supabase/functions/agent-sync/index.ts -> POST /reverse-sync-workers
-```
-
-Se o dispositivo está sujo, essa rotina pode reintroduzir inconsistências.
-
-## Plano de correção
-
-### 1. Corrigir a origem do full-resync
-Alterar o full-resync para **não depender do `getWorkers()` local**.
-
-Implementação:
-- antes de recadastrar, forçar uma atualização completa de trabalhadores no agente
-- ou buscar explicitamente os trabalhadores via endpoint já existente de download
-- só depois executar o enrollment em massa
-
-Abordagem recomendada:
-- resetar `last_download_workers`
-- chamar a rotina de download de trabalhadores
-- validar quantos trabalhadores ativos vieram
-- abortar se o total estiver anormalmente baixo
-- só então limpar e reenrolar o dispositivo
-
-### 2. Adicionar trava de segurança
-Hoje o sistema aceita fazer full-resync mesmo com base local incompleta.
-
-Vou adicionar proteção para:
-- bloquear resync se vierem poucos trabalhadores (ex: menos de um mínimo esperado)
-- retornar erro claro em vez de apagar o dispositivo e recadastrar dados incompletos
-- registrar no log quantos trabalhadores serão enviados antes de começar
-
-Exemplo da lógica:
-```text
-se totalWorkers < limite_minimo:
-  aborta resync
-  informa que a base local está incompleta
-```
-
-### 3. Desativar o reverse sync durante recuperação
-Enquanto os dispositivos estiverem inconsistentes, o reverse sync não deve importar usuários “desconhecidos” do hardware de volta.
-
-Vou ajustar para pelo menos uma destas estratégias:
-- pausar o reverse sync por configuração
-- ou ignorar reverse sync quando houver resync pendente/recentemente executado
-- ou impedir importação de usuários vindos de dispositivos com base suspeita
-
-A opção mais segura agora é **desabilitar temporariamente o reverse sync**.
-
-### 4. Deduplicar por código no re-enrollment
-Mesmo com a base correta, o full-resync deve impedir reenviar trabalhadores repetidos.
-
-Vou incluir deduplicação antes do enrollment:
-- chave principal: `code`
-- se houver duplicidade de código, manter apenas um registro
-- logar os conflitos encontrados
-
-Isso evita casos como:
-- Alexandre 2x
-- Cristiano 2x
-- Leonardo 3x
-- Márcio 2x
-
-### 5. Corrigir a UI/ação para disparar o resync correto
-Hoje não vi evidência de botão na interface chamando esse endpoint diretamente, então o processo pode estar sendo feito via fluxo parcial/local.
-
-Vou padronizar o disparo para usar **uma única implementação confiável** do full-resync, com retorno de:
-- total baixado da nuvem
-- total deduplicado
-- total enviado ao dispositivo
-- falhas por trabalhador
-
-### 6. Revisar os registros incorretos de acesso
-Depois de corrigir a sincronização dos dispositivos, ainda pode haver logs históricos atribuídos ao trabalhador errado.
-
-Vou deixar o sistema preparado para:
-- identificar acessos registrados com código antigo
-- permitir correção dirigida dos eventos já afetados
-
-## Arquivos que devem ser ajustados
-
-- `server/routes/devices.js`
-  - parar de usar apenas `req.db.getWorkers()` cru no full-resync
-  - incluir validação de volume mínimo e deduplicação
-
-- `electron/sync.js`
-  - usar download completo antes do resync
-  - bloquear reverse sync temporariamente
-  - deduplicar trabalhadores por `code`
-
+3. Evidências objetivas encontradas
 - `supabase/functions/agent-sync/index.ts`
-  - opcionalmente expor suporte explícito para full-resync seguro
-  - manter o download paginado como fonte principal
+  - `download-workers` retorna todos os ativos, com paginação correta no backend.
+  - Portanto a nuvem não é o gargalo.
+- `electron/sync.js`
+  - `fullDeviceResync()` usa `since = last_download_workers` e depois grava `last_download_workers = now()` dentro do loop, quebrando a paginação.
+  - `downloadUpdates()` também faz auto-enrollment no mesmo momento em que baixa os trabalhadores.
+- `electron/server-ui.html`
+  - “Sync Completo” chama `resetAndFullSync()`, não o resync do dispositivo.
+- `src/lib/localServerProvider.ts`
+  - não existe método exposto para disparar `POST /api/devices/:id/full-resync` pela interface.
+- Dados reais no banco:
+  - Alexandre Silva já aparece com saídas recentes atribuídas corretamente.
+  - total ativo = 2531, distinct codes = 2531.
+  - isso reforça que o erro restante está no ambiente local/hardware, não no banco principal.
 
-## Resultado esperado após a correção
+4. O que vou implementar
+- Corrigir `fullDeviceResync()` para baixar a base completa de forma confiável
+  - sem avançar checkpoint para “agora” dentro do loop.
+  - usar cursor determinístico da própria resposta ou um full-download único controlado.
+- Separar “sync de dados” de “resync de hardware”
+  - `resetAndFullSync()` continuará sendo sync de banco/local.
+  - criarei um fluxo explícito para “Limpar e recadastrar dispositivo”.
+- Impedir auto-enrollment durante full refresh de trabalhadores
+  - adicionar um modo/flag para baixar tudo sem provisionar no hardware no meio do processo.
+- Expor ação real de resync completo por dispositivo
+  - no servidor local e na UI de dispositivos.
+- Melhorar diagnósticos
+  - retornar no resync: total baixado, total ativo, total único por code, total enviado ao dispositivo, falhas.
+  - mostrar mensagem clara se a base local vier parcial.
+- Blindar reverse sync durante recuperação
+  - manter a pausa e garantir que ela cubra também o fluxo de recuperação disparado pelo servidor local.
 
-Depois dessa correção, o fluxo certo será:
-
+5. Resultado esperado após a correção
+Fluxo correto:
 ```text
-1. agente baixa todos os trabalhadores ativos da nuvem
-2. agente valida quantidade e remove duplicados por code
-3. dispositivo é limpo
-4. trabalhadores corretos são reenrolados com os códigos atuais
-5. Alexandre volta a ser reconhecido pelo código dele
-6. Gustavo deixa de receber saídas do Alexandre
+1. baixar 2.531 trabalhadores completos da nuvem
+2. validar quantidade mínima
+3. deduplicar por code
+4. limpar o dispositivo
+5. recadastrar todos os trabalhadores corretos
+6. Alexandre voltar a existir apenas com o código 350 no hardware
+7. Gustavo deixar de herdar eventos do Alexandre
 ```
 
-## Detalhes técnicos
+6. Arquivos que precisam ser ajustados
+- `electron/sync.js`
+  - corrigir paginação e checkpoint do fullDeviceResync
+  - bloquear auto-enrollment durante full refresh
+  - alinhar pausa do reverse sync
+- `electron/server-ui.html`
+  - trocar o botão atual ou adicionar um botão explícito para resync real de dispositivo
+- `electron/server-preload.js`
+  - expor chamada para full resync por dispositivo
+- `src/lib/localServerProvider.ts`
+  - adicionar método local para chamar `/api/devices/:id/full-resync`
+- `src/components/devices/DeviceManagement.tsx`
+  - adicionar ação de “Re-sincronização total” por dispositivo com feedback detalhado
 
-- O problema atual não parece ser o reconhecimento facial em si.
-- O problema é o **cadastro enviado ao dispositivo**.
-- O full-resync existente está confiando em uma base local aparentemente incompleta/suja.
-- Como o dispositivo hoje mostra só 9 usuários duplicados, isso indica que o resync executado apagou a base anterior e regravou usando esse conjunto parcial.
+7. Validação que farei depois da implementação
+- confirmar que o resync informa ~2.531 trabalhadores, não 9
+- confirmar que o dispositivo deixa de listar duplicados
+- confirmar que Alexandre aparece só uma vez, com código 350
+- confirmar que uma nova saída do Alexandre entra como Alexandre no fluxo completo
+- confirmar que o botão usado pelo operador dispara o fluxo correto de hardware, não apenas um sync de banco
 
-## Validação depois da implementação
+8. Nota importante
+O diff de versão `server/package.json` (1.3.17 → 1.3.18) não é a causa do problema funcional. O problema real é de lógica/fluxo: o operador está disparando uma ação que não faz o resync de hardware esperado, e o resync existente está paginando errado.
 
-Vou considerar a correção pronta quando:
-1. o resync listar quantidade coerente de trabalhadores antes de iniciar
-2. o dispositivo deixar de exibir apenas 9 duplicados
-3. Alexandre aparecer com o código correto no hardware
-4. uma nova saída do Alexandre gerar log para Alexandre, não para Gustavo
+Se aprovado, o próximo passo é implementar essa correção estrutural e deixar um caminho único e seguro para recuperar os dispositivos sem recontaminar a base.
