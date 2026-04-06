@@ -22,15 +22,9 @@ const PeopleManagement = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Gestão de Pessoas e Documentos</h1>
-          <p className="text-muted-foreground">Centro administrativo para gerenciamento de trabalhadores, empresas e documentação.</p>
-        </div>
-        <Button variant="outline" className="gap-2">
-          <UserPlus className="h-4 w-4" />
-          Testar Cadastro de Usuário
-        </Button>
+      <div>
+        <h1 className="text-2xl font-bold">Gestão de Pessoas e Documentos</h1>
+        <p className="text-muted-foreground">Centro administrativo para gerenciamento de trabalhadores, empresas e documentação.</p>
       </div>
 
       <Tabs defaultValue={getDefaultTab()} className="space-y-6">
