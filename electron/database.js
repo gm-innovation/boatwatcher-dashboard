@@ -579,6 +579,15 @@ function createDatabaseAPI(db, startCode) {
       return normalizeWorkerRow(row);
     },
 
+    /**
+     * Get all device IDs belonging to the agent's project(s).
+     * Used as fallback when a worker has no devices_enrolled.
+     */
+    getProjectDeviceIds() {
+      const rows = db.prepare('SELECT id FROM devices WHERE controlid_ip_address IS NOT NULL AND controlid_ip_address != ""').all();
+      return rows.map(r => r.id);
+    },
+
     // === Companies ===
     getCompanies() {
       return db.prepare('SELECT * FROM companies ORDER BY name').all().map(normalizeCompanyRow);

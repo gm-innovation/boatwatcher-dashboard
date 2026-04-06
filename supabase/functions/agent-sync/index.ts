@@ -711,28 +711,45 @@ serve(async (req) => {
     if (req.method === 'GET' && action === 'download-workers') {
       const since = url.searchParams.get('since') || '1970-01-01T00:00:00Z'
 
-      // In docking operations, all active workers (client staff, subcontractors, crew)
-      // need to be available locally — no project/company filter applied
-      let { data: workers, error } = await supabase
-        .from('workers')
-        .select('id, name, code, document_number, photo_url, status, company_id, role, allowed_project_ids, devices_enrolled, job_function_id, birth_date, gender, blood_type, observations, updated_at')
-        .gte('updated_at', since)
-        .eq('status', 'active')
+      const WORKER_SELECT = 'id, name, code, document_number, photo_url, status, company_id, role, allowed_project_ids, devices_enrolled, job_function_id, birth_date, gender, blood_type, observations, updated_at'
+      const PAGE_SIZE = 1000
 
-      if (error) throw error
+      // Paginated fetch to handle >1000 workers (Supabase default limit)
+      async function fetchAllWorkers(filter: { since?: string } = {}) {
+        const allWorkers: any[] = []
+        let offset = 0
+        while (true) {
+          let query = supabase
+            .from('workers')
+            .select(WORKER_SELECT)
+            .eq('status', 'active')
+            .order('created_at', { ascending: true })
+            .range(offset, offset + PAGE_SIZE - 1)
 
-      // Fallback: if incremental sync returns 0 and we had a real checkpoint, do a full download
-      if ((workers || []).length === 0 && since !== '1970-01-01T00:00:00Z') {
-        console.log(`[agent-sync/download-workers] Incremental returned 0 for agent=${agent.id}, falling back to full download`)
-        const fullResult = await supabase
-          .from('workers')
-          .select('id, name, code, document_number, photo_url, status, company_id, role, allowed_project_ids, devices_enrolled, job_function_id, birth_date, gender, blood_type, observations, updated_at')
-          .eq('status', 'active')
-        if (fullResult.error) throw fullResult.error
-        workers = fullResult.data
+          if (filter.since) {
+            query = query.gte('updated_at', filter.since)
+          }
+
+          const { data, error: fetchErr } = await query
+          if (fetchErr) throw fetchErr
+          if (data && data.length > 0) allWorkers.push(...data)
+          if (!data || data.length < PAGE_SIZE) break
+          offset += PAGE_SIZE
+        }
+        return allWorkers
       }
 
-      console.log(`[agent-sync/download-workers] agent=${agent.id} project=${agent.project_id} filter=all-active found=${(workers || []).length}`)
+      // In docking operations, all active workers (client staff, subcontractors, crew)
+      // need to be available locally — no project/company filter applied
+      let workers = await fetchAllWorkers({ since })
+
+      // Fallback: if incremental sync returns 0 and we had a real checkpoint, do a full download
+      if (workers.length === 0 && since !== '1970-01-01T00:00:00Z') {
+        console.log(`[agent-sync/download-workers] Incremental returned 0 for agent=${agent.id}, falling back to full download`)
+        workers = await fetchAllWorkers()
+      }
+
+      console.log(`[agent-sync/download-workers] agent=${agent.id} project=${agent.project_id} filter=all-active found=${workers.length}`)
 
       const workersWithPhotos = await Promise.all((workers || []).map((worker: any) => attachWorkerPhotoSignedUrl(supabase as any, worker)))
       return new Response(JSON.stringify({ workers: workersWithPhotos, timestamp: new Date().toISOString() }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
