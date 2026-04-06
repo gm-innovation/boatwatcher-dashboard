@@ -57,6 +57,7 @@ interface Worker {
   status: string | null;
   photo_url: string | null;
   allowed_project_ids: string[] | null;
+  rejection_reason?: string | null;
   birth_date?: string | null;
   gender?: string | null;
   blood_type?: string | null;

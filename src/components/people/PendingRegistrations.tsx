@@ -7,6 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ResolvedAvatar } from '@/components/ResolvedAvatar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -14,6 +17,10 @@ export const PendingRegistrations = () => {
   const { data: workers = [], isLoading } = useWorkers();
   const queryClient = useQueryClient();
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectingWorkerId, setRejectingWorkerId] = useState<string | null>(null);
+  const [rejectingWorkerName, setRejectingWorkerName] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
 
   const pendingWorkers = workers.filter(w => w.status === 'pending_review');
 
@@ -30,12 +37,24 @@ export const PendingRegistrations = () => {
     }
   };
 
-  const handleReject = async (workerId: string) => {
-    setProcessingId(workerId);
+  const openRejectDialog = (workerId: string, workerName: string) => {
+    setRejectingWorkerId(workerId);
+    setRejectingWorkerName(workerName);
+    setRejectionReason('');
+    setRejectDialogOpen(true);
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectingWorkerId || !rejectionReason.trim()) return;
+    setProcessingId(rejectingWorkerId);
     try {
-      await updateWorker(workerId, { status: 'blocked' });
-      toast({ title: 'Cadastro rejeitado' });
+      await updateWorker(rejectingWorkerId, { 
+        status: 'blocked', 
+        rejection_reason: rejectionReason.trim() 
+      });
+      toast({ title: 'Cadastro rejeitado', description: `Motivo: ${rejectionReason.trim()}` });
       queryClient.invalidateQueries({ queryKey: ['workers'] });
+      setRejectDialogOpen(false);
     } catch (error: any) {
       toast({ title: 'Erro ao rejeitar', description: error.message, variant: 'destructive' });
     } finally {
@@ -127,7 +146,7 @@ export const PendingRegistrations = () => {
                         variant="outline"
                         size="sm"
                         className="text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-950"
-                        onClick={() => handleReject(worker.id)}
+                        onClick={() => openRejectDialog(worker.id, worker.name)}
                         disabled={processingId === worker.id}
                       >
                         <XCircle className="h-4 w-4 mr-2" />
@@ -156,6 +175,42 @@ export const PendingRegistrations = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Rejection Dialog */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rejeitar Cadastro</DialogTitle>
+            <DialogDescription>
+              Informe o motivo da rejeição do cadastro de <strong>{rejectingWorkerName}</strong>. 
+              Esta justificativa ficará registrada para auditoria.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="rejection-reason">Motivo da Rejeição *</Label>
+            <Textarea
+              id="rejection-reason"
+              placeholder="Ex: Documentação incompleta, dados inconsistentes..."
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmReject}
+              disabled={!rejectionReason.trim() || processingId === rejectingWorkerId}
+            >
+              <XCircle className="h-4 w-4 mr-2" />
+              Confirmar Rejeição
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
