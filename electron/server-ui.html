@@ -533,6 +533,38 @@
     } catch (_) {}
   }
 
+  async function handleFullDeviceResync(deviceId, deviceName, btnEl) {
+    if (!confirm(`Re-sincronização total de "${deviceName}"?\n\nIsso vai:\n1. Baixar TODOS os trabalhadores da nuvem\n2. Limpar o dispositivo\n3. Recadastrar todos os trabalhadores\n\nEssa operação pode levar vários minutos.`)) return;
+    btnEl.disabled = true;
+    btnEl.innerHTML = '<span class="spinner"></span> Resync...';
+    try {
+      const result = await window.serverAPI.fullDeviceResync(deviceId);
+      if (result && result.error) {
+        alert('Erro: ' + result.error);
+        btnEl.textContent = '✕ Erro';
+        btnEl.classList.add('btn-danger');
+        btnEl.classList.remove('btn-primary');
+      } else {
+        const msg = `Concluído: ${result.enrolled || 0} cadastrados, ${result.failed || 0} falhas\n(${result.totalDownloaded || 0} baixados da nuvem, ${result.duplicatesRemoved || 0} duplicados removidos)`;
+        alert(msg);
+        btnEl.textContent = '✓ OK';
+        btnEl.classList.add('btn-success');
+        btnEl.classList.remove('btn-primary');
+      }
+    } catch (e) {
+      alert('Erro: ' + (e.message || 'Falha no resync'));
+      btnEl.textContent = '✕ Erro';
+      btnEl.classList.add('btn-danger');
+      btnEl.classList.remove('btn-primary');
+    }
+    setTimeout(() => {
+      btnEl.textContent = 'Resync Total';
+      btnEl.className = 'btn btn-primary btn-sm';
+      btnEl.disabled = false;
+    }, 3000);
+    setTimeout(refreshDashboard, 1500);
+  }
+
   async function handleTestDevice(id, ip, btnEl) {
     btnEl.disabled = true;
     btnEl.textContent = '...';
