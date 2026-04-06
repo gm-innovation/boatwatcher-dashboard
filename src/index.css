@@ -201,3 +201,167 @@
     print-color-adjust: exact;
   }
 }
+
+/* ===================== Label print styles ===================== */
+
+/* Hidden on screen */
+.label-print-area {
+  display: none;
+}
+
+/* When body has printing-labels class, hide everything except labels */
+body.printing-labels #root {
+  display: none !important;
+}
+
+body.printing-labels .label-print-area {
+  display: block !important;
+}
+
+@media print {
+  body.printing-labels .label-print-area {
+    display: block !important;
+  }
+
+  body.printing-labels #root {
+    display: none !important;
+  }
+}
+
+/* Label page - each label is one printed page */
+.label-page {
+  width: 62mm;
+  height: 100mm;
+  position: relative;
+  page-break-after: always;
+  overflow: hidden;
+  background: white;
+}
+
+.label-page:last-child {
+  page-break-after: auto;
+}
+
+.label-border {
+  position: absolute;
+  top: 3mm;
+  left: 3mm;
+  right: 3mm;
+  bottom: 3mm;
+  border: 0.5mm solid black;
+}
+
+/* Logo top-right */
+.label-logo {
+  position: absolute;
+  top: 2mm;
+  right: 3mm;
+  width: 12mm;
+  height: 24mm;
+  object-fit: contain;
+}
+
+/* All rotated text: writing-mode vertical, rotated 180° to mimic -90° in jsPDF */
+.label-text {
+  position: absolute;
+  white-space: nowrap;
+  transform-origin: top left;
+  transform: rotate(-90deg);
+  color: black;
+  font-family: Helvetica, Arial, sans-serif;
+}
+
+/* Name - x=32 in jsPDF (from left), y=5 (from top) */
+.label-name {
+  top: 2mm;
+  left: 29mm;
+  font-size: 16pt;
+  font-weight: bold;
+}
+
+/* Job function - x=26 */
+.label-job {
+  top: 2mm;
+  left: 23mm;
+  font-size: 12pt;
+  font-weight: normal;
+}
+
+/* Company - x=22 */
+.label-company {
+  top: 2mm;
+  left: 19mm;
+  font-size: 10pt;
+  font-weight: normal;
+}
+
+/* Project name - x=10 */
+.label-project {
+  top: 2mm;
+  left: 7mm;
+  font-size: 14pt;
+  font-weight: bold;
+}
+
+/* Project type - x=6 */
+.label-project-type {
+  top: 2mm;
+  left: 3mm;
+  font-size: 11pt;
+  font-weight: normal;
+}
+
+/* Powered by - x=5, y=40 */
+.label-powered {
+  top: 37mm;
+  left: 2mm;
+  font-size: 7pt;
+  font-weight: normal;
+  color: #787878;
+}
+
+/* Code circle */
+.label-code-circle {
+  position: absolute;
+  left: 24mm;
+  top: 64mm;
+  width: 32mm;
+  height: 32mm;
+  border: 0.5mm solid black;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+}
+
+.label-code-text {
+  font-size: 25pt;
+  font-weight: bold;
+  font-family: Helvetica, Arial, sans-serif;
+  color: black;
+  transform: rotate(-90deg);
+}
+
+/* Blood type */
+.label-blood-type {
+  position: absolute;
+  left: 13mm;
+  top: 72mm;
+  transform: rotate(-90deg);
+  transform-origin: top left;
+  display: flex;
+  flex-direction: column;
+  color: black;
+  font-family: Helvetica, Arial, sans-serif;
+}
+
+.label-blood-label {
+  font-size: 7pt;
+  font-weight: normal;
+}
+
+.label-blood-value {
+  font-size: 12pt;
+  font-weight: bold;
+}

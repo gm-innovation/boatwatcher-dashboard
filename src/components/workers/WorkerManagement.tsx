@@ -1,9 +1,9 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { formatWorkerCode, normalizeName, formatCpf } from '@/lib/utils';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import jsPDF from 'jspdf';
+import { WorkerLabelPrintSheet, type LabelData } from './WorkerLabelPrintSheet';
 import { createWorker, updateWorker, deleteWorker } from '@/hooks/useDataProvider';
 import { uploadFile } from '@/lib/storageProvider';
 import { isElectron } from '@/lib/dataProvider';
@@ -703,6 +703,7 @@ export const WorkerManagement = () => {
   const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
   const [selectedProjectForLabels, setSelectedProjectForLabels] = useState<string>('');
   const [customLabelName, setCustomLabelName] = useState('');
+  const [printLabels, setPrintLabels] = useState<LabelData[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [companyFilter, setCompanyFilter] = useState<string>('all');
   const { data: workers = [], isLoading, refetch } = useWorkers();
@@ -745,13 +746,13 @@ export const WorkerManagement = () => {
               if (logoResponse.ok) {
                 const logoBuffer = await logoResponse.arrayBuffer();
                 const logoBytes = new Uint8Array(logoBuffer);
-                let detectedFormat = 'JPEG';
-                if (logoBytes[0] === 0x89 && logoBytes[1] === 0x50) detectedFormat = 'PNG';
+                let detectedFormat = 'jpeg';
+                if (logoBytes[0] === 0x89 && logoBytes[1] === 0x50) detectedFormat = 'png';
                 let binary = '';
                 for (let j = 0; j < logoBytes.length; j++) {
                   binary += String.fromCharCode(logoBytes[j]);
                 }
-                logoDataUrl = `data:image/${detectedFormat.toLowerCase()};base64,${btoa(binary)}`;
+                logoDataUrl = `data:image/${detectedFormat};base64,${btoa(binary)}`;
               }
             } catch {
               clearTimeout(timeoutId);
@@ -764,132 +765,75 @@ export const WorkerManagement = () => {
     }
 
     const combinedProjectName = selectedProject.name;
-    let projectFontSize = 14;
-    if (combinedProjectName.length > 40) projectFontSize = 9;
-    else if (combinedProjectName.length > 30) projectFontSize = 10;
-    else if (combinedProjectName.length > 20) projectFontSize = 12;
-
     const projectType = (selectedProject as any).project_type === 'docagem' ? 'Docagem' :
       (selectedProject as any).project_type === 'mobilizacao' ? 'Mobilizacao' : 'Projeto';
 
-    const pageWidth = 62;
-    const pageHeight = 100;
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pageWidth, pageHeight] });
-
-    workerList.forEach((worker, idx) => {
-      if (idx > 0) doc.addPage([pageWidth, pageHeight]);
-
+    const labels: LabelData[] = workerList.map((worker) => {
       let displayName: string;
       const effectiveCustomName = overrideCustomName !== undefined ? overrideCustomName : customLabelName;
       if (effectiveCustomName && effectiveCustomName.trim() !== '' && workerList.length === 1) {
-        displayName = customLabelName.trim();
+        displayName = effectiveCustomName.trim();
       } else {
         displayName = formatNameForLabel(worker.name);
       }
 
-      // Border
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.5);
-      doc.rect(3, 3, pageWidth - 6, pageHeight - 6);
-
-      // Logo (proportional, moved left)
-      if (logoDataUrl) {
-        try {
-          const logoImg = new Image();
-          logoImg.src = logoDataUrl;
-          const logoW = 12;
-          const logoH = 24;
-          const logoX = pageWidth - 9 - logoW;
-          doc.addImage(logoDataUrl, 'PNG', logoX, 5, logoW, logoH);
-        } catch {}
-      }
-
-      // Name (rotated -90°)
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(0, 0, 0);
-      const cleanName = removeAccents(displayName);
-      let nameFontSize = 16;
-      doc.setFontSize(nameFontSize);
-      while (doc.getTextWidth(cleanName) > 55 && nameFontSize > 8) {
-        nameFontSize -= 1;
-        doc.setFontSize(nameFontSize);
-      }
-      doc.text(cleanName, 32, 5, { angle: -90 });
-
-      // Job function
       const jobFn = jobFunctions.find(jf => jf.id === (worker as any).job_function_id);
-      const jobFunctionName = jobFn?.name || (worker as any).role || 'Funcao nao informada';
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(0, 0, 0);
-      doc.text(removeAccents(String(jobFunctionName)), 26, 5, { angle: -90 });
-
-      // Company
+      const jobFunctionName = jobFn?.name || (worker as any).role || 'Função não informada';
       const companyName = getCompanyName(worker.company_id);
-      doc.setFontSize(10);
-      doc.text(removeAccents(companyName === '-' ? 'Empresa nao informada' : companyName), 22, 5, { angle: -90 });
-
-      // Project name
-      doc.setFontSize(projectFontSize);
-      doc.setFont('helvetica', 'bold');
-      doc.text(removeAccents(combinedProjectName), 10, 5, { angle: -90 });
-
-      // Project type
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'normal');
-      doc.text(removeAccents(projectType), 6, 5, { angle: -90 });
-
-      // Circle with code
-      const circleX = 40;
-      const circleY = 80;
-      const radius = 16;
-      doc.setFillColor(255, 255, 255);
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.5);
-      doc.circle(circleX, circleY, radius, 'FD');
-
       const code = String((worker as any).code || '1').padStart(4, '0');
-      doc.setFontSize(25);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(0, 0, 0);
-      doc.text(code, circleX + 7, 71, { align: 'center', angle: -90 });
 
-      // Powered by
-      doc.setFontSize(7);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(120, 120, 120);
-      doc.text('Powered by Googlemarine', 5, 40, { angle: -90 });
-
-      // Blood type
       const bloodType = (worker as any).blood_type;
       const isValidBloodType = bloodType && typeof bloodType === 'string' &&
         bloodType.trim() !== '' && !['nao informado', 'não informado', 'n/a', 'null', 'undefined']
           .includes(bloodType.trim().toLowerCase());
-      if (isValidBloodType) {
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(0, 0, 0);
-        doc.text('Tipo Sanguineo', 16, 75, { angle: -90 });
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text(bloodType.trim(), 12, 80, { angle: -90 });
-      }
+
+      return {
+        displayName,
+        jobFunctionName,
+        companyName: companyName === '-' ? 'Empresa não informada' : companyName,
+        projectName: combinedProjectName,
+        projectType,
+        code,
+        bloodType: isValidBloodType ? bloodType.trim() : null,
+        logoDataUrl,
+      };
     });
 
-    // Abrir PDF via data URI e disparar impressão
-    const dataUri = doc.output('dataurlstring');
-    const printWindow = window.open(dataUri);
-    if (printWindow) {
-      printWindow.addEventListener('load', () => {
+    // Set state to render HTML labels
+    setPrintLabels(labels);
+
+    // Wait for next paint, inject @page style, then print
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        // Inject temporary @page style for label size
+        const pageStyle = document.createElement('style');
+        pageStyle.id = 'label-page-style';
+        pageStyle.textContent = '@page { size: 62mm 100mm; margin: 0; }';
+        document.head.appendChild(pageStyle);
+
+        // Add printing-labels class to body
+        document.body.classList.add('printing-labels');
+
+        const cleanup = () => {
+          document.body.classList.remove('printing-labels');
+          const s = document.getElementById('label-page-style');
+          if (s) s.remove();
+          setPrintLabels([]);
+        };
+
+        window.addEventListener('afterprint', cleanup, { once: true });
+        window.print();
+
+        // Fallback cleanup if afterprint doesn't fire (some browsers)
         setTimeout(() => {
-          printWindow.print();
-        }, 500);
-      });
-    } else {
-      // Fallback: download se popup bloqueado
-      doc.save('etiquetas.pdf');
-    }
-    toast({ title: `${workerList.length} etiqueta(s) gerada(s) com sucesso!` });
+          if (document.body.classList.contains('printing-labels')) {
+            cleanup();
+          }
+        }, 5000);
+
+        toast({ title: `${workerList.length} etiqueta(s) gerada(s) com sucesso!` });
+      }, 100);
+    });
   };
 
   const handlePrintLabels = () => {
@@ -1217,6 +1161,9 @@ export const WorkerManagement = () => {
           </tbody>
         </table>
       </ScrollArea>
+
+      {/* Hidden label print area - rendered for window.print() */}
+      <WorkerLabelPrintSheet labels={printLabels} />
     </div>
   );
 };
