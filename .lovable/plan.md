@@ -1,26 +1,60 @@
 
 
-## Correções Pendentes: Limite de Trabalhadores e Empresas
+## Correção: Limite de 1000 Trabalhadores (Paginação)
 
-### Estado Atual do Banco de Dados (confirmado)
-- **Trabalhadores**: 2531 registros, códigos 2/3/4 estão corretos (Bruno, Gustavo, Edson)
-- **Empresas**: 111 com `type='company'` + 1 DOF com `type='client'` = 112 total
-- **DOF**: Existe como `client` E como `company` (duas entradas distintas, correto)
-- **Problema 3**: Já está corrigido no banco
+### Causa Raiz
 
-### Problema 1: Trabalhadores mostrando apenas 1000
-O código em `useDataProvider.ts` já tem `.range(0, 9999)`, mas a mudança pode não ter sido refletida no build atual. O plano é forçar o rebuild tocando o arquivo.
+O servidor PostgREST do backend tem um limite rígido de **1000 registros por requisição**. Mesmo com `.range(0, 9999)` no código, o servidor trunca a resposta em 1000 linhas. Confirmado pela requisição de rede: `limit=10000` mas apenas 1000 retornados.
 
-### Problema 2: Empresas mostrando 110 em vez de 111
-O banco tem exatamente 111 empresas `type='company'`, sem duplicatas. Isso pode ser um problema de cache do React Query ou o usuário viu antes da criação do DOF company. Vou forçar a invalidação e verificar se há algum filtro adicional no componente `CompanyManagement`.
+O número "38 empresas" é consequência do mesmo problema — conta apenas as empresas presentes nos 1000 primeiros trabalhadores.
 
-### Ações
+### Solução
 
-1. **Forçar rebuild** de `src/hooks/useDataProvider.ts` — tocar o arquivo para garantir que o `.range(0,9999)` seja compilado
-2. **Verificar** se `CompanyManagement.tsx` ou `CompaniesTable.tsx` aplica algum filtro que exclui uma empresa
-3. Se necessário, adicionar `.order('name')` na query de `useContractorCompanies` para garantir ordenação consistente
+Implementar **paginação automática** no `fetchWorkers` — buscar em lotes de 1000 até não haver mais dados, e concatenar os resultados.
 
-### Arquivos a modificar
-- `src/hooks/useDataProvider.ts` — confirmar/retocar para forçar rebuild
-- Nenhuma operação de dados necessária — banco já está correto
+### Alteração
+
+**Arquivo**: `src/hooks/useDataProvider.ts`
+
+Substituir a query única por um loop de paginação:
+
+```typescript
+export async function fetchWorkers() {
+  return executeWithDesktopFallback(
+    () => localWorkers.list(),
+    async () => {
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      
+      while (true) {
+        const { data, error } = await supabase
+          .from('workers')
+          .select('*, companies(name)')
+          .order('code', { ascending: true })
+          .range(from, from + PAGE_SIZE - 1);
+        
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        
+        allData = allData.concat(data);
+        if (data.length < PAGE_SIZE) break; // última página
+        from += PAGE_SIZE;
+      }
+      
+      return allData.map((w: any) => ({
+        ...w,
+        company: w.companies?.name || 'N/A',
+      }));
+    },
+  );
+}
+```
+
+Mesma abordagem será aplicada ao `fetchCompanies` para garantir que todas as empresas sejam carregadas (atualmente sem `.range()` explícito, mas sujeito ao mesmo limite de 1000).
+
+### Resultado Esperado
+- Aba "Trabalhadores": exibirá todos os 2531 trabalhadores
+- Card "Empresas": mostrará o total correto de empresas vinculadas
+- Nenhuma alteração de schema ou dados necessária
 
