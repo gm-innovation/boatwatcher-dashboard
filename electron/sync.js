@@ -695,8 +695,15 @@ class SyncEngine {
   }
 
   async autoEnrollWorkerPhoto(worker) {
-    const devicesEnrolled = Array.isArray(worker.devices_enrolled) ? worker.devices_enrolled : [];
-    if (devicesEnrolled.length === 0) return;
+    let devicesEnrolled = Array.isArray(worker.devices_enrolled) ? worker.devices_enrolled : [];
+
+    // Fallback: if devices_enrolled is empty, auto-enroll in ALL project devices
+    if (devicesEnrolled.length === 0) {
+      const projectDeviceIds = this.db.getProjectDeviceIds?.() || [];
+      if (projectDeviceIds.length === 0) return;
+      devicesEnrolled = projectDeviceIds;
+      console.log(`[auto-enroll] Worker ${worker.name} (code=${worker.code}) has no devices_enrolled — using all ${projectDeviceIds.length} project device(s)`);
+    }
 
     let photoBase64 = null;
     try {
