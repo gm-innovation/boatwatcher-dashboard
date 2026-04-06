@@ -1,69 +1,177 @@
 
+## Diagnóstico
 
-## Problema: Códigos trocados nos dispositivos ControlID
+O comportamento que você descreveu bate com um problema no **full-resync atual**:
 
-### O que aconteceu
+- os dispositivos ficaram com **apenas 9 cadastros**
+- esses 9 aparecem **duplicados**
+- Alexandre continua sendo reconhecido como Gustavo
 
-Quando os 2.531 trabalhadores foram importados da plataforma legada, os códigos numéricos foram reatribuídos:
-- Alexandre Silva: era código **1**, passou a ser código **350**
-- Gustavo Magalhães: recebeu o código **1**
+Pelo código atual, a re-sincronização total **não busca os 2.531 trabalhadores diretamente do backend**. Ela usa a base local do agente:
 
-Porém, nos dispositivos ControlID, o rosto do Alexandre **ainda está cadastrado como código 1**. Quando Alexandre passa na saída, o dispositivo envia `user_id = 1`, e o sistema resolve isso como Gustavo Magalhães (que agora é código 1 no banco).
+- `server/routes/devices.js` → `req.db.getWorkers()`
+- `electron/sync.js` → `this.db.getWorkers()`
 
-Resultado: 4 saídas de "Gustavo" são na verdade saídas de Alexandre.
+Ou seja: se o banco local do servidor tiver só 9 trabalhadores, o resync:
+1. apaga o dispositivo
+2. recadastra apenas esses 9
+3. mantém o problema de mapeamento errado
 
-### Correção necessária
+## O que provavelmente aconteceu
 
-Os dispositivos precisam ser **re-sincronizados** com os códigos atualizados. Isso significa:
+Há dois efeitos combinados:
 
-1. **Limpar todos os usuários dos dispositivos** e re-cadastrar com os códigos corretos
-2. Ou **atualizar individualmente** cada usuário no dispositivo com o novo código
+1. **Fonte errada no full-resync**  
+   O resync está usando o cache local do agente, não a fonte completa e confiável.
 
-A opção 1 é mais segura e simples para 2.500+ trabalhadores.
+2. **Reverse sync contaminando a base local/cloud**  
+   Existe uma rotina de reverse sync em `electron/sync.js` que lê usuários do dispositivo e envia de volta para a nuvem os “desconhecidos”.  
+   Como o dispositivo já estava com IDs errados/duplicados, isso pode ter reforçado registros inconsistentes em vez de corrigi-los.
 
-### Plano técnico
+## Evidências no código
 
-#### 1. Criar comando "full-resync" no agente local
+### Full-resync atual
+```text
+server/routes/devices.js
+const workers = req.db.getWorkers?.() || [];
+const activeWorkers = workers.filter(...)
+```
 
-**Arquivo: `electron/sync.js`**
+```text
+electron/sync.js
+const workers = this.db.getWorkers?.() || [];
+const active = workers.filter(...)
+```
 
-Adicionar uma função `fullDeviceResync()` que:
-- Lista todos os usuários no dispositivo ControlID via `load_objects.fcgi` (object: `users`)
-- Remove todos via `destroy_objects.fcgi`
-- Re-cadastra todos os trabalhadores ativos do banco local com os códigos corretos usando `enrollUserOnDevice()`
-- Processa em lotes de 50 para não sobrecarregar o dispositivo
+### Download normal de trabalhadores
+Já existe um fluxo correto para baixar trabalhadores da nuvem em massa:
+```text
+supabase/functions/agent-sync/index.ts
+GET /download-workers
+```
 
-#### 2. Expor comando via API do servidor local
+Esse endpoint foi feito justamente para baixar todos os trabalhadores ativos paginados.
 
-**Arquivo: `server/routes/devices.js`**
+### Reverse sync ativo
+Também existe:
+```text
+electron/sync.js -> reverseSync()
+supabase/functions/agent-sync/index.ts -> POST /reverse-sync-workers
+```
 
-Adicionar endpoint `POST /api/devices/:id/full-resync` que dispara o re-enrollment completo para um dispositivo específico.
+Se o dispositivo está sujo, essa rotina pode reintroduzir inconsistências.
 
-#### 3. Adicionar função de limpeza no controlid.js
+## Plano de correção
 
-**Arquivo: `server/lib/controlid.js`**
+### 1. Corrigir a origem do full-resync
+Alterar o full-resync para **não depender do `getWorkers()` local**.
 
-Adicionar `clearAllUsersFromDevice(device)` que:
-- Busca todos os user IDs via `load_objects.fcgi`
-- Remove em lote via `destroy_objects.fcgi`
+Implementação:
+- antes de recadastrar, forçar uma atualização completa de trabalhadores no agente
+- ou buscar explicitamente os trabalhadores via endpoint já existente de download
+- só depois executar o enrollment em massa
 
-#### 4. Corrigir access_logs incorretos
+Abordagem recomendada:
+- resetar `last_download_workers`
+- chamar a rotina de download de trabalhadores
+- validar quantos trabalhadores ativos vieram
+- abortar se o total estiver anormalmente baixo
+- só então limpar e reenrolar o dispositivo
 
-**Migração de dados**
+### 2. Adicionar trava de segurança
+Hoje o sistema aceita fazer full-resync mesmo com base local incompleta.
 
-Os 4 registros de saída atribuídos a Gustavo Magalhães (código 1) são na verdade de Alexandre Silva (código 350). Corrigir via UPDATE no banco.
+Vou adicionar proteção para:
+- bloquear resync se vierem poucos trabalhadores (ex: menos de um mínimo esperado)
+- retornar erro claro em vez de apagar o dispositivo e recadastrar dados incompletos
+- registrar no log quantos trabalhadores serão enviados antes de começar
 
-### Arquivos alterados
+Exemplo da lógica:
+```text
+se totalWorkers < limite_minimo:
+  aborta resync
+  informa que a base local está incompleta
+```
 
-| Arquivo | Alteração |
-|---|---|
-| `server/lib/controlid.js` | Adicionar `clearAllUsersFromDevice()` e `listUsersOnDevice()` |
-| `electron/sync.js` | Adicionar `fullDeviceResync()` com enrollment em lote |
-| `server/routes/devices.js` | Endpoint `POST /api/devices/:id/full-resync` |
-| Banco de dados | Corrigir worker_id nos access_logs de Gustavo→Alexandre |
+### 3. Desativar o reverse sync durante recuperação
+Enquanto os dispositivos estiverem inconsistentes, o reverse sync não deve importar usuários “desconhecidos” do hardware de volta.
 
-### O que NÃO muda
-- Fluxo normal de captura de eventos
-- Polling do agente
-- Dashboard web
+Vou ajustar para pelo menos uma destas estratégias:
+- pausar o reverse sync por configuração
+- ou ignorar reverse sync quando houver resync pendente/recentemente executado
+- ou impedir importação de usuários vindos de dispositivos com base suspeita
 
+A opção mais segura agora é **desabilitar temporariamente o reverse sync**.
+
+### 4. Deduplicar por código no re-enrollment
+Mesmo com a base correta, o full-resync deve impedir reenviar trabalhadores repetidos.
+
+Vou incluir deduplicação antes do enrollment:
+- chave principal: `code`
+- se houver duplicidade de código, manter apenas um registro
+- logar os conflitos encontrados
+
+Isso evita casos como:
+- Alexandre 2x
+- Cristiano 2x
+- Leonardo 3x
+- Márcio 2x
+
+### 5. Corrigir a UI/ação para disparar o resync correto
+Hoje não vi evidência de botão na interface chamando esse endpoint diretamente, então o processo pode estar sendo feito via fluxo parcial/local.
+
+Vou padronizar o disparo para usar **uma única implementação confiável** do full-resync, com retorno de:
+- total baixado da nuvem
+- total deduplicado
+- total enviado ao dispositivo
+- falhas por trabalhador
+
+### 6. Revisar os registros incorretos de acesso
+Depois de corrigir a sincronização dos dispositivos, ainda pode haver logs históricos atribuídos ao trabalhador errado.
+
+Vou deixar o sistema preparado para:
+- identificar acessos registrados com código antigo
+- permitir correção dirigida dos eventos já afetados
+
+## Arquivos que devem ser ajustados
+
+- `server/routes/devices.js`
+  - parar de usar apenas `req.db.getWorkers()` cru no full-resync
+  - incluir validação de volume mínimo e deduplicação
+
+- `electron/sync.js`
+  - usar download completo antes do resync
+  - bloquear reverse sync temporariamente
+  - deduplicar trabalhadores por `code`
+
+- `supabase/functions/agent-sync/index.ts`
+  - opcionalmente expor suporte explícito para full-resync seguro
+  - manter o download paginado como fonte principal
+
+## Resultado esperado após a correção
+
+Depois dessa correção, o fluxo certo será:
+
+```text
+1. agente baixa todos os trabalhadores ativos da nuvem
+2. agente valida quantidade e remove duplicados por code
+3. dispositivo é limpo
+4. trabalhadores corretos são reenrolados com os códigos atuais
+5. Alexandre volta a ser reconhecido pelo código dele
+6. Gustavo deixa de receber saídas do Alexandre
+```
+
+## Detalhes técnicos
+
+- O problema atual não parece ser o reconhecimento facial em si.
+- O problema é o **cadastro enviado ao dispositivo**.
+- O full-resync existente está confiando em uma base local aparentemente incompleta/suja.
+- Como o dispositivo hoje mostra só 9 usuários duplicados, isso indica que o resync executado apagou a base anterior e regravou usando esse conjunto parcial.
+
+## Validação depois da implementação
+
+Vou considerar a correção pronta quando:
+1. o resync listar quantidade coerente de trabalhadores antes de iniciar
+2. o dispositivo deixar de exibir apenas 9 duplicados
+3. Alexandre aparecer com o código correto no hardware
+4. uma nova saída do Alexandre gerar log para Alexandre, não para Gustavo
