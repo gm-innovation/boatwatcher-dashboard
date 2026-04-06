@@ -40,9 +40,20 @@ export async function fetchCompanies() {
   return executeWithDesktopFallback(
     () => localCompanies.list(),
     async () => {
-      const { data, error } = await supabase.from('companies').select('*').order('name');
-      if (error) throw error;
-      return data;
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+
+      while (true) {
+        const { data, error } = await supabase.from('companies').select('*').order('name').range(from, from + PAGE_SIZE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+      }
+
+      return allData;
     },
   );
 }
@@ -158,9 +169,26 @@ export async function fetchWorkers() {
   return executeWithDesktopFallback(
     () => localWorkers.list(),
     async () => {
-      const { data, error } = await supabase.from('workers').select('*, companies(name)').order('code', { ascending: true }).range(0, 9999);
-      if (error) throw error;
-      return data.map((w: any) => ({ ...w, company: w.companies?.name || 'N/A' }));
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+
+      while (true) {
+        const { data, error } = await supabase
+          .from('workers')
+          .select('*, companies(name)')
+          .order('code', { ascending: true })
+          .range(from, from + PAGE_SIZE - 1);
+
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+
+        allData = allData.concat(data);
+        if (data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+      }
+
+      return allData.map((w: any) => ({ ...w, company: w.companies?.name || 'N/A' }));
     },
   );
 }
