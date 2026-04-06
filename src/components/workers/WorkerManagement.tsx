@@ -1131,23 +1131,23 @@ export const WorkerManagement = () => {
 
       {/* Table */}
       <ScrollArea className="h-[500px] border rounded-lg">
-        <table className="w-full">
+        <table className="w-full table-fixed min-w-[1050px]">
           <thead className="sticky top-0 bg-card border-b">
             <tr>
-              <th className="p-4 w-10">
+              <th className="p-3 w-10">
                 <Checkbox
                   checked={allSelected}
                   onCheckedChange={toggleAll}
                 />
               </th>
-              <th className="text-left p-4 text-xs font-medium text-muted-foreground">Código</th>
-              <th className="text-left p-4 text-xs font-medium text-muted-foreground">Trabalhador</th>
-              <th className="text-left p-4 text-xs font-medium text-muted-foreground">CPF</th>
-              <th className="text-left p-4 text-xs font-medium text-muted-foreground">Empresa</th>
-              <th className="text-left p-4 text-xs font-medium text-muted-foreground">Projetos Autorizados</th>
-              <th className="text-left p-4 text-xs font-medium text-muted-foreground">Função</th>
-              <th className="text-center p-4 text-xs font-medium text-muted-foreground">Status</th>
-              <th className="text-center p-4 text-xs font-medium text-muted-foreground">Ações</th>
+              <th className="text-left px-2 py-3 w-[70px] text-xs font-medium text-muted-foreground">Código</th>
+              <th className="text-left px-2 py-3 w-[200px] text-xs font-medium text-muted-foreground">Trabalhador</th>
+              <th className="text-left px-2 py-3 w-[130px] text-xs font-medium text-muted-foreground">CPF</th>
+              <th className="text-left px-2 py-3 w-[160px] text-xs font-medium text-muted-foreground">Empresa</th>
+              <th className="text-left px-2 py-3 min-w-[140px] text-xs font-medium text-muted-foreground">Projetos Autorizados</th>
+              <th className="text-left px-2 py-3 w-[130px] text-xs font-medium text-muted-foreground">Função</th>
+              <th className="text-center px-2 py-3 w-[90px] text-xs font-medium text-muted-foreground">Status</th>
+              <th className="text-center px-2 py-3 w-[100px] text-xs font-medium text-muted-foreground">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -1155,38 +1155,38 @@ export const WorkerManagement = () => {
               const projectNames = getProjectNames(worker.allowed_project_ids);
               return (
                 <tr key={worker.id} className="border-b hover:bg-muted/50 cursor-pointer" onClick={() => { setSelectedWorker(worker); setIsDetailsOpen(true); }}>
-                  <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                  <td className="p-3" onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={selectedWorkerIds.includes(worker.id)}
                       onCheckedChange={() => toggleWorker(worker.id)}
                     />
                   </td>
-                  <td className="p-4 text-sm text-muted-foreground whitespace-nowrap">
+                  <td className="px-2 py-3 text-sm text-muted-foreground whitespace-nowrap">
                     {formatWorkerCode((worker as any).code)}
                   </td>
-                  <td className="p-4 whitespace-nowrap">
-                    <div className="flex items-center gap-3">
+                  <td className="px-2 py-3 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
                       <ResolvedAvatar
                         className="h-8 w-8"
                         photoUrl={worker.photo_url}
                         name={worker.name}
                         iconClassName="h-4 w-4"
                       />
-                      <span className="font-medium text-sm">{normalizeName(worker.name)}</span>
+                      <span className="font-medium text-sm truncate">{normalizeName(worker.name)}</span>
                     </div>
                   </td>
-                  <td className="p-4 text-sm text-muted-foreground whitespace-nowrap">{formatCpf(worker.document_number)}</td>
-                  <td className="p-4 text-sm text-muted-foreground whitespace-nowrap">{normalizeName(getCompanyName(worker.company_id))}</td>
-                  <td className="p-4">
+                  <td className="px-2 py-3 text-sm text-muted-foreground whitespace-nowrap">{formatCpf(worker.document_number)}</td>
+                  <td className="px-2 py-3 text-sm text-muted-foreground whitespace-nowrap truncate">{normalizeName(getCompanyName(worker.company_id))}</td>
+                  <td className="px-2 py-3">
                     <div className="flex flex-wrap gap-1">
                       {projectNames.length > 0 ? projectNames.map((name, i) => (
                         <Badge key={i} variant="secondary" className="text-xs">{name}</Badge>
                       )) : <span className="text-xs text-muted-foreground">-</span>}
                     </div>
                   </td>
-                  <td className="p-4 text-sm text-muted-foreground whitespace-nowrap">{normalizeName(worker.role)}</td>
-                  <td className="p-4 text-center">{getStatusBadge(worker.status)}</td>
-                  <td className="p-4">
+                  <td className="px-2 py-3 text-sm text-muted-foreground whitespace-nowrap truncate">{normalizeName(worker.role)}</td>
+                  <td className="px-2 py-3 text-center">{getStatusBadge(worker.status)}</td>
+                  <td className="px-2 py-3">
                     <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
                       <Button size="sm" variant="outline" onClick={() => { setSelectedWorker(worker); setIsDetailsOpen(true); }}>
                         <Edit className="h-4 w-4 mr-1" />
