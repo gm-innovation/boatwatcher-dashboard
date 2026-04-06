@@ -171,6 +171,7 @@ export const localDevices = {
   create: (data: Record<string, any>) => apiFetch('/api/devices', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string, data: Record<string, any>) => apiFetch(`/api/devices/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: string) => apiFetch(`/api/devices/${id}`, { method: 'DELETE' }),
+  fullResync: (id: string) => apiFetch(`/api/devices/${id}/full-resync`, { method: 'POST' }),
 };
 
 export const localControlId = {

@@ -63,6 +63,7 @@ export const DeviceManagement = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [showSetupDevice, setShowSetupDevice] = useState<Device | null>(null);
   const [sendingCommand, setSendingCommand] = useState<string | null>(null);
+  const [resyncingDevice, setResyncingDevice] = useState<string | null>(null);
   const [listedUsers, setListedUsers] = useState<any[]>([]);
   const [isUsersDialogOpen, setIsUsersDialogOpen] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
@@ -288,6 +289,28 @@ export const DeviceManagement = () => {
       toast({ title: 'Erro ao enviar comando', description: error.message, variant: 'destructive' });
     } finally {
       setSendingCommand(null);
+    }
+  };
+
+  const handleFullResync = async (device: Device) => {
+    if (!confirm(`Re-sincronização total do dispositivo "${device.name}"?\n\nIsso vai:\n1. Baixar todos os trabalhadores da nuvem\n2. Limpar o dispositivo\n3. Recadastrar todos os trabalhadores\n\nEssa operação pode levar vários minutos.`)) return;
+    setResyncingDevice(device.id);
+    try {
+      const result: any = await localDevices.fullResync(device.id);
+      if (result.error) {
+        toast({ title: 'Erro no resync', description: result.error, variant: 'destructive' });
+      } else {
+        toast({
+          title: 'Re-sincronização concluída',
+          description: `${result.enrolled || 0} cadastrados, ${result.failed || 0} falhas (${result.totalDownloaded || 0} baixados da nuvem, ${result.duplicatesRemoved || 0} duplicados removidos)`,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+      refetch();
+    } catch (err: any) {
+      toast({ title: 'Erro no resync', description: err.message, variant: 'destructive' });
+    } finally {
+      setResyncingDevice(null);
     }
   };
 
@@ -559,6 +582,12 @@ export const DeviceManagement = () => {
                             {isLocalRuntime && (
                               <DropdownMenuItem onClick={() => sendAgentCommand(device, 'list_users')} disabled={!!sendingCommand}>
                                 <Users className="h-4 w-4 mr-2" />Usuários
+                              </DropdownMenuItem>
+                            )}
+                            {isLocalRuntime && (
+                              <DropdownMenuItem onClick={() => handleFullResync(device)} disabled={!!resyncingDevice}>
+                                {resyncingDevice === device.id ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                                Re-sincronização Total
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem onClick={() => setShowSetupDevice(device)}>

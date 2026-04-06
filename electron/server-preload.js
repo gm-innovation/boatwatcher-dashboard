@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('serverAPI', {
   restartService: () => ipcRenderer.invoke('server:restart-service'),
   getLogContent: () => ipcRenderer.invoke('server:get-log-content'),
   openFolder: (type) => ipcRenderer.invoke('server:open-folder', type),
+  fullDeviceResync: (deviceId) => ipcRenderer.invoke('server:full-device-resync', deviceId),
 
   // App info
   getVersion: () => ipcRenderer.invoke('server:get-version'),
