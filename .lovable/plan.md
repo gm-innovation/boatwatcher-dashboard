@@ -1,60 +1,29 @@
 
 
-## Correção: Limite de 1000 Trabalhadores (Paginação)
+## Ajustar Espaçamento das Colunas da Tabela de Trabalhadores
 
-### Causa Raiz
-
-O servidor PostgREST do backend tem um limite rígido de **1000 registros por requisição**. Mesmo com `.range(0, 9999)` no código, o servidor trunca a resposta em 1000 linhas. Confirmado pela requisição de rede: `limit=10000` mas apenas 1000 retornados.
-
-O número "38 empresas" é consequência do mesmo problema — conta apenas as empresas presentes nos 1000 primeiros trabalhadores.
+### Problema
+As 9 colunas (Checkbox, Código, Trabalhador, CPF, Empresa, Projetos Autorizados, Função, Status, Ações) estão todas com `p-4` e sem larguras definidas, fazendo com que Status e Ações fiquem comprimidos ou fora da área visível.
 
 ### Solução
+Definir larguras proporcionais (`w-`) em cada `<th>` e `<td>` para distribuir o espaço de forma equilibrada, e reduzir o padding de `p-4` para `px-2 py-3` nas colunas mais estreitas.
 
-Implementar **paginação automática** no `fetchWorkers` — buscar em lotes de 1000 até não haver mais dados, e concatenar os resultados.
+### Alteração — `src/components/workers/WorkerManagement.tsx`
 
-### Alteração
+**Headers (linhas 1137-1151)**: Aplicar classes de largura fixa/proporcional:
+- Checkbox: `w-10` (já está)
+- Código: `w-[70px]`
+- Trabalhador: `w-[200px]`  
+- CPF: `w-[130px]`
+- Empresa: `w-[160px]`
+- Projetos Autorizados: `min-w-[140px]`
+- Função: `w-[130px]`
+- Status: `w-[90px]`
+- Ações: `w-[100px]`
 
-**Arquivo**: `src/hooks/useDataProvider.ts`
+Reduzir padding de `p-4` para `px-2 py-3` em todas as colunas (exceto checkbox que mantém `p-3`).
 
-Substituir a query única por um loop de paginação:
+**Cells (linhas 1158-1196)**: Aplicar as mesmas classes de largura e padding reduzido nos `<td>` correspondentes.
 
-```typescript
-export async function fetchWorkers() {
-  return executeWithDesktopFallback(
-    () => localWorkers.list(),
-    async () => {
-      const PAGE_SIZE = 1000;
-      let allData: any[] = [];
-      let from = 0;
-      
-      while (true) {
-        const { data, error } = await supabase
-          .from('workers')
-          .select('*, companies(name)')
-          .order('code', { ascending: true })
-          .range(from, from + PAGE_SIZE - 1);
-        
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        
-        allData = allData.concat(data);
-        if (data.length < PAGE_SIZE) break; // última página
-        from += PAGE_SIZE;
-      }
-      
-      return allData.map((w: any) => ({
-        ...w,
-        company: w.companies?.name || 'N/A',
-      }));
-    },
-  );
-}
-```
-
-Mesma abordagem será aplicada ao `fetchCompanies` para garantir que todas as empresas sejam carregadas (atualmente sem `.range()` explícito, mas sujeito ao mesmo limite de 1000).
-
-### Resultado Esperado
-- Aba "Trabalhadores": exibirá todos os 2531 trabalhadores
-- Card "Empresas": mostrará o total correto de empresas vinculadas
-- Nenhuma alteração de schema ou dados necessária
+Usar `table-fixed` na `<table>` para forçar as larguras definidas e adicionar `min-w-[1050px]` para garantir scroll horizontal em telas menores.
 
