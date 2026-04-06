@@ -1,9 +1,9 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { formatWorkerCode, normalizeName, formatCpf } from '@/lib/utils';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import jsPDF from 'jspdf';
+import { WorkerLabelPrintSheet, type LabelData } from './WorkerLabelPrintSheet';
 import { createWorker, updateWorker, deleteWorker } from '@/hooks/useDataProvider';
 import { uploadFile } from '@/lib/storageProvider';
 import { isElectron } from '@/lib/dataProvider';
@@ -703,6 +703,7 @@ export const WorkerManagement = () => {
   const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
   const [selectedProjectForLabels, setSelectedProjectForLabels] = useState<string>('');
   const [customLabelName, setCustomLabelName] = useState('');
+  const [printLabels, setPrintLabels] = useState<LabelData[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [companyFilter, setCompanyFilter] = useState<string>('all');
   const { data: workers = [], isLoading, refetch } = useWorkers();
