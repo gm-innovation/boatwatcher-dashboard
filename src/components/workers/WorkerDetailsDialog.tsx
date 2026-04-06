@@ -261,6 +261,38 @@ export const WorkerDetailsDialog = ({ worker, open, onOpenChange, onUpdate, onPr
 
         <div className="flex-1 overflow-y-auto pr-4">
           <div className="space-y-6 pb-4">
+            {/* Blocked Alert with Unblock */}
+            {worker.status === 'blocked' && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">Trabalhador bloqueado</p>
+                    {worker.rejection_reason && (
+                      <p className="text-sm mt-1">Motivo: {worker.rejection_reason}</p>
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-4 border-red-300 hover:bg-red-50 dark:hover:bg-red-950"
+                    onClick={async () => {
+                      try {
+                        await updateWorker(worker.id, { status: 'active', rejection_reason: null });
+                        toast({ title: 'Trabalhador desbloqueado com sucesso' });
+                        queryClient.invalidateQueries({ queryKey: ['workers'] });
+                        onUpdate?.();
+                      } catch (error: any) {
+                        toast({ title: 'Erro ao desbloquear', description: error.message, variant: 'destructive' });
+                      }
+                    }}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-1" />
+                    Desbloquear
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
             {/* Basic Info Card */}
             <Card>
               <CardHeader className="pb-3">
