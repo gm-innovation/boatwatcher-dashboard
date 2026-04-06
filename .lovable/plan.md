@@ -1,39 +1,19 @@
 
 
-## Abrir diálogo de impressão diretamente
+## Reverter para download do PDF
 
-### Alteração
+### Alteração única em `WorkerManagement.tsx` (linhas 879-892)
 
-Trocar o download do PDF por abertura direta do diálogo de impressão do navegador, usando um iframe oculto.
-
-### Mudança em `WorkerManagement.tsx` (linhas 879-888)
-
-Substituir o bloco de download:
+Substituir o bloco do iframe por download direto:
 
 ```typescript
-// Antes: download do arquivo
-const blob = doc.output('blob');
-const link = document.createElement('a');
-...
+// De: iframe oculto com print()
+// Para: download do PDF
+const fileName = overrideCustomName
+  ? `etiqueta-${overrideCustomName}.pdf`
+  : `etiquetas-${workerList.length}-trabalhadores.pdf`;
+doc.save(fileName);
 ```
 
-Por impressão direta via iframe:
-
-```typescript
-const blob = doc.output('blob');
-const url = URL.createObjectURL(blob);
-const iframe = document.createElement('iframe');
-iframe.style.display = 'none';
-iframe.src = url;
-document.body.appendChild(iframe);
-iframe.onload = () => {
-  iframe.contentWindow?.print();
-  setTimeout(() => {
-    document.body.removeChild(iframe);
-    URL.revokeObjectURL(url);
-  }, 60000);
-};
-```
-
-Isso abre o diálogo de impressão do navegador diretamente com o PDF da etiqueta, sem baixar arquivo. Funciona tanto para o botão da lista quanto para o botão no modal de detalhes, já que ambos chamam `generateLabels`.
+Remove as 14 linhas do iframe e substitui por uma única chamada `doc.save()`, que é o comportamento original de download do PDF.
 
