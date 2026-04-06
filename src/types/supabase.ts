@@ -33,6 +33,7 @@ export interface Worker {
   allowed_project_ids: string[];
   devices_enrolled: string[];
   job_function_id: string | null;
+  rejection_reason: string | null;
   created_at: string;
   updated_at: string;
 }

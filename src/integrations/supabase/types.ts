@@ -1167,6 +1167,7 @@ export type Database = {
           name: string
           observations: string | null
           photo_url: string | null
+          rejection_reason: string | null
           role: string | null
           status: string | null
           updated_at: string
@@ -1187,6 +1188,7 @@ export type Database = {
           name: string
           observations?: string | null
           photo_url?: string | null
+          rejection_reason?: string | null
           role?: string | null
           status?: string | null
           updated_at?: string
@@ -1207,6 +1209,7 @@ export type Database = {
           name?: string
           observations?: string | null
           photo_url?: string | null
+          rejection_reason?: string | null
           role?: string | null
           status?: string | null
           updated_at?: string
