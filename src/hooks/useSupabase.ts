@@ -195,6 +195,35 @@ async function fetchWorkersOnBoardFromCloud(
 
     if (deviceIds.length === 0 && manualDeviceNames.length === 0) return [];
 
+    // ── Carry-over: fetch last event per worker from previous 7 days ──
+    // This handles workers who entered on a previous day and haven't exited yet.
+    const carryOverStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: priorLogs } = await supabase
+      .from('access_logs')
+      .select('worker_id, worker_name, device_name, device_id, timestamp, direction, created_at')
+      .eq('access_status', 'granted')
+      .gte('timestamp', carryOverStart)
+      .lt('timestamp', startTimestamp)
+      .order('created_at', { ascending: true });
+
+    // Filter prior logs to this project's devices/manual points
+    const relevantPriorLogs = (priorLogs || []).filter(log =>
+      (log.device_id && deviceIds.includes(log.device_id)) ||
+      (!log.device_id && log.device_name && manualDeviceNames.includes(log.device_name))
+    );
+
+    // Build last-known state from prior days (chronological order → last write wins)
+    const priorState = new Map<string, { direction: string; worker_id: string | null; worker_name: string | null; device_name: string | null; device_id: string | null; entry_time: string }>();
+    for (const log of relevantPriorLogs) {
+      const key = log.worker_name || log.worker_id || '';
+      if (!key) continue;
+      if (log.direction === 'entry') {
+        priorState.set(key, { direction: 'entry', worker_id: log.worker_id, worker_name: log.worker_name, device_name: log.device_name, device_id: log.device_id, entry_time: log.timestamp });
+      } else if (log.direction === 'exit') {
+        priorState.set(key, { direction: 'exit', worker_id: log.worker_id, worker_name: log.worker_name, device_name: log.device_name, device_id: log.device_id, entry_time: log.timestamp });
+      }
+    }
+
     // Fetch ALL events (entry + exit) for the day, ordered by created_at (cloud arrival order)
     const { data: allLogs, error: logsError } = await supabase
       .from('access_logs')
@@ -212,8 +241,22 @@ async function fetchWorkersOnBoardFromCloud(
       (!log.device_id && log.device_name && manualDeviceNames.includes(log.device_name))
     );
 
-    // Process worker state chronologically by created_at (cloud arrival order)
+    // Initialize workerState from carry-over (workers still on board from prior days)
     const workerState = new Map<string, any>();
+    for (const [key, state] of priorState) {
+      if (state.direction === 'entry') {
+        workerState.set(key, {
+          worker_id: state.worker_id,
+          worker_name: state.worker_name,
+          device_name: state.device_name,
+          device_id: state.device_id,
+          entry_time: state.entry_time,
+          isOnBoard: true,
+        });
+      }
+    }
+
+    // Process today's events chronologically by created_at (cloud arrival order)
     for (const log of relevantLogs) {
       const key = log.worker_name || log.worker_id || '';
       if (!key) continue;
@@ -231,6 +274,16 @@ async function fetchWorkersOnBoardFromCloud(
         const existing = workerState.get(key);
         if (existing) {
           existing.isOnBoard = false;
+        } else {
+          // Exit without prior entry today — mark as exited (carry-over case)
+          workerState.set(key, {
+            worker_id: log.worker_id,
+            worker_name: log.worker_name,
+            device_name: log.device_name,
+            device_id: log.device_id,
+            entry_time: log.timestamp,
+            isOnBoard: false,
+          });
         }
       }
     }
