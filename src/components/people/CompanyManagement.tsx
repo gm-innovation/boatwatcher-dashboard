@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useContractorCompanies } from '@/hooks/useSupabase';
-import { createCompany, updateCompany, deleteCompany } from '@/hooks/useDataProvider';
+import { useContractorCompanies, useProjects, useWorkers } from '@/hooks/useSupabase';
+import { createCompany, updateCompany, deleteCompany, updateWorker } from '@/hooks/useDataProvider';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Edit2, Trash2, Building2 } from 'lucide-react';
@@ -72,7 +73,12 @@ const CompanyForm = ({ company, onSuccess, onCancel }: CompanyFormProps) => {
 export const CompanyManagement = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<Set<string>>(new Set());
+  const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
+  const [isAuthorizing, setIsAuthorizing] = useState(false);
   const { data: companies = [], isLoading } = useContractorCompanies();
+  const { data: projects = [] } = useProjects();
+  const { data: workers = [] } = useWorkers();
   const queryClient = useQueryClient();
 
   const handleDelete = async (company: Company) => {
@@ -87,6 +93,55 @@ export const CompanyManagement = () => {
     }
   };
 
+  const toggleCompany = (id: string) => {
+    setSelectedCompanyIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const allSelected = companies.length > 0 && selectedCompanyIds.size === companies.length;
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedCompanyIds(new Set());
+    } else {
+      setSelectedCompanyIds(new Set(companies.map(c => c.id)));
+    }
+  };
+
+  const handleAuthorizeProject = async (projectId: string) => {
+    setIsAuthorizing(true);
+    try {
+      const companyWorkers = workers.filter((w: any) => selectedCompanyIds.has(w.company_id));
+      let updated = 0;
+
+      for (const worker of companyWorkers) {
+        const currentIds: string[] = (worker as any).allowed_project_ids || [];
+        if (!currentIds.includes(projectId)) {
+          await updateWorker(worker.id, {
+            allowed_project_ids: [...currentIds, projectId],
+          });
+          updated++;
+        }
+      }
+
+      toast({
+        title: 'Autorização concluída',
+        description: `${updated} trabalhador(es) de ${selectedCompanyIds.size} empresa(s) autorizado(s) no projeto.`,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['workers'] });
+      setSelectedCompanyIds(new Set());
+      setIsProjectDialogOpen(false);
+    } catch (error: any) {
+      toast({ title: 'Erro ao autorizar', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsAuthorizing(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -94,30 +149,37 @@ export const CompanyManagement = () => {
           <h2 className="text-xl font-semibold">Empresas</h2>
           <p className="text-sm text-muted-foreground">{companies.length} empresas cadastradas</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => setEditingCompany(null)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Nova Empresa
+        <div className="flex gap-2">
+          {selectedCompanyIds.size > 0 && (
+            <Button variant="outline" onClick={() => setIsProjectDialogOpen(true)}>
+              Autorizar Projeto ({selectedCompanyIds.size})
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>{editingCompany ? 'Editar Empresa' : 'Nova Empresa'}</DialogTitle>
-            </DialogHeader>
-            <CompanyForm 
-              company={editingCompany} 
-              onSuccess={() => {
-                setIsDialogOpen(false);
-                setEditingCompany(null);
-              }}
-              onCancel={() => {
-                setIsDialogOpen(false);
-                setEditingCompany(null);
-              }}
-            />
-          </DialogContent>
-        </Dialog>
+          )}
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => setEditingCompany(null)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Nova Empresa
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>{editingCompany ? 'Editar Empresa' : 'Nova Empresa'}</DialogTitle>
+              </DialogHeader>
+              <CompanyForm 
+                company={editingCompany} 
+                onSuccess={() => {
+                  setIsDialogOpen(false);
+                  setEditingCompany(null);
+                }}
+                onCancel={() => {
+                  setIsDialogOpen(false);
+                  setEditingCompany(null);
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {isLoading ? (
@@ -129,6 +191,13 @@ export const CompanyManagement = () => {
           <table className="w-full">
             <thead className="sticky top-0 bg-card border-b">
               <tr>
+                <th className="w-10 p-3">
+                  <Checkbox
+                    checked={allSelected}
+                    onCheckedChange={toggleAll}
+                    aria-label="Selecionar todas"
+                  />
+                </th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Empresa</th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">CNPJ</th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Email</th>
@@ -138,6 +207,13 @@ export const CompanyManagement = () => {
             <tbody>
               {companies.map((company) => (
                 <tr key={company.id} className="border-b hover:bg-muted/50">
+                  <td className="w-10 p-3">
+                    <Checkbox
+                      checked={selectedCompanyIds.has(company.id)}
+                      onCheckedChange={() => toggleCompany(company.id)}
+                      aria-label={`Selecionar ${company.name}`}
+                    />
+                  </td>
                   <td className="p-4">
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -182,6 +258,39 @@ export const CompanyManagement = () => {
           <p className="text-sm">Adicione a primeira empresa</p>
         </div>
       )}
+
+      {/* Project selection dialog */}
+      <Dialog open={isProjectDialogOpen} onOpenChange={setIsProjectDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Selecionar Projeto para Autorização</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {selectedCompanyIds.size} empresa(s) selecionada(s). Escolha o projeto para autorizar todos os trabalhadores vinculados.
+          </p>
+          <ScrollArea className="max-h-[300px]">
+            <div className="space-y-2">
+              {projects.filter((p: any) => p.status === 'active').map((project: any) => (
+                <Button
+                  key={project.id}
+                  variant="outline"
+                  className="w-full justify-start"
+                  disabled={isAuthorizing}
+                  onClick={() => handleAuthorizeProject(project.id)}
+                >
+                  {project.name}
+                  {project.location && (
+                    <span className="ml-2 text-xs text-muted-foreground">— {project.location}</span>
+                  )}
+                </Button>
+              ))}
+              {projects.filter((p: any) => p.status === 'active').length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">Nenhum projeto ativo encontrado</p>
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
