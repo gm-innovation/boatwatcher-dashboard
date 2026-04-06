@@ -68,7 +68,7 @@ export const DeviceManagement = () => {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
-  const { data: devices = [], isLoading, refetch } = useDevices(selectedProjectId);
+  const { data: devices = [], isLoading, refetch } = useDevices(selectedProjectId, { forceCloud: true });
   const { data: projects = [] } = useProjects();
   const { agents } = useLocalAgents(selectedProjectId);
   const queryClient = useQueryClient();
