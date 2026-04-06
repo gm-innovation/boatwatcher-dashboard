@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { controlIdRequest } = require('../lib/controlid');
+const { controlIdRequest, clearAllUsersFromDevice, enrollUserOnDevice, loadPhotoAsBase64 } = require('../lib/controlid');
 
 async function executeDeviceAction(db, device, action, params = {}) {
   switch (action) {
@@ -143,6 +143,80 @@ router.post('/:id/actions', async (req, res) => {
     const result = await executeDeviceAction(req.db, device, req.body?.action, req.body || {});
     res.json(result);
   } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/devices/:id/full-resync
+ * Clears all users from the device and re-enrolls all active workers.
+ */
+router.post('/:id/full-resync', async (req, res) => {
+  try {
+    const device = req.db.getDeviceById?.(req.params.id);
+    if (!device) return res.status(404).json({ error: 'Device not found' });
+    if (!device.controlid_ip_address) {
+      return res.status(400).json({ error: 'Dispositivo sem IP configurado.' });
+    }
+
+    console.log(`[full-resync] Starting full resync for device ${device.name} (${device.controlid_ip_address})`);
+
+    // Step 1: Clear all users from device
+    const clearResult = await clearAllUsersFromDevice(device);
+    if (!clearResult.success) {
+      return res.status(500).json({ error: clearResult.error || 'Falha ao limpar dispositivo.' });
+    }
+    console.log(`[full-resync] Cleared ${clearResult.removed} users from device ${device.name}`);
+
+    // Step 2: Get all active workers from local DB
+    const workers = req.db.getWorkers?.() || [];
+    const activeWorkers = workers.filter(w => w.status === 'active' || !w.status);
+    console.log(`[full-resync] Re-enrolling ${activeWorkers.length} active workers on device ${device.name}`);
+
+    let enrolled = 0;
+    let failed = 0;
+    const errors = [];
+    const BATCH_SIZE = 50;
+
+    for (let i = 0; i < activeWorkers.length; i += BATCH_SIZE) {
+      const batch = activeWorkers.slice(i, i + BATCH_SIZE);
+      for (const worker of batch) {
+        try {
+          let photoBase64 = null;
+          if (worker.photo_url) {
+            try {
+              photoBase64 = await loadPhotoAsBase64(worker.photo_url);
+            } catch (photoErr) {
+              // Enroll without photo
+            }
+          }
+          const result = await enrollUserOnDevice(device, worker, photoBase64);
+          if (result.success) {
+            enrolled++;
+          } else {
+            failed++;
+            errors.push({ worker: worker.name, code: worker.code, error: result.error || result.warning });
+          }
+        } catch (err) {
+          failed++;
+          errors.push({ worker: worker.name, code: worker.code, error: err.message });
+        }
+      }
+      console.log(`[full-resync] Progress: ${Math.min(i + BATCH_SIZE, activeWorkers.length)}/${activeWorkers.length}`);
+    }
+
+    console.log(`[full-resync] Completed: ${enrolled} enrolled, ${failed} failed`);
+    res.json({
+      success: true,
+      message: `Re-sincronização completa: ${enrolled} cadastrados, ${failed} falhas.`,
+      enrolled,
+      failed,
+      totalWorkers: activeWorkers.length,
+      cleared: clearResult.removed,
+      errors: errors.slice(0, 20), // Limit error details
+    });
+  } catch (err) {
+    console.error(`[full-resync] Error:`, err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
