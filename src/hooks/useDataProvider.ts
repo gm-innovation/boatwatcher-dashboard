@@ -437,7 +437,7 @@ export async function insertAccessLog(logData: Record<string, any>) {
 
 // --- Devices ---
 
-export async function fetchDevices(projectId?: string) {
+export async function fetchDevices(projectId?: string, forceCloud: boolean = false) {
   return executeWithDesktopFallback(
     () => localDevices.list(projectId),
     async () => {
@@ -447,6 +447,7 @@ export async function fetchDevices(projectId?: string) {
       if (error) throw error;
       return data;
     },
+    forceCloud,
   );
 }
 

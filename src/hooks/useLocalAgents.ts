@@ -55,35 +55,7 @@ export function useLocalAgents(projectId?: string | null) {
         return [] as LocalAgent[];
       }
 
-      if (isDesktopLocalRuntime) {
-        const [agentStatus, syncStatus] = await Promise.all([
-          localAgent.getStatus(),
-          localSync.getStatus(),
-        ]);
-
-        const now = new Date().toISOString();
-        const pseudoAgent: LocalAgent = {
-          id: 'local-runtime-agent',
-          name: 'Agente local do servidor',
-          token: '',
-          project_id: projectId || null,
-          status: agentStatus?.running ? 'online' : 'offline',
-          last_seen_at: agentStatus?.running ? now : syncStatus?.lastSync ?? null,
-          ip_address: 'Servidor local',
-          version: null,
-          configuration: {
-            devicesCount: agentStatus?.devicesCount ?? 0,
-          },
-          created_at: now,
-          updated_at: now,
-          last_sync_at: syncStatus?.lastSync ?? null,
-          pending_sync_count: syncStatus?.pendingCount ?? 0,
-          sync_status: syncStatus?.online ? 'online' : 'offline',
-        };
-
-        return [pseudoAgent];
-      }
-
+      // Always fetch from cloud for consistent data across platforms
       let query = supabase
         .from('local_agents')
         .select('*')
@@ -95,8 +67,39 @@ export function useLocalAgents(projectId?: string | null) {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as LocalAgent[];
-    }
+      const cloudAgents = (data || []) as LocalAgent[];
+
+      // On Desktop with local server, enrich cloud agents with live local status
+      if (isDesktopLocalRuntime) {
+        try {
+          const [agentStatus, syncStatus] = await Promise.all([
+            localAgent.getStatus(),
+            localSync.getStatus(),
+          ]);
+
+          return cloudAgents.map(agent => ({
+            ...agent,
+            // Override status with live local info
+            status: agentStatus?.running ? 'online' : agent.status,
+            last_seen_at: agentStatus?.running ? new Date().toISOString() : agent.last_seen_at,
+            last_sync_at: syncStatus?.lastSync ?? agent.last_sync_at,
+            pending_sync_count: syncStatus?.pendingCount ?? agent.pending_sync_count,
+            sync_status: syncStatus?.online ? 'online' : agent.sync_status,
+            configuration: {
+              ...(agent.configuration as Record<string, unknown>),
+              devicesCount: agentStatus?.devicesCount ?? 0,
+              localServerRunning: agentStatus?.running ?? false,
+            },
+          }));
+        } catch {
+          // If local status fails, return cloud data as-is
+          return cloudAgents;
+        }
+      }
+
+      return cloudAgents;
+    },
+    refetchInterval: 30000,
   });
 
   const createAgent = useMutation({

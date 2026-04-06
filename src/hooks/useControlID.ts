@@ -9,14 +9,15 @@ import { useRuntimeProfile } from "@/hooks/useRuntimeProfile";
 const DESKTOP_LOCAL_ONLY_MESSAGE = 'O servidor local está indisponível no desktop. Os dados seguem em fallback para a nuvem, mas ações diretas em hardware ficam desabilitadas.';
 
 // Hook para buscar dispositivos
-export const useDevices = (projectId?: string | null) => {
+export const useDevices = (projectId?: string | null, options?: { forceCloud?: boolean }) => {
   return useQuery({
-    queryKey: ["devices", projectId],
+    queryKey: ["devices", projectId, options?.forceCloud],
     queryFn: async (): Promise<Device[]> => {
-      const data = await fetchDevices(projectId || undefined);
+      const data = await fetchDevices(projectId || undefined, options?.forceCloud);
       return data as unknown as Device[];
     },
     enabled: true,
+    refetchInterval: 30000,
   });
 };
 
