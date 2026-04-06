@@ -1161,6 +1161,8 @@ export const WorkerManagement = () => {
           </tbody>
         </table>
       </ScrollArea>
+
+      {/* Hidden label print area - rendered for window.print() */}
+      <WorkerLabelPrintSheet labels={printLabels} />
     </div>
-  );
 };
