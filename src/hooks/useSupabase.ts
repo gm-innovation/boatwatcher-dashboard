@@ -43,7 +43,9 @@ export const useContractorCompanies = () => {
       const { data, error } = await supabase
         .from('companies')
         .select('*')
-        .eq('type', 'company');
+        .eq('type', 'company')
+        .order('name')
+        .range(0, 9999);
       if (error) throw error;
       return (data || []) as Company[];
     }
