@@ -1236,6 +1236,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      authorize_companies_to_project: {
+        Args: { _company_ids: string[]; _project_id: string }
+        Returns: number
+      }
       create_initial_admin: { Args: { _user_id: string }; Returns: boolean }
       get_user_company_id: { Args: { _user_id: string }; Returns: string }
       get_user_role: {

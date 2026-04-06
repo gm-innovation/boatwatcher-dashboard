@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useContractorCompanies, useProjects, useWorkers } from '@/hooks/useSupabase';
-import { createCompany, updateCompany, deleteCompany, updateWorker } from '@/hooks/useDataProvider';
+import { useContractorCompanies, useProjects } from '@/hooks/useSupabase';
+import { createCompany, updateCompany, deleteCompany } from '@/hooks/useDataProvider';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -78,7 +79,6 @@ export const CompanyManagement = () => {
   const [isAuthorizing, setIsAuthorizing] = useState(false);
   const { data: companies = [], isLoading } = useContractorCompanies();
   const { data: projects = [] } = useProjects();
-  const { data: workers = [] } = useWorkers();
   const queryClient = useQueryClient();
 
   const handleDelete = async (company: Company) => {
@@ -114,22 +114,15 @@ export const CompanyManagement = () => {
   const handleAuthorizeProject = async (projectId: string) => {
     setIsAuthorizing(true);
     try {
-      const companyWorkers = workers.filter((w: any) => selectedCompanyIds.has(w.company_id));
-      let updated = 0;
-
-      for (const worker of companyWorkers) {
-        const currentIds: string[] = (worker as any).allowed_project_ids || [];
-        if (!currentIds.includes(projectId)) {
-          await updateWorker(worker.id, {
-            allowed_project_ids: [...currentIds, projectId],
-          });
-          updated++;
-        }
-      }
+      const { data, error } = await supabase.rpc('authorize_companies_to_project' as any, {
+        _company_ids: Array.from(selectedCompanyIds),
+        _project_id: projectId,
+      });
+      if (error) throw error;
 
       toast({
         title: 'Autorização concluída',
-        description: `${updated} trabalhador(es) de ${selectedCompanyIds.size} empresa(s) autorizado(s) no projeto.`,
+        description: `${data} trabalhador(es) de ${selectedCompanyIds.size} empresa(s) autorizado(s) no projeto.`,
       });
 
       queryClient.invalidateQueries({ queryKey: ['workers'] });
