@@ -149,7 +149,14 @@ router.post('/:id/actions', async (req, res) => {
 
 /**
  * POST /api/devices/:id/full-resync
- * Clears all users from the device and re-enrolls all active workers.
+ * Delegates to SyncEngine.fullDeviceResync() which:
+ * 1. Downloads ALL workers fresh from cloud
+ * 2. Pauses reverse sync
+ * 3. Validates minimum worker count
+ * 4. Deduplicates by code
+ * 5. Clears device and re-enrolls
+ *
+ * Falls back to local-only resync if SyncEngine is not available.
  */
 router.post('/:id/full-resync', async (req, res) => {
   try {
@@ -159,41 +166,64 @@ router.post('/:id/full-resync', async (req, res) => {
       return res.status(400).json({ error: 'Dispositivo sem IP configurado.' });
     }
 
-    console.log(`[full-resync] Starting full resync for device ${device.name} (${device.controlid_ip_address})`);
+    // Prefer SyncEngine path (downloads from cloud first)
+    if (req.syncEngine && typeof req.syncEngine.fullDeviceResync === 'function') {
+      console.log(`[full-resync] Delegating to SyncEngine for device ${device.name}`);
+      const result = await req.syncEngine.fullDeviceResync(req.params.id);
+      return res.json({
+        success: true,
+        message: `Re-sincronização completa: ${result.enrolled} cadastrados, ${result.failed} falhas (${result.totalDownloaded} baixados da nuvem, ${result.duplicatesRemoved} duplicados removidos).`,
+        ...result,
+      });
+    }
 
-    // Step 1: Clear all users from device
+    // Fallback: local-only resync with safety checks
+    console.warn(`[full-resync] SyncEngine not available — using local DB fallback for device ${device.name}`);
+
+    const workers = req.db.getWorkers?.() || [];
+    const activeWorkers = workers.filter(w => w.status === 'active' || !w.status);
+
+    // Safety threshold
+    const MIN_WORKERS = 50;
+    if (activeWorkers.length < MIN_WORKERS) {
+      return res.status(400).json({
+        success: false,
+        error: `ABORTADO: apenas ${activeWorkers.length} trabalhadores ativos na base local (mínimo: ${MIN_WORKERS}). Execute um sync completo antes de tentar o resync.`,
+      });
+    }
+
+    // Deduplicate by code
+    const codeMap = new Map();
+    for (const w of activeWorkers) {
+      const code = Number(w.code);
+      if (!codeMap.has(code)) codeMap.set(code, w);
+    }
+    const uniqueWorkers = Array.from(codeMap.values());
+    const dupsRemoved = activeWorkers.length - uniqueWorkers.length;
+
+    console.log(`[full-resync] Local fallback: ${uniqueWorkers.length} unique workers (${dupsRemoved} duplicates removed)`);
+
+    // Clear device
     const clearResult = await clearAllUsersFromDevice(device);
     if (!clearResult.success) {
       return res.status(500).json({ error: clearResult.error || 'Falha ao limpar dispositivo.' });
     }
-    console.log(`[full-resync] Cleared ${clearResult.removed} users from device ${device.name}`);
-
-    // Step 2: Get all active workers from local DB
-    const workers = req.db.getWorkers?.() || [];
-    const activeWorkers = workers.filter(w => w.status === 'active' || !w.status);
-    console.log(`[full-resync] Re-enrolling ${activeWorkers.length} active workers on device ${device.name}`);
 
     let enrolled = 0;
     let failed = 0;
     const errors = [];
     const BATCH_SIZE = 50;
 
-    for (let i = 0; i < activeWorkers.length; i += BATCH_SIZE) {
-      const batch = activeWorkers.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < uniqueWorkers.length; i += BATCH_SIZE) {
+      const batch = uniqueWorkers.slice(i, i + BATCH_SIZE);
       for (const worker of batch) {
         try {
           let photoBase64 = null;
           if (worker.photo_url) {
-            try {
-              photoBase64 = await loadPhotoAsBase64(worker.photo_url);
-            } catch (photoErr) {
-              // Enroll without photo
-            }
+            try { photoBase64 = await loadPhotoAsBase64(worker.photo_url); } catch {}
           }
           const result = await enrollUserOnDevice(device, worker, photoBase64);
-          if (result.success) {
-            enrolled++;
-          } else {
+          if (result.success) enrolled++; else {
             failed++;
             errors.push({ worker: worker.name, code: worker.code, error: result.error || result.warning });
           }
@@ -202,22 +232,36 @@ router.post('/:id/full-resync', async (req, res) => {
           errors.push({ worker: worker.name, code: worker.code, error: err.message });
         }
       }
-      console.log(`[full-resync] Progress: ${Math.min(i + BATCH_SIZE, activeWorkers.length)}/${activeWorkers.length}`);
+      console.log(`[full-resync] Progress: ${Math.min(i + BATCH_SIZE, uniqueWorkers.length)}/${uniqueWorkers.length}`);
     }
 
-    console.log(`[full-resync] Completed: ${enrolled} enrolled, ${failed} failed`);
     res.json({
       success: true,
-      message: `Re-sincronização completa: ${enrolled} cadastrados, ${failed} falhas.`,
+      message: `Re-sincronização completa (local): ${enrolled} cadastrados, ${failed} falhas.`,
       enrolled,
       failed,
-      totalWorkers: activeWorkers.length,
+      totalWorkers: uniqueWorkers.length,
+      duplicatesRemoved: dupsRemoved,
       cleared: clearResult.removed,
-      errors: errors.slice(0, 20), // Limit error details
+      errors: errors.slice(0, 20),
     });
   } catch (err) {
     console.error(`[full-resync] Error:`, err.message);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/devices/reverse-sync/resume
+ * Re-enables reverse sync after recovery is complete.
+ */
+router.post('/reverse-sync/resume', (req, res) => {
+  try {
+    req.db.setSyncMeta?.('reverse_sync_paused', 'false');
+    console.log('[reverse-sync] Reverse sync RESUMED');
+    res.json({ success: true, message: 'Reverse sync reativado.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
