@@ -1155,38 +1155,38 @@ export const WorkerManagement = () => {
               const projectNames = getProjectNames(worker.allowed_project_ids);
               return (
                 <tr key={worker.id} className="border-b hover:bg-muted/50 cursor-pointer" onClick={() => { setSelectedWorker(worker); setIsDetailsOpen(true); }}>
-                  <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                  <td className="p-3" onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={selectedWorkerIds.includes(worker.id)}
                       onCheckedChange={() => toggleWorker(worker.id)}
                     />
                   </td>
-                  <td className="p-4 text-sm text-muted-foreground whitespace-nowrap">
+                  <td className="px-2 py-3 text-sm text-muted-foreground whitespace-nowrap">
                     {formatWorkerCode((worker as any).code)}
                   </td>
-                  <td className="p-4 whitespace-nowrap">
-                    <div className="flex items-center gap-3">
+                  <td className="px-2 py-3 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
                       <ResolvedAvatar
                         className="h-8 w-8"
                         photoUrl={worker.photo_url}
                         name={worker.name}
                         iconClassName="h-4 w-4"
                       />
-                      <span className="font-medium text-sm">{normalizeName(worker.name)}</span>
+                      <span className="font-medium text-sm truncate">{normalizeName(worker.name)}</span>
                     </div>
                   </td>
-                  <td className="p-4 text-sm text-muted-foreground whitespace-nowrap">{formatCpf(worker.document_number)}</td>
-                  <td className="p-4 text-sm text-muted-foreground whitespace-nowrap">{normalizeName(getCompanyName(worker.company_id))}</td>
-                  <td className="p-4">
+                  <td className="px-2 py-3 text-sm text-muted-foreground whitespace-nowrap">{formatCpf(worker.document_number)}</td>
+                  <td className="px-2 py-3 text-sm text-muted-foreground whitespace-nowrap truncate">{normalizeName(getCompanyName(worker.company_id))}</td>
+                  <td className="px-2 py-3">
                     <div className="flex flex-wrap gap-1">
                       {projectNames.length > 0 ? projectNames.map((name, i) => (
                         <Badge key={i} variant="secondary" className="text-xs">{name}</Badge>
                       )) : <span className="text-xs text-muted-foreground">-</span>}
                     </div>
                   </td>
-                  <td className="p-4 text-sm text-muted-foreground whitespace-nowrap">{normalizeName(worker.role)}</td>
-                  <td className="p-4 text-center">{getStatusBadge(worker.status)}</td>
-                  <td className="p-4">
+                  <td className="px-2 py-3 text-sm text-muted-foreground whitespace-nowrap truncate">{normalizeName(worker.role)}</td>
+                  <td className="px-2 py-3 text-center">{getStatusBadge(worker.status)}</td>
+                  <td className="px-2 py-3">
                     <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
                       <Button size="sm" variant="outline" onClick={() => { setSelectedWorker(worker); setIsDetailsOpen(true); }}>
                         <Edit className="h-4 w-4 mr-1" />
