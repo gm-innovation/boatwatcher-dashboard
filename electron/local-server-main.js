@@ -429,6 +429,20 @@ function registerIpcHandlers() {
     }
   });
 
+  ipcMain.handle('server:full-device-resync', async (_event, deviceId) => {
+    if (!serverRuntime?.syncEngine) return { error: 'SyncEngine não disponível.' };
+    if (!deviceId) return { error: 'Device ID é obrigatório.' };
+    try {
+      logToFile(`Full device resync requested for device ${deviceId}`);
+      const result = await serverRuntime.syncEngine.fullDeviceResync(deviceId);
+      logToFile(`Full device resync completed: ${result.enrolled} enrolled, ${result.failed} failed, ${result.totalDownloaded} downloaded`);
+      return result;
+    } catch (err) {
+      logToFile(`Full device resync error: ${err.message}`);
+      return { error: err.message };
+    }
+  });
+
   ipcMain.handle('server:restart-service', async () => {
     try {
       logToFile('Restart requested via UI');
