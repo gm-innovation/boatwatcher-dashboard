@@ -1132,7 +1132,7 @@ export const WorkerManagement = () => {
       {/* Table */}
       <ScrollArea className="h-[500px] border rounded-lg">
         <table className="w-full table-fixed min-w-[1050px]">
-          <thead className="sticky top-0 bg-card border-b">
+          <thead className="sticky top-0 z-10 bg-card border-b">
             <tr>
               <th className="p-3 w-10">
                 <Checkbox
