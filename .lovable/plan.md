@@ -1,71 +1,62 @@
 
 
-## Por que os 2.531 trabalhadores não foram sincronizados nos dispositivos ControlID
+## Diagnóstico: Saída de Alexandre Silva não registrada
 
-### Diagnóstico — Dois problemas identificados
+### Dados do banco de dados hoje (06/04)
 
-**Problema 1: Limite de 1.000 linhas do banco de dados**
+Existem **apenas 3 registros** no dia inteiro:
 
-A query `download-workers` na Edge Function não especifica `.range()`, então o banco retorna no máximo 1.000 registros por consulta (limite padrão). Com 2.531 trabalhadores ativos, **~1.500 nunca chegam ao servidor local**.
+| Hora (UTC) | Trabalhador | Direção | Dispositivo |
+|---|---|---|---|
+| 12:28 | Alexandre Silva | entry | Engenharia - Entrada |
+| 17:22 | Gustavo Magalhães | exit | Engenharia - Saída |
+| 17:24 | Gustavo Magalhães | exit | Engenharia - Saída |
 
-Arquivo: `supabase/functions/agent-sync/index.ts`, linha 716-721
+**A saída do Alexandre às ~14:20 não existe no banco.** O dashboard está correto ao mostrá-lo como "a bordo" — ele simplesmente nunca recebeu o evento de saída.
 
-**Problema 2: `devices_enrolled` está vazio `{}`**
+### Causa raiz provável
 
-O auto-enrollment (`autoEnrollWorkerPhoto`) só envia trabalhadores para o hardware se `devices_enrolled` contiver IDs de dispositivos. Todos os 2.531 registros têm `devices_enrolled = {}` (vazio). Ou seja, mesmo os 1.000 que chegam ao servidor local **não são enviados para o ControlID** porque o sistema não sabe em quais dispositivos cadastrá-los.
-
-**Problema 3 (menor): Apenas 5 de 2.531 têm foto**
-
-Sem `photo_url`, o enrollment cria o usuário no dispositivo mas sem biometria facial — o reconhecimento facial não funcionará.
-
-### Plano de correção
-
-#### 1. Paginação na Edge Function (resolve o limite de 1.000)
-
-Na rota `download-workers` do `agent-sync`, implementar loop de paginação para buscar todos os registros:
+O agente local (versão 1.3.16) usa **deduplicação temporal** no `processEvent`:
 
 ```text
-// Ao invés de uma query simples, fazer loop com .range(offset, offset+999)
-// até retornar menos de 1000 resultados
-let allWorkers = []
-let offset = 0
-while (true) {
-  const { data } = await supabase.from('workers')...range(offset, offset + 999)
-  allWorkers.push(...data)
-  if (data.length < 1000) break
-  offset += 1000
-}
+// electron/agent.js linhas 519-529
+if (eventMs <= lastMs) → descarta o evento como duplicado
 ```
 
-#### 2. Enrollment automático em TODOS os dispositivos do projeto
+O problema: o `last_event_timestamp` do dispositivo de **saída** (192.168.0.129) pode ter ficado com um timestamp futuro de uma sessão anterior, fazendo com que todos os novos eventos sejam descartados como "duplicados". Isso explicaria por que a saída do Alexandre às 14:20 sumiu, mas as saídas do Gustavo às 17:22/17:24 foram capturadas (ultrapassaram o timestamp travado).
 
-Criar uma lógica que, quando `devices_enrolled` está vazio mas o trabalhador pertence ao projeto do agente, **automaticamente o cadastra em todos os dispositivos** do projeto. Isso é feito no `electron/sync.js`:
+### Plano de correção — 3 itens
 
-```text
-// Se devices_enrolled está vazio, considerar todos os devices do projeto
-const targetDevices = devicesEnrolled.length > 0
-  ? devicesEnrolled
-  : allProjectDeviceIds;  // fallback: todos os dispositivos
-```
+**1. Corrigir deduplicação para usar o cursor `id` em vez de timestamp**
 
-#### 3. Enrollment em lote (batch) para 2.500+ trabalhadores
+Arquivo: `electron/agent.js`
 
-O enrollment individual (1 por vez com download de foto) seria muito lento para 2.500 registros. Adicionar:
-- Controle de progresso (`enrollmentProgress` no status de sync)
-- Processamento em lote com limite de concorrência (5 dispositivos simultâneos)
-- Checkpoint para retomar em caso de interrupção
+O `lastEventId` (cursor incremental) já é usado para buscar novos eventos do hardware. Mas dentro do `processEvent`, a deduplicação usa `last_event_timestamp` (comparação temporal), que é frágil — um timestamp futuro anômalo bloqueia todos os eventos seguintes.
 
-### Arquivos a alterar
+Correção: remover a deduplicação por timestamp dentro do `processEvent`. O filtro `where id > lastEventId` na query já garante que não haverá duplicatas.
+
+**2. Implementar carry-over de trabalhadores entre dias**
+
+Arquivo: `src/hooks/useSupabase.ts` — função `fetchWorkersOnBoardFromCloud`
+
+Adicionar uma query que busca o **último evento** de cada trabalhador nos últimos 7 dias (antes da meia-noite de hoje). Se o último evento foi "entry", inicializar o trabalhador como "a bordo" no dia atual, permitindo que saídas de hoje o removam corretamente.
+
+**3. Adicionar log de diagnóstico para eventos descartados**
+
+Arquivo: `electron/agent.js`
+
+Quando um evento é descartado pela deduplicação, logar detalhes suficientes para depuração: worker_name, direction, timestamp do evento e timestamp de referência.
+
+### Arquivos alterados
 
 | Arquivo | Alteração |
 |---|---|
-| `supabase/functions/agent-sync/index.ts` | Paginação na rota `download-workers` |
-| `electron/sync.js` | Fallback de `devices_enrolled` vazio → todos devices do projeto; batch enrollment com checkpoint |
-| `electron/database.js` | Helper `getProjectDeviceIds()` para listar devices do projeto |
+| `electron/agent.js` | Remover deduplicação temporal redundante no processEvent; manter apenas cursor por ID |
+| `src/hooks/useSupabase.ts` | Adicionar carry-over de trabalhadores entre dias na lógica "on board" |
 
 ### O que NÃO muda
-- Fluxo de enrollment via comando manual (web/desktop)
-- Upload de logs de acesso
-- Sincronização reversa recém-implementada
-- RLS e autenticação
+- Polling de eventos do hardware (já funciona)
+- Upload de logs para a nuvem (já funciona)
+- Cursor `lastEventId` (já funciona corretamente)
+- Configuração de dispositivos
 
