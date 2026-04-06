@@ -1,65 +1,73 @@
 
 
-## Importação de Dados de Produção para o Banco de Dados
+## Correções: Códigos Duplicados, Limite de 1000 e DOF
 
-### Resumo
+### Problemas Identificados
 
-Importar empresas, funções e trabalhadores dos 4 CSVs fornecidos para o banco Supabase, preservando os códigos de produção (`worker_code`) e tratando conflitos de código conforme solicitado.
+**1. Limite de 1000 trabalhadores**: A query `fetchWorkers` em `useDataProvider.ts` não especifica range, então o Supabase retorna no máximo 1000 dos 2531 registros.
 
-### Dados atuais no banco
+**2. DOF — empresa vs cliente**: A importação associou 166 trabalhadores ao DOF `type='client'` em vez de criar uma entrada separada `type='company'`. O usuário confirma que são entidades distintas.
 
-| Entidade | Existentes | A importar |
-|----------|-----------|------------|
-| Empresas | 2 (DOF, Googlemarine) | ~112 do CSV |
-| Funções | 1 (TÉCNICO EM ELETRÔNICA II) | ~489 linhas (muitas duplicatas) |
-| Trabalhadores | 5 (códigos 1–5) | ~2530 do CSV |
+**3. 24 códigos duplicados + códigos 2, 3, 4 errados**: O script de importação, ao encontrar códigos ocupados, atribuiu códigos sequenciais (a partir de ~1377) que colidiram com trabalhadores já importados com esses mesmos códigos do CSV. Resultado: 24 pares de duplicatas + 3 trabalhadores incorretos nos códigos 2, 3, 4.
 
-### Lógica de importação (script Python via psql)
+### Plano de Correção
 
-#### Passo 1: Empresas
-- Extrair `name` e `cnpj` do `CompanyProfile_export.csv`
-- Match por CNPJ normalizado (somente dígitos) ou nome exato
-- "DOF" já existe (sem CNPJ) → associar pelo nome e atualizar CNPJ se disponível
-- Novas empresas: `INSERT` com `type='company'`, `status='active'`
-- Construir mapa `nome_empresa → uuid`
+#### Passo 1: Código — Remover limite de 1000 em `fetchWorkers`
+Adicionar `.range(0, 9999)` na query de workers em `src/hooks/useDataProvider.ts`.
 
-#### Passo 2: Funções (Job Functions)
-- Deduplicar por nome (case-insensitive, trim)
-- Ignorar "Não informado"
-- Manter função existente "TÉCNICO EM ELETRÔNICA II"
-- Construir mapa `nome_função → uuid`
+#### Passo 2: Dados — Criar DOF empresa
+Inserir nova entrada na tabela `companies` com `name='DOF'`, `type='company'`, `cnpj='07925451000189'`. Atualizar os 166 trabalhadores que apontam para o DOF client para apontar para o novo DOF company.
 
-#### Passo 3: Trabalhadores
-Para cada trabalhador do `ManagedWorker_export.csv`:
+#### Passo 3: Dados — Corrigir todos os códigos em cascata
+Script Python que:
 
-1. Normalizar CPF (remover pontos/traços)
-2. Se CPF já existe no banco → **atualizar `code`** para o `worker_code` do CSV
-3. Se CPF não existe:
-   - Tentar inserir com o `worker_code` do CSV
-   - **Se o código já estiver em uso** por outro trabalhador → atribuir o próximo número livre (após o maior código existente)
-4. Vincular `company_id` pelo mapa de empresas (por `company_name`)
-5. Vincular `job_function_id` pelo mapa de funções (por `job_function`)
-6. Campos: `name`, `document_number`, `code`, `status`, `birth_date`, `gender`, `blood_type`, `role` (job_function)
+1. Identifica os 24 trabalhadores em posições erradas (já mapeados acima)
+2. Move Cristiano Calheiros (código 2), Leonardo Morgado (código 3) e Márcio Mendes (código 4) para o final da lista (2521, 2522, 2523)
+3. Para cada trabalhador "WRONG": primeiro libera o código de destino se estiver ocupado por outro WRONG (processo em ordem de dependência), depois move para o código correto do CSV
+4. Ordem de execução: primeiro move todos os WRONG para códigos temporários altos (2524+), depois move cada um para seu código CSV correto
+5. Atualiza `workers_code_seq` para MAX(code)
 
-#### Passo 4: Atualizar sequência
-- `SELECT setval('workers_code_seq', (SELECT MAX(code) FROM workers))`
+Os 24 trabalhadores afetados e seus destinos corretos:
 
-### Tratamento de conflitos de código
+| Trabalhador | Código atual (errado) | Código correto (CSV) |
+|---|---|---|
+| Bruno de Souza Fonseca | 1400 | 2 |
+| Gustavo Chaim Araujo Silva | 1385 | 3 |
+| Edson Frederico Teixeira Freimann | 1394 | 4 |
+| Leonardo Gonçalves Candido Gomes | 1404 | 17 |
+| Emmanuel Figueira Vilasboas | 1392 | 147 |
+| ALEX VILAS BOAS DE BRITO | 1403 | 334 |
+| Ewerton Felipe Ribamar Ramos | 1389 | 700 |
+| Felipe Rodrigues dos Santos | 1387 | 712 |
+| Carlos Henrique de Anchietta Pitta | 1398 | 713 |
+| Endel da Cruz Santos Oliveira | 1391 | 714 |
+| Rafael de Araujo Pereira | 1405 | 860 |
+| Fabio Jose Pereira da Silva | 1388 | 971 |
+| Reni do Nascimento Chilelle | 1377 | 1366 |
+| Eduardo Magalhães Evangelista | 1393 | 1369 |
+| Luiz Oswaldo Oliveria Cruz | 1380 | 1370 |
+| David Pereira Porto | 1397 | 1371 |
+| Allan Santos Albuquerque | 1401 | 1373 |
+| Carlos Alberto Souzas de Medeiros | 1399 | 1374 |
+| Jorge Luiz Magalhães | 1383 | 1375 |
+| Deivison Rodrigo Silva dos Santos | 1396 | 1376 |
+| Kristian Oedegaard | 1381 | 1378 |
+| Erico da Silva Martins | 1390 | 1379 |
+| Gabriel Felipe de Brito Martins | 1386 | 1382 |
+| Dogival Almeida da Silva | 1395 | 1384 |
+| Alexandro Santos Silva | 1402 | 1400 |
 
-Os 5 trabalhadores existentes ocupam códigos 1–5. O CSV tem códigos que vão até ~2520. Se um `worker_code` do CSV colidir com um código já ocupado por outro CPF:
-- O trabalhador é colocado no **final da fila** (recebe `MAX(code) + 1`)
-- Isso garante que nenhum dado existente é sobrescrito
+E 3 trabalhadores pré-existentes movidos para o final:
+- Cristiano Calheiros: 2 → 2521
+- Leonardo Morgado: 3 → 2522
+- Márcio Mendes: 4 → 2523
 
-Exemplo: se ADRIANO (CPF 08963535754, código 5 no banco) aparece no CSV com `worker_code` diferente, ele mantém o código do CSV (pois será atualizado por match de CPF).
+### Arquivos modificados
+- `src/hooks/useDataProvider.ts` — adicionar `.range(0, 9999)` na query de workers
 
-### Execução
-
-Um script Python será executado no sandbox que:
-1. Lê os CSVs com `csv.DictReader`
-2. Consulta dados existentes via `psql`
-3. Gera e executa INSERTs em batches
-4. Tudo via `code--exec` — nenhum arquivo do projeto é modificado
-
-### Arquivos NÃO modificados
-Nenhum arquivo do projeto será alterado — operação puramente de dados.
+### Operações de dados (via script Python + psql)
+- INSERT nova DOF company
+- UPDATE 166 workers para novo company_id
+- UPDATE ~27 workers para códigos corretos (em 2 fases: temporário → definitivo)
+- UPDATE sequência workers_code_seq
 
