@@ -584,6 +584,12 @@ export const DeviceManagement = () => {
                                 <Users className="h-4 w-4 mr-2" />Usuários
                               </DropdownMenuItem>
                             )}
+                            {isLocalRuntime && (
+                              <DropdownMenuItem onClick={() => handleFullResync(device)} disabled={!!resyncingDevice}>
+                                {resyncingDevice === device.id ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                                Re-sincronização Total
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => setShowSetupDevice(device)}>
                               <Server className="h-4 w-4 mr-2" />Configurar
                             </DropdownMenuItem>
