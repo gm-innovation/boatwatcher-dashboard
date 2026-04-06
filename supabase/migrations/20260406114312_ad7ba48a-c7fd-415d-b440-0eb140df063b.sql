@@ -1,0 +1,1 @@
+ALTER TABLE public.workers ADD COLUMN rejection_reason text;
