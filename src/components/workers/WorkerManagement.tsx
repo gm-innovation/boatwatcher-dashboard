@@ -1165,4 +1165,5 @@ export const WorkerManagement = () => {
       {/* Hidden label print area - rendered for window.print() */}
       <WorkerLabelPrintSheet labels={printLabels} />
     </div>
+  );
 };
