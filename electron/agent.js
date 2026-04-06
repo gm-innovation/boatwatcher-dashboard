@@ -516,15 +516,17 @@ class AgentController {
       return;
     }
 
-    // Temporal deduplication: compare parsed timestamps numerically
+    // NOTE: Temporal deduplication REMOVED — it was causing valid events to be
+    // silently discarded when last_event_timestamp got stuck at a future value.
+    // The hardware query already uses `WHERE id > lastEventId` (incremental cursor)
+    // which is the reliable deduplication mechanism.
+    // Log for diagnostics only:
     const eventMs = Date.parse(event.timestamp);
     const lastTimestamp = device.last_event_timestamp;
     if (lastTimestamp) {
       const lastMs = Date.parse(lastTimestamp);
       if (!isNaN(lastMs) && eventMs <= lastMs) {
-        this._ignoredDedupeCount++;
-        this._lastIgnoreReason = `dedupe: event ${event.timestamp} <= last ${lastTimestamp}`;
-        return; // Already processed
+        console.warn(`[Agent][${device.name}] Event timestamp ${event.timestamp} <= last ${lastTimestamp} (NOT discarding — cursor-based dedup in use)`);
       }
     }
 
