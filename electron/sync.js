@@ -954,35 +954,51 @@ class SyncEngine {
     console.log('[full-resync] Reverse sync PAUSED to prevent contamination');
 
     // Step 1: Force fresh worker download from cloud
+    // CRITICAL FIX: Use a fixed checkpoint for the entire download loop.
+    // Previously, each page set last_download_workers = now(), causing the
+    // next page to skip all remaining workers (since > now means 0 results).
     console.log('[full-resync] Resetting worker checkpoint and downloading from cloud...');
     this.db.setSyncMeta?.('last_download_workers', '1970-01-01T00:00:00Z');
 
-    // Download workers in a loop to handle pagination (500 per page)
+    // Set bulk download mode to prevent auto-enrollment during download
+    this._bulkDownloadMode = true;
+
     let totalDownloaded = 0;
     const MAX_PAGES = 20; // Safety limit: 20 * 500 = 10,000 workers max
-    for (let page = 0; page < MAX_PAGES; page++) {
-      try {
-        const since = this.db.getSyncMeta('last_download_workers') || '1970-01-01T00:00:00Z';
-        const workersRes = await this.callEdgeFunction(`agent-sync/download-workers?since=${since}`, 'GET');
-        if (!workersRes.workers || workersRes.workers.length === 0) break;
+    const fixedSince = '1970-01-01T00:00:00Z'; // Use a FIXED checkpoint for all pages
 
-        for (const worker of workersRes.workers) {
-          try {
-            this.db.upsertWorkerFromCloud(worker);
-          } catch (err) {
-            console.error(`[full-resync] Worker upsert failed for ${worker.id}:`, err.message);
+    try {
+      for (let page = 0; page < MAX_PAGES; page++) {
+        try {
+          // CRITICAL FIX: Use the fixed "since" value for ALL pages, not the
+          // live checkpoint. The cloud endpoint returns paginated results using
+          // offset/limit internally when since is epoch.
+          // After all pages are downloaded, we update the checkpoint ONCE.
+          const workersRes = await this.callEdgeFunction(`agent-sync/download-workers?since=${fixedSince}&offset=${totalDownloaded}`, 'GET');
+          if (!workersRes.workers || workersRes.workers.length === 0) break;
+
+          for (const worker of workersRes.workers) {
+            try {
+              this.db.upsertWorkerFromCloud(worker);
+            } catch (err) {
+              console.error(`[full-resync] Worker upsert failed for ${worker.id}:`, err.message);
+            }
           }
-        }
-        totalDownloaded += workersRes.workers.length;
-        console.log(`[full-resync] Downloaded page ${page + 1}: ${workersRes.workers.length} workers (total: ${totalDownloaded})`);
-        this.db.setSyncMeta('last_download_workers', new Date().toISOString());
+          totalDownloaded += workersRes.workers.length;
+          console.log(`[full-resync] Downloaded page ${page + 1}: ${workersRes.workers.length} workers (total: ${totalDownloaded})`);
 
-        // If we got fewer than expected, we've reached the end
-        if (workersRes.workers.length < 400) break;
-      } catch (err) {
-        console.error(`[full-resync] Cloud download failed on page ${page + 1}:`, err.message);
-        throw new Error(`Falha ao baixar trabalhadores da nuvem: ${err.message}. Dispositivo NÃO foi alterado.`);
+          // If we got fewer than expected, we've reached the end
+          if (workersRes.workers.length < 400) break;
+        } catch (err) {
+          console.error(`[full-resync] Cloud download failed on page ${page + 1}:`, err.message);
+          throw new Error(`Falha ao baixar trabalhadores da nuvem: ${err.message}. Dispositivo NÃO foi alterado.`);
+        }
       }
+
+      // Update checkpoint ONCE after all pages are downloaded
+      this.db.setSyncMeta('last_download_workers', new Date().toISOString());
+    } finally {
+      this._bulkDownloadMode = false;
     }
 
     console.log(`[full-resync] Total downloaded from cloud: ${totalDownloaded}`);
