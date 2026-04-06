@@ -229,7 +229,14 @@ class SyncEngine {
       await this.downloadUpdates();
 
       // Reverse sync: import workers from devices → cloud (every ~10 cycles ≈ 10min)
-      if (this._reverseSyncCycleCount % 10 === 0) {
+      // DISABLED during recovery: reverse sync is paused when reverse_sync_paused flag is set
+      // to prevent contamination from dirty devices overwriting correct cloud data.
+      const reverseSyncPaused = this.db.getSyncMeta?.('reverse_sync_paused');
+      if (reverseSyncPaused === 'true') {
+        if (this._reverseSyncCycleCount % 10 === 0) {
+          console.log('[sync] reverseSync PAUSED (reverse_sync_paused=true). Skipping to prevent device contamination.');
+        }
+      } else if (this._reverseSyncCycleCount % 10 === 0) {
         await this.reverseSync().catch(err => console.error('[sync] reverseSync error:', err.message));
       }
 
@@ -922,9 +929,14 @@ class SyncEngine {
   }
 
   /**
-   * Full device re-sync: clears all users from a device and re-enrolls
-   * all active workers with correct codes and photos.
-   * Called via local server API: POST /api/devices/:id/full-resync
+   * Full device re-sync: downloads ALL workers from cloud first,
+   * then clears the device and re-enrolls with correct codes.
+   * 
+   * Critical safety measures:
+   * 1. Forces a fresh cloud download (resets worker checkpoint)
+   * 2. Pauses reverse sync to prevent contamination
+   * 3. Validates minimum worker count before clearing device
+   * 4. Deduplicates workers by code to prevent duplicates on hardware
    */
   async fullDeviceResync(deviceId) {
     const { clearAllUsersFromDevice, enrollUserOnDevice, loadPhotoAsBase64 } = require('../server/lib/controlid');
@@ -936,20 +948,87 @@ class SyncEngine {
 
     console.log(`[full-resync] Starting for device ${device.name}`);
 
-    // Step 1: Clear
+    // Step 0: Pause reverse sync to prevent dirty device data from flowing back
+    this.db.setSyncMeta?.('reverse_sync_paused', 'true');
+    console.log('[full-resync] Reverse sync PAUSED to prevent contamination');
+
+    // Step 1: Force fresh worker download from cloud
+    console.log('[full-resync] Resetting worker checkpoint and downloading from cloud...');
+    this.db.setSyncMeta?.('last_download_workers', '1970-01-01T00:00:00Z');
+
+    // Download workers in a loop to handle pagination (500 per page)
+    let totalDownloaded = 0;
+    const MAX_PAGES = 20; // Safety limit: 20 * 500 = 10,000 workers max
+    for (let page = 0; page < MAX_PAGES; page++) {
+      try {
+        const since = this.db.getSyncMeta('last_download_workers') || '1970-01-01T00:00:00Z';
+        const workersRes = await this.callEdgeFunction(`agent-sync/download-workers?since=${since}`, 'GET');
+        if (!workersRes.workers || workersRes.workers.length === 0) break;
+
+        for (const worker of workersRes.workers) {
+          try {
+            this.db.upsertWorkerFromCloud(worker);
+          } catch (err) {
+            console.error(`[full-resync] Worker upsert failed for ${worker.id}:`, err.message);
+          }
+        }
+        totalDownloaded += workersRes.workers.length;
+        console.log(`[full-resync] Downloaded page ${page + 1}: ${workersRes.workers.length} workers (total: ${totalDownloaded})`);
+        this.db.setSyncMeta('last_download_workers', new Date().toISOString());
+
+        // If we got fewer than expected, we've reached the end
+        if (workersRes.workers.length < 400) break;
+      } catch (err) {
+        console.error(`[full-resync] Cloud download failed on page ${page + 1}:`, err.message);
+        throw new Error(`Falha ao baixar trabalhadores da nuvem: ${err.message}. Dispositivo NÃO foi alterado.`);
+      }
+    }
+
+    console.log(`[full-resync] Total downloaded from cloud: ${totalDownloaded}`);
+
+    // Step 2: Get all workers from local DB (now freshly updated)
+    const allWorkers = this.db.getWorkers?.() || [];
+    const active = allWorkers.filter(w => w.status === 'active' || !w.status);
+
+    // Step 3: Safety threshold — abort if too few workers
+    const MIN_WORKERS = 50; // Configurable safety threshold
+    if (active.length < MIN_WORKERS) {
+      const msg = `ABORTADO: apenas ${active.length} trabalhadores ativos encontrados (mínimo: ${MIN_WORKERS}). Base local possivelmente incompleta. Dispositivo NÃO foi alterado.`;
+      console.error(`[full-resync] ${msg}`);
+      throw new Error(msg);
+    }
+
+    // Step 4: Deduplicate workers by code (keep first occurrence)
+    const codeMap = new Map();
+    const duplicates = [];
+    for (const worker of active) {
+      const code = Number(worker.code);
+      if (codeMap.has(code)) {
+        duplicates.push({ code, name: worker.name, id: worker.id });
+      } else {
+        codeMap.set(code, worker);
+      }
+    }
+    const uniqueWorkers = Array.from(codeMap.values());
+
+    if (duplicates.length > 0) {
+      console.warn(`[full-resync] Found ${duplicates.length} duplicate codes:`, duplicates.slice(0, 10));
+    }
+
+    console.log(`[full-resync] Workers: ${active.length} active, ${uniqueWorkers.length} unique by code, ${duplicates.length} duplicates removed`);
+
+    // Step 5: Clear device
     const clearResult = await clearAllUsersFromDevice(device);
-    console.log(`[full-resync] Cleared ${clearResult.removed || 0} users`);
+    console.log(`[full-resync] Cleared ${clearResult.removed || 0} users from device`);
 
-    // Step 2: Re-enroll all active workers
-    const workers = this.db.getWorkers?.() || [];
-    const active = workers.filter(w => w.status === 'active' || !w.status);
-
+    // Step 6: Re-enroll unique workers
     let enrolled = 0;
     let failed = 0;
+    const errors = [];
     const BATCH = 50;
 
-    for (let i = 0; i < active.length; i += BATCH) {
-      const batch = active.slice(i, i + BATCH);
+    for (let i = 0; i < uniqueWorkers.length; i += BATCH) {
+      const batch = uniqueWorkers.slice(i, i + BATCH);
       for (const worker of batch) {
         try {
           let photo = null;
@@ -957,14 +1036,28 @@ class SyncEngine {
             try { photo = await loadPhotoAsBase64(worker.photo_url); } catch {}
           }
           const r = await enrollUserOnDevice(device, worker, photo);
-          if (r.success) enrolled++; else failed++;
-        } catch { failed++; }
+          if (r.success) enrolled++; else {
+            failed++;
+            errors.push({ code: worker.code, name: worker.name, error: r.warning || r.error });
+          }
+        } catch (err) {
+          failed++;
+          errors.push({ code: worker.code, name: worker.name, error: err.message });
+        }
       }
-      console.log(`[full-resync] Progress: ${Math.min(i + BATCH, active.length)}/${active.length}`);
+      console.log(`[full-resync] Progress: ${Math.min(i + BATCH, uniqueWorkers.length)}/${uniqueWorkers.length}`);
     }
 
-    console.log(`[full-resync] Done: ${enrolled} enrolled, ${failed} failed`);
-    return { success: true, enrolled, failed, total: active.length };
+    console.log(`[full-resync] Done: ${enrolled} enrolled, ${failed} failed out of ${uniqueWorkers.length} unique workers`);
+    return {
+      success: true,
+      enrolled,
+      failed,
+      total: uniqueWorkers.length,
+      totalDownloaded,
+      duplicatesRemoved: duplicates.length,
+      errors: errors.slice(0, 20),
+    };
   }
 }
 
