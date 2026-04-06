@@ -876,20 +876,10 @@ export const WorkerManagement = () => {
       }
     });
 
-    // Abrir diálogo de impressão diretamente via iframe oculto
-    const blob = doc.output('blob');
-    const url = URL.createObjectURL(blob);
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = url;
-    document.body.appendChild(iframe);
-    iframe.onload = () => {
-      iframe.contentWindow?.print();
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-        URL.revokeObjectURL(url);
-      }, 60000);
-    };
+    const fileName = overrideCustomName
+      ? `etiqueta-${overrideCustomName}.pdf`
+      : `etiquetas-${workerList.length}-trabalhadores.pdf`;
+    doc.save(fileName);
     toast({ title: `${workerList.length} etiqueta(s) gerada(s) com sucesso!` });
   };
 
