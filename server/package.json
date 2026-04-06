@@ -1,6 +1,6 @@
 {
   "name": "dockcheck-local-server",
-  "version": "1.3.17",
+  "version": "1.3.18",
   "description": "Dock Check Local Server — API REST + SQLite + ControlID Agent + Cloud Sync",
   "main": "index.js",
   "scripts": {
