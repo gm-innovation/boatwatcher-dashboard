@@ -1131,23 +1131,23 @@ export const WorkerManagement = () => {
 
       {/* Table */}
       <ScrollArea className="h-[500px] border rounded-lg">
-        <table className="w-full">
+        <table className="w-full table-fixed min-w-[1050px]">
           <thead className="sticky top-0 bg-card border-b">
             <tr>
-              <th className="p-4 w-10">
+              <th className="p-3 w-10">
                 <Checkbox
                   checked={allSelected}
                   onCheckedChange={toggleAll}
                 />
               </th>
-              <th className="text-left p-4 text-xs font-medium text-muted-foreground">Código</th>
-              <th className="text-left p-4 text-xs font-medium text-muted-foreground">Trabalhador</th>
-              <th className="text-left p-4 text-xs font-medium text-muted-foreground">CPF</th>
-              <th className="text-left p-4 text-xs font-medium text-muted-foreground">Empresa</th>
-              <th className="text-left p-4 text-xs font-medium text-muted-foreground">Projetos Autorizados</th>
-              <th className="text-left p-4 text-xs font-medium text-muted-foreground">Função</th>
-              <th className="text-center p-4 text-xs font-medium text-muted-foreground">Status</th>
-              <th className="text-center p-4 text-xs font-medium text-muted-foreground">Ações</th>
+              <th className="text-left px-2 py-3 w-[70px] text-xs font-medium text-muted-foreground">Código</th>
+              <th className="text-left px-2 py-3 w-[200px] text-xs font-medium text-muted-foreground">Trabalhador</th>
+              <th className="text-left px-2 py-3 w-[130px] text-xs font-medium text-muted-foreground">CPF</th>
+              <th className="text-left px-2 py-3 w-[160px] text-xs font-medium text-muted-foreground">Empresa</th>
+              <th className="text-left px-2 py-3 min-w-[140px] text-xs font-medium text-muted-foreground">Projetos Autorizados</th>
+              <th className="text-left px-2 py-3 w-[130px] text-xs font-medium text-muted-foreground">Função</th>
+              <th className="text-center px-2 py-3 w-[90px] text-xs font-medium text-muted-foreground">Status</th>
+              <th className="text-center px-2 py-3 w-[100px] text-xs font-medium text-muted-foreground">Ações</th>
             </tr>
           </thead>
           <tbody>
