@@ -43,11 +43,10 @@ function normalizeTimestamp(event) {
   const raw = event.timestamp || event.time || event.date || event.datetime;
   if (!raw) return null;
 
-  // Store device timestamps AS-IS — no timezone conversion.
-  // ControlID devices report wall-clock time; we preserve it directly.
+  // ControlID firmware computes epoch from BRT wall clock (treats local
+  // time as if it were UTC).  Add 3h to convert to true UTC.
   if (typeof raw === 'number') {
-    // Unix timestamp — use directly without offset adjustment
-    return new Date(raw * 1000).toISOString();
+    return new Date(raw * 1000 + 3 * 3600 * 1000).toISOString();
   }
 
   // String with timezone suffix — parse directly
