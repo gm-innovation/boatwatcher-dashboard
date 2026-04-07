@@ -1,120 +1,121 @@
 
-Objetivo: parar de perseguir sintomas e corrigir o ponto exato onde o evento de hoje está se perdendo.
+Objetivo: sair do ciclo de tentativas e atacar a causa estrutural. A investigação mostra que o problema não está no dashboard, nem só no upload, e nem em diferença entre web e desktop.
 
-Diagnóstico aprofundado confirmado
+Diagnóstico aprofundado
 
-1. O problema não está no dashboard
-- A consulta do dashboard está correta.
-- No web, a requisição de hoje para `access_logs` usa `timestamp >= 2026-04-07T03:00:00.000Z` e voltou `[]`.
-- No desktop, o dashboard também é cloud-first para “a bordo”, então ele herda o mesmo vazio.
-- Conclusão: web e desktop mostram 0 porque a nuvem realmente não tem eventos de hoje para esse projeto.
+1. Web e desktop estão corretos ao mostrar zero
+- Ambos usam a nuvem como fonte principal para “a bordo”.
+- `useWorkersOnBoard` consulta a nuvem nas duas versões; no desktop o local só entra como fallback.
+- Portanto, se os dois mostram 0, o problema está antes da UI.
 
-2. O erro 401 anterior foi resolvido
-- O token do agente está válido.
-- A função `agent-sync/upload-logs` está recebendo token e processando lote com sucesso.
-- Há log explícito de sucesso:
-```text
-Agent ...: received=100 accepted=100 rejected=0
-```
-- Então o problema atual não é mais autenticação.
+2. A nuvem continua sem eventos de hoje
+- A consulta no banco confirmou `total_today = 0`.
+- Então o evento atual ainda não está chegando de forma utilizável ao backend.
 
-3. O que está chegando à nuvem são eventos antigos, não os eventos atuais
-- As linhas mais recentes do banco continuam com timestamps antigos/históricos.
-- A própria consulta do banco mostrou `since_brt_midnight = 0`.
-- Os eventos visíveis pertencem a datas como 2024-10 e 2026-03, não ao acesso atual de 07/04.
-- Isso bate com os logs da função, que seguem resolvendo vários `worker_id` antigos “via document”.
+3. O pipeline está vivo, mas contaminado por replay histórico
+- A nuvem recebeu milhares de inserts recentes, porém com `created_at` de agora e `timestamp` antigo (2024), quase todos do dispositivo `Engenharia - Saída`.
+- Muitos desses logs chegam com `worker_id` e `worker_name` nulos.
+- Isso prova que o sistema está enviando massa histórica/repetida, não o fluxo operacional atual.
 
-4. Não é filtro de projeto
-- Os dispositivos `Engenharia - Entrada` e `Engenharia - Saída` estão vinculados ao projeto `Skandi Botafogo`.
-- Os logs existentes também apontam para esse mesmo projeto.
-- Então a hipótese de “evento foi para outro projeto” não se sustenta.
+4. Há um indício forte de cursor inconsistente
+- A telemetria do agente mostrou no `Engenharia - Entrada` um `lastEventPayload.id = 109`, mas `lastEventId = 108`.
+- Ou seja: o evento atual foi capturado, mas o cursor não estava refletindo isso no mesmo estado observado.
 
-Causa raiz mais provável
+5. Encontrei um bug estrutural no caminho de webhook/monitor
+- Em `server/index.js`, a rota `/api/notifications/dao` chama `agentController.processEvent(device, rawEvent)`.
+- Em `electron/agent.js`, `processEvent()` insere o log, mas não atualiza `lastEventId`.
+- Hoje o cursor só é persistido com segurança no loop de polling (`pollDevice`) quando a resposta vem em array e o `maxId` é calculado.
+- Resultado: eventos processados via monitor push ou fallback de evento único podem ser gravados sem avançar o cursor, abrindo espaço para replay/duplicação.
 
-O pipeline local está vivo, mas não chegou no evento atual do hardware.
+6. O full resync atual alinha cursor de apenas um dispositivo
+- `fullDeviceResync(deviceId)` ajusta o cursor somente do device passado.
+- Mas o replay atual vem do `Engenharia - Saída`.
+- Se o resync/alinhamento foi feito em outro terminal, o segundo continua contaminando a nuvem.
 
-Hoje o cenário mais consistente com os dados é este:
+7. A fila local favorece starvation durante replay
+- `getUnsyncedLogs()` retorna só 100 linhas e sem `ORDER BY`.
+- Em cenário de replay contínuo, isso pode manter evento novo preso atrás de ruído histórico, atrasando ou impedindo a chegada do acesso real ao backend.
 
-```text
-Hardware tem evento novo de hoje
-→ agente local está uploadando lote(s)
-→ esses lotes são backlog histórico / reprocessamento
-→ a nuvem ainda não recebeu o evento de hoje
-→ consulta “hoje” retorna vazio
-→ web e desktop mostram 0
-```
-
-Ou seja: o gargalo agora está no cursor/backlog do agente local, não na UI e não no upload autenticado.
-
-Pontos técnicos que sustentam isso
-- `electron/agent.js` usa cursor por `lastEventId`.
-- `fullDeviceResync()` reconstrói trabalhadores e recadastra hardware, mas não mostra uma estratégia explícita para reposicionar o cursor de eventos no “ponto atual” do buffer do dispositivo.
-- Se o cursor foi resetado ou ficou desalinhado, o agente pode estar drenando histórico antigo antes de alcançar o evento novo.
-- Como o dashboard filtra “hoje”, qualquer replay antigo continua deixando a tela zerada.
+Conclusão técnica
+A causa raiz mais provável é a combinação de:
+- cursor não persistido em todos os caminhos de captura;
+- alinhamento parcial de cursores após resync;
+- backlog histórico de um segundo dispositivo monopolizando a fila de upload.
 
 Plano de correção
 
-Fase 1 — Diagnóstico definitivo do cursor e da fila local
-Adicionar telemetria para provar exatamente o que está sendo enviado:
-- `lastEventId` atual por dispositivo
-- `maxEventId` atual no hardware
-- quantidade de logs locais não sincronizados
-- `timestamp` mínimo e máximo desses logs locais pendentes
-- amostra dos últimos logs locais capturados
-- primeiro e último `id/timestamp` do lote enviado em `uploadLogs()`
-
+Fase 1 — Tornar o cursor consistente em qualquer origem de evento
 Arquivos:
 - `electron/agent.js`
-- `electron/sync.js`
-- `electron/database.js`
-- `server/routes/sync.js`
+- `server/index.js`
 
-Fase 2 — Corrigir a estratégia de recuperação após resync
-Ao concluir `Resync Total`, o sistema deve parar de reimportar backlog antigo do hardware.
-Implementação proposta:
-- ler o `maxEventId` do dispositivo no fim do resync
-- gravar esse valor como novo cursor canônico
-- opcionalmente permitir apenas um backfill curto e controlado (ex.: últimos minutos), não histórico inteiro
+Implementação:
+- Fazer `processEvent()` receber/usar `rawEvent.id` e persistir `lastEventId` quando houver ID válido.
+- Garantir que o cursor só avance para frente, nunca para trás.
+- No caminho do webhook `/api/notifications/dao`, persistir explicitamente o cursor do evento processado.
+- No fallback de evento único em `pollDevice`, também atualizar cursor.
 
-Isso evita que o agente fique “preso no passado” antes de chegar aos eventos atuais.
+Efeito esperado:
+- cada evento processado vira também avanço de cursor;
+- o mesmo evento deixa de reaparecer em loops posteriores.
 
+Fase 2 — Alinhar todos os dispositivos do agente/projeto, não só um
 Arquivos:
-- `electron/agent.js`
 - `electron/sync.js`
-
-Fase 3 — Higienizar backlog local obsoleto
-Se existirem logs locais pendentes muito antigos, eles precisam ser tratados para não mascarar o estado atual:
-- diagnosticar se os mesmos 100 logs estão sendo reenviados repetidamente
-- identificar se `markLogsSynced()` está persistindo corretamente no SQLite em uso
-- se necessário, criar rotina segura para arquivar/descartar backlog antigo fora da janela operacional
-
-Arquivos:
-- `electron/database.js`
-- `electron/sync.js`
-
-Fase 4 — Expor status operacional claro
-Mostrar no painel local/admin:
-- último evento capturado no hardware
-- último evento enviado com sucesso
-- evento mais antigo pendente
-- cursor atual vs max cursor do dispositivo
-- indicador “replay histórico em andamento” quando aplicável
-
-Arquivos:
 - `server/routes/sync.js`
 - `src/components/admin/DiagnosticsPanel.tsx`
-- possivelmente `src/lib/localServerProvider.ts`
+
+Implementação:
+- Após `fullDeviceResync`, alinhar cursores de todos os dispositivos vinculados ao agente/projeto.
+- Expor uma ação de “alinhar todos os cursores” no diagnóstico local.
+- Mostrar por dispositivo: `lastEventId`, `maxEventId`, último payload capturado e atraso entre cursor e hardware.
+
+Efeito esperado:
+- o `Engenharia - Saída` deixa de continuar despejando histórico enquanto o `Entrada` já está correto.
+
+Fase 3 — Tornar a fila de upload determinística e resistente a replay
+Arquivos:
+- `electron/database.js`
+- `electron/sync.js`
+
+Implementação:
+- Ordenar `getUnsyncedLogs()` por `created_at ASC` (ou `rowid ASC`) para drenagem previsível.
+- Exibir claramente no diagnóstico a faixa temporal real da fila.
+- Após correção de cursor, limpar de forma segura backlog local obsoleto ainda não enviado, para não continuar priorizando ruído.
+
+Efeito esperado:
+- o próximo acesso real não ficará escondido atrás de lotes históricos.
+
+Fase 4 — Confirmar ingestão atual no backend
+Arquivos:
+- `supabase/functions/agent-sync/index.ts`
+- `src/hooks/useSupabase.ts` (somente se necessário para telemetria, não para lógica principal)
+
+Implementação:
+- Adicionar logging enxuto do lote aceito com `min/max timestamp`, device e quantidade rejeitada.
+- Confirmar se algum evento atual está sendo rejeitado individualmente.
+- Só mexer na query do dashboard se, depois da correção de captura/cursor, ainda houver divergência.
+
+Efeito esperado:
+- separar definitivamente problema de ingestão vs. problema de leitura.
 
 Critérios de aceite
-
-1. O diagnóstico mostra claramente que o cursor local está alinhado ao ponto atual do hardware.
-2. Após um novo acesso real no dispositivo, surge uma linha nova na nuvem com timestamp do dia atual.
-3. A requisição web de “hoje” para `access_logs` deixa de retornar `[]`.
-4. Web e desktop passam a exibir o mesmo trabalhador a bordo.
-5. O sistema deixa de ficar drenando eventos antigos como se fossem novidade operacional.
+1. Um novo acesso no `Engenharia - Entrada` gera linha do dia atual no backend.
+2. O flood de timestamps antigos do `Engenharia - Saída` para.
+3. O dashboard web deixa de retornar vazio para hoje.
+4. O desktop passa a exibir o mesmo trabalhador da web.
+5. A telemetria mostra cursor avançando junto com o evento capturado.
 
 Resumo executivo
-- O problema atual não é mais 401.
-- O problema atual não é o dashboard.
-- O problema atual não é filtro de projeto.
-- O problema atual está no fluxo de recuperação/cursor do agente local: ele está processando backlog antigo e ainda não alcançou o evento atual que deveria alimentar as telas.
+- Não é bug de UI.
+- Não é diferença entre web e desktop.
+- Não é RLS.
+- O problema central está no controle de cursor e replay histórico entre dispositivos, com o `Saída` contaminando a fila e o evento atual ficando sem chegar corretamente à nuvem.
+
+Arquivos que eu atacaria primeiro
+- `electron/agent.js`
+- `server/index.js`
+- `electron/sync.js`
+- `electron/database.js`
+- `server/routes/sync.js`
+- `src/components/admin/DiagnosticsPanel.tsx`
