@@ -1,54 +1,82 @@
 
 
-## Diagnóstico
+## Diagnóstico Definitivo
 
-O erro "FOREIGN KEY constraint failed" ocorre em `reconstructWorkersFromSnapshot()` (database.js linha 700). Quando o resync tenta deletar trabalhadores locais que não estão no snapshot da nuvem, o SQLite bloqueia porque:
+### Por que o dashboard mostra 0
 
-1. `access_logs.worker_id` referencia `workers(id)` (FK na linha 185)
-2. `worker_documents.worker_id` referencia `workers(id)` (FK na linha 167)
+A investigação nos logs de analytics revelou a causa raiz:
 
-E `foreign_keys = ON` está ativo (linha 68).
+**TODAS as chamadas `POST /upload-logs` estão retornando 401 (Unauthorized).**
 
-O `sanitizeWorkers()` tem o mesmo problema (linha 608).
+```
+POST | 401 | upload-logs  (20+ vezes consecutivas, sem nenhum 200)
+```
+
+Isso significa que:
+1. O hardware ControlID registrou a entrada do Alexandre corretamente (11:41)
+2. O agente local capturou o evento e armazenou no SQLite
+3. O sync engine tentou enviar para a nuvem mas recebeu 401
+4. O evento NUNCA chegou ao banco de dados na nuvem
+5. O dashboard consulta a nuvem → 0 trabalhadores
+
+### Evidência no banco
+
+```sql
+-- Último log na nuvem:
+max(created_at) = 2026-04-06 20:28:44
+-- Logs de hoje: ZERO
+-- Total: 923 (nenhum novo desde ontem)
+```
+
+### Por que o 401?
+
+O analytics mostra um padrão estranho: `POST /status` (heartbeat) retorna 200, mas `POST /upload-logs` retorna 401, mesmo usando o mesmo token e a mesma função `callEdgeFunction`.
+
+Hipótese mais provável: após as últimas alterações no `agent-sync`, a edge function foi redesplantada. Pode haver um problema de cold-start, timeout ou uma segunda instância do sync engine rodando com token inválido/vazio. Os `shutdown` frequentes nos logs da função também indicam instabilidade.
+
+O token no banco (`84ed5d35...`) existe e é válido. A busca `SELECT ... WHERE token = ?` deveria funcionar.
 
 ## Plano de Correção
 
-### 1. Corrigir `reconstructWorkersFromSnapshot()` em `electron/database.js`
+### 1. Adicionar logging de diagnóstico na edge function
 
-Antes de deletar um worker, remover as dependências:
-- Deletar `worker_documents` do worker sendo removido
-- Setar `worker_id = NULL` nos `access_logs` (preservar os logs, só desassociar)
+No handler de `upload-logs`, antes da validação de token, logar o token recebido (primeiros 8 chars) para confirmar se o valor está chegando corretamente:
 
-```javascript
-// Antes de: db.prepare('DELETE FROM workers WHERE id = ?').run(local.id);
-// Adicionar:
-db.prepare('DELETE FROM worker_documents WHERE worker_id = ?').run(local.id);
-db.prepare('UPDATE access_logs SET worker_id = NULL WHERE worker_id = ?').run(local.id);
-db.prepare('DELETE FROM workers WHERE id = ?').run(local.id);
+```typescript
+console.log(`[agent-sync] Token received: ${token?.slice(0,8)}... action=${action}`)
 ```
 
-### 2. Corrigir `sanitizeWorkers()` em `electron/database.js`
+### 2. Adicionar fallback robusto no sync engine
 
-Aplicar a mesma lógica de limpeza de dependências antes de deletar orphans e duplicatas:
+Em `electron/sync.js`, na função `uploadLogs()`, quando receber 401:
+- Logar o token sendo usado (primeiros 8 chars)
+- Tentar recarregar o token do `sync_meta`
+- Se ainda falhar, tentar um re-bootstrap automático
 
-```javascript
-// Antes de cada: db.prepare('DELETE FROM workers WHERE id = ?').run(orphan.id);
-db.prepare('DELETE FROM worker_documents WHERE worker_id = ?').run(orphan.id);
-db.prepare('UPDATE access_logs SET worker_id = NULL WHERE worker_id = ?').run(orphan.id);
-```
+### 3. Redesplantar a edge function
 
-### 3. Bump de versão
+Forçar um novo deploy do `agent-sync` para garantir que a versão atual está ativa.
 
-Atualizar `package.json` e `server/package.json` para v1.3.26.
+### 4. Adicionar retry com re-auth no upload de logs
 
-### Arquivos alterados
-- `electron/database.js` — 3 pontos de deleção de workers precisam de limpeza FK prévia
+No `uploadLogs()`, ao receber 401, antes de desistir:
+- Verificar se `process.env.AGENT_TOKEN` difere de `this.db.getSyncMeta('agent_token')`
+- Se diferir, sincronizar os dois valores
+- Re-tentar o upload uma vez
+
+### 5. Garantir que `reverse_sync_paused` seja desativado após resync bem-sucedido
+
+O flag `reverse_sync_paused` é setado para `true` durante o `fullDeviceResync` mas NUNCA é setado de volta para `false`. Corrigir no final do resync.
+
+### Arquivos
+
+- `supabase/functions/agent-sync/index.ts` — logging de diagnóstico
+- `electron/sync.js` — retry com re-auth + unpause reverse_sync
+- Redeploy da edge function
 
 ### Resultado esperado
-O "Resync Total" não vai mais falhar com FK constraint. O fluxo completo vai:
-1. Baixar snapshot da nuvem (~2.531 workers)
-2. Limpar dependências dos workers que serão removidos
-3. Reconstruir a tabela local
-4. Limpar o dispositivo
-5. Recadastrar todos os workers canônicos
+
+1. O upload de logs para de retornar 401
+2. Os eventos capturados (incluindo Alexandre 11:41) chegam à nuvem
+3. O dashboard passa a mostrar os trabalhadores corretamente
 
