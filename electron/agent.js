@@ -507,6 +507,17 @@ class AgentController {
     // Store last raw payload for diagnostics
     device._lastEventPayload = rawEvent;
 
+    // ── Persist cursor for ANY origin (polling, webhook, monitor push) ──
+    // This prevents replaying the same event on subsequent polls.
+    const rawEventId = parseInt(rawEvent.id, 10) || 0;
+    if (rawEventId > 0) {
+      const currentCursor = this.getLastEventId(device);
+      if (rawEventId > currentCursor) {
+        this.setLastEventId(device, rawEventId);
+        console.log(`[Agent][${device.name}] Cursor advanced: ${currentCursor} → ${rawEventId} (via processEvent)`);
+      }
+    }
+
     // Parse and normalize the raw hardware event
     const event = parseControlIdEvent(rawEvent, device);
     if (!event) {
