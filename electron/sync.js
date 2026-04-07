@@ -403,8 +403,13 @@ class SyncEngine {
     // Keep local IDs for marking as synced after success
     const localIds = rawLogs.map((l) => l.id);
 
+    // Telemetry: log batch timestamp range for debugging backlog replay
+    const timestamps = rawLogs.map(l => l.timestamp).filter(Boolean).sort();
+    const batchMinTs = timestamps[0] || 'N/A';
+    const batchMaxTs = timestamps[timestamps.length - 1] || 'N/A';
+    console.log(`[sync] Upload batch: count=${logs.length} ts_range=[${batchMinTs} → ${batchMaxTs}] token=${this.agentToken?.slice(0,8)}...`);
+
     try {
-      console.log(`[sync] Uploading ${logs.length} sanitized access logs (token=${this.agentToken?.slice(0,8)}...)...`);
       const response = await this.callEdgeFunction('agent-sync/upload-logs', 'POST', { logs });
       if (response.success) {
         this.db.markLogsSynced(localIds);
@@ -1125,6 +1130,39 @@ class SyncEngine {
 
     // Update checkpoint after successful resync
     this.db.setSyncMeta('last_download_workers', new Date().toISOString());
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PHASE 6: Align event cursor to hardware's current max event ID
+    // This prevents the agent from replaying the entire device history
+    // after a resync — it will only capture NEW events going forward.
+    // ═══════════════════════════════════════════════════════════════════
+    try {
+      const agentCtrl = this.agentController;
+      if (agentCtrl) {
+        const session = await agentCtrl.loginToDevice(device);
+        const creds = agentCtrl.parseApiCredentials(device.api_credentials);
+        const maxIdOnDevice = await agentCtrl.fetchMaxEventId(device, session, creds);
+        if (maxIdOnDevice != null && maxIdOnDevice > 0) {
+          agentCtrl.setLastEventId(device, maxIdOnDevice);
+          console.log(`[full-resync] Cursor aligned: lastEventId set to ${maxIdOnDevice} (device max). Only NEW events will be captured.`);
+        } else {
+          console.warn('[full-resync] Could not determine device maxEventId — cursor NOT updated');
+        }
+      }
+    } catch (cursorErr) {
+      console.error(`[full-resync] Cursor alignment failed: ${cursorErr.message} — agent may replay old events`);
+    }
+
+    // Also mark all existing unsynced local logs as synced to prevent
+    // re-uploading stale backlog that was already in the cloud
+    try {
+      const staleCount = this.db.markAllLogsSynced?.() || 0;
+      if (staleCount > 0) {
+        console.log(`[full-resync] Marked ${staleCount} stale local logs as synced to clear backlog`);
+      }
+    } catch (e) {
+      console.warn(`[full-resync] Could not clear stale logs: ${e.message}`);
+    }
 
     // Unpause reverse sync now that the device has been rebuilt with canonical data
     this.db.setSyncMeta?.('reverse_sync_paused', 'false');
