@@ -254,6 +254,8 @@ export const localSync = {
   getStatus: () => apiFetch('/api/sync/status'),
   trigger: () => apiFetch('/api/sync/trigger', { method: 'POST' }),
   getDiagnostics: () => apiFetch('/api/sync/diagnostics'),
+  getWorkerDiagnostics: () => apiFetch('/api/sync/worker-diagnostics'),
+  sanitizeWorkers: () => apiFetch('/api/sync/sanitize-workers', { method: 'POST' }),
 };
 
 export const localAgent = {
