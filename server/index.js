@@ -211,30 +211,47 @@ function createLocalServer(options = {}) {
 
 function startLocalServer(options = {}) {
   const runtime = createLocalServer(options);
-  const server = runtime.app.listen(runtime.port, runtime.host, () => {
-    console.log(`[Dock Check Server] Running on http://${runtime.host}:${runtime.port}`);
-    console.log(`[Dock Check Server] Data dir: ${runtime.dataDir}`);
-    console.log(`[Dock Check Server] Backup dir: ${runtime.backupDir}`);
+
+  return new Promise((resolve, reject) => {
+    const server = runtime.app.listen(runtime.port, runtime.host, () => {
+      console.log(`[Dock Check Server] Running on http://${runtime.host}:${runtime.port}`);
+      console.log(`[Dock Check Server] Data dir: ${runtime.dataDir}`);
+      console.log(`[Dock Check Server] Backup dir: ${runtime.backupDir}`);
+
+      const stop = () => {
+        runtime.syncEngine.stop();
+        runtime.agentController.stop();
+        runtime.backupManager.stop();
+        if (server.listening) {
+          server.close();
+        }
+      };
+
+      resolve({
+        ...runtime,
+        server,
+        stop,
+      });
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        const msg = `[Dock Check Server] ERRO: Porta ${runtime.port} já está em uso. Outro processo pode estar ocupando esta porta.`;
+        console.error(msg);
+        reject(new Error(msg));
+      } else {
+        console.error(`[Dock Check Server] Server error: ${err.message}`);
+        reject(err);
+      }
+    });
   });
-
-  const stop = () => {
-    runtime.syncEngine.stop();
-    runtime.agentController.stop();
-    runtime.backupManager.stop();
-    if (server.listening) {
-      server.close();
-    }
-  };
-
-  return {
-    ...runtime,
-    server,
-    stop,
-  };
 }
 
 if (require.main === module) {
-  startLocalServer();
+  startLocalServer().catch(err => {
+    console.error(err.message);
+    process.exit(1);
+  });
 }
 
 module.exports = {
