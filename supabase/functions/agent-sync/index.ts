@@ -290,12 +290,14 @@ serve(async (req) => {
     }
 
     const token = (req.headers.get('x-agent-token') || req.headers.get('authorization'))?.replace('Bearer ', '')
+    console.log(`[agent-sync] Token received: ${token?.slice(0,8)}... action=${action}`)
     if (!token) {
       return new Response(JSON.stringify({ error: 'Token required' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     const { data: agent } = await supabase.from('local_agents').select('id, project_id, status').eq('token', token).maybeSingle()
     if (!agent) {
+      console.warn(`[agent-sync] Token lookup FAILED for token=${token.slice(0,8)}... action=${action}`)
       return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
