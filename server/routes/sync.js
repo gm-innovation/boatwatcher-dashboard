@@ -94,12 +94,14 @@ router.get('/diagnostics', (req, res) => {
 
     // Count unsynced logs in SQLite
     let unsyncedCount = 0;
+    let unsyncedDiagnostics = null;
     try {
       const rawDb = req.db.getRawDb?.();
       if (rawDb) {
         const row = rawDb.prepare('SELECT COUNT(*) as count FROM access_logs WHERE synced = 0').get();
         unsyncedCount = row?.count || 0;
       }
+      unsyncedDiagnostics = req.db.getUnsyncedLogsDiagnostics?.() || null;
     } catch { /* ignore */ }
 
     // Worker diagnostics — duplicate codes, orphans, etc.
@@ -127,6 +129,25 @@ router.get('/diagnostics', (req, res) => {
       }
     } catch { /* ignore */ }
 
+    // Event cursor diagnostics per device
+    let cursorDiagnostics = [];
+    try {
+      const rawDb = req.db.getRawDb?.();
+      if (rawDb) {
+        const devices = req.db.getDevices?.() || [];
+        for (const device of devices) {
+          const key = `last_event_id_${device.id}`;
+          const row = rawDb.prepare('SELECT value FROM sync_meta WHERE key = ?').get(key);
+          cursorDiagnostics.push({
+            device_id: device.id,
+            device_name: device.name,
+            last_event_id: row ? parseInt(row.value, 10) || 0 : 0,
+            last_event_timestamp: device.last_event_timestamp || null,
+          });
+        }
+      }
+    } catch { /* ignore */ }
+
     res.json({
       version: serverVersion,
       timestamp: new Date().toISOString(),
@@ -141,8 +162,10 @@ router.get('/diagnostics', (req, res) => {
       agent: agentStatus,
       local_db: {
         unsynced_access_logs: unsyncedCount,
+        unsynced_diagnostics: unsyncedDiagnostics,
         workers: workerDiagnostics,
       },
+      cursors: cursorDiagnostics,
       config: {
         supabase_url: supabaseUrl.replace(/\/\/(.{8}).*(@|\.supabase)/, '//$1***$2'),
         has_access_token: hasToken,
