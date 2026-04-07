@@ -1586,7 +1586,7 @@ function createDatabaseAPI(db, startCode) {
     },
 
     getUnsyncedLogs() {
-      return db.prepare('SELECT * FROM access_logs WHERE synced = 0').all();
+      return db.prepare('SELECT * FROM access_logs WHERE synced = 0 ORDER BY created_at ASC LIMIT 100').all();
     },
 
     getPendingSyncOperations() {
@@ -1927,7 +1927,7 @@ function createDatabaseAPI(db, startCode) {
     },
 
     getUnsyncedLogs() {
-      return db.prepare('SELECT * FROM access_logs WHERE synced = 0 LIMIT 100').all();
+      return db.prepare('SELECT * FROM access_logs WHERE synced = 0 ORDER BY created_at ASC LIMIT 100').all();
     },
 
     getPendingSyncOperations() {
