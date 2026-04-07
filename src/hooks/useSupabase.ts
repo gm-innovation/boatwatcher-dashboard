@@ -204,7 +204,7 @@ async function fetchWorkersOnBoardFromCloud(
       .eq('access_status', 'granted')
       .gte('timestamp', carryOverStart)
       .lt('timestamp', startTimestamp)
-      .order('created_at', { ascending: true });
+      .order('timestamp', { ascending: true });
 
     // Filter prior logs to this project's devices/manual points
     const relevantPriorLogs = (priorLogs || []).filter(log =>
@@ -212,10 +212,11 @@ async function fetchWorkersOnBoardFromCloud(
       (!log.device_id && log.device_name && manualDeviceNames.includes(log.device_name))
     );
 
-    // Build last-known state from prior days (chronological order → last write wins)
+    // Build last-known state from prior days using STABLE keys and TIMESTAMP order
     const priorState = new Map<string, { direction: string; worker_id: string | null; worker_name: string | null; device_name: string | null; device_id: string | null; entry_time: string }>();
     for (const log of relevantPriorLogs) {
-      const key = log.worker_name || log.worker_id || '';
+      // Use worker_id as primary key (stable UUID), fallback to worker_name
+      const key = log.worker_id || log.worker_name || '';
       if (!key) continue;
       if (log.direction === 'entry') {
         priorState.set(key, { direction: 'entry', worker_id: log.worker_id, worker_name: log.worker_name, device_name: log.device_name, device_id: log.device_id, entry_time: log.timestamp });
@@ -224,14 +225,14 @@ async function fetchWorkersOnBoardFromCloud(
       }
     }
 
-    // Fetch ALL events (entry + exit) for the day, ordered by created_at (cloud arrival order)
+    // Fetch ALL events (entry + exit) for the day, ordered by TIMESTAMP (event time, not upload time)
     const { data: allLogs, error: logsError } = await supabase
       .from('access_logs')
       .select('worker_id, worker_name, device_name, device_id, timestamp, direction, created_at')
       .eq('access_status', 'granted')
       .gte('timestamp', startTimestamp)
       .lte('timestamp', maxTimestamp)
-      .order('created_at', { ascending: true });
+      .order('timestamp', { ascending: true });
 
     if (logsError) throw logsError;
 
@@ -256,9 +257,12 @@ async function fetchWorkersOnBoardFromCloud(
       }
     }
 
-    // Process today's events chronologically by created_at (cloud arrival order)
+    // Process today's events chronologically by TIMESTAMP (actual event time)
+    // Previously used created_at (upload time) which caused ghost sessions when
+    // old events were batch-uploaded later.
     for (const log of relevantLogs) {
-      const key = log.worker_name || log.worker_id || '';
+      // Use worker_id as primary key (stable UUID), fallback to worker_name
+      const key = log.worker_id || log.worker_name || '';
       if (!key) continue;
 
       if (log.direction === 'entry') {
@@ -298,35 +302,62 @@ async function fetchWorkersOnBoardFromCloud(
 
     if (workersOnBoard.size === 0) return [];
 
-    // Build first entry map from relevantLogs (already ordered by created_at ASC)
+    // Build first entry map from relevantLogs (already ordered by timestamp ASC)
     const firstEntryMap = new Map<string, string>();
     for (const log of relevantLogs) {
       if (log.direction !== 'entry') continue;
-      const key = log.worker_name || log.worker_id || '';
+      const key = log.worker_id || log.worker_name || '';
       if (key && !firstEntryMap.has(key)) {
         firstEntryMap.set(key, log.timestamp);
       }
     }
 
-    // Enrich by worker_name (handles UUID mismatch)
+    // Enrich: collect worker_ids AND worker_names for lookup
+    const workerIds = Array.from(workersOnBoard.values())
+      .map(w => w.worker_id)
+      .filter(Boolean);
     const workerNames = Array.from(workersOnBoard.values())
       .map(w => w.worker_name)
       .filter(Boolean);
 
-    const { data: workers } = workerNames.length > 0
-      ? await supabase
-          .from('workers')
-          .select('id, name, role, company_id, companies(name)')
-          .in('name', workerNames)
-      : { data: [] };
+    // Enrich by worker_id first (most reliable), then by name as fallback
+    let workersByIdOrName = new Map<string, any>();
 
-    const workersByName = new Map<string, any>();
-    for (const w of workers || []) {
-      workersByName.set(w.name, w);
+    if (workerIds.length > 0) {
+      const { data: byId } = await supabase
+        .from('workers')
+        .select('id, name, role, company_id, companies(name)')
+        .in('id', workerIds);
+      for (const w of byId || []) {
+        workersByIdOrName.set(w.id, w);
+      }
+    }
+
+    // Fallback: fetch by name for workers without a valid UUID
+    const missingNames = workerNames.filter(n => {
+      // Check if we already have this worker by ID
+      for (const [, state] of workersOnBoard) {
+        if (state.worker_name === n && state.worker_id && workersByIdOrName.has(state.worker_id)) return false;
+      }
+      return true;
+    });
+
+    if (missingNames.length > 0) {
+      const { data: byName } = await supabase
+        .from('workers')
+        .select('id, name, role, company_id, companies(name)')
+        .in('name', missingNames);
+      for (const w of byName || []) {
+        if (!workersByIdOrName.has(w.id)) {
+          workersByIdOrName.set(w.name, w); // Index by name for fallback
+        }
+      }
     }
 
     return Array.from(workersOnBoard.entries()).map(([key, onBoard]) => {
-      const enriched = workersByName.get(onBoard.worker_name);
+      // Look up by worker_id first (stable), then by name
+      const enriched = (onBoard.worker_id && workersByIdOrName.get(onBoard.worker_id))
+        || workersByIdOrName.get(onBoard.worker_name);
       // Map device access_location to display label; manual entries show "Manual"
       const isManual = !onBoard.device_id && onBoard.device_name?.startsWith('Manual -');
       const accessLocation = onBoard.device_id ? deviceLocationMap.get(onBoard.device_id) || 'bordo' : 'bordo';

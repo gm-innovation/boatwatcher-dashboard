@@ -542,14 +542,38 @@ class AgentController {
         try {
           const rawDb = this.db.getRawDb?.();
           if (rawDb) {
-            const worker = rawDb.prepare('SELECT id, name, document_number FROM workers WHERE code = ?').get(Number(event.user_id));
+            const code = Number(event.user_id);
+            // DETERMINISTIC LOOKUP: prioritize cloud-synced records, then most recently updated.
+            // This prevents stale/orphaned local records from hijacking identity resolution.
+            const candidates = rawDb.prepare(
+              `SELECT id, name, document_number, cloud_id, synced, status
+               FROM workers WHERE code = ?
+               ORDER BY
+                 (CASE WHEN cloud_id IS NOT NULL THEN 0 ELSE 1 END),
+                 synced DESC,
+                 updated_at DESC
+               LIMIT 5`
+            ).all(code);
+
+            if (candidates.length > 1) {
+              console.warn(`[Agent][${device.name}] DUPLICATE CODE ${code}: ${candidates.length} workers found: ${candidates.map(c => `${c.name}(id=${c.id},cloud=${c.cloud_id||'null'})`).join(', ')}. Using first canonical match.`);
+            }
+
+            // Pick the best candidate: prefer active + cloud-synced
+            const worker = candidates.find(c => c.cloud_id && c.status === 'active')
+              || candidates.find(c => c.cloud_id)
+              || candidates.find(c => c.status === 'active')
+              || candidates[0];
+
             if (worker) {
-              workerId = worker.id;
+              workerId = worker.cloud_id || worker.id; // Prefer cloud UUID
               workerName = workerName || worker.name;
               workerDocument = workerDocument || worker.document_number;
             }
           }
-        } catch { /* ignore lookup errors */ }
+        } catch (lookupErr) {
+          console.error(`[Agent][${device.name}] Worker lookup error for code ${event.user_id}:`, lookupErr.message);
+        }
       }
     }
 

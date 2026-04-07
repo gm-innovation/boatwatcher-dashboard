@@ -573,10 +573,105 @@ function createDatabaseAPI(db, startCode) {
 
     /**
      * Find a worker by their ControlID integer code.
+     * Uses deterministic selection: cloud-synced > active > most recent.
      */
     getWorkerByCode(code) {
-      const row = db.prepare('SELECT * FROM workers WHERE code = ?').get(code);
+      const row = db.prepare(
+        `SELECT * FROM workers WHERE code = ?
+         ORDER BY
+           (CASE WHEN cloud_id IS NOT NULL THEN 0 ELSE 1 END),
+           synced DESC,
+           updated_at DESC
+         LIMIT 1`
+      ).get(code);
       return normalizeWorkerRow(row);
+    },
+
+    /**
+     * Sanitize the local workers table:
+     * 1. Remove orphaned workers (no cloud_id, not synced, not in the cloud)
+     * 2. Deduplicate by code: keep only the canonical (cloud-synced) record
+     * Returns a diagnostic report.
+     */
+    sanitizeWorkers() {
+      const report = { orphansRemoved: 0, duplicatesResolved: 0, errors: [] };
+
+      // Step 1: Remove workers without cloud_id that were never synced
+      // These are local-only records that shouldn't exist after a cloud sync
+      try {
+        const orphans = db.prepare(
+          `SELECT id, code, name FROM workers WHERE cloud_id IS NULL AND synced = 0`
+        ).all();
+        for (const orphan of orphans) {
+          db.prepare('DELETE FROM workers WHERE id = ?').run(orphan.id);
+          report.orphansRemoved++;
+          console.log(`[sanitize] Removed orphan worker: ${orphan.name} (code=${orphan.code}, id=${orphan.id})`);
+        }
+      } catch (err) {
+        report.errors.push(`orphan cleanup: ${err.message}`);
+      }
+
+      // Step 2: Deduplicate by code — keep only the best record per code
+      try {
+        const duplicateCodes = db.prepare(
+          `SELECT code, COUNT(*) as cnt FROM workers WHERE code IS NOT NULL AND code > 0
+           GROUP BY code HAVING cnt > 1`
+        ).all();
+
+        for (const { code } of duplicateCodes) {
+          const candidates = db.prepare(
+            `SELECT id, name, cloud_id, synced, status, updated_at FROM workers WHERE code = ?
+             ORDER BY
+               (CASE WHEN cloud_id IS NOT NULL THEN 0 ELSE 1 END),
+               synced DESC,
+               updated_at DESC`
+          ).all(code);
+
+          // Keep first (best), delete rest
+          const [keep, ...remove] = candidates;
+          for (const dup of remove) {
+            db.prepare('DELETE FROM workers WHERE id = ?').run(dup.id);
+            report.duplicatesResolved++;
+            console.log(`[sanitize] Removed duplicate code=${code}: ${dup.name} (id=${dup.id}, cloud=${dup.cloud_id || 'null'}), kept: ${keep.name} (id=${keep.id})`);
+          }
+        }
+      } catch (err) {
+        report.errors.push(`dedup: ${err.message}`);
+      }
+
+      return report;
+    },
+
+    /**
+     * Get diagnostic information about the local workers table.
+     */
+    getWorkerDiagnostics() {
+      const totalWorkers = db.prepare('SELECT COUNT(*) as cnt FROM workers').get().cnt;
+      const activeWorkers = db.prepare("SELECT COUNT(*) as cnt FROM workers WHERE status = 'active' OR status IS NULL").get().cnt;
+      const withCloudId = db.prepare('SELECT COUNT(*) as cnt FROM workers WHERE cloud_id IS NOT NULL').get().cnt;
+      const withoutCloudId = db.prepare('SELECT COUNT(*) as cnt FROM workers WHERE cloud_id IS NULL').get().cnt;
+      const synced = db.prepare('SELECT COUNT(*) as cnt FROM workers WHERE synced = 1').get().cnt;
+      const unsynced = db.prepare('SELECT COUNT(*) as cnt FROM workers WHERE synced = 0').get().cnt;
+      const duplicateCodes = db.prepare(
+        `SELECT code, COUNT(*) as cnt FROM workers WHERE code IS NOT NULL AND code > 0
+         GROUP BY code HAVING cnt > 1`
+      ).all();
+      const distinctCodes = db.prepare('SELECT COUNT(DISTINCT code) as cnt FROM workers WHERE code IS NOT NULL AND code > 0').get().cnt;
+
+      return {
+        totalWorkers,
+        activeWorkers,
+        withCloudId,
+        withoutCloudId,
+        synced,
+        unsynced,
+        distinctCodes,
+        duplicateCodes: duplicateCodes.map(d => ({
+          code: d.code,
+          count: d.cnt,
+          workers: db.prepare('SELECT id, name, cloud_id, synced FROM workers WHERE code = ?').all(d.code),
+        })),
+      };
     },
 
     /**
@@ -1141,7 +1236,9 @@ function createDatabaseAPI(db, startCode) {
       // Temporal ceiling: ignore timestamps more than 2 min in the future (matches web)
       const maxTimestamp = new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
-      // Fetch ALL events (entry + exit) for the day, ordered by created_at (cloud arrival order)
+      // Fetch ALL events (entry + exit) for the day, ordered by TIMESTAMP (event time)
+      // Previously used created_at (cloud arrival order) which caused ghost sessions
+      // when old events were batch-uploaded later with wrong identity.
       const deviceFilter = projectId
         ? 'AND (al.device_id IN (SELECT id FROM devices WHERE project_id = ?) OR (al.device_id IS NULL AND al.device_name LIKE \'Manual - %\'))'
         : '';
@@ -1157,14 +1254,15 @@ function createDatabaseAPI(db, startCode) {
           AND al.access_status = 'granted'
           AND (al.worker_id IS NOT NULL OR al.worker_name IS NOT NULL)
           ${deviceFilter}
-        ORDER BY al.created_at ASC
+        ORDER BY al.timestamp ASC
       `).all(...params);
 
-      // Process worker state chronologically by created_at (cloud arrival order)
+      // Process worker state chronologically by TIMESTAMP (actual event time)
       const workerState = new Map();
       const firstEntryMap = new Map();
       for (const log of allLogs) {
-        const key = log.worker_name || log.worker_id || '';
+        // Use worker_id as primary key (stable UUID), fallback to worker_name
+        const key = log.worker_id || log.worker_name || '';
         if (!key) continue;
 
         if (log.direction === 'entry') {
