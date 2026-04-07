@@ -589,23 +589,25 @@ function createDatabaseAPI(db, startCode) {
 
     /**
      * Sanitize the local workers table:
-     * 1. Remove orphaned workers (no cloud_id, not synced, not in the cloud)
-     * 2. Deduplicate by code: keep only the canonical (cloud-synced) record
+     * 1. Remove ALL workers without cloud_id (regardless of synced flag)
+     * 2. Deduplicate by code: keep only the cloud-synced canonical record
+     * 3. Deduplicate by document_number: merge identity conflicts
      * Returns a diagnostic report.
      */
     sanitizeWorkers() {
       const report = { orphansRemoved: 0, duplicatesResolved: 0, errors: [] };
 
-      // Step 1: Remove workers without cloud_id that were never synced
-      // These are local-only records that shouldn't exist after a cloud sync
+      // Step 1: Remove ALL workers without cloud_id
+      // After cloud sync, every legitimate worker should have a cloud_id.
+      // Records without one are either local-only junk or pre-sync artifacts.
       try {
         const orphans = db.prepare(
-          `SELECT id, code, name FROM workers WHERE cloud_id IS NULL AND synced = 0`
+          `SELECT id, code, name, synced FROM workers WHERE cloud_id IS NULL`
         ).all();
         for (const orphan of orphans) {
           db.prepare('DELETE FROM workers WHERE id = ?').run(orphan.id);
           report.orphansRemoved++;
-          console.log(`[sanitize] Removed orphan worker: ${orphan.name} (code=${orphan.code}, id=${orphan.id})`);
+          console.log(`[sanitize] Removed orphan worker: ${orphan.name} (code=${orphan.code}, synced=${orphan.synced}, id=${orphan.id})`);
         }
       } catch (err) {
         report.errors.push(`orphan cleanup: ${err.message}`);
@@ -623,11 +625,11 @@ function createDatabaseAPI(db, startCode) {
             `SELECT id, name, cloud_id, synced, status, updated_at FROM workers WHERE code = ?
              ORDER BY
                (CASE WHEN cloud_id IS NOT NULL THEN 0 ELSE 1 END),
+               (CASE WHEN status = 'active' THEN 0 ELSE 1 END),
                synced DESC,
                updated_at DESC`
           ).all(code);
 
-          // Keep first (best), delete rest
           const [keep, ...remove] = candidates;
           for (const dup of remove) {
             db.prepare('DELETE FROM workers WHERE id = ?').run(dup.id);
@@ -636,9 +638,115 @@ function createDatabaseAPI(db, startCode) {
           }
         }
       } catch (err) {
-        report.errors.push(`dedup: ${err.message}`);
+        report.errors.push(`dedup by code: ${err.message}`);
       }
 
+      // Step 3: Deduplicate by document_number
+      try {
+        const duplicateDocs = db.prepare(
+          `SELECT document_number, COUNT(*) as cnt FROM workers
+           WHERE document_number IS NOT NULL AND document_number != ''
+           GROUP BY document_number HAVING cnt > 1`
+        ).all();
+
+        for (const { document_number } of duplicateDocs) {
+          const candidates = db.prepare(
+            `SELECT id, name, code, cloud_id, synced, status, updated_at FROM workers WHERE document_number = ?
+             ORDER BY
+               (CASE WHEN cloud_id IS NOT NULL THEN 0 ELSE 1 END),
+               (CASE WHEN status = 'active' THEN 0 ELSE 1 END),
+               synced DESC,
+               updated_at DESC`
+          ).all(document_number);
+
+          const [keep, ...remove] = candidates;
+          for (const dup of remove) {
+            db.prepare('DELETE FROM workers WHERE id = ?').run(dup.id);
+            report.duplicatesResolved++;
+            console.log(`[sanitize] Removed duplicate doc=${document_number}: ${dup.name} (id=${dup.id}), kept: ${keep.name} (id=${keep.id})`);
+          }
+        }
+      } catch (err) {
+        report.errors.push(`dedup by document: ${err.message}`);
+      }
+
+      return report;
+    },
+
+    /**
+     * Reconstruct the workers table from an authoritative cloud snapshot.
+     * This is the nuclear option: DELETE all workers not in the snapshot,
+     * and upsert all workers that ARE in it.
+     */
+    reconstructWorkersFromSnapshot(cloudWorkers) {
+      const report = { kept: 0, removed: 0, upserted: 0 };
+
+      // Build set of canonical cloud IDs
+      const canonicalCloudIds = new Set(cloudWorkers.map(w => w.id));
+
+      // Delete all workers whose cloud_id is NOT in the canonical set
+      const allLocal = db.prepare('SELECT id, cloud_id, name, code FROM workers').all();
+      for (const local of allLocal) {
+        if (local.cloud_id && canonicalCloudIds.has(local.cloud_id)) {
+          report.kept++;
+          continue;
+        }
+        // Also check if the local id itself matches a cloud id
+        if (canonicalCloudIds.has(local.id)) {
+          report.kept++;
+          continue;
+        }
+        // Not in canonical set — remove
+        db.prepare('DELETE FROM workers WHERE id = ?').run(local.id);
+        report.removed++;
+      }
+
+      // Upsert all canonical workers
+      for (const worker of cloudWorkers) {
+        try {
+          // Use the existing upsertWorkerFromCloud which handles both insert and update
+          const existing = db.prepare('SELECT id FROM workers WHERE cloud_id = ? OR id = ?').get(worker.id, worker.id);
+          const localCompanyId = worker.company_id ? (resolveLocalEntityId('companies', worker.company_id) || null) : null;
+
+          if (existing) {
+            db.prepare(`
+              UPDATE workers SET code = ?, name = ?, company_id = ?, role = ?, status = ?, document_number = ?,
+              photo_url = ?, allowed_project_ids = ?, job_function_id = ?, birth_date = ?, gender = ?,
+              blood_type = ?, observations = ?, devices_enrolled = ?,
+              updated_at = datetime('now'), synced = 1, cloud_id = ?
+              WHERE id = ?
+            `).run(
+              worker.code || 0, worker.name, localCompanyId, worker.role, worker.status,
+              worker.document_number, worker.photo_url,
+              JSON.stringify(worker.allowed_project_ids || []),
+              worker.job_function_id || null, worker.birth_date || null, worker.gender || null,
+              worker.blood_type || null, worker.observations || null,
+              JSON.stringify(worker.devices_enrolled || []),
+              worker.id, existing.id
+            );
+          } else {
+            db.prepare(`
+              INSERT INTO workers (id, code, name, company_id, role, status, document_number, photo_url,
+              allowed_project_ids, job_function_id, birth_date, gender, blood_type, observations, devices_enrolled,
+              cloud_id, synced)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            `).run(
+              uuidv4(), worker.code || 0, worker.name, localCompanyId, worker.role, worker.status,
+              worker.document_number, worker.photo_url,
+              JSON.stringify(worker.allowed_project_ids || []),
+              worker.job_function_id || null, worker.birth_date || null, worker.gender || null,
+              worker.blood_type || null, worker.observations || null,
+              JSON.stringify(worker.devices_enrolled || []),
+              worker.id
+            );
+          }
+          report.upserted++;
+        } catch (err) {
+          console.error(`[reconstruct] Failed to upsert worker ${worker.id}: ${err.message}`);
+        }
+      }
+
+      console.log(`[reconstruct] Workers table reconstructed: kept=${report.kept}, removed=${report.removed}, upserted=${report.upserted}`);
       return report;
     },
 

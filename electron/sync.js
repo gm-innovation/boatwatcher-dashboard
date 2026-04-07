@@ -939,6 +939,15 @@ class SyncEngine {
    * 3. Validates minimum worker count before clearing device
    * 4. Deduplicates workers by code to prevent duplicates on hardware
    */
+  /**
+   * Full device re-sync: downloads ALL workers from cloud INTO MEMORY,
+   * deduplicates, then clears the device and re-enrolls from the
+   * authoritative cloud snapshot — NEVER from the local SQLite table.
+   *
+   * This is the definitive fix for the "9 duplicates" problem:
+   * the local SQLite can be contaminated with orphans/duplicates,
+   * so we bypass it entirely for the enrollment source of truth.
+   */
   async fullDeviceResync(deviceId) {
     const { clearAllUsersFromDevice, enrollUserOnDevice, loadPhotoAsBase64 } = require('../server/lib/controlid');
 
@@ -947,127 +956,140 @@ class SyncEngine {
       throw new Error(`Dispositivo ${deviceId} não encontrado ou sem IP.`);
     }
 
-    console.log(`[full-resync] Starting for device ${device.name}`);
+    console.log(`[full-resync] Starting AUTHORITATIVE resync for device ${device.name}`);
 
     // Step 0: Pause reverse sync to prevent dirty device data from flowing back
     this.db.setSyncMeta?.('reverse_sync_paused', 'true');
     console.log('[full-resync] Reverse sync PAUSED to prevent contamination');
 
-    // Step 0.5: SANITIZE local workers table BEFORE downloading
-    // This removes orphans and deduplicates by code to prevent identity conflicts
-    console.log('[full-resync] Sanitizing local workers table...');
-    const sanitizeReport = this.db.sanitizeWorkers?.() || { orphansRemoved: 0, duplicatesResolved: 0 };
-    console.log(`[full-resync] Sanitized: ${sanitizeReport.orphansRemoved} orphans removed, ${sanitizeReport.duplicatesResolved} duplicates resolved`);
+    // ═══════════════════════════════════════════════════════════════════
+    // PHASE 1: Download COMPLETE worker snapshot from cloud INTO MEMORY
+    // We do NOT use the local SQLite table as source for enrollment.
+    // ═══════════════════════════════════════════════════════════════════
+    console.log('[full-resync] Downloading authoritative worker snapshot from cloud...');
 
-    // Step 1: Force fresh worker download from cloud
-    console.log('[full-resync] Resetting worker checkpoint and downloading from cloud...');
-    this.db.setSyncMeta?.('last_download_workers', '1970-01-01T00:00:00Z');
-
-    // Set bulk download mode to prevent auto-enrollment during download
-    this._bulkDownloadMode = true;
-
-    let totalDownloaded = 0;
-    const MAX_PAGES = 20; // Safety limit: 20 * 500 = 10,000 workers max
-    const fixedSince = '1970-01-01T00:00:00Z'; // Use a FIXED checkpoint for all pages
+    const cloudWorkers = [];
+    const MAX_PAGES = 30; // Safety: 30 * 1000 = 30,000 workers max
 
     try {
       for (let page = 0; page < MAX_PAGES; page++) {
-        try {
-          // CRITICAL FIX: Use the fixed "since" value for ALL pages, not the
-          // live checkpoint. The cloud endpoint returns paginated results using
-          // offset/limit internally when since is epoch.
-          // After all pages are downloaded, we update the checkpoint ONCE.
-          const workersRes = await this.callEdgeFunction(`agent-sync/download-workers?since=${fixedSince}&offset=${totalDownloaded}`, 'GET');
-          if (!workersRes.workers || workersRes.workers.length === 0) break;
+        const offset = page * 1000;
+        // download-workers already does internal pagination via fetchAllWorkers()
+        // We call it once with since=epoch to get ALL active workers
+        const workersRes = await this.callEdgeFunction(
+          `agent-sync/download-workers?since=1970-01-01T00:00:00Z`,
+          'GET'
+        );
 
-          for (const worker of workersRes.workers) {
-            try {
-              this.db.upsertWorkerFromCloud(worker);
-            } catch (err) {
-              console.error(`[full-resync] Worker upsert failed for ${worker.id}:`, err.message);
-            }
-          }
-          totalDownloaded += workersRes.workers.length;
-          console.log(`[full-resync] Downloaded page ${page + 1}: ${workersRes.workers.length} workers (total: ${totalDownloaded})`);
-
-          // If we got fewer than expected, we've reached the end
-          if (workersRes.workers.length < 400) break;
-        } catch (err) {
-          console.error(`[full-resync] Cloud download failed on page ${page + 1}:`, err.message);
-          throw new Error(`Falha ao baixar trabalhadores da nuvem: ${err.message}. Dispositivo NÃO foi alterado.`);
+        if (workersRes.workers && Array.isArray(workersRes.workers)) {
+          cloudWorkers.push(...workersRes.workers);
         }
+        // The edge function already returns ALL workers in one call (internal pagination)
+        // so we only need one request
+        break;
+      }
+    } catch (err) {
+      throw new Error(`Falha ao baixar trabalhadores da nuvem: ${err.message}. Dispositivo NÃO foi alterado.`);
+    }
+
+    console.log(`[full-resync] Downloaded ${cloudWorkers.length} workers from cloud`);
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PHASE 2: Deduplicate IN MEMORY by cloud UUID, document, and code
+    // ═══════════════════════════════════════════════════════════════════
+    const seenCloudIds = new Set();
+    const seenDocuments = new Set();
+    const codeMap = new Map();
+    const duplicates = [];
+    const canonical = [];
+
+    for (const worker of cloudWorkers) {
+      // Skip if status is not active
+      if (worker.status && worker.status !== 'active') continue;
+
+      // Dedup by cloud UUID
+      if (seenCloudIds.has(worker.id)) {
+        duplicates.push({ reason: 'duplicate_cloud_id', id: worker.id, name: worker.name });
+        continue;
+      }
+      seenCloudIds.add(worker.id);
+
+      // Dedup by document_number (if present)
+      if (worker.document_number) {
+        const docKey = worker.document_number.trim().toLowerCase();
+        if (seenDocuments.has(docKey)) {
+          duplicates.push({ reason: 'duplicate_document', id: worker.id, name: worker.name, doc: worker.document_number });
+          continue;
+        }
+        seenDocuments.add(docKey);
       }
 
-      // Update checkpoint ONCE after all pages are downloaded
-      this.db.setSyncMeta('last_download_workers', new Date().toISOString());
-    } finally {
-      this._bulkDownloadMode = false;
+      // Dedup by code (keep first occurrence from cloud, which is authoritative)
+      const code = Number(worker.code);
+      if (code > 0 && codeMap.has(code)) {
+        duplicates.push({ reason: 'duplicate_code', id: worker.id, name: worker.name, code });
+        continue;
+      }
+      if (code > 0) codeMap.set(code, worker);
+
+      canonical.push(worker);
     }
 
-    console.log(`[full-resync] Total downloaded from cloud: ${totalDownloaded}`);
-
-    // Step 1.5: Sanitize AGAIN after download (cloud data may have introduced duplicates)
-    const postSanitize = this.db.sanitizeWorkers?.() || { orphansRemoved: 0, duplicatesResolved: 0 };
-    if (postSanitize.orphansRemoved + postSanitize.duplicatesResolved > 0) {
-      console.log(`[full-resync] Post-download sanitize: ${postSanitize.orphansRemoved} orphans, ${postSanitize.duplicatesResolved} duplicates`);
+    console.log(`[full-resync] Canonical: ${canonical.length} workers, ${duplicates.length} duplicates removed`);
+    if (duplicates.length > 0) {
+      console.warn('[full-resync] Duplicates removed:', JSON.stringify(duplicates.slice(0, 15)));
     }
 
-    // Diagnostic: log worker state before enrollment
-    const diagnostics = this.db.getWorkerDiagnostics?.();
-    if (diagnostics) {
-      console.log(`[full-resync] Worker diagnostics: total=${diagnostics.totalWorkers}, active=${diagnostics.activeWorkers}, cloud=${diagnostics.withCloudId}, distinct_codes=${diagnostics.distinctCodes}, dupes=${diagnostics.duplicateCodes.length}`);
-    }
-
-    // Step 2: Get all workers from local DB (now freshly updated and sanitized)
-    const allWorkers = this.db.getWorkers?.() || [];
-    const active = allWorkers.filter(w => w.status === 'active' || !w.status);
-
-    // Step 3: Safety threshold — abort if too few workers
-    const MIN_WORKERS = 50; // Configurable safety threshold
-    if (active.length < MIN_WORKERS) {
-      const msg = `ABORTADO: apenas ${active.length} trabalhadores ativos encontrados (mínimo: ${MIN_WORKERS}). Base local possivelmente incompleta. Dispositivo NÃO foi alterado.`;
+    // ═══════════════════════════════════════════════════════════════════
+    // PHASE 3: Safety validation — abort if too few workers
+    // ═══════════════════════════════════════════════════════════════════
+    const MIN_WORKERS = 50;
+    if (canonical.length < MIN_WORKERS) {
+      const msg = `ABORTADO: apenas ${canonical.length} trabalhadores canônicos (mínimo: ${MIN_WORKERS}). Snapshot da nuvem possivelmente incompleto. Dispositivo NÃO foi alterado.`;
       console.error(`[full-resync] ${msg}`);
       throw new Error(msg);
     }
 
-    // Step 4: Deduplicate workers by code (keep first occurrence)
-    const codeMap = new Map();
-    const duplicates = [];
-    for (const worker of active) {
-      const code = Number(worker.code);
-      if (codeMap.has(code)) {
-        duplicates.push({ code, name: worker.name, id: worker.id });
-      } else {
-        codeMap.set(code, worker);
-      }
-    }
-    const uniqueWorkers = Array.from(codeMap.values());
+    // ═══════════════════════════════════════════════════════════════════
+    // PHASE 4: Also reconstruct the local SQLite table from this snapshot
+    // This ensures the agent's identity resolution uses canonical data
+    // ═══════════════════════════════════════════════════════════════════
+    console.log('[full-resync] Reconstructing local SQLite workers table from cloud snapshot...');
+    const reconstructReport = this.db.reconstructWorkersFromSnapshot?.(canonical) || { kept: 0, removed: 0 };
+    console.log(`[full-resync] SQLite reconstructed: kept=${reconstructReport.kept}, removed=${reconstructReport.removed}`);
 
-    if (duplicates.length > 0) {
-      console.warn(`[full-resync] Found ${duplicates.length} duplicate codes:`, duplicates.slice(0, 10));
-    }
-
-    console.log(`[full-resync] Workers: ${active.length} active, ${uniqueWorkers.length} unique by code, ${duplicates.length} duplicates removed`);
-
-    // Step 5: Clear device
+    // ═══════════════════════════════════════════════════════════════════
+    // PHASE 5: Clear device and re-enroll FROM MEMORY (not from SQLite!)
+    // ═══════════════════════════════════════════════════════════════════
+    console.log(`[full-resync] Clearing device ${device.name}...`);
     const clearResult = await clearAllUsersFromDevice(device);
     console.log(`[full-resync] Cleared ${clearResult.removed || 0} users from device`);
 
-    // Step 6: Re-enroll unique workers
     let enrolled = 0;
     let failed = 0;
     const errors = [];
     const BATCH = 50;
 
-    for (let i = 0; i < uniqueWorkers.length; i += BATCH) {
-      const batch = uniqueWorkers.slice(i, i + BATCH);
+    for (let i = 0; i < canonical.length; i += BATCH) {
+      const batch = canonical.slice(i, i + BATCH);
       for (const worker of batch) {
         try {
+          // Build worker object for enrollment (directly from cloud data)
+          const workerObj = {
+            id: worker.id,
+            code: worker.code,
+            name: worker.name,
+            document_number: worker.document_number,
+          };
+
           let photo = null;
-          if (worker.photo_url) {
-            try { photo = await loadPhotoAsBase64(worker.photo_url); } catch {}
+          // Use signed URL from cloud response (NOT local photo_url)
+          const photoUrl = worker.photo_signed_url;
+          if (photoUrl) {
+            try { photo = await loadPhotoAsBase64(photoUrl); } catch {}
           }
-          const r = await enrollUserOnDevice(device, worker, photo);
+
+          const r = await enrollUserOnDevice(device, workerObj, photo);
           if (r.success) enrolled++; else {
             failed++;
             errors.push({ code: worker.code, name: worker.name, error: r.warning || r.error });
@@ -1077,17 +1099,21 @@ class SyncEngine {
           errors.push({ code: worker.code, name: worker.name, error: err.message });
         }
       }
-      console.log(`[full-resync] Progress: ${Math.min(i + BATCH, uniqueWorkers.length)}/${uniqueWorkers.length}`);
+      console.log(`[full-resync] Progress: ${Math.min(i + BATCH, canonical.length)}/${canonical.length}`);
     }
 
-    console.log(`[full-resync] Done: ${enrolled} enrolled, ${failed} failed out of ${uniqueWorkers.length} unique workers`);
+    // Update checkpoint after successful resync
+    this.db.setSyncMeta('last_download_workers', new Date().toISOString());
+
+    console.log(`[full-resync] Done: ${enrolled} enrolled, ${failed} failed out of ${canonical.length} canonical workers`);
     return {
       success: true,
       enrolled,
       failed,
-      total: uniqueWorkers.length,
-      totalDownloaded,
+      total: canonical.length,
+      totalDownloaded: cloudWorkers.length,
       duplicatesRemoved: duplicates.length,
+      reconstructReport,
       errors: errors.slice(0, 20),
     };
   }
