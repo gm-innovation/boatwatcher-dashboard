@@ -383,6 +383,15 @@ serve(async (req) => {
       }
 
       console.log(`[agent-sync/upload-logs] Agent ${agent.id}: received=${logs.length} accepted=${accepted.length} rejected=${rejected.length}`)
+
+      // Telemetry: log timestamp range of accepted batch to track backlog vs current events
+      if (accepted.length > 0) {
+        const timestamps = accepted.map(l => l.timestamp as string).filter(Boolean).sort()
+        const minTs = timestamps[0] || 'N/A'
+        const maxTs = timestamps[timestamps.length - 1] || 'N/A'
+        console.log(`[agent-sync/upload-logs] Batch timestamp range: [${minTs} → ${maxTs}]`)
+      }
+
       if (rejected.length > 0) {
         console.warn(`[agent-sync/upload-logs] Rejected logs:`, JSON.stringify(rejected.slice(0, 10)))
       }
