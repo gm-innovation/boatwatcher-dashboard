@@ -996,6 +996,21 @@ export const DiagnosticsPanel = () => {
                     {cloudPipelineMetrics?.unsyncedLogsCount ?? 0}
                   </p>
                   <p className="text-xs text-muted-foreground">logs aguardando upload</p>
+                  {cloudPipelineMetrics?.unsyncedMinTimestamp && (
+                    <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                      <p>De: {new Date(cloudPipelineMetrics.unsyncedMinTimestamp).toLocaleString()}</p>
+                      <p>Até: {new Date(cloudPipelineMetrics.unsyncedMaxTimestamp).toLocaleString()}</p>
+                      {(() => {
+                        const now = new Date();
+                        const brtMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 3, 0, 0));
+                        const maxTs = new Date(cloudPipelineMetrics.unsyncedMaxTimestamp);
+                        if (maxTs < brtMidnight) {
+                          return <p className="text-xs text-orange-500 font-medium">⚠ Replay histórico — backlog anterior a hoje</p>;
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  )}
                 </div>
 
                 {/* Stage 3: Upload */}

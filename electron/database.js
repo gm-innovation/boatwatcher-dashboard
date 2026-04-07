@@ -1622,6 +1622,30 @@ function createDatabaseAPI(db, startCode) {
       db.prepare(`UPDATE access_logs SET synced = 1 WHERE id IN (${placeholders})`).run(...ids);
     },
 
+    /**
+     * Mark ALL unsynced logs as synced (used after full resync to clear backlog).
+     * Returns the number of rows updated.
+     */
+    markAllLogsSynced() {
+      const result = db.prepare('UPDATE access_logs SET synced = 1 WHERE synced = 0').run();
+      return result.changes || 0;
+    },
+
+    /**
+     * Get diagnostics about the unsynced log queue: count, min/max timestamps.
+     */
+    getUnsyncedLogsDiagnostics() {
+      const row = db.prepare(`
+        SELECT COUNT(*) as count,
+               MIN(timestamp) as min_ts,
+               MAX(timestamp) as max_ts,
+               MIN(created_at) as min_created,
+               MAX(created_at) as max_created
+        FROM access_logs WHERE synced = 0
+      `).get();
+      return row || { count: 0, min_ts: null, max_ts: null, min_created: null, max_created: null };
+    },
+
     markSyncEntitySynced(entityType, entityId, cloudId = null) {
       const table = syncEntityTableMap[entityType];
       if (!table || !entityId) return;
