@@ -256,6 +256,7 @@ export const localSync = {
   getDiagnostics: () => apiFetch('/api/sync/diagnostics'),
   getWorkerDiagnostics: () => apiFetch('/api/sync/worker-diagnostics'),
   sanitizeWorkers: () => apiFetch('/api/sync/sanitize-workers', { method: 'POST' }),
+  alignCursors: () => apiFetch<{ success: boolean; results: any[]; staleLogsCleared: number }>('/api/sync/align-cursors', { method: 'POST' }),
 };
 
 export const localAgent = {
