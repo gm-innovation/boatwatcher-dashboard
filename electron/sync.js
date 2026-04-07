@@ -412,7 +412,7 @@ class SyncEngine {
     return { results, staleLogsCleared: cleared };
   }
 
-
+  async uploadOperations(entityTypes) {
     let operations = this.db.getPendingSyncOperations?.() || [];
     if (Array.isArray(entityTypes) && entityTypes.length > 0) {
       operations = operations.filter((operation) => entityTypes.includes(operation.entity_type));
