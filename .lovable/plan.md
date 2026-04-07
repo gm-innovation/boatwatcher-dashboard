@@ -1,126 +1,150 @@
 
-Objetivo
+Objetivo: parar de “tentar no escuro” e corrigir a causa real com base no que o código mostra hoje.
 
-Resolver definitivamente o problema em 3 camadas: identificação no agente local, sincronização do espelho local e cálculo do dashboard “a bordo”.
+Diagnóstico confirmado no código
 
-Conclusão da investigação aprofundada
+1. O botão que você usou não recadastra hardware
+- `Sync Completo` no servidor local chama `resetAndFullSync()`.
+- Em `electron/sync.js`, isso só zera checkpoints e roda `triggerSync()`.
+- Não limpa dispositivo, não remove os 9 usuários, não recadastra Alexandre.
+- `Forçar Sync` também só roda sincronização de dados.
+- Portanto, usar esses botões e ver tudo acontecer “em uma fração de segundo” bate exatamente com o código atual.
 
-O problema atual não é único. Hoje existem 3 falhas encadeadas, e por isso “corrigir só o resync” não resolveu.
+2. O `fullDeviceResync()` ainda está logicamente errado
+- Em `electron/sync.js`, o resync manda `download-workers?since=...&offset=...`.
+- Em `supabase/functions/agent-sync/index.ts`, o endpoint `download-workers` ignora `offset` e já busca todos os trabalhadores ativos internamente.
+- Resultado: o loop do resync não pagina de verdade; ele repete o mesmo snapshot completo várias vezes.
+- Pior: depois disso ele usa `this.db.getWorkers()` como fonte final de enrollment, então um SQLite local contaminado ainda pode “ganhar” da nuvem.
 
-1. Resolução errada no agente local
-- `electron/agent.js` resolve o `user_id` numérico do dispositivo com:
-  - `SELECT id, name, document_number FROM workers WHERE code = ?`
-- Se o SQLite local tiver mais de um trabalhador com o mesmo `code`, a escolha vira arbitrária.
-- Como o lookup é local, a nuvem pode estar correta e mesmo assim o evento ser atribuído ao trabalhador errado antes do upload.
+3. O espelho local continua contaminando a identidade
+- `electron/database.js -> upsertWorkerFromCloud()` só reconcilia por `cloud_id` ou `id`.
+- Se existir registro local antigo com mesmo `code`/documento, mas outro `id` e `cloud_id` nulo, ele sobrevive.
+- `sanitizeWorkers()` hoje remove só parte dos órfãos (`cloud_id IS NULL AND synced = 0`), ou seja, sobra lixo local em vários cenários.
 
-2. O espelho local pode continuar contaminado mesmo após download da nuvem
-- `electron/database.js` faz `upsertWorkerFromCloud`, mas não saneia/remueve registros locais antigos ou órfãos antes do uso.
-- `electron/sync.js -> fullDeviceResync()` usa `this.db.getWorkers()` como base final para recadastro.
-- Então, se o banco local já tiver duplicidades ou linhas antigas, o resync pode reenviar essa base contaminada para o hardware.
-- Observação importante: o loop atual de `fullDeviceResync()` ainda está inconsistente porque manda `offset`, mas `agent-sync/download-workers` não usa esse parâmetro. Isso gera retrabalho, mas não explica sozinho o “Gustavo desde 31/03”.
+4. A prova de que o agente ainda está trabalhando com identidades locais erradas já apareceu nos logs
+- Os logs da função mostram várias linhas como:
+  `Resolved worker_id <uuid local> -> <uuid nuvem> via document`
+- Isso prova que o agente ainda envia `worker_id` local não canônico em eventos.
+- Se a base local estivesse realmente saneada, o evento já sairia com o UUID canônico e essa “tradução via documento” praticamente sumiria.
 
-3. O dashboard “a bordo” usa identidade instável e cronologia errada
-- `src/hooks/useSupabase.ts` e `electron/database.js` montam o estado usando:
-  - chave `worker_name || worker_id`
-  - ordem por `created_at`
-- Isso é perigoso por dois motivos:
-  1. um log antigo com nome errado (“Gustavo”) cria uma sessão fantasma que não é cancelada por uma saída posterior do Alexandre
-  2. um evento antigo sincronizado depois pode virar o “último estado” só porque chegou mais tarde
-- A tela mostrando “Gustavo” com entrada em `31/03 10:26` combina exatamente com esse bug: uma presença antiga/errada ficou carregada no carry-over.
+5. O problema dos “9 duplicados” continua no hardware
+- Como `Sync Completo`/`Forçar Sync` não mexem no hardware, eles não têm como corrigir isso.
+- E mesmo o `Resync Total` atual não é confiável porque monta o recadastro a partir do SQLite local depois de um download mal orquestrado.
 
-4. O contrato de horário ainda está inconsistente
-- `electron/agent.js` já converte timestamp sem timezone para UTC (+3h).
-- `supabase/functions/agent-sync/index.ts` ainda possui uma autocorreção heurística de +3h.
-- Isso mantém risco de hora deslocada em instalações legadas, filas atrasadas ou dados mistos.
+O que isso significa na prática
 
-O que essa investigação confirma
-- A nuvem não é mais o principal problema.
-- O hardware sozinho não explica o dashboard errado.
-- O erro persiste porque o evento pode nascer errado no agente local e depois o dashboard ainda consolida esse erro da pior forma possível.
-
-Fluxo problemático atual
 ```text
-Dispositivo -> agente local resolve code no SQLite local
-           -> grava access_log com nome/id possivelmente errados
-           -> sync envia para nuvem
-           -> dashboard agrupa por worker_name e ordena por created_at
-           -> presença fantasma permanece “a bordo” com data antiga
+Nuvem correta
+→ Sync normal baixa dados
+→ SQLite local continua com resíduos/duplicatas
+→ Resync usa base local contaminada
+→ Hardware continua com 9 duplicados
+→ Reconhecimento novo não gera o efeito esperado
+→ Backend ainda precisa “resolver via documento”
 ```
 
-Plano de correção definitivo
+Plano definitivo de correção
 
-1. Sanear o banco local antes de qualquer novo resync
-- Em `electron/database.js` e `electron/sync.js`, criar uma rotina de reconstrução canônica do espelho local:
-  - remover ou arquivar trabalhadores locais que não existem mais na nuvem
-  - deduplicar por `code`
-  - priorizar registros com `cloud_id` e `synced = 1`
-- Se ainda houver duplicidade por `code`, abortar resync com diagnóstico explícito.
+Fase 1 — Tornar o resync realmente autoritativo
+- Reescrever `fullDeviceResync()` para usar um único snapshot canônico vindo da nuvem.
+- Não usar `this.db.getWorkers()` como fonte para recadastrar hardware.
+- Fluxo novo:
+  1. baixar snapshot completo de trabalhadores ativos da nuvem
+  2. deduplicar em memória por `cloud_id`, `document_number` e `code`
+  3. validar contagem esperada
+  4. só então limpar o dispositivo
+  5. recadastrar o hardware a partir desse snapshot em memória
 
-2. Tornar o lookup por código determinístico
-- Em `electron/agent.js`, substituir o lookup cru por seleção canônica:
-  - preferir `cloud_id IS NOT NULL`
-  - preferir `synced = 1`
-  - preferir registro mais recente
-- Se existir conflito por `code`, registrar erro operacional em vez de seguir silenciosamente.
+Arquivos:
+- `electron/sync.js`
+- `supabase/functions/agent-sync/index.ts`
 
-3. Corrigir o cálculo de “a bordo”
-- Em `src/hooks/useSupabase.ts` e `electron/database.js`:
-  - usar chave estável: `worker_id || worker_document || normalizedName(worker_name)`
-  - ordenar a máquina de estado por `timestamp ASC`
-  - usar `created_at` apenas como desempate, não como cronologia principal
-  - quando houver `worker_id`, exibir sempre o trabalhador canônico por ID
-- Isso remove o efeito “Gustavo ficou aberto para sempre”.
+Fase 2 — Reconstruir o SQLite local em vez de “tentar limpar”
+- Substituir a sanitização heurística por uma reconstrução canônica da tabela `workers`.
+- Regras:
+  - manter somente a versão canônica por trabalhador vindo da nuvem
+  - remover duplicatas por `code` mesmo se estiverem `synced = 1`
+  - reconciliar por `cloud_id`, e quando necessário por `document_number`
+  - registrar relatório claro do que foi removido/unificado
+- Se houver referências locais dependentes, preservar ou remapear corretamente.
 
-4. Unificar a política de horário
-- Manter a normalização principal apenas no agente local.
-- Remover ou restringir a autocorreção heurística em `supabase/functions/agent-sync/index.ts`.
-- Padronizar todo o fluxo para tratar timestamp como UTC canônico.
-
-5. Blindar o full-resync
-- Em `electron/sync.js`, usar somente a base local saneada/canônica para recadastro.
-- Não depender do conjunto bruto retornado por `getWorkers()`.
-- Validar antes de limpar o dispositivo:
-  - quantidade esperada
-  - ausência de conflitos por `code`
-  - ausência de trabalhadores locais órfãos
-
-6. Criar diagnóstico operacional antes da próxima tentativa
-- Expor no servidor local um diagnóstico com:
-  - códigos duplicados no SQLite
-  - trabalhadores sem `cloud_id`
-  - conflitos por `code`
-  - sessões “a bordo” abertas há dias
-  - quantidade real de usuários cadastrados por dispositivo
-- Isso evita outra tentativa às cegas.
-
-7. Corrigir os dados já contaminados
-- Depois da lógica corrigida:
-  - identificar os logs que sustentam a sessão fantasma Gustavo/Alexandre
-  - corrigir `worker_id` e `worker_name` dos registros afetados
-  - reprocessar o board com a nova lógica
-- Se necessário, aplicar uma correção dirigida no backend para o período afetado.
-
-Arquivos principais
-- `electron/agent.js`
+Arquivos:
 - `electron/database.js`
 - `electron/sync.js`
-- `src/hooks/useSupabase.ts`
+
+Fase 3 — Corrigir o diagnóstico operacional para não enganar mais
+- Adicionar um endpoint de diagnóstico profundo no servidor local mostrando:
+  - total de trabalhadores na nuvem
+  - total local no SQLite
+  - duplicados por `code`
+  - quantos têm `cloud_id`
+  - quantos usuários existem fisicamente no dispositivo
+  - último `lastEventId`
+  - últimos eventos capturados
+  - `reverse_sync_paused`
+  - último erro de upload
+- Corrigir a listagem de usuários do dispositivo para usar a mesma leitura confiável do resync, não a rota atual ambígua.
+
+Arquivos:
+- `server/routes/sync.js`
+- `server/routes/devices.js`
+- possivelmente `server/lib/controlid.js`
+
+Fase 4 — Remover a ambiguidade da UI
+- Renomear e separar claramente as ações:
+  - `Forçar Sync (base local)`
+  - `Sync Completo (base local)`
+  - `Resync Total do Dispositivo (hardware)`
+- Exibir aviso explícito: os dois primeiros não alteram usuários do Control iD.
+- Exibir relatório pós-resync com:
+  - baixados da nuvem
+  - canônicos após dedup
+  - usuários no dispositivo antes
+  - usuários no dispositivo depois
+  - falhas por trabalhador
+
+Arquivos:
+- `electron/server-ui.html`
+- `src/components/devices/DeviceManagement.tsx`
+- `src/lib/localServerProvider.ts`
+
+Fase 5 — Fechar o ciclo de identidade dos eventos
+- Depois da reconstrução local, o agente deve resolver `code -> worker` sempre para o registro canônico.
+- Critério forte de validação:
+  - os logs da função não devem mais ficar mostrando repetidamente `Resolved worker_id <uuid local> -> <uuid nuvem> via document` para trabalhadores normais.
+- Se isso continuar, ainda existe base local poluída ou lookup incorreto.
+
+Arquivos:
+- `electron/agent.js`
+- `electron/database.js`
 - `supabase/functions/agent-sync/index.ts`
-- opcional para diagnóstico: `server/routes/sync.js` ou `server/routes/devices.js`
 
-Critérios de validação
-1. O SQLite local não pode mais ter duplicidade por `code`.
-2. O lookup do código do Alexandre deve apontar sempre para o mesmo registro canônico.
-3. O dashboard não pode mais manter “Gustavo” aberto quando o evento correto é do Alexandre.
-4. A data/hora exibidas devem refletir o `timestamp` real do acesso.
-5. O full-resync deve recadastrar somente a base canônica saneada.
-6. Um novo acesso/saída do Alexandre deve aparecer como Alexandre, com horário correto, no dispositivo e no dashboard.
+Fase 6 — Só depois tratar histórico contaminado, se ainda necessário
+- Primeiro estabilizar hardware + SQLite + captura.
+- Depois revisar e corrigir logs históricos específicos, se o Alexandre/Gustavo ainda tiverem rastros antigos afetando telas.
 
-Sequência recomendada
-1. diagnóstico local
-2. saneamento do SQLite
-3. correção do lookup por `code`
-4. correção da lógica do board
-5. unificação de timestamps
-6. novo full-resync
-7. correção dirigida dos logs históricos contaminados
+Detalhes técnicos importantes
+- O erro principal agora não é “a nuvem está errada”.
+- O erro principal é:
+  1. ação errada sendo usada para expectativa de hardware
+  2. `fullDeviceResync()` montado sobre uma fonte local contaminável
+  3. reconciliação fraca do SQLite
+- O ponto mais importante da investigação é este:
+  o resync precisa passar a usar um snapshot canônico em memória vindo da nuvem, e não a tabela local como verdade final.
+
+Critérios de aceite
+1. `Sync Completo` e `Forçar Sync` ficam claramente identificados como sync de base local apenas.
+2. `Resync Total do Dispositivo` demora o tempo esperado e mostra números reais.
+3. O relatório do resync precisa mostrar algo próximo de 2.531 trabalhadores canônicos, não 9.
+4. O dispositivo e a plataforma do Control iD precisam voltar a listar a base completa, sem duplicações.
+5. Um novo acesso do Alexandre precisa gerar evento normalmente.
+6. Os logs não podem mais depender de “resolver worker_id via document” para casos normais.
+
+Ordem recomendada
+1. corrigir `fullDeviceResync()` para snapshot autoritativo da nuvem
+2. reconstruir a tabela local `workers`
+3. criar diagnóstico profundo
+4. corrigir UI/nomes das ações
+5. executar novo resync real de hardware
+6. validar captura de um acesso novo do Alexandre
+7. só então revisar histórico legado se ainda restar sujeira
