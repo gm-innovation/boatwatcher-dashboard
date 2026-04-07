@@ -953,10 +953,13 @@ class SyncEngine {
     this.db.setSyncMeta?.('reverse_sync_paused', 'true');
     console.log('[full-resync] Reverse sync PAUSED to prevent contamination');
 
+    // Step 0.5: SANITIZE local workers table BEFORE downloading
+    // This removes orphans and deduplicates by code to prevent identity conflicts
+    console.log('[full-resync] Sanitizing local workers table...');
+    const sanitizeReport = this.db.sanitizeWorkers?.() || { orphansRemoved: 0, duplicatesResolved: 0 };
+    console.log(`[full-resync] Sanitized: ${sanitizeReport.orphansRemoved} orphans removed, ${sanitizeReport.duplicatesResolved} duplicates resolved`);
+
     // Step 1: Force fresh worker download from cloud
-    // CRITICAL FIX: Use a fixed checkpoint for the entire download loop.
-    // Previously, each page set last_download_workers = now(), causing the
-    // next page to skip all remaining workers (since > now means 0 results).
     console.log('[full-resync] Resetting worker checkpoint and downloading from cloud...');
     this.db.setSyncMeta?.('last_download_workers', '1970-01-01T00:00:00Z');
 

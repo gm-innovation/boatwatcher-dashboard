@@ -1236,7 +1236,9 @@ function createDatabaseAPI(db, startCode) {
       // Temporal ceiling: ignore timestamps more than 2 min in the future (matches web)
       const maxTimestamp = new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
-      // Fetch ALL events (entry + exit) for the day, ordered by created_at (cloud arrival order)
+      // Fetch ALL events (entry + exit) for the day, ordered by TIMESTAMP (event time)
+      // Previously used created_at (cloud arrival order) which caused ghost sessions
+      // when old events were batch-uploaded later with wrong identity.
       const deviceFilter = projectId
         ? 'AND (al.device_id IN (SELECT id FROM devices WHERE project_id = ?) OR (al.device_id IS NULL AND al.device_name LIKE \'Manual - %\'))'
         : '';
@@ -1252,14 +1254,15 @@ function createDatabaseAPI(db, startCode) {
           AND al.access_status = 'granted'
           AND (al.worker_id IS NOT NULL OR al.worker_name IS NOT NULL)
           ${deviceFilter}
-        ORDER BY al.created_at ASC
+        ORDER BY al.timestamp ASC
       `).all(...params);
 
-      // Process worker state chronologically by created_at (cloud arrival order)
+      // Process worker state chronologically by TIMESTAMP (actual event time)
       const workerState = new Map();
       const firstEntryMap = new Map();
       for (const log of allLogs) {
-        const key = log.worker_name || log.worker_id || '';
+        // Use worker_id as primary key (stable UUID), fallback to worker_name
+        const key = log.worker_id || log.worker_name || '';
         if (!key) continue;
 
         if (log.direction === 'entry') {
