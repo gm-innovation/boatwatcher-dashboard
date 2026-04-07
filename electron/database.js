@@ -605,6 +605,8 @@ function createDatabaseAPI(db, startCode) {
           `SELECT id, code, name, synced FROM workers WHERE cloud_id IS NULL`
         ).all();
         for (const orphan of orphans) {
+          db.prepare('DELETE FROM worker_documents WHERE worker_id = ?').run(orphan.id);
+          db.prepare('UPDATE access_logs SET worker_id = NULL WHERE worker_id = ?').run(orphan.id);
           db.prepare('DELETE FROM workers WHERE id = ?').run(orphan.id);
           report.orphansRemoved++;
           console.log(`[sanitize] Removed orphan worker: ${orphan.name} (code=${orphan.code}, synced=${orphan.synced}, id=${orphan.id})`);
@@ -632,6 +634,8 @@ function createDatabaseAPI(db, startCode) {
 
           const [keep, ...remove] = candidates;
           for (const dup of remove) {
+            db.prepare('DELETE FROM worker_documents WHERE worker_id = ?').run(dup.id);
+            db.prepare('UPDATE access_logs SET worker_id = NULL WHERE worker_id = ?').run(dup.id);
             db.prepare('DELETE FROM workers WHERE id = ?').run(dup.id);
             report.duplicatesResolved++;
             console.log(`[sanitize] Removed duplicate code=${code}: ${dup.name} (id=${dup.id}, cloud=${dup.cloud_id || 'null'}), kept: ${keep.name} (id=${keep.id})`);
@@ -661,6 +665,8 @@ function createDatabaseAPI(db, startCode) {
 
           const [keep, ...remove] = candidates;
           for (const dup of remove) {
+            db.prepare('DELETE FROM worker_documents WHERE worker_id = ?').run(dup.id);
+            db.prepare('UPDATE access_logs SET worker_id = NULL WHERE worker_id = ?').run(dup.id);
             db.prepare('DELETE FROM workers WHERE id = ?').run(dup.id);
             report.duplicatesResolved++;
             console.log(`[sanitize] Removed duplicate doc=${document_number}: ${dup.name} (id=${dup.id}), kept: ${keep.name} (id=${keep.id})`);
@@ -696,7 +702,9 @@ function createDatabaseAPI(db, startCode) {
           report.kept++;
           continue;
         }
-        // Not in canonical set — remove
+        // Not in canonical set — remove (clear FK dependencies first)
+        db.prepare('DELETE FROM worker_documents WHERE worker_id = ?').run(local.id);
+        db.prepare('UPDATE access_logs SET worker_id = NULL WHERE worker_id = ?').run(local.id);
         db.prepare('DELETE FROM workers WHERE id = ?').run(local.id);
         report.removed++;
       }
