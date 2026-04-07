@@ -565,15 +565,21 @@ function setTrayMenu(statusText) {
 
 async function bootLocalServer() {
   ensureRuntimeDirectories();
-  serverRuntime = startLocalServer({
-    host: process.env.BW_HOST,
-    port: process.env.BW_PORT,
-    dataDir: process.env.BW_DATA_DIR,
-    backupDir: process.env.BW_BACKUP_DIR,
-  });
+  try {
+    serverRuntime = await startLocalServer({
+      host: process.env.BW_HOST,
+      port: process.env.BW_PORT,
+      dataDir: process.env.BW_DATA_DIR,
+      backupDir: process.env.BW_BACKUP_DIR,
+    });
 
-  const port = serverRuntime.port || process.env.BW_PORT || '3001';
-  setTrayMenu(`Online em http://localhost:${port}`);
+    const port = serverRuntime.port || process.env.BW_PORT || '3001';
+    setTrayMenu(`Online em http://localhost:${port}`);
+  } catch (err) {
+    logToFile(`BOOT SERVER ERROR: ${err.message}`);
+    setTrayMenu(`ERRO: ${err.message.substring(0, 60)}`);
+    throw err;
+  }
 }
 
 // --- App lifecycle ---

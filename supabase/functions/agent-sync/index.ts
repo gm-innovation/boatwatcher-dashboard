@@ -681,6 +681,26 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, results }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    // POST /clear-align-flag — agent clears the align_cursors_requested flag after execution
+    if (req.method === 'POST' && action === 'clear-align-flag') {
+      const { data: agentRow } = await supabase
+        .from('local_agents')
+        .select('id, configuration')
+        .eq('id', agent.id)
+        .single()
+
+      if (agentRow) {
+        const config = (agentRow.configuration as Record<string, unknown>) || {}
+        delete config.align_cursors_requested
+        await supabase
+          .from('local_agents')
+          .update({ configuration: config })
+          .eq('id', agent.id)
+      }
+
+      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     // GET /download-devices
     if (req.method === 'GET' && action === 'download-devices') {
       const { data: devices, error } = await supabase
@@ -693,7 +713,7 @@ serve(async (req) => {
       // Also fetch agent info and project name
       const { data: agentInfo } = await supabase
         .from('local_agents')
-        .select('id, name, project_id, status')
+        .select('id, name, project_id, status, configuration')
         .eq('id', agent.id)
         .single()
 
@@ -709,7 +729,7 @@ serve(async (req) => {
 
       return new Response(JSON.stringify({
         devices: devices || [],
-        agent: agentInfo ? { id: agentInfo.id, name: agentInfo.name, project_id: agentInfo.project_id, project_name: projectName } : null,
+        agent: agentInfo ? { id: agentInfo.id, name: agentInfo.name, project_id: agentInfo.project_id, project_name: projectName, configuration: agentInfo.configuration } : null,
         timestamp: new Date().toISOString(),
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }

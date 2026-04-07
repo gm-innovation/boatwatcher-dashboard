@@ -63,15 +63,35 @@ const fetchHealth = async (timeoutMs = 1500) => {
 
 async function apiFetch<T = any>(path: string, options?: RequestInit): Promise<T> {
   const base = getBaseUrl();
-  const res = await fetch(`${base}${path}`, {
+  const url = `${base}${path}`;
+  const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || `API error ${res.status}`);
+    const errMsg = err.error || `API error ${res.status}`;
+    if (res.status === 404) {
+      throw new Error(`Rota não encontrada no servidor local (${url}). Verifique se o servidor está atualizado. ${errMsg}`);
+    }
+    throw new Error(errMsg);
   }
   return res.json();
+}
+
+/** Fetch the health endpoint and return capabilities */
+export async function getServerCapabilities(): Promise<Record<string, boolean>> {
+  try {
+    const health = await fetchHealth(3000);
+    return (health as any)?.capabilities || {};
+  } catch {
+    return {};
+  }
+}
+
+/** Get the base URL of the local server (for display/diagnostics) */
+export function getLocalServerBaseUrl(): string {
+  return getBaseUrl();
 }
 
 export const getLocalServerAvailabilitySnapshot = () => lastKnownAvailability;
