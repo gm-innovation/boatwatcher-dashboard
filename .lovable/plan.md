@@ -1,121 +1,66 @@
 
-Objetivo: sair do ciclo de tentativas e atacar a causa estrutural. A investigação mostra que o problema não está no dashboard, nem só no upload, e nem em diferença entre web e desktop.
+Diagnóstico confirmado
 
-Diagnóstico aprofundado
+- Você tem razão: do jeito que o código está hoje, esse botão efetivamente “não existe” na prática para boa parte dos cenários.
+- Eu confirmei no código que o texto `Alinhar Todos os Cursores` está em `src/components/admin/DiagnosticsPanel.tsx`, mas ele fica escondido por 2 condições ao mesmo tempo:
+  1. só renderiza se `isLocalRuntime` for `true`;
+  2. e ainda fica dentro do bloco `deviceTelemetry?.agent?.devices`, então se a telemetria não vier, o botão inteiro some.
+- Na web ele nunca aparece, porque está preso ao runtime local.
+- No desktop ele também pode não aparecer, mesmo com servidor local, se a telemetria do agente não estiver carregada.
 
-1. Web e desktop estão corretos ao mostrar zero
-- Ambos usam a nuvem como fonte principal para “a bordo”.
-- `useWorkersOnBoard` consulta a nuvem nas duas versões; no desktop o local só entra como fallback.
-- Portanto, se os dois mostram 0, o problema está antes da UI.
+O que corrigir
 
-2. A nuvem continua sem eventos de hoje
-- A consulta no banco confirmou `total_today = 0`.
-- Então o evento atual ainda não está chegando de forma utilizável ao backend.
+1. Tornar a ação visível de forma estável
+- Tirar o botão de dentro do card de telemetria dos dispositivos.
+- Colocar a ação em uma área própria do painel de diagnóstico, sempre visível quando fizer sentido operacionalmente.
 
-3. O pipeline está vivo, mas contaminado por replay histórico
-- A nuvem recebeu milhares de inserts recentes, porém com `created_at` de agora e `timestamp` antigo (2024), quase todos do dispositivo `Engenharia - Saída`.
-- Muitos desses logs chegam com `worker_id` e `worker_name` nulos.
-- Isso prova que o sistema está enviando massa histórica/repetida, não o fluxo operacional atual.
+2. Padronizar o acesso via provider
+- Criar um método próprio no provider local para essa ação, em vez de usar `fetch('http://localhost:3001/...')` direto dentro do componente.
+- Isso mantém o padrão já usado no restante do app para `/api/sync/*`.
 
-4. Há um indício forte de cursor inconsistente
-- A telemetria do agente mostrou no `Engenharia - Entrada` um `lastEventPayload.id = 109`, mas `lastEventId = 108`.
-- Ou seja: o evento atual foi capturado, mas o cursor não estava refletindo isso no mesmo estado observado.
+3. Corrigir a lógica por ambiente
+- Desktop com servidor local: botão ativo e chamando o endpoint local `/api/sync/align-cursors`.
+- Web e desktop em fallback: não esconder a ação silenciosamente.
+  - Opção recomendada: mostrar o botão desabilitado com mensagem clara explicando que o alinhamento depende do servidor local/agente conectado.
+  - Se quisermos suportar acionamento remoto via web, aí precisa implementar um fluxo separado por sinalização em nuvem.
 
-5. Encontrei um bug estrutural no caminho de webhook/monitor
-- Em `server/index.js`, a rota `/api/notifications/dao` chama `agentController.processEvent(device, rawEvent)`.
-- Em `electron/agent.js`, `processEvent()` insere o log, mas não atualiza `lastEventId`.
-- Hoje o cursor só é persistido com segurança no loop de polling (`pollDevice`) quando a resposta vem em array e o `maxId` é calculado.
-- Resultado: eventos processados via monitor push ou fallback de evento único podem ser gravados sem avançar o cursor, abrindo espaço para replay/duplicação.
+4. Melhorar feedback visual
+- Exibir estados explícitos:
+  - “Disponível no desktop com servidor local”
+  - “Servidor local indisponível”
+  - “Telemetria ausente, mas ação disponível”
+  - resultado do alinhamento com total de dispositivos e logs limpos
 
-6. O full resync atual alinha cursor de apenas um dispositivo
-- `fullDeviceResync(deviceId)` ajusta o cursor somente do device passado.
-- Mas o replay atual vem do `Engenharia - Saída`.
-- Se o resync/alinhamento foi feito em outro terminal, o segundo continua contaminando a nuvem.
+5. Evitar nova confusão
+- Ajustar o texto do painel para não sugerir que o botão está disponível apenas quando a telemetria aparece.
+- Garantir que a ação não dependa de `deviceTelemetry` para existir.
 
-7. A fila local favorece starvation durante replay
-- `getUnsyncedLogs()` retorna só 100 linhas e sem `ORDER BY`.
-- Em cenário de replay contínuo, isso pode manter evento novo preso atrás de ruído histórico, atrasando ou impedindo a chegada do acesso real ao backend.
+Arquivos envolvidos
 
-Conclusão técnica
-A causa raiz mais provável é a combinação de:
-- cursor não persistido em todos os caminhos de captura;
-- alinhamento parcial de cursores após resync;
-- backlog histórico de um segundo dispositivo monopolizando a fila de upload.
-
-Plano de correção
-
-Fase 1 — Tornar o cursor consistente em qualquer origem de evento
-Arquivos:
-- `electron/agent.js`
-- `server/index.js`
-
-Implementação:
-- Fazer `processEvent()` receber/usar `rawEvent.id` e persistir `lastEventId` quando houver ID válido.
-- Garantir que o cursor só avance para frente, nunca para trás.
-- No caminho do webhook `/api/notifications/dao`, persistir explicitamente o cursor do evento processado.
-- No fallback de evento único em `pollDevice`, também atualizar cursor.
-
-Efeito esperado:
-- cada evento processado vira também avanço de cursor;
-- o mesmo evento deixa de reaparecer em loops posteriores.
-
-Fase 2 — Alinhar todos os dispositivos do agente/projeto, não só um
-Arquivos:
-- `electron/sync.js`
-- `server/routes/sync.js`
 - `src/components/admin/DiagnosticsPanel.tsx`
+  - mover o botão para fora do bloco de telemetria
+  - renderizar conforme runtime
+  - adicionar estado/explicação visual
+- `src/lib/localServerProvider.ts`
+  - criar método `localSync.alignCursors()`
+- opcional, se quisermos suporte remoto real pela web:
+  - `electron/sync.js`
+  - possivelmente leitura/escrita em `local_agents.configuration`
 
-Implementação:
-- Após `fullDeviceResync`, alinhar cursores de todos os dispositivos vinculados ao agente/projeto.
-- Expor uma ação de “alinhar todos os cursores” no diagnóstico local.
-- Mostrar por dispositivo: `lastEventId`, `maxEventId`, último payload capturado e atraso entre cursor e hardware.
+Abordagem recomendada
 
-Efeito esperado:
-- o `Engenharia - Saída` deixa de continuar despejando histórico enquanto o `Entrada` já está correto.
+Fase 1 — corrigir já o problema de visibilidade
+- Mostrar a ação em local fixo no painel.
+- No desktop local: ativa.
+- Na web/fallback: visível, porém desabilitada com explicação.
 
-Fase 3 — Tornar a fila de upload determinística e resistente a replay
-Arquivos:
-- `electron/database.js`
-- `electron/sync.js`
+Fase 2 — se você quiser uso remoto pela web
+- Implementar uma “solicitação de alinhamento” enviada ao agente via nuvem.
+- O agente lê essa solicitação no ciclo de sync e executa o alinhamento localmente.
+- Aí sim o botão funcionará também na web, não apenas aparecerá.
 
-Implementação:
-- Ordenar `getUnsyncedLogs()` por `created_at ASC` (ou `rowid ASC`) para drenagem previsível.
-- Exibir claramente no diagnóstico a faixa temporal real da fila.
-- Após correção de cursor, limpar de forma segura backlog local obsoleto ainda não enviado, para não continuar priorizando ruído.
+Resultado esperado
 
-Efeito esperado:
-- o próximo acesso real não ficará escondido atrás de lotes históricos.
-
-Fase 4 — Confirmar ingestão atual no backend
-Arquivos:
-- `supabase/functions/agent-sync/index.ts`
-- `src/hooks/useSupabase.ts` (somente se necessário para telemetria, não para lógica principal)
-
-Implementação:
-- Adicionar logging enxuto do lote aceito com `min/max timestamp`, device e quantidade rejeitada.
-- Confirmar se algum evento atual está sendo rejeitado individualmente.
-- Só mexer na query do dashboard se, depois da correção de captura/cursor, ainda houver divergência.
-
-Efeito esperado:
-- separar definitivamente problema de ingestão vs. problema de leitura.
-
-Critérios de aceite
-1. Um novo acesso no `Engenharia - Entrada` gera linha do dia atual no backend.
-2. O flood de timestamps antigos do `Engenharia - Saída` para.
-3. O dashboard web deixa de retornar vazio para hoje.
-4. O desktop passa a exibir o mesmo trabalhador da web.
-5. A telemetria mostra cursor avançando junto com o evento capturado.
-
-Resumo executivo
-- Não é bug de UI.
-- Não é diferença entre web e desktop.
-- Não é RLS.
-- O problema central está no controle de cursor e replay histórico entre dispositivos, com o `Saída` contaminando a fila e o evento atual ficando sem chegar corretamente à nuvem.
-
-Arquivos que eu atacaria primeiro
-- `electron/agent.js`
-- `server/index.js`
-- `electron/sync.js`
-- `electron/database.js`
-- `server/routes/sync.js`
-- `src/components/admin/DiagnosticsPanel.tsx`
+- O botão deixa de ficar “fantasma”.
+- No desktop com servidor local ele aparece sempre, independentemente da telemetria.
+- Na web o sistema deixa claro por que a ação não roda localmente, ou passa a rodar remotamente se implementarmos a fase 2.
