@@ -1131,6 +1131,35 @@ export const DiagnosticsPanel = () => {
                 </div>
               ))}
 
+              {/* Align All Cursors button */}
+              {isLocalRuntime && (
+                <div className="flex items-center gap-2 pt-2 border-t">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch('http://localhost:3001/api/sync/align-cursors', { method: 'POST' });
+                        const data = await res.json();
+                        toast({
+                          title: 'Cursores alinhados',
+                          description: `${data.results?.length || 0} dispositivos processados. Backlog limpo: ${data.staleLogsCleared || 0} logs.`,
+                        });
+                      } catch (err: any) {
+                        toast({ title: 'Erro ao alinhar cursores', description: err.message, variant: 'destructive' });
+                      }
+                    }}
+                  >
+                    <Zap className="h-3 w-3 mr-1" />
+                    Alinhar Todos os Cursores
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Pula backlog histórico e posiciona todos os dispositivos no evento mais recente
+                  </span>
+                </div>
+              )}
+
               {deviceTelemetry.version && (
                 <p className="text-xs text-muted-foreground text-right">Servidor Local v{deviceTelemetry.version}</p>
               )}
