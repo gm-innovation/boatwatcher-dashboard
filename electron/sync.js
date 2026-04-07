@@ -369,7 +369,50 @@ class SyncEngine {
     return this.getStatus();
   }
 
-  async uploadQueuedOperations(entityTypes = null) {
+  /**
+   * Execute cursor alignment: set each device's lastEventId to the max event on hardware,
+   * then clear stale unsynced logs. Called locally or via remote cloud signaling.
+   */
+  async executeAlignCursors(agentId) {
+    const { loginToDevice } = require('../server/lib/controlid');
+
+    const devices = this.db.getDevices?.() || [];
+    const results = [];
+
+    for (const device of devices) {
+      if (!device.controlid_ip_address) continue;
+      try {
+        const session = await loginToDevice(device);
+        const maxId = await this.agentController?.fetchMaxEventId?.(device, session, this.agentController.parseApiCredentials?.(device.api_credentials));
+        const currentCursor = this.agentController?.getLastEventId?.(device) || 0;
+        if (maxId != null && maxId > 0) {
+          this.agentController?.setLastEventId?.(device, maxId);
+          results.push({ device: device.name, previousCursor: currentCursor, newCursor: maxId, status: 'aligned' });
+        } else {
+          results.push({ device: device.name, previousCursor: currentCursor, status: 'no_max_id' });
+        }
+      } catch (err) {
+        results.push({ device: device.name, status: 'error', error: err.message });
+      }
+    }
+
+    const cleared = this.db.markAllLogsSynced?.() || 0;
+    console.log(`[sync] Cursor alignment complete: ${results.length} devices processed, ${cleared} stale logs cleared`);
+
+    // Clear the remote flag
+    if (agentId) {
+      try {
+        await this.callEdgeFunction('agent-sync/clear-align-flag', 'POST', { agentId });
+      } catch (err) {
+        // Fallback: try to clear via download-devices next cycle
+        console.warn('[sync] Could not clear align flag:', err.message);
+      }
+    }
+
+    return { results, staleLogsCleared: cleared };
+  }
+
+
     let operations = this.db.getPendingSyncOperations?.() || [];
     if (Array.isArray(entityTypes) && entityTypes.length > 0) {
       operations = operations.filter((operation) => entityTypes.includes(operation.entity_type));
