@@ -204,7 +204,7 @@ async function fetchWorkersOnBoardFromCloud(
       .eq('access_status', 'granted')
       .gte('timestamp', carryOverStart)
       .lt('timestamp', startTimestamp)
-      .order('created_at', { ascending: true });
+      .order('timestamp', { ascending: true });
 
     // Filter prior logs to this project's devices/manual points
     const relevantPriorLogs = (priorLogs || []).filter(log =>
@@ -212,10 +212,11 @@ async function fetchWorkersOnBoardFromCloud(
       (!log.device_id && log.device_name && manualDeviceNames.includes(log.device_name))
     );
 
-    // Build last-known state from prior days (chronological order → last write wins)
+    // Build last-known state from prior days using STABLE keys and TIMESTAMP order
     const priorState = new Map<string, { direction: string; worker_id: string | null; worker_name: string | null; device_name: string | null; device_id: string | null; entry_time: string }>();
     for (const log of relevantPriorLogs) {
-      const key = log.worker_name || log.worker_id || '';
+      // Use worker_id as primary key (stable UUID), fallback to worker_name
+      const key = log.worker_id || log.worker_name || '';
       if (!key) continue;
       if (log.direction === 'entry') {
         priorState.set(key, { direction: 'entry', worker_id: log.worker_id, worker_name: log.worker_name, device_name: log.device_name, device_id: log.device_id, entry_time: log.timestamp });
@@ -224,14 +225,14 @@ async function fetchWorkersOnBoardFromCloud(
       }
     }
 
-    // Fetch ALL events (entry + exit) for the day, ordered by created_at (cloud arrival order)
+    // Fetch ALL events (entry + exit) for the day, ordered by TIMESTAMP (event time, not upload time)
     const { data: allLogs, error: logsError } = await supabase
       .from('access_logs')
       .select('worker_id, worker_name, device_name, device_id, timestamp, direction, created_at')
       .eq('access_status', 'granted')
       .gte('timestamp', startTimestamp)
       .lte('timestamp', maxTimestamp)
-      .order('created_at', { ascending: true });
+      .order('timestamp', { ascending: true });
 
     if (logsError) throw logsError;
 
@@ -256,9 +257,12 @@ async function fetchWorkersOnBoardFromCloud(
       }
     }
 
-    // Process today's events chronologically by created_at (cloud arrival order)
+    // Process today's events chronologically by TIMESTAMP (actual event time)
+    // Previously used created_at (upload time) which caused ghost sessions when
+    // old events were batch-uploaded later.
     for (const log of relevantLogs) {
-      const key = log.worker_name || log.worker_id || '';
+      // Use worker_id as primary key (stable UUID), fallback to worker_name
+      const key = log.worker_id || log.worker_name || '';
       if (!key) continue;
 
       if (log.direction === 'entry') {
