@@ -125,6 +125,13 @@ function createLocalServer(options = {}) {
       enrollment_revision: 3,
       uptime: process.uptime(),
       database: 'connected',
+      capabilities: {
+        align_cursors: true,
+        worker_diagnostics: true,
+        sanitize_workers: true,
+        fast_upload_logs: true,
+        full_device_resync: true,
+      },
       runtime: {
         host,
         port,

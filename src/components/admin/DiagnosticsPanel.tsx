@@ -35,7 +35,7 @@ import { InterLayerConnectivityCard } from './InterLayerConnectivityCard';
 import { ProjectDiagnosticsSection } from './ProjectDiagnosticsSection';
 import { getSessionDiagnostics, forceLogout } from '@/utils/ensureValidSession';
 import { toast } from '@/hooks/use-toast';
-import { localAgent, localHealth, localSync } from '@/lib/localServerProvider';
+import { localAgent, localHealth, localSync, getServerCapabilities, getLocalServerBaseUrl } from '@/lib/localServerProvider';
 import { useRuntimeProfile } from '@/hooks/useRuntimeProfile';
 
 interface DiagnosticItem {
@@ -1141,33 +1141,100 @@ export const DiagnosticsPanel = () => {
 
       {/* Align All Cursors — always visible */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-3 flex-wrap">
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-xs"
-              disabled={!isLocalRuntime}
-              onClick={async () => {
-                try {
-                  const data = await localSync.alignCursors();
-                  toast({
-                    title: 'Cursores alinhados',
-                    description: `${data.results?.length || 0} dispositivos processados. Backlog limpo: ${data.staleLogsCleared || 0} logs.`,
-                  });
-                } catch (err: any) {
-                  toast({ title: 'Erro ao alinhar cursores', description: err.message, variant: 'destructive' });
-                }
-              }}
-            >
-              <Zap className="h-3 w-3 mr-1" />
-              Alinhar Todos os Cursores
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              {isLocalRuntime
-                ? 'Pula backlog histórico e posiciona todos os dispositivos no evento mais recente'
-                : 'Disponível apenas no desktop com servidor local ativo'}
-            </span>
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Zap className="h-4 w-4" />
+            Ações de Manutenção
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs"
+                onClick={async () => {
+                  if (isLocalRuntime) {
+                    // Try local first; if 404, fall back to cloud signaling
+                    try {
+                      const caps = await getServerCapabilities();
+                      if (!caps.align_cursors) {
+                        throw new Error('NOT_SUPPORTED');
+                      }
+                      const data = await localSync.alignCursors();
+                      toast({
+                        title: 'Cursores alinhados',
+                        description: `${data.results?.length || 0} dispositivos processados. Backlog limpo: ${data.staleLogsCleared || 0} logs.`,
+                      });
+                      return;
+                    } catch (localErr: any) {
+                      if (localErr.message !== 'NOT_SUPPORTED' && !localErr.message.includes('Rota não encontrada') && !localErr.message.includes('404')) {
+                        toast({ title: 'Erro ao alinhar cursores', description: localErr.message, variant: 'destructive' });
+                        return;
+                      }
+                      // Fall through to cloud signaling
+                      console.warn('[DiagnosticsPanel] Local align-cursors not available, using cloud signaling');
+                    }
+                  }
+
+                  // Cloud signaling fallback
+                  try {
+                    const { data: agents, error } = await supabase
+                      .from('local_agents')
+                      .select('id, configuration')
+                      .eq('status', 'online')
+                      .limit(5);
+
+                    if (error || !agents?.length) {
+                      toast({
+                        title: 'Nenhum agente online',
+                        description: 'Não há agentes locais conectados para receber a solicitação.',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+
+                    let updated = 0;
+                    for (const agent of agents) {
+                      const currentConfig = (agent.configuration as Record<string, any>) || {};
+                      const { error: updateErr } = await supabase
+                        .from('local_agents')
+                        .update({
+                          configuration: { ...currentConfig, align_cursors_requested: true },
+                        })
+                        .eq('id', agent.id);
+                      if (!updateErr) updated++;
+                    }
+
+                    toast({
+                      title: 'Solicitação enviada',
+                      description: `Alinhamento de cursores solicitado para ${updated} agente(s). O agente executará na próxima sincronização.`,
+                    });
+                  } catch (cloudErr: any) {
+                    toast({ title: 'Erro ao solicitar alinhamento', description: cloudErr.message, variant: 'destructive' });
+                  }
+                }}
+              >
+                <Zap className="h-3 w-3 mr-1" />
+                Alinhar Todos os Cursores
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                {isLocalRuntime
+                  ? 'Pula backlog histórico e posiciona todos os dispositivos no evento mais recente'
+                  : 'Envia solicitação remota ao agente local via nuvem'}
+              </span>
+            </div>
+
+            {/* Show local server info for diagnostics */}
+            {isLocalRuntime && deviceTelemetry && (
+              <div className="flex items-center gap-4 text-xs text-muted-foreground border-t pt-2">
+                <span>API: <code className="text-foreground">{getLocalServerBaseUrl()}</code></span>
+                {deviceTelemetry.version && (
+                  <span>Versão API: <code className="text-foreground">v{deviceTelemetry.version}</code></span>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
