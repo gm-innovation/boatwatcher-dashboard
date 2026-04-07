@@ -1,66 +1,147 @@
 
-Diagnóstico confirmado
+Correção do diagnóstico anterior
 
-- Você tem razão: do jeito que o código está hoje, esse botão efetivamente “não existe” na prática para boa parte dos cenários.
-- Eu confirmei no código que o texto `Alinhar Todos os Cursores` está em `src/components/admin/DiagnosticsPanel.tsx`, mas ele fica escondido por 2 condições ao mesmo tempo:
-  1. só renderiza se `isLocalRuntime` for `true`;
-  2. e ainda fica dentro do bloco `deviceTelemetry?.agent?.devices`, então se a telemetria não vier, o botão inteiro some.
-- Na web ele nunca aparece, porque está preso ao runtime local.
-- No desktop ele também pode não aparecer, mesmo com servidor local, se a telemetria do agente não estiver carregada.
+Você está certo: o problema não é visibilidade do botão. O botão existe, renderiza e o clique está disparando.
 
-O que corrigir
+Do I know what the issue is?
 
-1. Tornar a ação visível de forma estável
-- Tirar o botão de dentro do card de telemetria dos dispositivos.
-- Colocar a ação em uma área própria do painel de diagnóstico, sempre visível quando fizer sentido operacionalmente.
+Sim, agora o problema está claro no código:
 
-2. Padronizar o acesso via provider
-- Criar um método próprio no provider local para essa ação, em vez de usar `fetch('http://localhost:3001/...')` direto dentro do componente.
-- Isso mantém o padrão já usado no restante do app para `/api/sync/*`.
+1. O botão chama `localSync.alignCursors()` em `src/components/admin/DiagnosticsPanel.tsx`.
+2. Esse método faz `POST /api/sync/align-cursors` em `src/lib/localServerProvider.ts`.
+3. A rota existe no código atual em `server/routes/sync.js` e está montada em `server/index.js`.
+4. Portanto, receber `Not Found` ao clicar significa que a requisição não está chegando no backend HTTP que corresponde a este código atual.
 
-3. Corrigir a lógica por ambiente
-- Desktop com servidor local: botão ativo e chamando o endpoint local `/api/sync/align-cursors`.
-- Web e desktop em fallback: não esconder a ação silenciosamente.
-  - Opção recomendada: mostrar o botão desabilitado com mensagem clara explicando que o alinhamento depende do servidor local/agente conectado.
-  - Se quisermos suportar acionamento remoto via web, aí precisa implementar um fluxo separado por sinalização em nuvem.
+Problema exato
 
-4. Melhorar feedback visual
-- Exibir estados explícitos:
-  - “Disponível no desktop com servidor local”
-  - “Servidor local indisponível”
-  - “Telemetria ausente, mas ação disponível”
-  - resultado do alinhamento com total de dispositivos e logs limpos
+Há um desencontro entre o que a UI mostra e o servidor HTTP real atendendo a porta configurada:
 
-5. Evitar nova confusão
-- Ajustar o texto do painel para não sugerir que o botão está disponível apenas quando a telemetria aparece.
-- Garantir que a ação não dependa de `deviceTelemetry` para existir.
+- o texto “Versão atual: v1.3.53” da janela do local server vem de `app.getVersion()` em `electron/local-server-main.js` via `electron/server-ui.html`;
+- isso mostra a versão do app-shell do servidor local, não prova que a API Express ativa em `localhost:3001` é a mesma build;
+- como a rota existe no repositório, um `404 Not Found` indica uma destas causas estruturais:
+  - a UI está apontando para outra URL configurada em `getServerUrl()`;
+  - existe um processo antigo ocupando a porta e recebendo `/api/sync/align-cursors`;
+  - o shell abriu em v1.3.53, mas a API carregada/ativa não corresponde ao bundle esperado;
+  - há conflito de instância/porta sem tratamento explícito no boot do servidor local.
 
-Arquivos envolvidos
+Evidências do código
 
+- `DiagnosticsPanel.tsx`: o clique está correto.
+- `localServerProvider.ts`: a chamada vai para `window.electronAPI.getServerUrl()` ou `http://localhost:3001`.
+- `server/routes/sync.js`: a rota `/align-cursors` está implementada.
+- `server/index.js`: o router `/api/sync` está montado.
+- `electron/server-ui.html`: “Versão atual” usa `server:get-version` do Electron, não `/api/health.version`.
+- `electron/local-server-main.js`: o boot não deixa claro para a UI se houve conflito de porta/instância do servidor HTTP.
+
+Plano de implementação
+
+1. Expor a verdade operacional no diagnóstico
+Arquivos:
 - `src/components/admin/DiagnosticsPanel.tsx`
-  - mover o botão para fora do bloco de telemetria
-  - renderizar conforme runtime
-  - adicionar estado/explicação visual
 - `src/lib/localServerProvider.ts`
-  - criar método `localSync.alignCursors()`
-- opcional, se quisermos suporte remoto real pela web:
-  - `electron/sync.js`
-  - possivelmente leitura/escrita em `local_agents.configuration`
+
+Implementar:
+- mostrar no painel:
+  - URL base atual do servidor local (`getServerUrl()`);
+  - versão retornada por `/api/health`;
+  - versão retornada por `/api/sync/diagnostics`;
+- no erro do botão, trocar o toast genérico por mensagem diagnóstica:
+  - “Rota ausente no servidor HTTP atual”
+  - incluir URL alvo e versão do backend, quando disponível.
+
+Resultado:
+- para de existir ambiguidade entre “versão do app” e “versão da API”.
+
+2. Diferenciar versão do shell vs versão da API no Local Server
+Arquivos:
+- `electron/server-ui.html`
+- `electron/server-preload.js`
+- `electron/local-server-main.js`
+
+Implementar:
+- manter a versão do app-shell;
+- adicionar também “API local: vX.Y.Z” lendo `/api/health.version`;
+- se a API responder offline/404, mostrar isso explicitamente na tela do servidor local.
+
+Resultado:
+- o operador passa a ver imediatamente se o shell está em 1.3.53, mas a API real não está alinhada.
+
+3. Endurecer o boot contra conflito de porta/instância errada
+Arquivos:
+- `server/index.js`
+- `electron/local-server-main.js`
+
+Implementar:
+- tratar erro de `listen` no servidor local, especialmente conflito de porta;
+- se a porta já estiver em uso:
+  - não seguir como se tudo estivesse normal;
+  - registrar erro visível;
+  - avisar na UI/tray que outra instância/processo está atendendo a porta configurada;
+- opcionalmente validar no boot que `/api/health.version` da instância ativa bate com a build esperada.
+
+Resultado:
+- elimina o cenário “app abriu, mas quem responde HTTP é outro processo”.
+
+4. Adicionar capability check antes do clique
+Arquivos:
+- `server/index.js` ou `server/routes/sync.js`
+- `src/components/admin/DiagnosticsPanel.tsx`
+
+Implementar:
+- incluir em `/api/health` ou novo endpoint um bloco `capabilities`, por exemplo:
+  - `align_cursors: true`
+- antes de habilitar/executar a ação, o front valida essa capability;
+- se não existir, mostra aviso claro em vez de tentar a rota cega.
+
+Resultado:
+- mesmo se houver backend antigo, o usuário recebe mensagem precisa em vez de `Not Found`.
+
+5. Fallback remoto opcional
+Arquivos:
+- `src/components/admin/DiagnosticsPanel.tsx`
+- `electron/sync.js`
+
+Implementar:
+- se a rota local não existir, permitir fallback por sinalização remota ao agente;
+- isso resolve o uso pela web e também serve como contingência quando a API local estiver desatualizada.
+
+Resultado:
+- a ação continua disponível mesmo fora do caminho HTTP local.
 
 Abordagem recomendada
 
-Fase 1 — corrigir já o problema de visibilidade
-- Mostrar a ação em local fixo no painel.
-- No desktop local: ativa.
-- Na web/fallback: visível, porém desabilitada com explicação.
+Fase 1 — corrigir o diagnóstico e a observabilidade
+- expor URL real;
+- expor versão da API;
+- melhorar a mensagem do erro.
 
-Fase 2 — se você quiser uso remoto pela web
-- Implementar uma “solicitação de alinhamento” enviada ao agente via nuvem.
-- O agente lê essa solicitação no ciclo de sync e executa o alinhamento localmente.
-- Aí sim o botão funcionará também na web, não apenas aparecerá.
+Fase 2 — corrigir a causa estrutural
+- tratar conflito de porta/instância;
+- validar capabilities no boot.
 
-Resultado esperado
+Fase 3 — adicionar fallback remoto
+- opcional, mas útil para resiliência.
 
-- O botão deixa de ficar “fantasma”.
-- No desktop com servidor local ele aparece sempre, independentemente da telemetria.
-- Na web o sistema deixa claro por que a ação não roda localmente, ou passa a rodar remotamente se implementarmos a fase 2.
+Critérios de aceite
+
+1. Ao abrir o painel, fica visível:
+- URL do servidor local em uso;
+- versão do app-shell;
+- versão da API local.
+
+2. Se a API ativa não tiver `/api/sync/align-cursors`, o sistema mostra:
+- que a rota está ausente naquele backend;
+- qual URL/backend respondeu.
+
+3. Se houver processo antigo ocupando a porta, o servidor local não aparenta estar saudável silenciosamente.
+
+4. Quando a API correta estiver ativa, o botão executa sem `404`.
+
+Arquivos principais
+- `src/components/admin/DiagnosticsPanel.tsx`
+- `src/lib/localServerProvider.ts`
+- `electron/server-ui.html`
+- `electron/server-preload.js`
+- `electron/local-server-main.js`
+- `server/index.js`
+- `server/routes/sync.js`
