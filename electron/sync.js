@@ -127,9 +127,17 @@ class SyncEngine {
     this.status.message = configured
       ? (this.status.online ? 'Sincronização online.' : 'Sem conexão com a internet.')
       : 'Sincronização não configurada. Operando apenas localmente.';
+
+    // Unsynced logs diagnostics (queue age/range)
+    let unsyncedDiag = null;
+    try {
+      unsyncedDiag = this.db.getUnsyncedLogsDiagnostics?.() || null;
+    } catch { /* ignore */ }
+
     return {
       ...this.status,
       unsyncedLogsCount: unsyncedLogs,
+      unsyncedLogsDiagnostics: unsyncedDiag,
       uploadLogsCount: this._uploadLogsCount,
       downloadLogsCount: this._downloadLogsCount,
       lastUploadLogsError: this._lastUploadLogsError,
