@@ -86,7 +86,7 @@ router.post('/agent/stop', (req, res) => {
   }
 });
 
-// Full diagnostics endpoint
+// Full diagnostics endpoint — deep inspection of local state
 router.get('/diagnostics', (req, res) => {
   try {
     const syncStatus = req.syncEngine.getStatus();
@@ -102,9 +102,30 @@ router.get('/diagnostics', (req, res) => {
       }
     } catch { /* ignore */ }
 
+    // Worker diagnostics — duplicate codes, orphans, etc.
+    let workerDiagnostics = null;
+    try {
+      workerDiagnostics = req.db.getWorkerDiagnostics?.();
+    } catch { /* ignore */ }
+
     // Check sync configuration
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'NOT SET';
     const hasToken = !!(req.syncEngine.agentToken);
+    const reverseSyncPaused = req.db.getSyncMeta?.('reverse_sync_paused') || 'false';
+
+    // Recent sync meta
+    let syncMeta = {};
+    try {
+      const rawDb = req.db.getRawDb?.();
+      if (rawDb) {
+        const rows = rawDb.prepare('SELECT key, value FROM sync_meta ORDER BY key').all();
+        for (const row of rows) {
+          // Don't expose tokens
+          if (row.key === 'agent_token') continue;
+          syncMeta[row.key] = row.value;
+        }
+      }
+    } catch { /* ignore */ }
 
     res.json({
       version: serverVersion,
@@ -115,16 +136,68 @@ router.get('/diagnostics', (req, res) => {
         lastDownloadLogsError: req.syncEngine._lastDownloadLogsError || null,
         uploadLogsCount: req.syncEngine._uploadLogsCount || 0,
         downloadLogsCount: req.syncEngine._downloadLogsCount || 0,
+        reverseSyncPaused,
       },
       agent: agentStatus,
       local_db: {
         unsynced_access_logs: unsyncedCount,
+        workers: workerDiagnostics,
       },
       config: {
         supabase_url: supabaseUrl.replace(/\/\/(.{8}).*(@|\.supabase)/, '//$1***$2'),
         has_access_token: hasToken,
       },
+      sync_meta: syncMeta,
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Deep worker diagnostics — standalone endpoint for debugging identity issues
+router.get('/worker-diagnostics', (req, res) => {
+  try {
+    const diagnostics = req.db.getWorkerDiagnostics?.();
+    if (!diagnostics) {
+      return res.status(500).json({ error: 'Worker diagnostics not available' });
+    }
+
+    // Add sample workers for each duplicate code
+    const enrichedDuplicates = diagnostics.duplicateCodes.map(d => ({
+      ...d,
+      workers: d.workers.map(w => ({
+        id: w.id,
+        name: w.name,
+        cloud_id: w.cloud_id,
+        synced: w.synced,
+      })),
+    }));
+
+    res.json({
+      timestamp: new Date().toISOString(),
+      total: diagnostics.totalWorkers,
+      active: diagnostics.activeWorkers,
+      withCloudId: diagnostics.withCloudId,
+      withoutCloudId: diagnostics.withoutCloudId,
+      synced: diagnostics.synced,
+      unsynced: diagnostics.unsynced,
+      distinctCodes: diagnostics.distinctCodes,
+      duplicateCodeCount: diagnostics.duplicateCodes.length,
+      duplicates: enrichedDuplicates,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Manual sanitization trigger
+router.post('/sanitize-workers', (req, res) => {
+  try {
+    const report = req.db.sanitizeWorkers?.();
+    if (!report) {
+      return res.status(500).json({ error: 'Sanitize not available' });
+    }
+    res.json({ success: true, report });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
