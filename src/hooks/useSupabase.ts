@@ -302,17 +302,20 @@ async function fetchWorkersOnBoardFromCloud(
 
     if (workersOnBoard.size === 0) return [];
 
-    // Build first entry map from relevantLogs (already ordered by created_at ASC)
+    // Build first entry map from relevantLogs (already ordered by timestamp ASC)
     const firstEntryMap = new Map<string, string>();
     for (const log of relevantLogs) {
       if (log.direction !== 'entry') continue;
-      const key = log.worker_name || log.worker_id || '';
+      const key = log.worker_id || log.worker_name || '';
       if (key && !firstEntryMap.has(key)) {
         firstEntryMap.set(key, log.timestamp);
       }
     }
 
-    // Enrich by worker_name (handles UUID mismatch)
+    // Enrich: collect worker_ids AND worker_names for lookup
+    const workerIds = Array.from(workersOnBoard.values())
+      .map(w => w.worker_id)
+      .filter(Boolean);
     const workerNames = Array.from(workersOnBoard.values())
       .map(w => w.worker_name)
       .filter(Boolean);
