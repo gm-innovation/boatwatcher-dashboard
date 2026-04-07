@@ -627,6 +627,8 @@
           `<span class="status-dot ${dot}"></span>${health.status === 'ok' ? 'Online' : 'Offline'}`;
         document.getElementById('serverInfo').textContent =
           `Porta ${health.runtime?.port || '3001'} · Uptime ${formatUptime(health.uptime)}`;
+        // Update API version
+        document.getElementById('apiVersion').textContent = health.version ? `v${health.version}` : '—';
       }
 
       // Agent info
