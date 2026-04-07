@@ -593,6 +593,13 @@ class SyncEngine {
       if (devicesRes.agent) {
         this.db.setSyncMeta?.('agent_name', devicesRes.agent.name || '');
         this.db.setSyncMeta?.('project_name', devicesRes.agent.project_name || '');
+
+        // Check for remote align_cursors_requested signal
+        const agentConfig = devicesRes.agent.configuration || {};
+        if (agentConfig.align_cursors_requested === true) {
+          console.log('[sync] Remote align_cursors_requested detected — executing alignment...');
+          await this.executeAlignCursors(devicesRes.agent.id);
+        }
       }
       this.db.setSyncMeta('last_download_devices', new Date().toISOString());
     } catch (e) {
