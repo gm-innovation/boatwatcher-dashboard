@@ -226,4 +226,40 @@ router.post('/sanitize-workers', (req, res) => {
   }
 });
 
+// Align event cursors to device max — skips backlog without full resync
+router.post('/align-cursors', async (req, res) => {
+  try {
+    const agentCtrl = req.agentController;
+    if (!agentCtrl) return res.status(500).json({ error: 'Agent controller not available' });
+
+    const results = [];
+    const devices = req.db.getDevices?.() || [];
+
+    for (const device of devices) {
+      if (!device.controlid_ip_address) continue;
+      try {
+        const session = await agentCtrl.loginToDevice(device);
+        const creds = agentCtrl.parseApiCredentials(device.api_credentials);
+        const maxId = await agentCtrl.fetchMaxEventId(device, session, creds);
+        const currentCursor = agentCtrl.getLastEventId(device);
+        if (maxId != null && maxId > 0) {
+          agentCtrl.setLastEventId(device, maxId);
+          results.push({ device: device.name, previousCursor: currentCursor, newCursor: maxId, status: 'aligned' });
+        } else {
+          results.push({ device: device.name, previousCursor: currentCursor, status: 'no_max_id' });
+        }
+      } catch (err) {
+        results.push({ device: device.name, status: 'error', error: err.message });
+      }
+    }
+
+    // Also clear stale unsynced logs
+    const cleared = req.db.markAllLogsSynced?.() || 0;
+
+    res.json({ success: true, results, staleLogsCleared: cleared });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
