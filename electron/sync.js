@@ -1006,7 +1006,19 @@ class SyncEngine {
 
     console.log(`[full-resync] Total downloaded from cloud: ${totalDownloaded}`);
 
-    // Step 2: Get all workers from local DB (now freshly updated)
+    // Step 1.5: Sanitize AGAIN after download (cloud data may have introduced duplicates)
+    const postSanitize = this.db.sanitizeWorkers?.() || { orphansRemoved: 0, duplicatesResolved: 0 };
+    if (postSanitize.orphansRemoved + postSanitize.duplicatesResolved > 0) {
+      console.log(`[full-resync] Post-download sanitize: ${postSanitize.orphansRemoved} orphans, ${postSanitize.duplicatesResolved} duplicates`);
+    }
+
+    // Diagnostic: log worker state before enrollment
+    const diagnostics = this.db.getWorkerDiagnostics?.();
+    if (diagnostics) {
+      console.log(`[full-resync] Worker diagnostics: total=${diagnostics.totalWorkers}, active=${diagnostics.activeWorkers}, cloud=${diagnostics.withCloudId}, distinct_codes=${diagnostics.distinctCodes}, dupes=${diagnostics.duplicateCodes.length}`);
+    }
+
+    // Step 2: Get all workers from local DB (now freshly updated and sanitized)
     const allWorkers = this.db.getWorkers?.() || [];
     const active = allWorkers.filter(w => w.status === 'active' || !w.status);
 
