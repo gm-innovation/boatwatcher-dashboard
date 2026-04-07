@@ -404,7 +404,7 @@ class SyncEngine {
     const localIds = rawLogs.map((l) => l.id);
 
     try {
-      console.log(`[sync] Uploading ${logs.length} sanitized access logs...`);
+      console.log(`[sync] Uploading ${logs.length} sanitized access logs (token=${this.agentToken?.slice(0,8)}...)...`);
       const response = await this.callEdgeFunction('agent-sync/upload-logs', 'POST', { logs });
       if (response.success) {
         this.db.markLogsSynced(localIds);
@@ -417,6 +417,27 @@ class SyncEngine {
         console.error('[sync] Upload logs rejected by server:', errDetail);
       }
     } catch (err) {
+      // Retry on 401: reload token from sync_meta and try once more
+      if (err.message && err.message.includes('401')) {
+        console.warn(`[sync] Upload logs got 401 — attempting token reload and retry...`);
+        const storedToken = this.db.getSyncMeta?.('agent_token');
+        if (storedToken && storedToken !== process.env.AGENT_TOKEN) {
+          console.log(`[sync] Token mismatch detected: env=${process.env.AGENT_TOKEN?.slice(0,8)}... db=${storedToken.slice(0,8)}... — syncing`);
+          process.env.AGENT_TOKEN = storedToken;
+        }
+        try {
+          const retryResponse = await this.callEdgeFunction('agent-sync/upload-logs', 'POST', { logs });
+          if (retryResponse.success) {
+            this.db.markLogsSynced(localIds);
+            this._uploadLogsCount += logs.length;
+            this._lastUploadLogsError = null;
+            console.log(`[sync] Retry succeeded: uploaded ${logs.length} access logs`);
+            return;
+          }
+        } catch (retryErr) {
+          console.error('[sync] Retry also failed:', retryErr.message);
+        }
+      }
       this._lastUploadLogsError = `${new Date().toISOString()}: ${err.message}`;
       console.error('[sync] Upload logs error:', err.message);
     }
@@ -1104,6 +1125,10 @@ class SyncEngine {
 
     // Update checkpoint after successful resync
     this.db.setSyncMeta('last_download_workers', new Date().toISOString());
+
+    // Unpause reverse sync now that the device has been rebuilt with canonical data
+    this.db.setSyncMeta?.('reverse_sync_paused', 'false');
+    console.log('[full-resync] Reverse sync UNPAUSED');
 
     console.log(`[full-resync] Done: ${enrolled} enrolled, ${failed} failed out of ${canonical.length} canonical workers`);
     return {
