@@ -1143,21 +1143,30 @@ class SyncEngine {
     this.db.setSyncMeta('last_download_workers', new Date().toISOString());
 
     // ═══════════════════════════════════════════════════════════════════
-    // PHASE 6: Align event cursor to hardware's current max event ID
-    // This prevents the agent from replaying the entire device history
-    // after a resync — it will only capture NEW events going forward.
+    // PHASE 6: Align event cursors for ALL devices (not just the one being resynced)
+    // This prevents other devices from replaying their entire history
+    // and contaminating the upload queue with stale backlog.
     // ═══════════════════════════════════════════════════════════════════
     try {
       const agentCtrl = this.agentController;
       if (agentCtrl) {
-        const session = await agentCtrl.loginToDevice(device);
-        const creds = agentCtrl.parseApiCredentials(device.api_credentials);
-        const maxIdOnDevice = await agentCtrl.fetchMaxEventId(device, session, creds);
-        if (maxIdOnDevice != null && maxIdOnDevice > 0) {
-          agentCtrl.setLastEventId(device, maxIdOnDevice);
-          console.log(`[full-resync] Cursor aligned: lastEventId set to ${maxIdOnDevice} (device max). Only NEW events will be captured.`);
-        } else {
-          console.warn('[full-resync] Could not determine device maxEventId — cursor NOT updated');
+        const allDevices = this.db.getDevices?.() || [];
+        for (const dev of allDevices) {
+          if (!dev.controlid_ip_address) continue;
+          try {
+            const session = await agentCtrl.loginToDevice(dev);
+            const creds = agentCtrl.parseApiCredentials(dev.api_credentials);
+            const maxIdOnDevice = await agentCtrl.fetchMaxEventId(dev, session, creds);
+            const currentCursor = agentCtrl.getLastEventId(dev);
+            if (maxIdOnDevice != null && maxIdOnDevice > 0 && maxIdOnDevice > currentCursor) {
+              agentCtrl.setLastEventId(dev, maxIdOnDevice);
+              console.log(`[full-resync] Cursor aligned for ${dev.name}: ${currentCursor} → ${maxIdOnDevice}`);
+            } else {
+              console.log(`[full-resync] Cursor OK for ${dev.name}: current=${currentCursor}, deviceMax=${maxIdOnDevice}`);
+            }
+          } catch (devErr) {
+            console.warn(`[full-resync] Cursor alignment failed for ${dev.name}: ${devErr.message}`);
+          }
         }
       }
     } catch (cursorErr) {
