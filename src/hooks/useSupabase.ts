@@ -320,20 +320,44 @@ async function fetchWorkersOnBoardFromCloud(
       .map(w => w.worker_name)
       .filter(Boolean);
 
-    const { data: workers } = workerNames.length > 0
-      ? await supabase
-          .from('workers')
-          .select('id, name, role, company_id, companies(name)')
-          .in('name', workerNames)
-      : { data: [] };
+    // Enrich by worker_id first (most reliable), then by name as fallback
+    let workersByIdOrName = new Map<string, any>();
 
-    const workersByName = new Map<string, any>();
-    for (const w of workers || []) {
-      workersByName.set(w.name, w);
+    if (workerIds.length > 0) {
+      const { data: byId } = await supabase
+        .from('workers')
+        .select('id, name, role, company_id, companies(name)')
+        .in('id', workerIds);
+      for (const w of byId || []) {
+        workersByIdOrName.set(w.id, w);
+      }
+    }
+
+    // Fallback: fetch by name for workers without a valid UUID
+    const missingNames = workerNames.filter(n => {
+      // Check if we already have this worker by ID
+      for (const [, state] of workersOnBoard) {
+        if (state.worker_name === n && state.worker_id && workersByIdOrName.has(state.worker_id)) return false;
+      }
+      return true;
+    });
+
+    if (missingNames.length > 0) {
+      const { data: byName } = await supabase
+        .from('workers')
+        .select('id, name, role, company_id, companies(name)')
+        .in('name', missingNames);
+      for (const w of byName || []) {
+        if (!workersByIdOrName.has(w.id)) {
+          workersByIdOrName.set(w.name, w); // Index by name for fallback
+        }
+      }
     }
 
     return Array.from(workersOnBoard.entries()).map(([key, onBoard]) => {
-      const enriched = workersByName.get(onBoard.worker_name);
+      // Look up by worker_id first (stable), then by name
+      const enriched = (onBoard.worker_id && workersByIdOrName.get(onBoard.worker_id))
+        || workersByIdOrName.get(onBoard.worker_name);
       // Map device access_location to display label; manual entries show "Manual"
       const isManual = !onBoard.device_id && onBoard.device_name?.startsWith('Manual -');
       const accessLocation = onBoard.device_id ? deviceLocationMap.get(onBoard.device_id) || 'bordo' : 'bordo';
