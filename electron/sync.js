@@ -711,13 +711,16 @@ class SyncEngine {
       // Collect pipeline metrics for remote diagnostics
       const agentStatus = this.agentController?.getStatus?.() || {};
       const unsyncedLogs = this.db.getUnsyncedLogs?.() || [];
+      const unsyncedDiag = this.db.getUnsyncedLogsDiagnostics?.() || {};
       const pipelineMetrics = {
         capturedEventsCount: agentStatus.capturedEventsCount || 0,
         ignoredInvalidCount: agentStatus.ignoredInvalidCount || 0,
         ignoredDedupeCount: agentStatus.ignoredDedupeCount || 0,
         lastCapturedAt: agentStatus.lastCapturedAt || null,
         lastIgnoreReason: agentStatus.lastIgnoreReason || null,
-        unsyncedLogsCount: unsyncedLogs.length,
+        unsyncedLogsCount: unsyncedDiag.count || unsyncedLogs.length,
+        unsyncedMinTimestamp: unsyncedDiag.min_ts || null,
+        unsyncedMaxTimestamp: unsyncedDiag.max_ts || null,
         uploadLogsCount: this._uploadLogsCount,
         lastUploadLogsError: this._lastUploadLogsError,
       };
