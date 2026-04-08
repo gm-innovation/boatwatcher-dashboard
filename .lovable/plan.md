@@ -1,58 +1,51 @@
 
 
-## Fix: Syntax Error in `electron/sync.js` — Missing `enroll_worker` Block
+## Fix: Normalizar filtro de logs de acesso no SQLite para incluir dispositivos manuais
 
 ### Problema
-Na edição anterior que adicionou o modo somente-leitura, o bloco `enroll_worker` dentro de `downloadAndExecuteCommands()` foi acidentalmente substituído por `...` (placeholder), gerando um **SyntaxError** na linha 890 que impede o servidor local de iniciar.
+O método `getAccessLogs` no `electron/database.js` (linha 1291-1293) filtra logs por projeto usando `d.project_id = ?` via LEFT JOIN com `devices`. Logs manuais têm `device_id = NULL`, então o JOIN retorna NULL para `d.project_id` e esses logs são **excluídos** do resultado.
+
+Isso explica a discrepância: a Web busca logs manuais separadamente via `manual_access_points`, mas o SQLite local os ignora.
+
+O método `getWorkersOnBoard` (linha 1358) já resolve isso corretamente com:
+```sql
+OR (al.device_id IS NULL AND al.device_name LIKE 'Manual - %')
+```
 
 ### Correção
 
-**Arquivo: `electron/sync.js`** — Linha 889-890
+**Arquivo único: `electron/database.js`** — método `getAccessLogs` (linhas 1291-1294)
 
-Substituir:
-```js
-if (cmd.command === 'enroll_worker') {
-...
-} else if (cmd.command === 'remove_worker') {
+Substituir o filtro simples:
+```javascript
+if (filters.projectId) {
+  conditions.push('d.project_id = ?');
+  params.push(filters.projectId);
+}
 ```
 
-Por o bloco completo de enrollment que existia antes:
-```js
-if (cmd.command === 'enroll_worker') {
-  let photoBase64 = null;
-  if (payload.photo_url) {
-    if (photoCache.has(payload.photo_url)) {
-      photoBase64 = photoCache.get(payload.photo_url);
-    } else {
-      try {
-        photoBase64 = await loadPhotoAsBase64(payload.photo_url);
-        photoCache.set(payload.photo_url, photoBase64);
-      } catch (photoErr) {
-        console.warn(`[commands] Photo download failed for ${payload.worker_name}: ${photoErr.message}`);
-      }
-    }
-  }
-
-  const workerObj = {
-    id: payload.worker_id,
-    name: payload.worker_name,
-    code: payload.worker_code,
-    photo_url: payload.photo_url,
-  };
-
-  const enrollResult = await enrollUserOnDevice(device, workerObj, photoBase64);
-  if (!enrollResult.success) {
-    throw new Error(enrollResult.error || enrollResult.warning || 'Enrollment failed');
-  }
-  resultPayload.result = enrollResult;
-  console.log(`[commands] Enrolled worker ${payload.worker_name} on device ${device.name}`);
-
-} else if (cmd.command === 'remove_worker') {
+Por um filtro que inclui logs manuais do mesmo projeto:
+```javascript
+if (filters.projectId) {
+  conditions.push(`(
+    d.project_id = ?
+    OR (al.device_id IS NULL AND al.device_name IN (
+      SELECT 'Manual - ' || name FROM manual_access_points WHERE project_id = ?
+    ))
+  )`);
+  params.push(filters.projectId, filters.projectId);
+}
 ```
 
-### Causa raiz
-O placeholder `// ... keep existing code` usado durante a edição do modo somente-leitura não foi expandido, resultando em `...` literal no JavaScript — um token inválido nesse contexto.
+### Impacto
+Essa única alteração corrige **todas** as áreas que consomem logs de acesso no Desktop:
+- Dashboard (RecentActivityFeed)
+- Relatórios na tela (WorkerTimeReport, PresenceReport, CompanyReport, OvernightControl, ReportsList)
+- Relatórios em PDF (usam os mesmos dados dos relatórios na tela)
+- Qualquer outra query que passe `projectId` para `getAccessLogs`
 
-### Arquivo a alterar
-- `electron/sync.js` (1 ponto — linhas 889-890)
+Todas essas áreas passam por `fetchAccessLogs` → `localAccessLogs.list()` → REST API → `database.getAccessLogs()`. A correção no ponto mais baixo da cadeia resolve tudo de uma vez.
+
+### Arquivos a alterar
+- `electron/database.js` — 1 ponto (linhas 1291-1294)
 
