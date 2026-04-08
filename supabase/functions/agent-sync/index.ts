@@ -449,6 +449,31 @@ serve(async (req) => {
         }
       }
 
+      // Fallback: resolve worker by hardware code when worker_id is still null
+      for (const log of accepted) {
+        if (!log.worker_id && (log as any)._hardware_user_id) {
+          const code = Number((log as any)._hardware_user_id)
+          if (!isNaN(code) && code > 0) {
+            const { data: byCode } = await supabase
+              .from('workers')
+              .select('id, name, document_number')
+              .eq('code', code)
+              .eq('status', 'active')
+              .maybeSingle()
+            if (byCode) {
+              console.log(`[agent-sync/upload-logs] Resolved worker by hardware code ${code} -> ${byCode.id} (${byCode.name})`)
+              log.worker_id = byCode.id
+              log.worker_name = log.worker_name || byCode.name
+              log.worker_document = log.worker_document || byCode.document_number
+            } else {
+              console.warn(`[agent-sync/upload-logs] No active worker found for hardware code ${code}`)
+            }
+          }
+        }
+        // Strip internal field before inserting into Postgres
+        delete (log as any)._hardware_user_id
+      }
+
       let insertedCount = 0
       if (accepted.length > 0) {
         // Use upsert with conflict on id; unique index on (device_id, timestamp, direction) 
