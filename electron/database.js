@@ -1289,8 +1289,13 @@ function createDatabaseAPI(db, startCode) {
       const params = [];
 
       if (filters.projectId) {
-        conditions.push('d.project_id = ?');
-        params.push(filters.projectId);
+        conditions.push(`(
+          d.project_id = ?
+          OR (al.device_id IS NULL AND al.device_name IN (
+            SELECT 'Manual - ' || name FROM manual_access_points WHERE project_id = ?
+          ))
+        )`);
+        params.push(filters.projectId, filters.projectId);
       }
       if (filters.startDate) {
         conditions.push('al.timestamp >= ?');
