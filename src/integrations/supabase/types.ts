@@ -26,6 +26,7 @@ export type Database = {
           reason: string | null
           score: number | null
           timestamp: string
+          updated_at: string
           worker_document: string | null
           worker_id: string | null
           worker_name: string | null
@@ -41,6 +42,7 @@ export type Database = {
           reason?: string | null
           score?: number | null
           timestamp?: string
+          updated_at?: string
           worker_document?: string | null
           worker_id?: string | null
           worker_name?: string | null
@@ -56,6 +58,7 @@ export type Database = {
           reason?: string | null
           score?: number | null
           timestamp?: string
+          updated_at?: string
           worker_document?: string | null
           worker_id?: string | null
           worker_name?: string | null
