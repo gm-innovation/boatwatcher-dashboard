@@ -150,8 +150,8 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
         if (!stats.firstEntry || entryDate < stats.firstEntry) {
           stats.firstEntry = entryDate;
         }
-        // Classify shift
-        const shift = classifyShift(entryDate.getHours());
+        // Classify shift using UTC timestamp
+        const shift = classifyShift(firstEntryLog.timestamp);
         if (shift === 'day') stats.dayWorkers++;
         else stats.nightWorkers++;
       }
