@@ -306,17 +306,6 @@ export async function exportCompanyReportPdf(opts: CompanyPdfOptions) {
 
   // --- Rows ---
   opts.companies.forEach((company, ri) => {
-    if (y + 6 > pageHeight - 20) {
-      doc.addPage();
-      y = 18;
-      y = drawTableHeader(y);
-    }
-
-    if (ri % 2 === 0) {
-      doc.setFillColor(...CLR.altRowBg);
-      doc.rect(MARGIN, y, availableWidth, 6, 'F');
-    }
-
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(...CLR.dark);
@@ -341,6 +330,12 @@ export async function exportCompanyReportPdf(opts: CompanyPdfOptions) {
     const compMaxLines = Math.max(...compWrapped.map(l => l.length));
     const compLineH = 3.5;
     const compRowH = Math.max(6, compMaxLines * compLineH + 2);
+
+    if (y + compRowH > pageHeight - 20) {
+      doc.addPage();
+      y = 18;
+      y = drawTableHeader(y);
+    }
 
     if (ri % 2 === 0) {
       doc.setFillColor(...CLR.altRowBg);
