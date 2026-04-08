@@ -147,19 +147,26 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
 
       const firstEntryLog = alternating.find(l => l.direction === 'entry');
       const lastExitLog = [...alternating].reverse().find(l => l.direction === 'exit');
+      const now = Date.now();
       let totalMinutes = 0;
-      if (firstEntryLog && lastExitLog) {
-        const diffMs = new Date(lastExitLog.timestamp).getTime() - new Date(firstEntryLog.timestamp).getTime();
+      if (firstEntryLog) {
+        const endTime = isOnBoard ? now : (lastExitLog ? new Date(lastExitLog.timestamp).getTime() : 0);
+        const diffMs = endTime - new Date(firstEntryLog.timestamp).getTime();
         totalMinutes = diffMs > 0 ? Math.round(diffMs / 60000) : 0;
       }
 
-      // Effective minutes: sum of individual entry→exit pairs
+      // Effective minutes: sum of individual entry→exit pairs + open session
       let effectiveMinutes = 0;
       for (let i = 0; i < alternating.length - 1; i += 2) {
         if (alternating[i].direction === 'entry' && alternating[i + 1]?.direction === 'exit') {
           const pairMs = new Date(alternating[i + 1].timestamp).getTime() - new Date(alternating[i].timestamp).getTime();
           if (pairMs > 0) effectiveMinutes += Math.round(pairMs / 60000);
         }
+      }
+      // Add open session time for workers still on board
+      if (isOnBoard && alternating.length > 0 && alternating[alternating.length - 1].direction === 'entry') {
+        const openMs = now - new Date(alternating[alternating.length - 1].timestamp).getTime();
+        if (openMs > 0) effectiveMinutes += Math.round(openMs / 60000);
       }
 
       const worker = workerById.get(key) || findWorker(logs[0]);
