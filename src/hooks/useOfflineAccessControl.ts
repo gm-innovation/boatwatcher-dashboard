@@ -31,7 +31,7 @@ export interface PendingAccessLog {
 
 const PENDING_LOGS_KEY = 'ac_pending_logs';
 
-function workersCacheKey(projectId?: string | null): string {
+export function workersCacheKey(projectId?: string | null): string {
   return projectId ? `ac_workers_cache_${projectId}` : 'ac_workers_cache';
 }
 
@@ -55,13 +55,12 @@ export function useOfflineAccessControl(projectId?: string | null) {
     };
   }, []);
 
-  // Load workers from cache or fetch — NO filtering by project or status
+  // Load workers: try remote first, fallback to cache. Never overwrite cache with empty.
   const loadWorkers = useCallback(async () => {
     setLoadingWorkers(true);
     const cacheKey = workersCacheKey(projectId);
     try {
       if (navigator.onLine) {
-        // Load ALL workers (no status filter) so blocked/pending ones are visible
         const query = supabase
           .from('workers')
           .select('id, name, code, document_number, photo_url, company_id, status, job_function_id, role, rejection_reason, allowed_project_ids')
@@ -91,16 +90,25 @@ export function useOfflineAccessControl(projectId?: string | null) {
             allowed_project_ids: w.allowed_project_ids,
           }));
 
-          // Store ALL workers in cache — filtering happens at display/authorization time
           await set(cacheKey, allWorkers);
           setWorkers(allWorkers);
+        } else {
+          // Remote returned empty — fallback to cache instead of clearing
+          const cached = await get<CachedWorker[]>(cacheKey);
+          if (cached && cached.length > 0) {
+            setWorkers(cached);
+            console.warn('[AC] Remote returned 0 workers, using cache with', cached.length, 'records');
+          }
+          // If cache is also empty, workers stays []
         }
       } else {
+        // Offline — use cache
         const cached = await get<CachedWorker[]>(cacheKey);
         if (cached) setWorkers(cached);
       }
     } catch (err) {
       console.error('Error loading workers:', err);
+      // Error — fallback to cache
       const cached = await get<CachedWorker[]>(cacheKey);
       if (cached) setWorkers(cached);
     } finally {
@@ -193,6 +201,7 @@ export function useOfflineAccessControl(projectId?: string | null) {
     pendingLogs,
     isSyncing,
     loadingWorkers,
+    workerCount: workers.length,
     saveAccessLog,
     syncPendingLogs,
     refreshWorkers: loadWorkers,

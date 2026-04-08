@@ -1,11 +1,13 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Camera, X } from 'lucide-react';
+import { AlertCircle, Camera, X, Loader2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
+import { get, set } from 'idb-keyval';
 
 import { useOfflineAccessControl, type CachedWorker, type PendingAccessLog } from '@/hooks/useOfflineAccessControl';
 
@@ -15,6 +17,8 @@ import { AccessControlShell } from '@/components/access-control/AccessControlShe
 import { QRScanner } from '@/components/access-control/QRScanner';
 import { NumericKeypad } from '@/components/access-control/NumericKeypad';
 import { useResolvedUrl } from '@/hooks/useResolvedUrl';
+
+const TERMINAL_CACHE_KEY = 'ac_active_terminal';
 
 function playBeep() {
   try {
@@ -30,13 +34,6 @@ function playBeep() {
   } catch { /* ignore audio errors */ }
 }
 
-/**
- * Derives the access authorization status for a worker in the context of a project.
- * Rules:
- *   - status !== 'active' => blocked (by admin/review)
- *   - status === 'active' but not in project's allowed_project_ids => blocked (not authorized for this project)
- *   - status === 'active' and authorized => granted
- */
 function deriveAccessStatus(worker: CachedWorker, projectId?: string | null): {
   borderStatus: 'granted' | 'blocked' | 'pending';
   authorized: boolean;
@@ -56,7 +53,6 @@ function deriveAccessStatus(worker: CachedWorker, projectId?: string | null): {
       reason: 'Trabalhador em análise',
     };
   }
-  // status === 'active' — check project authorization
   if (projectId && (!worker.allowed_project_ids || !worker.allowed_project_ids.includes(projectId))) {
     return {
       borderStatus: 'blocked',
@@ -85,56 +81,76 @@ export default function AccessControl() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // Bug 1 fix: cache terminal in IndexedDB, fallback when offline
   const { data: terminal, isLoading: loadingTerminal } = useQuery({
     queryKey: ['active_terminal'],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from('manual_access_points')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) return null;
-
-      let client_name: string | undefined;
-      let client_logo: string | undefined;
-      let project_name: string | undefined;
-      let effectiveClientId = data.client_id;
-
-      if (data.project_id) {
-        const { data: project } = await supabase
-          .from('projects')
-          .select('name, client_id')
-          .eq('id', data.project_id)
-          .maybeSingle();
-        if (project) {
-          project_name = project.name;
-          if (!effectiveClientId && project.client_id) {
-            effectiveClientId = project.client_id;
+      if (navigator.onLine) {
+        try {
+          const { data, error } = await (supabase as any)
+            .from('manual_access_points')
+            .select('*')
+            .eq('is_active', true)
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          if (error) throw error;
+          if (!data) {
+            // No active terminal remotely — still check cache
+            const cached = await get<ActiveTerminal>(TERMINAL_CACHE_KEY);
+            return cached || null;
           }
-        }
-      }
 
-      if (effectiveClientId) {
-        const { data: company } = await supabase
-          .from('companies')
-          .select('name, logo_url_light')
-          .eq('id', effectiveClientId)
-          .maybeSingle();
-        if (company) {
-          client_name = company.name;
-          client_logo = company.logo_url_light || undefined;
-        }
-      }
+          let client_name: string | undefined;
+          let client_logo: string | undefined;
+          let project_name: string | undefined;
+          let effectiveClientId = data.client_id;
 
-      return { ...data, client_name, client_logo, project_name } as ActiveTerminal;
+          if (data.project_id) {
+            const { data: project } = await supabase
+              .from('projects')
+              .select('name, client_id')
+              .eq('id', data.project_id)
+              .maybeSingle();
+            if (project) {
+              project_name = project.name;
+              if (!effectiveClientId && project.client_id) {
+                effectiveClientId = project.client_id;
+              }
+            }
+          }
+
+          if (effectiveClientId) {
+            const { data: company } = await supabase
+              .from('companies')
+              .select('name, logo_url_light')
+              .eq('id', effectiveClientId)
+              .maybeSingle();
+            if (company) {
+              client_name = company.name;
+              client_logo = company.logo_url_light || undefined;
+            }
+          }
+
+          const result = { ...data, client_name, client_logo, project_name } as ActiveTerminal;
+          // Persist to IndexedDB for offline use
+          await set(TERMINAL_CACHE_KEY, result);
+          return result;
+        } catch (err) {
+          console.error('[AC] Failed to load terminal from remote, using cache', err);
+          const cached = await get<ActiveTerminal>(TERMINAL_CACHE_KEY);
+          return cached || null;
+        }
+      } else {
+        // Offline — use cached terminal
+        const cached = await get<ActiveTerminal>(TERMINAL_CACHE_KEY);
+        return cached || null;
+      }
     },
   });
 
   const {
-    isOnline, workers, pendingLogs, isSyncing,
+    isOnline, workers, pendingLogs, isSyncing, loadingWorkers, workerCount,
     saveAccessLog, syncPendingLogs,
   } = useOfflineAccessControl(terminal?.project_id);
 
@@ -157,8 +173,9 @@ export default function AccessControl() {
     setWorkerCode('');
   };
 
+  // Bug 5 fix: block verify while loading
   const handleVerify = useCallback(() => {
-    if (!workerCode.trim()) return;
+    if (!workerCode.trim() || loadingWorkers) return;
     const numCode = parseInt(workerCode, 10);
     const worker = workers.find(w =>
       String(w.code) === workerCode || w.code === numCode
@@ -166,12 +183,20 @@ export default function AccessControl() {
     if (worker) {
       setSelectedWorker(worker);
     } else {
-      toast({ title: 'Trabalhador não encontrado', description: `Código: ${workerCode}`, variant: 'destructive' });
+      toast({
+        title: 'Trabalhador não encontrado',
+        description: `Código ${workerCode} não existe na base local (${workerCount} registros carregados)`,
+        variant: 'destructive',
+      });
     }
-  }, [workerCode, workers, toast]);
+  }, [workerCode, workers, toast, loadingWorkers, workerCount]);
 
   const handleQRScan = useCallback((code: string) => {
     setShowScanner(false);
+    if (loadingWorkers) {
+      toast({ title: 'Aguarde', description: 'Sincronizando trabalhadores...', variant: 'default' });
+      return;
+    }
     const numCode = parseInt(code, 10);
     const worker = workers.find(w =>
       String(w.code) === code || w.code === numCode
@@ -179,9 +204,13 @@ export default function AccessControl() {
     if (worker) {
       setSelectedWorker(worker);
     } else {
-      toast({ title: 'Trabalhador não encontrado', description: `Código: ${code}`, variant: 'destructive' });
+      toast({
+        title: 'Trabalhador não encontrado',
+        description: `Código ${code} não existe na base local (${workerCount} registros)`,
+        variant: 'destructive',
+      });
     }
-  }, [workers, toast]);
+  }, [workers, toast, loadingWorkers, workerCount]);
 
   const handleConfirm = async (direction: 'entry' | 'exit') => {
     if (!selectedWorker || !terminal) return;
@@ -219,7 +248,6 @@ export default function AccessControl() {
     }, 1200);
   };
 
-  // Derive status for selected worker
   const selectedStatus = selectedWorker
     ? deriveAccessStatus(selectedWorker, terminal?.project_id)
     : null;
@@ -268,6 +296,20 @@ export default function AccessControl() {
             {terminal.name}
             {terminal.location_description && ` · ${terminal.location_description}`}
           </p>
+          {/* Worker count indicator */}
+          <div className="flex items-center justify-center gap-1.5 pt-1">
+            {loadingWorkers ? (
+              <Badge variant="outline" className="gap-1 text-xs">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Sincronizando...
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="gap-1 text-xs">
+                <Users className="h-3 w-3" />
+                {workerCount} trabalhadores
+              </Badge>
+            )}
+          </div>
         </div>
 
         {/* Content */}
@@ -302,6 +344,7 @@ export default function AccessControl() {
                   size="sm"
                   className="gap-1 text-primary"
                   onClick={() => setShowScanner(true)}
+                  disabled={loadingWorkers}
                 >
                   <Camera className="h-4 w-4" />
                   Usar Câmera
@@ -319,6 +362,7 @@ export default function AccessControl() {
                 onClear={handleClear}
                 onConfirm={handleVerify}
                 onCamera={() => setShowScanner(true)}
+                disabled={loadingWorkers}
               />
             </>
           )}
