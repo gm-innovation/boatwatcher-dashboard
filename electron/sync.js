@@ -236,7 +236,7 @@ class SyncEngine {
       await this.uploadLogs();
       await this.downloadUpdates();
 
-      // Reverse sync: import workers from devices → cloud (every ~10 cycles ≈ 10min)
+      // Reverse sync: import workers from devices → cloud (every cycle ≈ 60s)
       // DISABLED during recovery: reverse sync is paused when reverse_sync_paused flag is set
       // to prevent contamination from dirty devices overwriting correct cloud data.
       const reverseSyncPaused = this.db.getSyncMeta?.('reverse_sync_paused');
@@ -244,7 +244,7 @@ class SyncEngine {
         if (this._reverseSyncCycleCount % 10 === 0) {
           console.log('[sync] reverseSync PAUSED (reverse_sync_paused=true). Skipping to prevent device contamination.');
         }
-      } else if (this._reverseSyncCycleCount % 10 === 0) {
+      } else {
         await this.reverseSync().catch(err => console.error('[sync] reverseSync error:', err.message));
       }
 
@@ -658,8 +658,9 @@ class SyncEngine {
         for (const worker of workersRes.workers) {
           try {
             this.db.upsertWorkerFromCloud(worker);
-            // Skip auto-enrollment during bulk download (fullDeviceResync sets this flag)
-            if (!this._bulkDownloadMode && worker.photo_signed_url) {
+            // Skip auto-enrollment during bulk download or in read-only mode
+            const isReadOnly = this.db.getSyncMeta?.('read_only_mode') === 'true';
+            if (!this._bulkDownloadMode && !isReadOnly && worker.photo_signed_url) {
               await this.autoEnrollWorkerPhoto(worker);
             }
           } catch (workerErr) {
@@ -860,11 +861,24 @@ class SyncEngine {
       // Photo cache: avoid downloading the same photo multiple times in a batch
       const photoCache = new Map();
 
+      const isReadOnly = this.db.getSyncMeta?.('read_only_mode') === 'true';
+
       const processDeviceCommands = async (deviceCmds) => {
         for (const cmd of deviceCmds) {
           const resultPayload = { command_id: cmd.id, status: 'completed', result: null, error_message: null };
 
           try {
+            // In read-only mode, skip hardware-write commands
+            if (isReadOnly && (cmd.command === 'enroll_worker' || cmd.command === 'remove_worker')) {
+              console.log(`[commands] SKIPPED ${cmd.command} (read-only mode active)`);
+              resultPayload.status = 'skipped';
+              resultPayload.error_message = 'Modo somente-leitura ativo — comando ignorado.';
+              try {
+                await this.callEdgeFunction('agent-sync/upload-command-result', 'POST', resultPayload);
+              } catch {}
+              continue;
+            }
+
             const device = this.db.getDeviceById?.(cmd.device_id);
             if (!device || !device.controlid_ip_address) {
               throw new Error(`Dispositivo ${cmd.device_id} não encontrado ou sem IP.`);
@@ -873,37 +887,7 @@ class SyncEngine {
             const payload = cmd.payload || {};
 
             if (cmd.command === 'enroll_worker') {
-              const workerObj = {
-                id: payload.worker_id,
-                code: payload.worker_code,
-                name: payload.worker_name,
-                document_number: payload.document_number,
-              };
-
-              let photoBase64 = null;
-              const photoUrl = payload.photo_signed_url || payload.photo_url;
-              if (photoUrl) {
-                // Use cache to avoid re-downloading same photo across devices
-                const cacheKey = payload.worker_id || photoUrl;
-                if (photoCache.has(cacheKey)) {
-                  photoBase64 = photoCache.get(cacheKey);
-                } else {
-                  try {
-                    photoBase64 = await loadPhotoAsBase64(photoUrl);
-                    photoCache.set(cacheKey, photoBase64);
-                  } catch (photoErr) {
-                    console.warn(`[commands] Photo download failed for worker ${payload.worker_id}:`, photoErr.message);
-                  }
-                }
-              }
-
-              const enrollResult = await enrollUserOnDevice(device, workerObj, photoBase64);
-              if (!enrollResult.success) {
-                throw new Error(enrollResult.error || 'Enrollment failed');
-              }
-              resultPayload.result = enrollResult;
-              console.log(`[commands] Enrolled worker ${payload.worker_name} on device ${device.name}`);
-
+...
             } else if (cmd.command === 'remove_worker') {
               const removeResult = await removeUserFromDevice(device, payload.worker_id, payload.worker_code);
               if (!removeResult.success) {
@@ -1036,6 +1020,12 @@ class SyncEngine {
    * so we bypass it entirely for the enrollment source of truth.
    */
   async fullDeviceResync(deviceId) {
+    // Block full resync in read-only mode
+    const isReadOnly = this.db.getSyncMeta?.('read_only_mode') === 'true';
+    if (isReadOnly) {
+      throw new Error('Modo somente-leitura ativo — full resync bloqueado para evitar escrita no hardware.');
+    }
+
     const { clearAllUsersFromDevice, enrollUserOnDevice, loadPhotoAsBase64 } = require('../server/lib/controlid');
 
     const device = this.db.getDeviceById?.(deviceId);
