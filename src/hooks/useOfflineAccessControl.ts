@@ -13,6 +13,8 @@ export interface CachedWorker {
   job_function_name?: string;
   status: string | null;
   role?: string | null;
+  rejection_reason?: string | null;
+  allowed_project_ids?: string[] | null;
 }
 
 export interface PendingAccessLog {
@@ -30,7 +32,7 @@ export interface PendingAccessLog {
 const WORKERS_CACHE_KEY = 'ac_workers_cache';
 const PENDING_LOGS_KEY = 'ac_pending_logs';
 
-export function useOfflineAccessControl(clientIdFilter?: string) {
+export function useOfflineAccessControl(projectId?: string | null) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [workers, setWorkers] = useState<CachedWorker[]>([]);
   const [pendingLogs, setPendingLogs] = useState<PendingAccessLog[]>([]);
@@ -55,15 +57,10 @@ export function useOfflineAccessControl(clientIdFilter?: string) {
     setLoadingWorkers(true);
     try {
       if (navigator.onLine) {
-        let query = supabase
+        const query = supabase
           .from('workers')
-          .select('id, name, code, document_number, photo_url, company_id, status, job_function_id, role')
-          .eq('status', 'active')
+          .select('id, name, code, document_number, photo_url, company_id, status, job_function_id, role, rejection_reason, allowed_project_ids')
           .limit(5000);
-
-        if (clientIdFilter) {
-          query = query.eq('company_id', clientIdFilter);
-        }
 
         const { data: workersData } = await query;
 
@@ -74,7 +71,7 @@ export function useOfflineAccessControl(clientIdFilter?: string) {
           const companiesMap = new Map((companies || []).map(c => [c.id, c.name]));
           const jobFunctionsMap = new Map((jobFunctions || []).map(j => [j.id, j.name]));
 
-          const cached: CachedWorker[] = workersData.map(w => ({
+          let allWorkers: CachedWorker[] = workersData.map(w => ({
             id: w.id,
             name: w.name,
             code: w.code,
@@ -85,10 +82,19 @@ export function useOfflineAccessControl(clientIdFilter?: string) {
             job_function_name: w.job_function_id ? jobFunctionsMap.get(w.job_function_id) || undefined : undefined,
             status: w.status,
             role: w.role,
+            rejection_reason: w.rejection_reason,
+            allowed_project_ids: w.allowed_project_ids,
           }));
 
-          await set(WORKERS_CACHE_KEY, cached);
-          setWorkers(cached);
+          // Filter by project if projectId is provided
+          if (projectId) {
+            allWorkers = allWorkers.filter(w =>
+              w.allowed_project_ids?.includes(projectId)
+            );
+          }
+
+          await set(WORKERS_CACHE_KEY, allWorkers);
+          setWorkers(allWorkers);
         }
       } else {
         const cached = await get<CachedWorker[]>(WORKERS_CACHE_KEY);
@@ -101,7 +107,7 @@ export function useOfflineAccessControl(clientIdFilter?: string) {
     } finally {
       setLoadingWorkers(false);
     }
-  }, [clientIdFilter]);
+  }, [projectId]);
 
   useEffect(() => {
     loadWorkers();

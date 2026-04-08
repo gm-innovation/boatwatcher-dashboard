@@ -31,9 +31,13 @@ function playBeep() {
 }
 
 function getWorkerBorderStatus(worker: CachedWorker): 'granted' | 'blocked' | 'pending' {
-  if (worker.status === 'blocked') return 'blocked';
+  if (worker.status === 'blocked' || worker.status === 'inactive') return 'blocked';
   if (worker.status === 'active') return 'granted';
   return 'pending';
+}
+
+function isWorkerAuthorized(worker: CachedWorker): boolean {
+  return worker.status === 'active';
 }
 
 interface ActiveTerminal {
@@ -105,7 +109,7 @@ export default function AccessControl() {
   const {
     isOnline, workers, pendingLogs, isSyncing,
     saveAccessLog, syncPendingLogs,
-  } = useOfflineAccessControl();
+  } = useOfflineAccessControl(terminal?.project_id);
 
   const resolvedLogo = useResolvedUrl(terminal?.client_logo ?? null);
 
@@ -155,13 +159,15 @@ export default function AccessControl() {
   const handleConfirm = async (direction: 'entry' | 'exit') => {
     if (!selectedWorker || !terminal) return;
 
+    const authorized = isWorkerAuthorized(selectedWorker);
+
     const log: PendingAccessLog = {
       id: uuidv4(),
       worker_id: selectedWorker.id,
       worker_name: selectedWorker.name,
       worker_document: selectedWorker.document_number,
       device_name: `Manual - ${terminal.name}`,
-      access_status: 'granted',
+      access_status: authorized ? 'granted' : 'denied',
       direction,
       timestamp: new Date().toISOString(),
       created_at: new Date().toISOString(),
@@ -171,8 +177,13 @@ export default function AccessControl() {
     playBeep();
 
     const { dismiss } = toast({
-      title: direction === 'entry' ? '✅ Entrada registrada' : '🔴 Saída registrada',
-      description: `${selectedWorker.name} - ${terminal.name}`,
+      title: authorized
+        ? (direction === 'entry' ? '✅ Entrada registrada' : '🔴 Saída registrada')
+        : '⛔ Acesso negado',
+      description: authorized
+        ? `${selectedWorker.name} - ${terminal.name}`
+        : `${selectedWorker.name} — ${selectedWorker.rejection_reason || 'Trabalhador não autorizado'}`,
+      variant: authorized ? 'default' : 'destructive',
     });
 
     setTimeout(() => {
@@ -236,7 +247,9 @@ export default function AccessControl() {
                 borderStatus={getWorkerBorderStatus(selectedWorker)}
               />
 
-              <AccessConfirmation onConfirm={handleConfirm} />
+              {isWorkerAuthorized(selectedWorker) && (
+                <AccessConfirmation onConfirm={handleConfirm} />
+              )}
 
               <Button
                 variant="outline"
