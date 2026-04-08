@@ -600,6 +600,7 @@ class AgentController {
       worker_name: workerName,
       worker_document: workerDocument,
       device_name: device.name,
+      hardware_user_id: event.user_id != null ? String(event.user_id) : null,
     };
 
     // Insert into local database

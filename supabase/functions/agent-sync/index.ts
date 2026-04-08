@@ -363,6 +363,9 @@ serve(async (req) => {
             continue;
           }
 
+          // Preserve hardware_user_id for cloud-side worker resolution, but don't insert it
+          const hardwareUserId = l.hardware_user_id || null
+
           accepted.push({
             ...(l.id ? { id: l.id } : {}),
             worker_id: workerId,
@@ -376,6 +379,7 @@ serve(async (req) => {
             worker_document: l.worker_document || null,
             device_name: l.device_name || null,
             photo_capture_url: l.photo_capture_url || null,
+            _hardware_user_id: hardwareUserId, // internal, stripped before insert
           })
         } catch (e) {
           rejected.push({ index: i, reason: (e as Error).message })
@@ -443,6 +447,31 @@ serve(async (req) => {
             log.worker_id = null
           }
         }
+      }
+
+      // Fallback: resolve worker by hardware code when worker_id is still null
+      for (const log of accepted) {
+        if (!log.worker_id && (log as any)._hardware_user_id) {
+          const code = Number((log as any)._hardware_user_id)
+          if (!isNaN(code) && code > 0) {
+            const { data: byCode } = await supabase
+              .from('workers')
+              .select('id, name, document_number')
+              .eq('code', code)
+              .eq('status', 'active')
+              .maybeSingle()
+            if (byCode) {
+              console.log(`[agent-sync/upload-logs] Resolved worker by hardware code ${code} -> ${byCode.id} (${byCode.name})`)
+              log.worker_id = byCode.id
+              log.worker_name = log.worker_name || byCode.name
+              log.worker_document = log.worker_document || byCode.document_number
+            } else {
+              console.warn(`[agent-sync/upload-logs] No active worker found for hardware code ${code}`)
+            }
+          }
+        }
+        // Strip internal field before inserting into Postgres
+        delete (log as any)._hardware_user_id
       }
 
       let insertedCount = 0

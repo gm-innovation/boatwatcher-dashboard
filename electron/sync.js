@@ -449,6 +449,8 @@ class SyncEngine {
       ...rest,
       access_status: VALID_ACCESS_STATUS.includes(rest.access_status) ? rest.access_status : 'granted',
       direction: VALID_DIRECTION.includes(rest.direction) ? rest.direction : 'unknown',
+      // Include hardware_user_id so cloud can resolve worker by code if worker_id is null
+      hardware_user_id: rest.hardware_user_id || null,
     }));
 
     // Keep local IDs for marking as synced after success
