@@ -293,9 +293,12 @@ async function fetchWorkersOnBoardFromCloud(
     }
 
     // Keep only workers whose final state is on-board
+    const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+    const cutoffTime = new Date(Date.now() - TWENTY_FOUR_HOURS_MS).toISOString();
+
     const workersOnBoard = new Map<string, any>();
     for (const [key, state] of workerState) {
-      if (state.isOnBoard) {
+      if (state.isOnBoard && state.entry_time > cutoffTime) {
         workersOnBoard.set(key, state);
       }
     }
