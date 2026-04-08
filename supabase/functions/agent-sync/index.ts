@@ -447,12 +447,49 @@ serve(async (req) => {
 
       let insertedCount = 0
       if (accepted.length > 0) {
-        const { error } = await supabase.from('access_logs').upsert(accepted, { onConflict: 'id' })
+        // Use upsert with conflict on id; unique index on (device_id, timestamp, direction) 
+        // prevents duplicates from cloud API. Handle constraint violations gracefully.
+        const { error } = await supabase.from('access_logs').upsert(accepted, { onConflict: 'id', ignoreDuplicates: false })
         if (error) {
-          console.error(`[agent-sync/upload-logs] Upsert error:`, error)
-          throw error
+          if (error.code === '23505') {
+            // Unique constraint violation — some events already exist from cloud API.
+            // Insert individually, skipping duplicates.
+            console.warn(`[agent-sync/upload-logs] Batch upsert hit unique constraint, falling back to individual inserts`)
+            for (const log of accepted) {
+              const { error: singleErr } = await supabase.from('access_logs').upsert(log, { onConflict: 'id' })
+              if (singleErr) {
+                if (singleErr.code === '23505') {
+                  // This specific event is a duplicate — try to enrich the existing one
+                  if (log.worker_id && log.device_id) {
+                    const { data: existing } = await supabase.from('access_logs')
+                      .select('id, worker_id')
+                      .eq('device_id', log.device_id)
+                      .eq('timestamp', log.timestamp)
+                      .eq('direction', log.direction || 'unknown')
+                      .maybeSingle()
+                    if (existing && !existing.worker_id) {
+                      await supabase.from('access_logs').update({
+                        worker_id: log.worker_id,
+                        worker_name: log.worker_name,
+                        worker_document: log.worker_document,
+                      }).eq('id', existing.id)
+                      console.log(`[agent-sync/upload-logs] Enriched existing log ${existing.id} with worker data`)
+                    }
+                  }
+                } else {
+                  console.error(`[agent-sync/upload-logs] Single insert error:`, singleErr)
+                }
+              } else {
+                insertedCount++
+              }
+            }
+          } else {
+            console.error(`[agent-sync/upload-logs] Upsert error:`, error)
+            throw error
+          }
+        } else {
+          insertedCount = accepted.length
         }
-        insertedCount = accepted.length
       }
 
       await supabase.from('local_agents').update({ last_sync_at: new Date().toISOString(), pending_sync_count: 0, sync_status: 'synced' }).eq('id', agent.id)
