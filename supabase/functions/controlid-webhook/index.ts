@@ -90,13 +90,18 @@ serve(async (req) => {
 
     // Unrecognized attempt
     if (!event.user_id) {
-      await supabase.from('access_logs').insert({
+      const unrecTimestamp = new Date(event.time ? event.time * 1000 + 3 * 3600 * 1000 : Date.now()).toISOString()
+      const { error: unrecErr } = await supabase.from('access_logs').insert({
         device_id: device.id, device_name: device.name,
-        timestamp: new Date(event.time ? event.time * 1000 + 3 * 3600 * 1000 : Date.now()).toISOString(),
+        timestamp: unrecTimestamp,
         access_status: 'denied', reason: 'not_recognized',
         direction: unrecognizedDirection, score: event.score,
         photo_capture_url: event.photo || null
       })
+
+      if (unrecErr && unrecErr.code !== '23505') {
+        console.error('Error inserting unrecognized access log:', unrecErr)
+      }
 
       // Phase 5: Notify admins of unrecognized access attempt
       await createAccessDeniedNotification(supabase, device, 'not_recognized', 'Tentativa de acesso não reconhecida')
@@ -149,15 +154,24 @@ serve(async (req) => {
       ? mapDirection(event.direction)
       : ((device.configuration as any)?.passage_direction || 'unknown')
 
-    // Insert access log
-    await supabase.from('access_logs').insert({
+    // Insert access log (with deduplication via unique constraint)
+    const eventTimestamp = new Date(event.time ? event.time * 1000 + 3 * 3600 * 1000 : Date.now()).toISOString()
+    const { error: logInsertError } = await supabase.from('access_logs').insert({
       worker_id: worker?.id || null, worker_name: workerName, worker_document: workerDocument,
       device_id: device.id, device_name: device.name,
-      timestamp: new Date(event.time ? event.time * 1000 + 3 * 3600 * 1000 : Date.now()).toISOString(),
+      timestamp: eventTimestamp,
       access_status: accessGranted ? 'granted' : 'denied', reason,
       direction: resolvedDirection, score: event.score,
       photo_capture_url: event.photo || null
     })
+
+    if (logInsertError) {
+      if (logInsertError.code === '23505') {
+        console.log('Webhook access log deduplicated via unique constraint')
+      } else {
+        console.error('Error inserting webhook access_log:', logInsertError)
+      }
+    }
 
     // Phase 5: Notify on access denied
     if (!accessGranted) {

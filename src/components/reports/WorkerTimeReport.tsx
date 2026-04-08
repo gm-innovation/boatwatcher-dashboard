@@ -447,8 +447,11 @@ function normalizeAlternatingLogs<T extends { direction: string }>(sorted: T[]):
 }
 
 function isDaytime(timestamp: string): boolean {
-  const hour = new Date(timestamp).getHours();
-  return hour >= 5 && hour <= 18;
+  // Timestamps are stored in UTC. BRT = UTC-3.
+  // Convert to BRT hour for shift classification.
+  const utcHour = new Date(timestamp).getUTCHours();
+  const brtHour = (utcHour - 3 + 24) % 24;
+  return brtHour >= 5 && brtHour <= 18;
 }
 
 function classifyLogs(rawLogs: RawLog[]) {
