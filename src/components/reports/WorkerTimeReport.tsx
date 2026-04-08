@@ -14,7 +14,7 @@ import { Download, FileDown, Search, Users, Building2, ChevronDown, ChevronRight
 import { exportStandardWorkerPdf, exportDetailedWorkerPdf, loadImageAsDataUrl } from '@/utils/exportWorkerReportPdf';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useSystemSetting } from '@/hooks/useSystemSettings';
-import { formatBrtShort } from '@/utils/brt';
+import { formatBrtShort, formatBrtDateTime } from '@/utils/brt';
 import { ptBR } from 'date-fns/locale';
 
 interface WorkerTimeReportProps {
@@ -625,7 +625,7 @@ function PeriodTable({ title, logs, emptyMessage }: {
                   </td>
                   <td className="px-3 py-1.5 text-muted-foreground">{log.device_name}</td>
                   <td className="px-3 py-1.5 text-muted-foreground">
-                    {(() => { const { formatBrtDateTime } = require('@/utils/brt'); return formatBrtDateTime(log.timestamp); })()}
+                    {formatBrtDateTime(log.timestamp)}
                   </td>
                 </tr>
               );
