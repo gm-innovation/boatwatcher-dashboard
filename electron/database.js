@@ -1354,7 +1354,7 @@ function createDatabaseAPI(db, startCode) {
 
     // === Workers On Board ===
     getWorkersOnBoard(projectId) {
-      // Simple date-based filtering — timestamps are stored as wall-clock time
+      // Date-based filtering — timestamps are stored in UTC
       const now = new Date();
       // BRT midnight = 03:00 UTC (consistent with web filtering)
       const todayBRT = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -1439,7 +1439,7 @@ function createDatabaseAPI(db, startCode) {
           locationLabel = 'Bordo';
         }
 
-        // Pass raw timestamps — no conversion needed since they're stored as wall-clock time
+        // Pass raw timestamps — stored in UTC, UI handles formatting
         let entryTime = state.entry_time;
         let firstEntryTime = firstEntryMap.get(key) || state.entry_time;
 

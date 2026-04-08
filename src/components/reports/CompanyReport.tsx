@@ -38,8 +38,11 @@ function formatDuration(minutes: number): string {
   return `${h}h ${m}m`;
 }
 
-function classifyShift(hour: number): 'day' | 'night' {
-  return hour >= 5 && hour <= 18 ? 'day' : 'night';
+function classifyShift(timestamp: string): 'day' | 'night' {
+  // Timestamps are stored in UTC. BRT = UTC-3.
+  const utcHour = new Date(timestamp).getUTCHours();
+  const brtHour = (utcHour - 3 + 24) % 24;
+  return brtHour >= 5 && brtHour <= 18 ? 'day' : 'night';
 }
 
 export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportProps) => {
@@ -147,8 +150,8 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
         if (!stats.firstEntry || entryDate < stats.firstEntry) {
           stats.firstEntry = entryDate;
         }
-        // Classify shift
-        const shift = classifyShift(entryDate.getHours());
+        // Classify shift using UTC timestamp
+        const shift = classifyShift(firstEntryLog.timestamp);
         if (shift === 'day') stats.dayWorkers++;
         else stats.nightWorkers++;
       }

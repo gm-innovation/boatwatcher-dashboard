@@ -348,6 +348,39 @@ serve(async (req) => {
       const workerRecord = await resolveWorker(supabase, body.user_id)
       const eventTime = parseEventTime(body.time)
       const photoCaptureUrl = normalizePhotoData(body.access_photo || body.photo)
+      const direction = mapDirection(body.direction)
+
+      // Deduplication: check if an event with same device+timestamp+direction already exists
+      // This prevents duplicate logs when both the local agent and cloud API receive the same hardware event
+      if (deviceRecord) {
+        const { data: existing } = await supabase
+          .from('access_logs')
+          .select('id, worker_id')
+          .eq('device_id', deviceRecord.id)
+          .eq('timestamp', eventTime)
+          .eq('direction', direction)
+          .maybeSingle()
+
+        if (existing) {
+          // If existing log has no worker but we resolved one, update it
+          if (!existing.worker_id && workerRecord) {
+            await supabase.from('access_logs').update({
+              worker_id: workerRecord.id,
+              worker_name: workerRecord.name,
+              worker_document: workerRecord.document_number,
+              photo_capture_url: photoCaptureUrl || undefined,
+            }).eq('id', existing.id)
+            console.log(`Access log deduplicated and enriched: ${existing.id} → ${workerRecord.name}`)
+          } else {
+            console.log(`Access log deduplicated (already exists): ${existing.id}`)
+          }
+          return new Response(JSON.stringify({ status: 'ok', deduplicated: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          })
+        }
+      }
+
       const accessLog = buildAccessLogPayload(body, {
         deviceRecord,
         workerRecord,
@@ -356,8 +389,16 @@ serve(async (req) => {
       })
 
       const { error: insertError } = await supabase.from('access_logs').insert(accessLog)
-      if (insertError) console.error('Error inserting access_log:', insertError)
-      else console.log('Access log inserted:', accessLog.worker_name || 'unknown worker')
+      if (insertError) {
+        // Handle unique constraint violation gracefully
+        if (insertError.code === '23505') {
+          console.log('Access log deduplicated via unique constraint')
+        } else {
+          console.error('Error inserting access_log:', insertError)
+        }
+      } else {
+        console.log('Access log inserted:', accessLog.worker_name || 'unknown worker')
+      }
 
       return new Response(JSON.stringify({ status: 'ok' }), {
         status: 200,
