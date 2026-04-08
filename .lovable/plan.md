@@ -1,159 +1,118 @@
 
-## Investigação profunda: causas prováveis reais e plano de correção segura
+Objetivo: parar de “remendar” pontos isolados e restaurar um comportamento único e estável para entrada/saída manual + facial e relatórios WebView/PDF com o mesmo conjunto de dados e o mesmo horário.
 
-### O que a leitura do código indica
-Há pelo menos 3 problemas diferentes acontecendo ao mesmo tempo:
+Diagnóstico real após revisão do código:
+1. O sistema hoje mistura dois modelos de tempo ao mesmo tempo:
+   - `electron/agent.js` e funções cloud convertem timestamps para UTC.
+   - `electron/database.js` e alguns comentários/tratamentos ainda assumem “wall-clock time”.
+   - relatórios e PDFs usam `new Date(...)` diretamente em vários pontos.
+   Resultado: desvio de horário e filtros inconsistentes.
+2. A fonte de dados também está fragmentada:
+   - relatórios usam `useAccessLogs` → `fetchAccessLogs`
+   - “a bordo” usa outro caminho (`useWorkersOnBoard`)
+   - manual e facial são combinados por regras diferentes entre SQLite e nuvem
+   Resultado: WebView/PDF/dashboard podem discordar entre si.
+3. O fluxo facial está frágil em dois pontos:
+   - captura local depende de `load_objects.fcgi` + normalização/local lookup do `worker.code`
+   - enrollment existe, mas qualquer inconsistência entre `code`, `allowed_project_ids`, device binding ou resolução local quebra o reconhecimento
+   Resultado: manual funciona, facial não.
 
-1. **Logs manuais ainda não entram corretamente em todos os relatórios Desktop**
-   - O ajuste em `electron/database.js#getAccessLogs` melhorou só um ponto.
-   - Mas o ecossistema inteiro usa caminhos diferentes:
-     - `getAccessLogs` no SQLite
-     - `getWorkersOnBoard`
-     - `fetchAccessLogs` na web/nuvem
-     - componentes de relatório
-     - exportação PDF/Excel
-   - Hoje a lógica manual está **fragmentada** e inconsistente.
+Do I know what the issue is?
+Sim. O problema principal não é “um bug só”; é a combinação de:
+- semântica de timestamp inconsistente
+- consultas de acesso divergentes entre áreas
+- pipeline facial dependente de resolução local frágil
 
-2. **Horário -3h nos relatórios/PDFs**
-   - A normalização de timestamp está sendo aplicada no ingest dos leitores faciais (`electron/agent.js` e funções cloud como `api` / `controlid-webhook`) com regra fixa de `+3h`.
-   - Depois, os relatórios e PDFs fazem `new Date(timestamp)` e formatam direto.
-   - Se o timestamp já foi “corrigido” na ingestão e depois volta a ser interpretado/localizado no frontend, o efeito visual fica deslocado.
-   - Isso explica por que **webview e PDF erram do mesmo jeito**: ambos consomem a mesma base já contaminada.
+Plano de correção segura
 
-3. **Entrada/saída pelos leitores faciais não funcionam**
-   - O código de captura local (`electron/agent.js`) depende de `load_objects.fcgi` lendo `access_logs` do hardware.
-   - Se o equipamento estiver operando em fluxo diferente (ex.: validação online/monitor/webhook sem persistência local compatível, ou retorno de payload diferente do esperado), o app não registra evento.
-   - Além disso, o enrollment pode estar “aparentemente feito” na base, mas insuficiente no hardware/na regra do equipamento.
-   - Ou seja: **o problema do facial não parece ser só relatório**; é provável falha no pipeline de captura do hardware.
+1. Congelar a semântica canônica de tempo
+- Adotar explicitamente: banco guarda UTC canônico, UI apenas formata.
+- Revisar e alinhar estes pontos para a mesma regra:
+  - `electron/agent.js`
+  - `supabase/functions/api/index.ts`
+  - `supabase/functions/controlid-webhook/index.ts`
+  - `supabase/functions/agent-sync/index.ts`
+  - `electron/database.js`
+- Remover suposições conflitantes como “timestamps are stored as wall-clock time”.
+- Substituir parsing ambíguo em relatórios/PDFs por parsing explícito e utilitário compartilhado.
 
-## Conclusão principal
-Não é seguro aplicar mais correções pontuais. O problema precisa ser tratado em **3 camadas**, com uma única regra canônica:
+2. Criar uma camada única de normalização/consulta de access logs
+- Extrair uma regra canônica para:
+  - logs faciais do projeto por `device_id`
+  - logs manuais do projeto por `manual_access_points`
+  - filtro de intervalo por data
+  - ordenação por timestamp real
+- Aplicar a mesma regra em:
+  - `electron/database.js#getAccessLogs`
+  - `src/hooks/useDataProvider.ts#fetchAccessLogs`
+  - `src/hooks/useSupabase.ts#fetchWorkersOnBoardFromCloud`
+  - `electron/database.js#getWorkersOnBoard`
+- Eliminar discrepâncias entre WebView, PDF e dashboard.
 
-```text
-Hardware/Manual -> Ingestão canônica -> SQLite/Cloud com mesmo timestamp sem drift
-                 -> Consulta compartilhada -> Relatórios Webview/PDF/Excel/Dashboard
-```
+3. Restaurar o pipeline facial sem quebrar o manual
+- Revisar a cadeia completa de enrollment/captura:
+  - `src/components/workers/WorkerManagement.tsx`
+  - `server/routes/workers.js`
+  - `server/lib/controlid.js`
+  - `electron/sync.js`
+  - `electron/agent.js`
+- Garantir que o enrollment use sempre o `worker.code` correto e dispositivos resolvidos pelos projetos autorizados.
+- Endurecer a resolução do trabalhador no agente/local:
+  - lookup determinístico por `code`
+  - logs defensivos quando o evento vier sem `user_id` ou sem match local
+  - não degradar eventos válidos para “desconhecido” silenciosamente
+- Preservar manual intacto enquanto a correção facial é feita.
 
-## Implementação proposta
+4. Unificar relatórios e PDFs no mesmo parsing de data
+- Atualizar componentes/utilitários que hoje usam `new Date(...)` de forma direta:
+  - `src/components/reports/WorkerTimeReport.tsx`
+  - `src/components/reports/CompanyReport.tsx`
+  - `src/components/reports/PresenceReport.tsx`
+  - `src/components/reports/OvernightControl.tsx`
+  - `src/utils/exportReportPdf.ts`
+  - `src/utils/exportWorkerReportPdf.ts`
+- Criar um utilitário compartilhado para:
+  - parse seguro de timestamp
+  - formatação consistente
+  - cálculo de entrada/saída/permanência
 
-### Etapa 1 — Unificar a regra canônica de logs de acesso
-Criar uma única estratégia para determinar:
-- quais logs pertencem ao projeto
-- como identificar logs manuais
-- como interpretar timestamps
-- como ordenar entrada/saída
+5. Proteger contra novas regressões
+- Adicionar validações defensivas para:
+  - logs faciais sem worker resolvido
+  - duplicidade cloud/local
+  - filtros de período inconsistentes
+  - manual/facial fora do projeto
+- Não alterar o fluxo manual além do necessário.
+- Manter compatibilidade online/offline com a mesma semântica.
 
-**Arquivos a revisar/ajustar**
+Arquivos principais a alterar
+- `electron/agent.js`
 - `electron/database.js`
-- `src/hooks/useDataProvider.ts`
-- `src/hooks/useControlID.ts`
-- `src/hooks/useSupabase.ts`
-
-**Ações**
-- Extrair a lógica de filtro por projeto para incluir:
-  - dispositivos faciais do projeto
-  - pontos manuais do projeto
-- Garantir que `getAccessLogs`, `getWorkersOnBoard` e as consultas cloud usem a mesma regra.
-- Padronizar o match de manual point para não depender só de string literal frágil `Manual - <nome>`.
-
-### Etapa 2 — Corrigir a origem do drift de horário
-**Arquivos a revisar/ajustar**
-- `electron/agent.js`
-- `supabase/functions/api/index.ts`
-- `supabase/functions/controlid-webhook/index.ts`
-
-**Ações**
-- Revisar a normalização de tempo dos leitores faciais para existir em **um único lugar conceitual**.
-- Remover dupla compensação de fuso.
-- Definir contrato claro:
-  - banco salva timestamp canônico em UTC
-  - UI apenas formata para exibição local
-  - nenhuma tela/PDF recalcula “correção” manual
-- Aplicar a mesma regra para:
-  - polling local
-  - webhook
-  - ingestão cloud
-
-### Etapa 3 — Corrigir o pipeline do leitor facial
-**Arquivos a revisar/ajustar**
-- `electron/agent.js`
+- `electron/sync.js`
 - `server/lib/controlid.js`
 - `server/routes/workers.js`
-- `electron/sync.js`
-
-**Ações**
-- Validar a compatibilidade entre:
-  - enrollment do trabalhador
-  - regra de acesso enviada ao dispositivo
-  - método de captura dos eventos (`load_objects.fcgi`)
-- Tornar o pipeline resiliente para os cenários:
-  - evento vindo por polling
-  - evento vindo por monitor/webhook
-  - equipamento retornando payload parcial
-- Garantir que o enrollment/re-enrollment use sempre:
-  - `worker.code` correto
-  - regra de acesso correta
-  - foto quando disponível, mas sem bloquear cadastro se a foto falhar
-- Adicionar reconciliação segura para leitores que perderam cadastro local após crash/atualização.
-
-### Etapa 4 — Fazer todos os relatórios e PDFs consumirem a mesma camada já normalizada
-**Arquivos a revisar/ajustar**
-- `src/components/reports/PresenceReport.tsx`
+- `src/hooks/useDataProvider.ts`
+- `src/hooks/useSupabase.ts`
 - `src/components/reports/WorkerTimeReport.tsx`
 - `src/components/reports/CompanyReport.tsx`
+- `src/components/reports/PresenceReport.tsx`
 - `src/components/reports/OvernightControl.tsx`
-- `src/components/reports/ReportsList.tsx`
 - `src/utils/exportReportPdf.ts`
-- `src/utils/exportReports.ts`
-- utilitários de PDF/Excel relacionados
+- `src/utils/exportWorkerReportPdf.ts`
+- `supabase/functions/api/index.ts`
+- `supabase/functions/controlid-webhook/index.ts`
+- `supabase/functions/agent-sync/index.ts`
 
-**Ações**
-- Evitar regras locais divergentes por componente.
-- Fazer todos consumirem logs já normalizados.
-- Padronizar formatação de data/hora para PDF, Excel e tela.
-- Garantir que manual + facial apareçam juntos em todas as saídas.
+Resultado esperado
+- entrada/saída manual continuam funcionando
+- entrada/saída facial voltam a funcionar
+- WebView e PDF passam a mostrar manual + facial juntos
+- horários deixam de aparecer com -3h
+- desktop online/offline e nuvem passam a refletir a mesma regra de dados
 
-### Etapa 5 — Proteger contra regressão
-**Ações**
-- Adicionar validações defensivas para:
-  - duplicação de log baixado da nuvem
-  - log facial sem `worker_id`
-  - log manual sem projeto resolvido
-  - saída sem entrada anterior
-- Preservar o funcionamento offline:
-  - SQLite continua sendo fonte offline
-  - nuvem e SQLite precisam convergir pelo mesmo modelo canônico
-
-## O que vou corrigir primeiro na implementação
-Ordem segura para não “escangalhar” mais nada:
-
-1. **Normalização de timestamp**
-2. **Filtro canônico manual + facial**
-3. **Pipeline de captura facial**
-4. **Consumo unificado nos relatórios/PDFs**
-5. **Proteções anti-regressão**
-
-## Resultado esperado após a correção
-- Manual e facial aparecem juntos em:
-  - relatórios webview
-  - PDFs
-  - Excel
-  - dashboard/feed
-- Horário exibido corretamente, sem `-3h`
-- Entrada e saída do leitor facial voltam a registrar
-- SQLite e nuvem passam a refletir a mesma semântica de dados
-- O sistema continua funcionando online e offline
-
-## Detalhes técnicos importantes
-- O ajuste anterior em `electron/database.js` foi **insuficiente**, não necessariamente “errado”.
-- O bug de horário não está só no relatório: ele nasce na **ingestão**.
-- O problema do facial provavelmente não é só cadastro de trabalhador; pode ser incompatibilidade entre **modo do hardware** e o **método de captura** usado pelo agente.
-- Por isso a correção precisa ser sistêmica, não pontual.
-
-<lov-actions>
-<lov-suggestion message="Teste ponta a ponta entrada e saída nos leitores faciais e no dispositivo manual, depois compare webview e PDF para confirmar que tudo ficou igual">Verifique tudo ponta a ponta</lov-suggestion>
-<lov-suggestion message="Implemente a normalização canônica de timestamps e unifique a consulta de logs de acesso para manual e facial em todas as áreas do sistema">Unificar normalização</lov-suggestion>
-<lov-suggestion message="Corrija o pipeline de captura dos leitores faciais para suportar polling e monitor/webhook sem perder eventos">Corrigir leitores faciais</lov-suggestion>
-<lov-suggestion message="Padronize todos os relatórios e exportações PDF/Excel para consumirem a mesma camada de dados de acesso normalizada">Padronizar relatórios e PDFs</lov-suggestion>
-<lov-suggestion message="Adicione validações e proteções contra regressão para evitar drift de horário, duplicidade de logs e divergência entre SQLite e nuvem">Adicionar proteções</lov-suggestion>
-</lov-actions>
+Estratégia de implementação
+1. corrigir semântica de timestamp
+2. unificar consulta manual + facial
+3. reforçar pipeline facial/enrollment
+4. alinhar relatórios e PDFs
+5. validar ponta a ponta sem mexer em mais nada fora dessa trilha
