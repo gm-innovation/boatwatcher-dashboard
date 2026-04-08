@@ -29,8 +29,11 @@ export interface PendingAccessLog {
   created_at: string;
 }
 
-const WORKERS_CACHE_KEY = 'ac_workers_cache';
 const PENDING_LOGS_KEY = 'ac_pending_logs';
+
+function workersCacheKey(projectId?: string | null): string {
+  return projectId ? `ac_workers_cache_${projectId}` : 'ac_workers_cache';
+}
 
 export function useOfflineAccessControl(projectId?: string | null) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -52,11 +55,13 @@ export function useOfflineAccessControl(projectId?: string | null) {
     };
   }, []);
 
-  // Load workers from cache or fetch
+  // Load workers from cache or fetch — NO filtering by project or status
   const loadWorkers = useCallback(async () => {
     setLoadingWorkers(true);
+    const cacheKey = workersCacheKey(projectId);
     try {
       if (navigator.onLine) {
+        // Load ALL workers (no status filter) so blocked/pending ones are visible
         const query = supabase
           .from('workers')
           .select('id, name, code, document_number, photo_url, company_id, status, job_function_id, role, rejection_reason, allowed_project_ids')
@@ -71,7 +76,7 @@ export function useOfflineAccessControl(projectId?: string | null) {
           const companiesMap = new Map((companies || []).map(c => [c.id, c.name]));
           const jobFunctionsMap = new Map((jobFunctions || []).map(j => [j.id, j.name]));
 
-          let allWorkers: CachedWorker[] = workersData.map(w => ({
+          const allWorkers: CachedWorker[] = workersData.map(w => ({
             id: w.id,
             name: w.name,
             code: w.code,
@@ -86,23 +91,17 @@ export function useOfflineAccessControl(projectId?: string | null) {
             allowed_project_ids: w.allowed_project_ids,
           }));
 
-          // Filter by project if projectId is provided
-          if (projectId) {
-            allWorkers = allWorkers.filter(w =>
-              w.allowed_project_ids?.includes(projectId)
-            );
-          }
-
-          await set(WORKERS_CACHE_KEY, allWorkers);
+          // Store ALL workers in cache — filtering happens at display/authorization time
+          await set(cacheKey, allWorkers);
           setWorkers(allWorkers);
         }
       } else {
-        const cached = await get<CachedWorker[]>(WORKERS_CACHE_KEY);
+        const cached = await get<CachedWorker[]>(cacheKey);
         if (cached) setWorkers(cached);
       }
     } catch (err) {
       console.error('Error loading workers:', err);
-      const cached = await get<CachedWorker[]>(WORKERS_CACHE_KEY);
+      const cached = await get<CachedWorker[]>(cacheKey);
       if (cached) setWorkers(cached);
     } finally {
       setLoadingWorkers(false);

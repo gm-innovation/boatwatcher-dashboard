@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils';
 interface WorkerCardProps {
   worker: CachedWorker;
   borderStatus?: 'granted' | 'blocked' | 'pending' | null;
+  /** Explicit reason to display when blocked/pending */
+  blockReason?: string;
 }
 
 const borderColorMap: Record<string, string> = {
@@ -21,9 +23,11 @@ const statusLabelMap: Record<string, { label: string; className: string }> = {
   pending: { label: 'Pendente', className: 'bg-yellow-500 text-white' },
 };
 
-export function WorkerCard({ worker, borderStatus }: WorkerCardProps) {
+export function WorkerCard({ worker, borderStatus, blockReason }: WorkerCardProps) {
   const borderClass = borderStatus ? borderColorMap[borderStatus] : 'border-border';
   const statusInfo = borderStatus ? statusLabelMap[borderStatus] : null;
+
+  const displayReason = blockReason || worker.rejection_reason;
 
   return (
     <Card className={cn('border-2', borderClass)}>
@@ -42,9 +46,9 @@ export function WorkerCard({ worker, borderStatus }: WorkerCardProps) {
                 <Badge className={cn('text-xs', statusInfo.className)}>{statusInfo.label}</Badge>
               </div>
             )}
-            {borderStatus === 'blocked' && worker.rejection_reason && (
+            {(borderStatus === 'blocked' || borderStatus === 'pending') && displayReason && (
               <p className="mt-2 text-sm text-destructive">
-                Motivo: {worker.rejection_reason}
+                Motivo: {displayReason}
               </p>
             )}
           </div>

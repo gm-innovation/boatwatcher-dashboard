@@ -30,14 +30,41 @@ function playBeep() {
   } catch { /* ignore audio errors */ }
 }
 
-function getWorkerBorderStatus(worker: CachedWorker): 'granted' | 'blocked' | 'pending' {
-  if (worker.status === 'blocked' || worker.status === 'inactive') return 'blocked';
-  if (worker.status === 'active') return 'granted';
-  return 'pending';
-}
-
-function isWorkerAuthorized(worker: CachedWorker): boolean {
-  return worker.status === 'active';
+/**
+ * Derives the access authorization status for a worker in the context of a project.
+ * Rules:
+ *   - status !== 'active' => blocked (by admin/review)
+ *   - status === 'active' but not in project's allowed_project_ids => blocked (not authorized for this project)
+ *   - status === 'active' and authorized => granted
+ */
+function deriveAccessStatus(worker: CachedWorker, projectId?: string | null): {
+  borderStatus: 'granted' | 'blocked' | 'pending';
+  authorized: boolean;
+  reason?: string;
+} {
+  if (worker.status === 'blocked' || worker.status === 'inactive') {
+    return {
+      borderStatus: 'blocked',
+      authorized: false,
+      reason: worker.rejection_reason || 'Trabalhador bloqueado',
+    };
+  }
+  if (worker.status === 'pending_review') {
+    return {
+      borderStatus: 'pending',
+      authorized: false,
+      reason: 'Trabalhador em análise',
+    };
+  }
+  // status === 'active' — check project authorization
+  if (projectId && (!worker.allowed_project_ids || !worker.allowed_project_ids.includes(projectId))) {
+    return {
+      borderStatus: 'blocked',
+      authorized: false,
+      reason: 'Não autorizado para este projeto',
+    };
+  }
+  return { borderStatus: 'granted', authorized: true };
 }
 
 interface ActiveTerminal {
@@ -65,6 +92,7 @@ export default function AccessControl() {
         .from('manual_access_points')
         .select('*')
         .eq('is_active', true)
+        .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
       if (error) throw error;
@@ -75,7 +103,6 @@ export default function AccessControl() {
       let project_name: string | undefined;
       let effectiveClientId = data.client_id;
 
-      // Fetch project info and use as fallback for client_id
       if (data.project_id) {
         const { data: project } = await supabase
           .from('projects')
@@ -159,7 +186,7 @@ export default function AccessControl() {
   const handleConfirm = async (direction: 'entry' | 'exit') => {
     if (!selectedWorker || !terminal) return;
 
-    const authorized = isWorkerAuthorized(selectedWorker);
+    const { authorized } = deriveAccessStatus(selectedWorker, terminal.project_id);
 
     const log: PendingAccessLog = {
       id: uuidv4(),
@@ -182,7 +209,7 @@ export default function AccessControl() {
         : '⛔ Acesso negado',
       description: authorized
         ? `${selectedWorker.name} - ${terminal.name}`
-        : `${selectedWorker.name} — ${selectedWorker.rejection_reason || 'Trabalhador não autorizado'}`,
+        : `${selectedWorker.name} — ${deriveAccessStatus(selectedWorker, terminal.project_id).reason}`,
       variant: authorized ? 'default' : 'destructive',
     });
 
@@ -191,6 +218,11 @@ export default function AccessControl() {
       handleNewAccess();
     }, 1200);
   };
+
+  // Derive status for selected worker
+  const selectedStatus = selectedWorker
+    ? deriveAccessStatus(selectedWorker, terminal?.project_id)
+    : null;
 
   if (loadingTerminal) {
     return (
@@ -240,14 +272,15 @@ export default function AccessControl() {
 
         {/* Content */}
         <div className="flex-1 p-4 space-y-4">
-          {selectedWorker ? (
+          {selectedWorker && selectedStatus ? (
             <div className="space-y-4">
               <WorkerCard
                 worker={selectedWorker}
-                borderStatus={getWorkerBorderStatus(selectedWorker)}
+                borderStatus={selectedStatus.borderStatus}
+                blockReason={selectedStatus.reason}
               />
 
-              {isWorkerAuthorized(selectedWorker) && (
+              {selectedStatus.authorized && (
                 <AccessConfirmation onConfirm={handleConfirm} />
               )}
 

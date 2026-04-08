@@ -79,8 +79,7 @@ export default function AccessControlConfig() {
     try {
       let query = supabase
         .from('workers')
-        .select('id, name, code, document_number, photo_url, company_id, status, job_function_id')
-        .eq('status', 'active')
+        .select('id, name, code, document_number, photo_url, company_id, status, job_function_id, role, rejection_reason, allowed_project_ids')
         .limit(5000);
 
       if (syncClientId) {
