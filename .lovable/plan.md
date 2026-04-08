@@ -1,44 +1,27 @@
 
 
-## Correções na Lista de Trabalhadores a Bordo
+## Correção: Barra de rolagem + Layout adaptativo
 
-### 1. Filtro de 24h — remover trabalhadores com entrada antiga
+### Problema 1: Barra de rolagem horizontal persistente
 
-**Arquivo:** `src/hooks/useSupabase.ts` (linhas 295-301)
+A causa raiz está no componente `Table` base (`src/components/ui/table.tsx` linha 9): o wrapper interno usa `overflow-auto`, que sempre gera scrollbar quando o conteudo excede. Mesmo com `overflow-hidden` no container externo, o wrapper interno do `<Table>` sobrepoe.
 
-Adicionar cutoff de 24h ao montar o `workersOnBoard`:
+**Solução**: No `WorkersOnBoardTable`, envolver a tabela em um div com `overflow-hidden` e aplicar classe para sobrescrever o wrapper interno do Table (`[&>div]:overflow-hidden`).
 
-```typescript
-const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
-const cutoffTime = new Date(Date.now() - TWENTY_FOUR_HOURS_MS).toISOString();
+### Problema 2: Muito espaço vazio em telas grandes
 
-const workersOnBoard = new Map<string, any>();
-for (const [key, state] of workerState) {
-  if (state.isOnBoard && state.entry_time > cutoffTime) {
-    workersOnBoard.set(key, state);
-  }
-}
-```
+O grid atual é fixo `xl:grid-cols-5` (3+2). Em telas de TV/monitor grande, sobra muito espaço abaixo e ao redor.
 
-Trabalhadores com mais de 24h sem saída serão removidos silenciosamente da lista (mas continuarão nos logs para o relatório de pernoite).
+**Solução no `Dashboard.tsx`**:
+- Mudar o grid de `xl:grid-cols-5` para `grid-cols-1 lg:grid-cols-3` (tabela 2/3, empresas 1/3)
+- Em telas `2xl` (>=1536px), usar `2xl:grid-cols-5` para manter proporção similar
 
-### 2. Tabela sem scroll — otimizar uso do espaço
-
-**Arquivo:** `src/components/dashboard/WorkersOnBoardTable.tsx`
-
-Manter `whitespace-nowrap` em todas as colunas (sem quebra de linha). Ajustar para ocupar melhor o espaço:
-
-- Usar `table-fixed` com `w-full` na `<Table>`
-- Reduzir padding de `px-3` para `px-2` em todas as células
-- Reduzir font de `text-sm` para `text-xs` nas células de dados
-- Coluna Nº: `w-8` (estreita)
-- Coluna Entrada: `w-20` (compacta, formato `dd/MM HH:mm`)
-- Coluna Local: `w-16`
-- Colunas Nome, Função, Empresa: sem largura fixa, distribuem o espaço restante com `truncate` + `max-w-0` para cortar com `...` apenas se realmente não couber
-- Adicionar `title={text}` nas células truncáveis para mostrar o texto completo no hover
-- Remover `overflow-x-auto`, usar `overflow-hidden`
+**Solução no `WorkersOnBoardTable.tsx`**:
+- Adicionar `[&>div]:overflow-hidden` no container da Table para eliminar o scrollbar do wrapper interno
+- Ajustar larguras das colunas com percentuais que funcionam melhor: Nº `w-[5%]`, Nome `w-[25%]`, Local `w-[10%]`, Função `w-[20%]`, Empresa `w-[25%]`, Entrada `w-[15%]`
+- Usar `text-[11px] xl:text-xs` para escalar fonte com a tela
 
 ### Arquivos alterados
-1. `src/hooks/useSupabase.ts` — cutoff 24h
-2. `src/components/dashboard/WorkersOnBoardTable.tsx` — layout compacto sem scroll
+1. `src/components/dashboard/WorkersOnBoardTable.tsx` — eliminar scrollbar, larguras proporcionais
+2. `src/components/dashboard/Dashboard.tsx` — grid mais adaptativo
 
