@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { AccessLog } from '@/types/supabase';
 import { fitImageDimensions } from './exportWorkerReportPdf';
-import { formatBrtTime, formatBrtDateTime, formatBrtDateTimeFull } from '@/utils/brt';
+import { formatBrtTime, formatBrtShort, formatBrtDateTime, formatBrtDateTimeFull } from '@/utils/brt';
 
 interface WorkerData {
   name: string;
