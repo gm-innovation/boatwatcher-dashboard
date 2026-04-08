@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Camera, X, Loader2, Users } from 'lucide-react';
+import { AlertCircle, Camera, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+
 import { useToast } from '@/hooks/use-toast';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/integrations/supabase/client';
@@ -150,7 +150,7 @@ export default function AccessControl() {
   });
 
   const {
-    isOnline, workers, pendingLogs, isSyncing, loadingWorkers, workerCount,
+    isOnline, workers, pendingLogs, isSyncing, loadingWorkers,
     saveAccessLog, syncPendingLogs,
   } = useOfflineAccessControl(terminal?.project_id);
 
@@ -185,11 +185,11 @@ export default function AccessControl() {
     } else {
       toast({
         title: 'Trabalhador não encontrado',
-        description: `Código ${workerCode} não existe na base local (${workerCount} registros carregados)`,
+        description: `Código ${workerCode} não localizado`,
         variant: 'destructive',
       });
     }
-  }, [workerCode, workers, toast, loadingWorkers, workerCount]);
+  }, [workerCode, workers, toast, loadingWorkers]);
 
   const handleQRScan = useCallback((code: string) => {
     setShowScanner(false);
@@ -206,11 +206,11 @@ export default function AccessControl() {
     } else {
       toast({
         title: 'Trabalhador não encontrado',
-        description: `Código ${code} não existe na base local (${workerCount} registros)`,
+        description: `Código ${code} não localizado`,
         variant: 'destructive',
       });
     }
-  }, [workers, toast, loadingWorkers, workerCount]);
+  }, [workers, toast, loadingWorkers]);
 
   const handleConfirm = async (direction: 'entry' | 'exit') => {
     if (!selectedWorker || !terminal) return;
@@ -296,20 +296,12 @@ export default function AccessControl() {
             {terminal.name}
             {terminal.location_description && ` · ${terminal.location_description}`}
           </p>
-          {/* Worker count indicator */}
-          <div className="flex items-center justify-center gap-1.5 pt-1">
-            {loadingWorkers ? (
-              <Badge variant="outline" className="gap-1 text-xs">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Sincronizando...
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="gap-1 text-xs">
-                <Users className="h-3 w-3" />
-                {workerCount} trabalhadores
-              </Badge>
-            )}
-          </div>
+          {loadingWorkers && (
+            <div className="flex items-center justify-center gap-1.5 pt-1">
+              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Sincronizando...</span>
+            </div>
+          )}
         </div>
 
         {/* Content */}

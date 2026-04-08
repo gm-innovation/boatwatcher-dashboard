@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { get, set } from 'idb-keyval';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllWorkers } from '@/lib/fetchAllWorkers';
 
 export interface CachedWorker {
   id: string;
@@ -43,7 +44,6 @@ export function useOfflineAccessControl(projectId?: string | null) {
   const [loadingWorkers, setLoadingWorkers] = useState(true);
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Online/offline listener
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -55,60 +55,30 @@ export function useOfflineAccessControl(projectId?: string | null) {
     };
   }, []);
 
-  // Load workers: try remote first, fallback to cache. Never overwrite cache with empty.
   const loadWorkers = useCallback(async () => {
     setLoadingWorkers(true);
     const cacheKey = workersCacheKey(projectId);
     try {
       if (navigator.onLine) {
-        const query = supabase
-          .from('workers')
-          .select('id, name, code, document_number, photo_url, company_id, status, job_function_id, role, rejection_reason, allowed_project_ids')
-          .limit(5000);
+        const allWorkers = await fetchAllWorkers();
 
-        const { data: workersData } = await query;
-
-        if (workersData && workersData.length > 0) {
-          const { data: companies } = await supabase.from('companies').select('id, name');
-          const { data: jobFunctions } = await supabase.from('job_functions').select('id, name');
-
-          const companiesMap = new Map((companies || []).map(c => [c.id, c.name]));
-          const jobFunctionsMap = new Map((jobFunctions || []).map(j => [j.id, j.name]));
-
-          const allWorkers: CachedWorker[] = workersData.map(w => ({
-            id: w.id,
-            name: w.name,
-            code: w.code,
-            document_number: w.document_number,
-            photo_url: w.photo_url,
-            company_id: w.company_id,
-            company_name: w.company_id ? companiesMap.get(w.company_id) || undefined : undefined,
-            job_function_name: w.job_function_id ? jobFunctionsMap.get(w.job_function_id) || undefined : undefined,
-            status: w.status,
-            role: w.role,
-            rejection_reason: w.rejection_reason,
-            allowed_project_ids: w.allowed_project_ids,
-          }));
-
+        if (allWorkers.length > 0) {
           await set(cacheKey, allWorkers);
           setWorkers(allWorkers);
         } else {
-          // Remote returned empty — fallback to cache instead of clearing
+          // Remote returned empty — fallback to cache
           const cached = await get<CachedWorker[]>(cacheKey);
           if (cached && cached.length > 0) {
             setWorkers(cached);
             console.warn('[AC] Remote returned 0 workers, using cache with', cached.length, 'records');
           }
-          // If cache is also empty, workers stays []
         }
       } else {
-        // Offline — use cache
         const cached = await get<CachedWorker[]>(cacheKey);
         if (cached) setWorkers(cached);
       }
     } catch (err) {
       console.error('Error loading workers:', err);
-      // Error — fallback to cache
       const cached = await get<CachedWorker[]>(cacheKey);
       if (cached) setWorkers(cached);
     } finally {
@@ -120,14 +90,12 @@ export function useOfflineAccessControl(projectId?: string | null) {
     loadWorkers();
   }, [loadWorkers]);
 
-  // Load pending logs from IndexedDB
   useEffect(() => {
     get<PendingAccessLog[]>(PENDING_LOGS_KEY).then(logs => {
       if (logs) setPendingLogs(logs);
     });
   }, []);
 
-  // Save an access log
   const saveAccessLog = useCallback(async (log: PendingAccessLog) => {
     if (navigator.onLine) {
       try {
@@ -154,7 +122,6 @@ export function useOfflineAccessControl(projectId?: string | null) {
     return false;
   }, []);
 
-  // Sync pending logs
   const syncPendingLogs = useCallback(async () => {
     const current = (await get<PendingAccessLog[]>(PENDING_LOGS_KEY)) || [];
     if (current.length === 0) return;
@@ -184,7 +151,6 @@ export function useOfflineAccessControl(projectId?: string | null) {
     setIsSyncing(false);
   }, []);
 
-  // Auto-sync when coming online
   useEffect(() => {
     if (isOnline && pendingLogs.length > 0) {
       if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);

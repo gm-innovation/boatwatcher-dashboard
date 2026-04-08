@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, set } from 'idb-keyval';
 import { workersCacheKey, type CachedWorker } from '@/hooks/useOfflineAccessControl';
+import { fetchAllWorkers } from '@/lib/fetchAllWorkers';
 
 interface AccessPoint {
   id: string;
@@ -80,41 +81,8 @@ export default function AccessControlConfig() {
   const handleSyncWorkers = useCallback(async () => {
     setSyncingWorkers(true);
     try {
-      let query = supabase
-        .from('workers')
-        .select('id, name, code, document_number, photo_url, company_id, status, job_function_id, role, rejection_reason, allowed_project_ids')
-        .limit(5000);
-
-      // Bug 4 fix: treat empty or "all" as no filter
-      if (syncClientId && syncClientId !== 'all') {
-        query = query.eq('company_id', syncClientId);
-      }
-
-      const { data: workersData, error } = await query;
-      if (error) throw error;
-
-      const { data: companiesData } = await supabase.from('companies').select('id, name');
-      const { data: jobFunctions } = await supabase.from('job_functions').select('id, name');
-
-      const companiesMap = new Map((companiesData || []).map(c => [c.id, c.name]));
-      const jobFunctionsMap = new Map((jobFunctions || []).map(j => [j.id, j.name]));
-
-      const cached: CachedWorker[] = (workersData || []).map(w => ({
-        id: w.id,
-        name: w.name,
-        code: w.code,
-        document_number: w.document_number,
-        photo_url: w.photo_url,
-        company_id: w.company_id,
-        company_name: w.company_id ? companiesMap.get(w.company_id) || undefined : undefined,
-        job_function_name: w.job_function_id ? jobFunctionsMap.get(w.job_function_id) || undefined : undefined,
-        status: w.status,
-        role: w.role,
-        rejection_reason: w.rejection_reason,
-        allowed_project_ids: w.allowed_project_ids,
-      }));
-
-      // Bug 2 fix: use same cache key as main page
+      const companyFilter = syncClientId && syncClientId !== 'all' ? syncClientId : null;
+      const cached = await fetchAllWorkers(companyFilter);
       const cacheKey = workersCacheKey(terminalProjectId);
 
       if (cached.length > 0) {
@@ -122,7 +90,6 @@ export default function AccessControlConfig() {
         setCachedCount(cached.length);
         toast({ title: `${cached.length} trabalhadores sincronizados` });
       } else {
-        // Don't overwrite cache with empty
         toast({ title: 'Nenhum trabalhador encontrado', description: 'O cache existente foi mantido.', variant: 'destructive' });
       }
     } catch (err: any) {
