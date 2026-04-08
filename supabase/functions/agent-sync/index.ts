@@ -363,6 +363,9 @@ serve(async (req) => {
             continue;
           }
 
+          // Preserve hardware_user_id for cloud-side worker resolution, but don't insert it
+          const hardwareUserId = l.hardware_user_id || null
+
           accepted.push({
             ...(l.id ? { id: l.id } : {}),
             worker_id: workerId,
@@ -376,6 +379,7 @@ serve(async (req) => {
             worker_document: l.worker_document || null,
             device_name: l.device_name || null,
             photo_capture_url: l.photo_capture_url || null,
+            _hardware_user_id: hardwareUserId, // internal, stripped before insert
           })
         } catch (e) {
           rejected.push({ index: i, reason: (e as Error).message })
