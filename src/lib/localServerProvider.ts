@@ -277,6 +277,11 @@ export const localSync = {
   getWorkerDiagnostics: () => apiFetch('/api/sync/worker-diagnostics'),
   sanitizeWorkers: () => apiFetch('/api/sync/sanitize-workers', { method: 'POST' }),
   alignCursors: () => apiFetch<{ success: boolean; results: any[]; staleLogsCleared: number }>('/api/sync/align-cursors', { method: 'POST' }),
+  getReadOnlyMode: () => apiFetch<{ enabled: boolean }>('/api/sync/read-only-status'),
+  setReadOnlyMode: (enabled: boolean) => apiFetch<{ success: boolean; enabled: boolean }>('/api/sync/read-only-mode', {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
+  }),
 };
 
 export const localAgent = {

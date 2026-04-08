@@ -7,11 +7,16 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
-import { Settings, Save, RefreshCw, ImagePlus, Trash2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Settings, Save, RefreshCw, ImagePlus, Trash2, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
+import { useRuntimeProfile } from '@/hooks/useRuntimeProfile';
+import { localSync } from '@/lib/localServerProvider';
 
 export const GlobalSettings = () => {
+  const runtimeProfile = useRuntimeProfile();
+  const isLocalRuntime = runtimeProfile.isDesktop && runtimeProfile.localServerAvailable;
   const { data: settings = [], isLoading, refetch } = useSystemSettings();
   const updateSetting = useUpdateSystemSetting();
   const { data: logoSetting } = useSystemSetting('system_logo');
