@@ -1,48 +1,46 @@
 
+Problema real
 
-## Controle de Acesso Offline-First: Correção dos bugs reais
+- Sim, agora dá para afirmar o problema: o módulo já tem banco local (IndexedDB), mas ele está sendo abastecido com apenas 1000 trabalhadores.
+- Em `src/hooks/useOfflineAccessControl.ts` e `src/pages/access-control/AccessControlConfig.tsx`, a busca usa `.limit(5000)`. Isso não vence o limite padrão de 1000 registros por resposta da API.
+- O próprio app já tem o padrão correto em `src/hooks/useDataProvider.ts`: paginação com `.range()` em loop. O acesso manual não está usando esse mesmo padrão.
+- Como a sincronização atual salva só esse primeiro bloco parcial no cache local, o modo offline também fica incompleto.
+- O badge de contagem no header do dispositivo não ajuda o operador e deve sair.
 
-### Diagnóstico dos bugs atuais
+Plano
 
-O sistema já usa IndexedDB como banco de dados local (via `idb-keyval`). O problema não é a ausência de armazenamento local, mas sim 4 bugs concretos que impedem o funcionamento:
+1. Corrigir a sincronização completa dos trabalhadores
+- Substituir a busca única por paginação em lotes de 1000 com `.range(from, to)`.
+- Aplicar ordenação determinística por `code` para o conjunto local ficar estável.
+- Carregar todos os campos necessários ao manual (`status`, `rejection_reason`, `allowed_project_ids`, etc.).
 
-**Bug 1 — Configuração do terminal não é cacheada.**  
-`AccessControl.tsx` carrega o terminal via `useQuery` do banco remoto. Offline = sem terminal = tela "Nenhum terminal configurado" = não funciona.
+2. Unificar a lógica de carga e cache
+- Centralizar a rotina de “buscar todos os trabalhadores do manual” para reutilizar em:
+  - `src/hooks/useOfflineAccessControl.ts`
+  - `src/pages/access-control/AccessControlConfig.tsx`
+- Salvar no cache/local DB apenas depois de concluir a paginação inteira, evitando cache parcial.
 
-**Bug 2 — Chave de cache inconsistente.**  
-A tela principal usa `ac_workers_cache_{projectId}`. A tela de configuração usa `ac_workers_cache` (sem projectId). Sincronização manual da config nunca popula o cache que a tela principal lê.
+3. Preservar o comportamento offline-first
+- Continuar lendo do cache local quando estiver offline.
+- Se a sincronização online falhar ou voltar vazia, manter o último dataset local válido.
+- Garantir que a tela de configuração e a tela operacional usem exatamente o mesmo escopo de cache.
 
-**Bug 3 — Resultado vazio não usa fallback.**  
-Se a query retornar 0 resultados (RLS, timeout, etc.), o hook não faz fallback ao cache. Workers fica como `[]` e qualquer código vira "não encontrado".
+4. Limpar a interface do dispositivo manual
+- Remover o badge de “X trabalhadores” do header em `src/pages/AccessControl.tsx`.
+- Simplificar o toast de “Trabalhador não encontrado”, sem mostrar contagem de registros carregados.
 
-**Bug 4 — Filtro "Todos os clientes" quebrado.**  
-O select da config tem `value="all"`, que faz `.eq('company_id', 'all')` e retorna zero resultados, sobrescrevendo o cache com array vazio.
+Arquivos a alterar
+- `src/hooks/useOfflineAccessControl.ts`
+- `src/pages/access-control/AccessControlConfig.tsx`
+- `src/pages/AccessControl.tsx`
+- opcionalmente um helper compartilhado para a paginação dos trabalhadores
 
-### Plano de correção
+Validação esperada
+- O banco local passa a receber todos os trabalhadores, não só os primeiros 1000.
+- Códigos que hoje ficam fora desse primeiro bloco passam a ser encontrados.
+- O manual continua funcionando offline com a última sincronização válida.
+- O badge “1000 trabalhadores” desaparece da tela.
 
-#### 1. Cachear o terminal ativo em IndexedDB
-- Em `AccessControl.tsx`, após carregar o terminal do Supabase, salvar em IndexedDB (`ac_active_terminal`).
-- Na `queryFn`, se offline, ler do cache local.
-- Isso permite que o app funcione 100% offline após a primeira sincronização.
-
-#### 2. Unificar a chave de cache
-- Em `AccessControlConfig.tsx`, usar a mesma função `workersCacheKey(projectId)` do hook principal.
-- Derivar o `projectId` do terminal ativo (mesmo terminal que a tela principal usa).
-- Incluir `rejection_reason` e `allowed_project_ids` nos objetos cacheados pela config.
-
-#### 3. Corrigir fallback para resultado vazio
-- Em `useOfflineAccessControl.ts`, se a query retornar `null` ou array vazio, fazer fallback ao cache existente em vez de manter `workers = []`.
-- Sempre atualizar o cache quando houver dados reais, mas nunca sobrescrever com vazio.
-
-#### 4. Corrigir filtro "all"
-- Em `AccessControlConfig.tsx`, tratar `syncClientId === 'all'` como sem filtro (não aplicar `.eq`).
-
-#### 5. Adicionar loading gate na tela principal
-- Desabilitar o teclado numérico e botão de verificação enquanto `loadingWorkers === true`.
-- Exibir contagem de trabalhadores carregados no header do terminal para feedback visual.
-
-### Arquivos a alterar
-1. `src/hooks/useOfflineAccessControl.ts` — fallback de cache vazio
-2. `src/pages/AccessControl.tsx` — cache do terminal + loading gate + contagem
-3. `src/pages/access-control/AccessControlConfig.tsx` — chave de cache unificada + fix "all" + campos completos
-
+Detalhes técnicos
+- A raiz do bug não é falta de banco local; é truncamento antes de persistir no banco local.
+- `limit(5000)` não resolve quando a API corta a resposta em 1000 linhas; a correção certa é paginação com `range()`.
