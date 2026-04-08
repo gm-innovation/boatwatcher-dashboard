@@ -507,14 +507,16 @@ class SyncEngine {
       const response = await this.callEdgeFunction(`agent-sync/download-access-logs?since=${encodeURIComponent(since)}`, 'GET');
       if (response.access_logs && Array.isArray(response.access_logs)) {
         let count = 0;
-        let maxCreatedAt = since;
+        let maxUpdatedAt = since;
         for (const log of response.access_logs) {
           try {
             this.db.upsertAccessLogFromCloud?.(log);
             count++;
-            // Track the latest created_at to enable incremental pagination
-            if (log.created_at && log.created_at > maxCreatedAt) {
-              maxCreatedAt = log.created_at;
+            // Track the latest updated_at to enable incremental pagination
+            // (uses updated_at instead of created_at so enrichments are re-downloaded)
+            const logCursor = log.updated_at || log.created_at;
+            if (logCursor && logCursor > maxUpdatedAt) {
+              maxUpdatedAt = logCursor;
             }
           } catch (err) {
             console.error(`[sync] access_log upsert failed for ${log.id}:`, err.message);
@@ -525,9 +527,8 @@ class SyncEngine {
           console.log(`[sync] Downloaded ${count} access logs from cloud`);
         }
         this._lastDownloadLogsError = null;
-        // Use the last record's created_at instead of now() to support pagination
-        // for datasets larger than the 500-row limit per request
-        this.db.setSyncMeta('last_download_access_logs', maxCreatedAt);
+        // Use the last record's updated_at for cursor-based pagination
+        this.db.setSyncMeta('last_download_access_logs', maxUpdatedAt);
       }
     } catch (err) {
       this._lastDownloadLogsError = `${new Date().toISOString()}: ${err.message}`;

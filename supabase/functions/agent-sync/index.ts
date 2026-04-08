@@ -1239,11 +1239,13 @@ serve(async (req) => {
       }
 
       // Build query with OR: device_id IN (...) OR (device_id IS NULL AND device_name IN (...))
+      // Use updated_at for incremental sync so enrichments (e.g. filling worker_id)
+      // are picked up by the desktop even when created_at hasn't changed.
       let query = supabase
         .from('access_logs')
-        .select('id, worker_id, device_id, timestamp, access_status, direction, reason, score, worker_name, worker_document, device_name, created_at')
-        .gte('created_at', since)
-        .order('created_at', { ascending: true })
+        .select('id, worker_id, device_id, timestamp, access_status, direction, reason, score, worker_name, worker_document, device_name, created_at, updated_at')
+        .gte('updated_at', since)
+        .order('updated_at', { ascending: true })
         .limit(500)
 
       // Build OR filter for devices + manual points
