@@ -59,6 +59,28 @@ router.post('/fast-upload-logs', async (req, res) => {
   }
 });
 
+// Read-only mode status
+router.get('/read-only-status', (req, res) => {
+  try {
+    const enabled = req.db.getSyncMeta?.('read_only_mode') === 'true';
+    res.json({ enabled });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Toggle read-only mode
+router.post('/read-only-mode', (req, res) => {
+  try {
+    const { enabled } = req.body || {};
+    req.db.setSyncMeta?.('read_only_mode', enabled ? 'true' : 'false');
+    console.log(`[read-only] Mode ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    res.json({ success: true, enabled: !!enabled });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Agent control (includes telemetry: capturedEventsCount, ignoredDedupeCount, etc.)
 router.get('/agent/status', (req, res) => {
   try {
@@ -114,6 +136,7 @@ router.get('/diagnostics', (req, res) => {
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'NOT SET';
     const hasToken = !!(req.syncEngine.agentToken);
     const reverseSyncPaused = req.db.getSyncMeta?.('reverse_sync_paused') || 'false';
+    const readOnlyMode = req.db.getSyncMeta?.('read_only_mode') === 'true';
 
     // Recent sync meta
     let syncMeta = {};
@@ -158,6 +181,7 @@ router.get('/diagnostics', (req, res) => {
         uploadLogsCount: req.syncEngine._uploadLogsCount || 0,
         downloadLogsCount: req.syncEngine._downloadLogsCount || 0,
         reverseSyncPaused,
+        readOnlyMode,
       },
       agent: agentStatus,
       local_db: {

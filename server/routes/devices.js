@@ -160,6 +160,12 @@ router.post('/:id/actions', async (req, res) => {
  */
 router.post('/:id/full-resync', async (req, res) => {
   try {
+    // Block in read-only mode
+    const isReadOnly = req.db.getSyncMeta?.('read_only_mode') === 'true';
+    if (isReadOnly) {
+      return res.status(403).json({ error: 'Modo somente-leitura ativo — full resync bloqueado.' });
+    }
+
     const device = req.db.getDeviceById?.(req.params.id);
     if (!device) return res.status(404).json({ error: 'Device not found' });
     if (!device.controlid_ip_address) {
