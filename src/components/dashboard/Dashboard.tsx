@@ -78,11 +78,11 @@ export const Dashboard = ({ projectId }: DashboardProps) => {
         companiesOnBoard={companiesOnBoard.length}
       />
 
-      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-        <div className="xl:col-span-3">
+      <div className="grid grid-cols-1 lg:grid-cols-3 2xl:grid-cols-5 gap-6">
+        <div className="lg:col-span-2 2xl:col-span-3">
           <WorkersOnBoardTable workers={formattedWorkers} />
         </div>
-        <div className="xl:col-span-2">
+        <div className="lg:col-span-1 2xl:col-span-2">
           <CompaniesOnBoardList companies={companiesOnBoard} />
         </div>
       </div>
