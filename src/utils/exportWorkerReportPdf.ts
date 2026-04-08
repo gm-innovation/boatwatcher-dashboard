@@ -274,7 +274,7 @@ export async function exportStandardWorkerPdf(opts: PdfOptions) {
       const wRowH = Math.max(5.5, wMaxLines * wLineH + 2);
 
       if (ri % 2 === 0) {
-        doc.setFillColor(...COLORS.altRow);
+        doc.setFillColor(248, 248, 248);
         doc.rect(MARGIN, cy, availableWidth, wRowH, 'F');
       }
 
