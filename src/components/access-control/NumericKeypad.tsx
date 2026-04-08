@@ -6,9 +6,10 @@ interface NumericKeypadProps {
   onClear: () => void;
   onConfirm: () => void;
   onCamera?: () => void;
+  disabled?: boolean;
 }
 
-export function NumericKeypad({ onDigit, onClear, onConfirm, onCamera }: NumericKeypadProps) {
+export function NumericKeypad({ onDigit, onClear, onConfirm, onCamera, disabled }: NumericKeypadProps) {
   const keys = [
     ['1', '2', '3'],
     ['4', '5', '6'],
