@@ -40,15 +40,26 @@ function parseEventTime(rawTime?: string | number) {
     return new Date().toISOString()
   }
 
+  // BRT offset: ControlID firmware generates epoch/timestamps from BRT wall clock.
+  // Add 3h (10_800_000ms) to convert to true UTC.
+  const BRT_OFFSET_MS = 3 * 3600 * 1000
+
   const numericTime = Number(rawTime)
   if (!Number.isNaN(numericTime)) {
     const timestamp = numericTime < 9999999999 ? numericTime * 1000 : numericTime
-    return new Date(timestamp).toISOString()
+    return new Date(timestamp + BRT_OFFSET_MS).toISOString()
   }
 
   const parsed = new Date(rawTime)
   if (Number.isNaN(parsed.getTime())) {
     return new Date().toISOString()
+  }
+
+  // String without timezone — treat as BRT, add offset
+  const rawStr = String(rawTime)
+  const hasTimezone = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(rawStr.trim())
+  if (!hasTimezone) {
+    return new Date(parsed.getTime() + BRT_OFFSET_MS).toISOString()
   }
 
   return parsed.toISOString()
