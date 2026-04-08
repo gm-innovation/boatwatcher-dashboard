@@ -1,98 +1,160 @@
 
+Objetivo revisado: corrigir sem “forçar cloud” nos relatórios. O comportamento correto será:
+- cloud e SQLite convergem para o mesmo conjunto de logs
+- web e desktop exibem os mesmos horários em BRT
+- manual + facial continuam juntos em tela, PDF e Excel
+- offline continua funcionando com SQLite, mas sem divergência quando voltar online
 
-## Diagnóstico real — causa raiz confirmada com dados
+O que a leitura do código confirmou agora
 
-### Problema 1: Entrada/saída facial não funciona
+1. O problema não é só “desktop lendo SQLite”
+- `fetchAccessLogs()` hoje usa SQLite no desktop quando o servidor local está disponível.
+- Isso por si só não seria problema se a sincronização estivesse realmente bidirecional e canônica.
+- O erro real é que a sincronização de `access_logs` não garante convergência completa.
 
-**Evidência do banco de dados cloud:**
-- Eventos faciais DO dia 08/04 (17:13, 17:16, 17:18, 17:30, 19:32) estão TODOS com `worker_id = NULL` e `worker_name = NULL`
-- O único evento facial que funcionou (11:17) tem `worker_id` e `worker_name` corretos
-- Eventos manuais estão todos com `worker_id` e `worker_name` corretos
+2. A sync de logs está assimétrica e deixa o SQLite desatualizado
+- `electron/sync.js#downloadAccessLogs` baixa logs por checkpoint de `created_at`.
+- `supabase/functions/agent-sync/index.ts#download-access-logs` também filtra por `created_at`.
+- Só que vários logs podem ser enriquecidos/corrigidos depois (ex.: preencher `worker_id`, `worker_name`, `worker_document`) sem mudar `created_at`.
+- Resultado: a nuvem fica certa e o SQLite continua com versão velha/incompleta do mesmo evento.
+- Isso explica por que o desktop pode seguir “vendo menos” ou “vendo errado” mesmo depois de a nuvem já estar correta.
 
-**Causa raiz**: O agente local (`electron/agent.js`) captura o evento do hardware com `user_id = 350` (código inteiro do ControlID). Faz lookup no SQLite local por `code = 350`. Quando funciona, popula `worker_id`, `worker_name`, `worker_document`. Quando FALHA (ex: após reinício/update do app, antes do sync de workers completar), os três campos ficam NULL. O upload para a nuvem NÃO inclui o código original do hardware. Resultado: a nuvem não tem como resolver o trabalhador.
+3. O webview também está errado no horário porque a UI ainda depende do timezone da máquina
+Há vários pontos usando `format(new Date(timestamp), ...)` e `getHours()`/`parseISO()` diretamente:
+- `WorkerTimeReport.tsx`
+- `PresenceReport.tsx`
+- `OvernightControl.tsx`
+- `exportWorkerReportPdf.ts`
+- `exportReports.ts`
 
-**Por que o relatório não mostra os dados faciais**: O código do relatório (WorkerTimeReport, CompanyReport, etc.) faz `resolveKey(log)` → se `worker_id`, `worker_name` e `worker_document` são todos null, retorna string vazia → `if (!key) continue` → evento é ignorado silenciosamente.
+Isso faz a exibição e o agrupamento dependerem do timezone do renderer/browser, não do BRT explicitamente.
 
-### Problema 2: Relatórios com horário -3h
+Implementação proposta
 
-Os timestamps no banco cloud estão corretos em UTC (verificado: evento às 19:32:04 UTC = 16:32:04 BRT, confirmado pelo screenshot do dispositivo). O `format(new Date(...), 'HH:mm')` do date-fns usa timezone local do sistema. Se o sistema está em BRT, exibe corretamente. O horário -3h pode ter sido causado pelos filtros de data antigos que usavam `T00:00:00Z` em vez de `T03:00:00Z` (já corrigido na v1.3.60), ou por alguma inconsistência no ambiente Desktop.
+1. Tornar a sincronização de access logs realmente bidirecional e convergente
+Arquivos:
+- `supabase/migrations/...`
+- `supabase/functions/agent-sync/index.ts`
+- `electron/sync.js`
+- `electron/database.js`
 
-### Problema 3: Token obsoleto
+Ações:
+- Adicionar `updated_at` em `access_logs` no backend, com backfill e trigger de atualização.
+- Passar a sincronização de download de logs a usar `updated_at`, não `created_at`.
+- Incluir `updated_at` no payload de `download-access-logs`.
+- Salvar `updated_at` também no SQLite.
+- Trocar o checkpoint local de logs para semântica baseada em atualização canônica, não só criação.
 
-Há um segundo token (`84ed5d35...`) fazendo requisições constantes que falham. Isso indica uma instância duplicada do servidor local rodando com credenciais antigas. Não causa os problemas acima mas polui os logs.
+Impacto:
+- Se um log for enriquecido/corrigido na nuvem, o desktop baixa a versão nova.
+- Cloud e SQLite passam a convergir de verdade.
 
----
+2. Reconciliar logs no SQLite por chave canônica do evento
+Arquivos:
+- `electron/database.js`
 
-## Plano de correção — 3 alterações cirúrgicas
+Ações:
+- Ao receber log da nuvem em `upsertAccessLogFromCloud`, não casar só por `id`.
+- Também reconciliar por chave canônica do evento:
+  - `device_id + timestamp + direction` para eventos de dispositivo
+  - `device_name + timestamp + direction` para eventos manuais sem `device_id`
+- Se já existir uma linha local equivalente, atualizar essa linha com os dados canônicos da nuvem em vez de inserir duplicata/stale copy.
+- Preservar `worker_id`, `worker_name`, `worker_document`, `timestamp`, `device_name`, `updated_at` como versão canônica da nuvem.
 
-### Alteração 1: Incluir código do hardware no access log local
+Impacto:
+- Evita que o SQLite fique com evento “antigo/local” e a nuvem com evento “corrigido”.
+- Remove a principal causa de divergência entre desktop e web.
 
-**Arquivo: `electron/agent.js`** — método `processEvent` (~linha 592)
+3. Centralizar a regra de data/hora em BRT
+Arquivos:
+- criar utilitário compartilhado em `src/lib/` ou `src/utils/`
+- `src/hooks/useDataProvider.ts`
+- `electron/database.js`
+- componentes e exportadores de relatório
 
-Adicionar campo `hardware_user_id` ao objeto `accessLog`:
-```javascript
-const accessLog = {
-  worker_id: workerId,
-  device_id: device.id,
-  timestamp: event.timestamp,
-  // ... campos existentes ...
-  hardware_user_id: event.user_id || null,  // NOVO: código original do ControlID
-};
+Ações:
+- Criar helpers únicos para:
+  - formatar timestamp em BRT
+  - obter hora BRT
+  - obter chave de dia em BRT
+  - calcular limites UTC do dia BRT (`03:00Z` até `02:59:59Z`)
+- Parar de repetir `T03:00:00.000Z`, `02:59:59.999Z` e `new Date(...)/format(...)` espalhados.
+- Usar esse helper tanto nas queries quanto na apresentação.
+
+Impacto:
+- Webview e desktop deixam de depender do timezone do sistema.
+- O horário exibido passa a ser explicitamente BRT em todos os lugares.
+
+4. Corrigir todos os relatórios webview que ainda usam timezone implícito
+Arquivos:
+- `src/components/reports/WorkerTimeReport.tsx`
+- `src/components/reports/CompanyReport.tsx`
+- `src/components/reports/PresenceReport.tsx`
+- `src/components/reports/OvernightControl.tsx`
+- `src/components/reports/ReportsList.tsx`
+- `src/components/CompaniesList.tsx`
+
+Ações:
+- Trocar exibição direta `format(new Date(timestamp), ...)` por formatter BRT central.
+- Corrigir agrupamento por dia em `PresenceReport` para usar chave BRT, não timezone local.
+- Corrigir cálculo/label de pernoite para usar comparação de datas em BRT.
+- Manter cálculos de duração em milissegundos UTC, mas exibição/classificação em BRT.
+
+Impacto:
+- O webview deixa de mostrar horário errado.
+- Os agrupamentos por dia/turno/pernoite ficam consistentes.
+
+5. Corrigir PDFs e Excel para usar a mesma camada temporal
+Arquivos:
+- `src/utils/exportWorkerReportPdf.ts`
+- `src/utils/exportReportPdf.ts`
+- `src/utils/exportReports.ts`
+
+Ações:
+- Substituir `getHours()` e `format(new Date(log.timestamp), ...)` por utilitários BRT.
+- Fazer PDF/Excel exibirem exatamente os mesmos horários do webview.
+- Garantir que classificação diurno/noturno e timestamps detalhados usem a mesma regra.
+
+Impacto:
+- Webview, PDF e Excel passam a bater entre si.
+
+6. Preservar o requisito do usuário: leitura e escrita em 2 vias
+Decisão de arquitetura:
+- Não vou tratar “forceCloud” como correção principal dos relatórios.
+- O fluxo correto será:
+```text
+captura local/manual/cloud
+ -> nuvem recebe versão canônica
+ -> desktop baixa atualizações canônicas
+ -> SQLite e cloud convergem
+ -> relatórios podem usar a abstração normal sem divergência
 ```
 
-**Arquivo: `electron/database.js`** — método `insertAccessLog` (~linha 1334)
+Detalhes técnicos importantes
+- O bug central de paridade é o uso de `created_at` na sync de `access_logs`; isso impede o desktop de receber enriquecimentos/correções já feitos na nuvem.
+- O bug de horário no webview é de apresentação/agregação: ainda existe uso de timezone implícito em vários relatórios.
+- Não vou “mascarar” o problema usando nuvem apenas; vou corrigir a convergência bidirecional como você pediu.
 
-Aceitar e armazenar `hardware_user_id` no SQLite (nova coluna na tabela `access_logs`). Adicionar migration na inicialização do banco:
-```sql
-ALTER TABLE access_logs ADD COLUMN hardware_user_id TEXT;
-```
+Arquivos principais a ajustar
+- `supabase/migrations/...` para `access_logs.updated_at`
+- `supabase/functions/agent-sync/index.ts`
+- `electron/sync.js`
+- `electron/database.js`
+- utilitário compartilhado de data/hora BRT
+- `src/hooks/useDataProvider.ts`
+- `src/components/reports/WorkerTimeReport.tsx`
+- `src/components/reports/CompanyReport.tsx`
+- `src/components/reports/PresenceReport.tsx`
+- `src/components/reports/OvernightControl.tsx`
+- `src/components/reports/ReportsList.tsx`
+- `src/components/CompaniesList.tsx`
+- `src/utils/exportWorkerReportPdf.ts`
+- `src/utils/exportReports.ts`
 
-### Alteração 2: Resolver worker por código na nuvem
-
-**Arquivo: `supabase/functions/agent-sync/index.ts`** — seção `upload-logs` (~linha 399)
-
-Quando `worker_id` é null mas `hardware_user_id` está presente, fazer lookup por `code`:
-```typescript
-if (!workerId && log.hardware_user_id) {
-  const code = Number(log.hardware_user_id);
-  if (!isNaN(code) && code > 0) {
-    const { data: byCode } = await supabase
-      .from('workers')
-      .select('id, name, document_number')
-      .eq('code', code)
-      .eq('status', 'active')
-      .maybeSingle();
-    if (byCode) {
-      log.worker_id = byCode.id;
-      log.worker_name = log.worker_name || byCode.name;
-      log.worker_document = log.worker_document || byCode.document_number;
-    }
-  }
-}
-```
-
-Remover `hardware_user_id` antes de inserir no Postgres (não existe na tabela cloud):
-```typescript
-delete log.hardware_user_id;
-```
-
-### Alteração 3: Corrigir eventos históricos já na nuvem
-
-**Migration SQL**: Atualizar os eventos faciais de hoje que têm `worker_id = NULL` mas vieram de dispositivos onde o ControlID reconheceu o trabalhador. Como não temos `hardware_user_id` nos eventos antigos, podemos usar correlação temporal: se existe um evento manual com worker_id dentro de ±5 min de um evento facial sem worker_id, inferir que é o mesmo trabalhador.
-
-Ou mais seguro: simplesmente adicionar uma coluna `hardware_user_id` à tabela cloud `access_logs` para referência futura (não obrigatória para a correção funcionar, já que o upload-logs resolve antes de inserir).
-
----
-
-## Resultado esperado
-- Facial: quando o lookup local falhar, a nuvem resolve pelo código → `worker_id` é preenchido → relatórios mostram os dados
-- Manual: nenhuma alteração, continua funcionando
-- Relatórios: uma vez que `worker_id` está preenchido, todos os relatórios (WebView, PDF, CSV) incluem os dados automaticamente
-- Timestamps: sem alteração (já corretos)
-
-## Arquivos alterados
-1. `electron/agent.js` — 1 ponto (adicionar `hardware_user_id` ao accessLog)
-2. `electron/database.js` — 2 pontos (migration de coluna + insertAccessLog)
-3. `supabase/functions/agent-sync/index.ts` — 1 ponto (resolução por code no upload-logs)
-4. `electron/sync.js` — 1 ponto (incluir `hardware_user_id` no upload, não stripped)
-
+Resultado esperado
+- web e desktop mostram os mesmos eventos
+- webview exibe horários corretos em BRT
+- desktop exibe horários corretos em BRT
+- PDF e Excel batem com a tela
+- manual + facial aparecem juntos
+- cloud e SQLite passam a refletir a mesma verdade canônica
