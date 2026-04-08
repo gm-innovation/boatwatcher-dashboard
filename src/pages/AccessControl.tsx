@@ -31,9 +31,13 @@ function playBeep() {
 }
 
 function getWorkerBorderStatus(worker: CachedWorker): 'granted' | 'blocked' | 'pending' {
-  if (worker.status === 'blocked') return 'blocked';
+  if (worker.status === 'blocked' || worker.status === 'inactive') return 'blocked';
   if (worker.status === 'active') return 'granted';
   return 'pending';
+}
+
+function isWorkerAuthorized(worker: CachedWorker): boolean {
+  return worker.status === 'active';
 }
 
 interface ActiveTerminal {

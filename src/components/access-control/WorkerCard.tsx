@@ -42,6 +42,11 @@ export function WorkerCard({ worker, borderStatus }: WorkerCardProps) {
                 <Badge className={cn('text-xs', statusInfo.className)}>{statusInfo.label}</Badge>
               </div>
             )}
+            {borderStatus === 'blocked' && worker.rejection_reason && (
+              <p className="mt-2 text-sm text-destructive">
+                Motivo: {worker.rejection_reason}
+              </p>
+            )}
           </div>
         </div>
 
