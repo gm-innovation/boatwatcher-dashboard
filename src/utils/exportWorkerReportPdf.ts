@@ -264,25 +264,36 @@ export async function exportStandardWorkerPdf(opts: PdfOptions) {
         formatDuration(row.totalMinutes),
       ];
 
+      // Pre-calculate wrapped text for dynamic row height
+      const wrappedVals = values.map((val, i) => {
+        const maxW = colWidths[i] - 3;
+        return doc.splitTextToSize(val, maxW) as string[];
+      });
+      const wMaxLines = Math.max(...wrappedVals.map(l => l.length));
+      const wLineH = 3.5;
+      const wRowH = Math.max(5.5, wMaxLines * wLineH + 2);
+
+      if (ri % 2 === 0) {
+        doc.setFillColor(...COLORS.altRow);
+        doc.rect(MARGIN, cy, availableWidth, wRowH, 'F');
+      }
+
       let x = MARGIN;
       cols.forEach((col, i) => {
         const tx = col.align === 'center' ? x + colWidths[i] / 2 : x + 1.5;
-        const maxW = colWidths[i] - 3;
-        let val = values[i];
-        if (doc.getTextWidth(val) > maxW) {
-          while (doc.getTextWidth(val + '…') > maxW && val.length > 1) val = val.slice(0, -1);
-          val += '…';
-        }
+        const lines = wrappedVals[i];
         if (i === 6 && row.isOnBoard) {
           doc.setTextColor(...COLORS.entryColor);
           doc.setFont('helvetica', 'bold');
         }
-        doc.text(val, tx, cy + 4, { align: col.align === 'center' ? 'center' : 'left' });
+        lines.forEach((line, li) => {
+          doc.text(line, tx, cy + 4 + li * wLineH, { align: col.align === 'center' ? 'center' : 'left' });
+        });
         doc.setTextColor(...COLORS.dark);
         doc.setFont('helvetica', 'normal');
         x += colWidths[i];
       });
-      cy += 5.5;
+      cy += wRowH;
     });
     return cy;
   };

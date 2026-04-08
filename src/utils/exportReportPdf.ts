@@ -99,30 +99,42 @@ export function exportReportPdf({
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
 
+  const baseRowH = 6;
+  const lineH = 3.5;
+
   data.forEach((row, rowIndex) => {
-    if (y > doc.internal.pageSize.getHeight() - 20) {
+    // Pre-calculate wrapped text for all columns to determine row height
+    const wrappedCols = columns.map((col, i) => {
+      const value = String(row[col.key] ?? '-');
+      const maxW = colWidths[i] - 4;
+      const lines: string[] = doc.splitTextToSize(value, maxW);
+      return lines;
+    });
+    const maxLines = Math.max(...wrappedCols.map(l => l.length));
+    const rowH = Math.max(baseRowH, maxLines * lineH + 2);
+
+    if (y + rowH > doc.internal.pageSize.getHeight() - 20) {
       doc.addPage();
       y = 15;
     }
 
     if (rowIndex % 2 === 0) {
       doc.setFillColor(248, 248, 248);
-      doc.rect(margin, y, availableWidth, 6, 'F');
+      doc.rect(margin, y, availableWidth, rowH, 'F');
     }
 
     doc.setTextColor(40);
     x = margin;
     columns.forEach((col, i) => {
-      const value = String(row[col.key] ?? '-');
-      const textX = col.align === 'center' ? x + colWidths[i] / 2 : col.align === 'right' ? x + colWidths[i] - 2 : x + 2;
+      const lines = wrappedCols[i];
       const align = col.align || 'left';
-      const truncated = doc.getTextWidth(value) > colWidths[i] - 4 
-        ? value.substring(0, Math.floor((colWidths[i] - 8) / 2)) + '...' 
-        : value;
-      doc.text(truncated, textX, y + 4, { align });
+      const textX = col.align === 'center' ? x + colWidths[i] / 2 : col.align === 'right' ? x + colWidths[i] - 2 : x + 2;
+      lines.forEach((line, li) => {
+        doc.text(line, textX, y + 4 + li * lineH, { align });
+      });
       x += colWidths[i];
     });
-    y += 6;
+    y += rowH;
   });
 
   // Footer
@@ -321,15 +333,24 @@ export async function exportCompanyReportPdf(opts: CompanyPdfOptions) {
       fmtDuration(company.totalMinutes),
     ];
 
+    // Pre-calculate wrapped text to determine row height
+    const compWrapped = values.map((val, i) => {
+      const maxW = colWidths[i] - 3;
+      return doc.splitTextToSize(val, maxW) as string[];
+    });
+    const compMaxLines = Math.max(...compWrapped.map(l => l.length));
+    const compLineH = 3.5;
+    const compRowH = Math.max(6, compMaxLines * compLineH + 2);
+
+    if (ri % 2 === 0) {
+      doc.setFillColor(...CLR.altRowBg);
+      doc.rect(MARGIN, y, availableWidth, compRowH, 'F');
+    }
+
     let cx = MARGIN;
     cols.forEach((col, i) => {
       const tx = col.align === 'center' ? cx + colWidths[i] / 2 : cx + 2;
-      const maxW = colWidths[i] - 3;
-      let val = values[i];
-      if (doc.getTextWidth(val) > maxW) {
-        while (doc.getTextWidth(val + '…') > maxW && val.length > 1) val = val.slice(0, -1);
-        val += '…';
-      }
+      const lines = compWrapped[i];
 
       // Highlight "A bordo"
       if (i === 3 && !company.allExited) {
@@ -337,13 +358,15 @@ export async function exportCompanyReportPdf(opts: CompanyPdfOptions) {
         doc.setFont('helvetica', 'bold');
       }
 
-      doc.text(val, tx, y + 4, { align: col.align === 'center' ? 'center' : 'left' });
+      lines.forEach((line, li) => {
+        doc.text(line, tx, y + 4 + li * compLineH, { align: col.align === 'center' ? 'center' : 'left' });
+      });
       doc.setTextColor(...CLR.dark);
       doc.setFont('helvetica', 'normal');
       cx += colWidths[i];
     });
 
-    y += 6;
+    y += compRowH;
   });
 
   // --- Total row ---
