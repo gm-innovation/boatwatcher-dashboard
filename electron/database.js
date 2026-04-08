@@ -1893,18 +1893,37 @@ function createDatabaseAPI(db, startCode) {
         if (!workerExists) localWorkerId = null;
       }
 
-      const existing = db.prepare('SELECT id FROM access_logs WHERE id = ?').get(data.id);
       const cloudCreatedAt = data.created_at || data.timestamp || new Date().toISOString();
 
+      // 1. Try exact match by cloud id
+      let existing = db.prepare('SELECT id FROM access_logs WHERE id = ?').get(data.id);
+
+      // 2. Canonical key reconciliation: match local event by device+timestamp+direction
+      //    This merges the cloud version with an existing local capture of the same event.
+      if (!existing) {
+        const ts = data.timestamp || '';
+        const dir = data.direction || 'unknown';
+        if (data.device_id) {
+          existing = db.prepare(
+            'SELECT id FROM access_logs WHERE device_id = ? AND timestamp = ? AND direction = ? LIMIT 1'
+          ).get(data.device_id, ts, dir);
+        } else if (data.device_name) {
+          existing = db.prepare(
+            'SELECT id FROM access_logs WHERE device_id IS NULL AND device_name = ? AND timestamp = ? AND direction = ? LIMIT 1'
+          ).get(data.device_name, ts, dir);
+        }
+      }
+
       if (existing) {
-        // UPDATE canonical fields from cloud (fixes timestamp drift)
+        // UPDATE canonical fields from cloud (fixes enrichments & timestamp drift)
         db.prepare(`
           UPDATE access_logs SET
-            worker_id = ?, device_id = ?, timestamp = ?, access_status = ?, direction = ?,
+            id = ?, worker_id = ?, device_id = ?, timestamp = ?, access_status = ?, direction = ?,
             reason = ?, score = ?, worker_name = ?, worker_document = ?, device_name = ?,
             created_at = ?, synced = 1
           WHERE id = ?
         `).run(
+          data.id,
           localWorkerId,
           data.device_id || null,
           data.timestamp || new Date().toISOString(),
@@ -1916,7 +1935,7 @@ function createDatabaseAPI(db, startCode) {
           data.worker_document || null,
           data.device_name || null,
           cloudCreatedAt,
-          data.id,
+          existing.id,
         );
         return;
       }

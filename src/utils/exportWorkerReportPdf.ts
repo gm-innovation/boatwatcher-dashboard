@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { formatBrtShort, formatBrtDateTime, formatBrtDateTimeFull, isDaytimeBrt, classifyShiftBrt } from '@/utils/brt';
 
 interface RawLog {
   direction: string;
@@ -52,12 +53,12 @@ const COLORS = {
 
 function formatTime(date: Date | null): string {
   if (!date) return '-';
-  return format(date, 'dd/MM/yyyy HH:mm');
+  return formatBrtDateTime(date);
 }
 
 function formatTimeShort(date: Date | null): string {
   if (!date) return '-';
-  return format(date, 'dd/MM HH:mm');
+  return formatBrtShort(date);
 }
 
 function formatDuration(mins: number): string {
@@ -66,14 +67,12 @@ function formatDuration(mins: number): string {
 }
 
 function isDaytime(timestamp: string): boolean {
-  const hour = new Date(timestamp).getHours();
-  return hour >= 5 && hour <= 18;
+  return isDaytimeBrt(timestamp);
 }
 
 function classifyShift(row: WorkerRow): 'day' | 'night' {
   if (!row.firstEntry) return 'day';
-  const hour = row.firstEntry.getHours();
-  return (hour >= 5 && hour <= 18) ? 'day' : 'night';
+  return classifyShiftBrt(row.firstEntry);
 }
 
 function classifyLogs(rawLogs: RawLog[]) {
@@ -473,7 +472,7 @@ export async function exportDetailedWorkerPdf(opts: PdfOptions) {
         doc.setFontSize(6.5);
         doc.setTextColor(...COLORS.dark);
 
-        doc.text(format(new Date(log.timestamp), 'dd/MM/yyyy HH:mm:ss'), MARGIN + 2, cy + 3.5);
+        doc.text(formatBrtDateTimeFull(log.timestamp), MARGIN + 2, cy + 3.5);
 
         if (isEntry) {
           doc.setTextColor(...COLORS.entryColor);

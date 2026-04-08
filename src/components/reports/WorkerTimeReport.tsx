@@ -14,7 +14,7 @@ import { Download, FileDown, Search, Users, Building2, ChevronDown, ChevronRight
 import { exportStandardWorkerPdf, exportDetailedWorkerPdf, loadImageAsDataUrl } from '@/utils/exportWorkerReportPdf';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useSystemSetting } from '@/hooks/useSystemSettings';
-import { format } from 'date-fns';
+import { formatBrtShort, formatBrtDateTime } from '@/utils/brt';
 import { ptBR } from 'date-fns/locale';
 
 interface WorkerTimeReportProps {
@@ -234,7 +234,7 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
     });
   };
 
-  const formatTime = (date: Date | null) => date ? format(date, 'dd/MM HH:mm') : '-';
+  const formatTime = (date: Date | null) => date ? formatBrtShort(date) : '-';
   const formatDuration = (mins: number) => {
     if (mins <= 0) return '-';
     return `${Math.floor(mins / 60)}h ${mins % 60}m`;
@@ -625,7 +625,7 @@ function PeriodTable({ title, logs, emptyMessage }: {
                   </td>
                   <td className="px-3 py-1.5 text-muted-foreground">{log.device_name}</td>
                   <td className="px-3 py-1.5 text-muted-foreground">
-                    {format(new Date(log.timestamp), 'dd/MM/yyyy HH:mm')}
+                    {formatBrtDateTime(log.timestamp)}
                   </td>
                 </tr>
               );
