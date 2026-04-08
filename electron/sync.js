@@ -887,7 +887,34 @@ class SyncEngine {
             const payload = cmd.payload || {};
 
             if (cmd.command === 'enroll_worker') {
-...
+              let photoBase64 = null;
+              if (payload.photo_url) {
+                if (photoCache.has(payload.photo_url)) {
+                  photoBase64 = photoCache.get(payload.photo_url);
+                } else {
+                  try {
+                    photoBase64 = await loadPhotoAsBase64(payload.photo_url);
+                    photoCache.set(payload.photo_url, photoBase64);
+                  } catch (photoErr) {
+                    console.warn(`[commands] Photo download failed for ${payload.worker_name}: ${photoErr.message}`);
+                  }
+                }
+              }
+
+              const workerObj = {
+                id: payload.worker_id,
+                name: payload.worker_name,
+                code: payload.worker_code,
+                photo_url: payload.photo_url,
+              };
+
+              const enrollResult = await enrollUserOnDevice(device, workerObj, photoBase64);
+              if (!enrollResult.success) {
+                throw new Error(enrollResult.error || enrollResult.warning || 'Enrollment failed');
+              }
+              resultPayload.result = enrollResult;
+              console.log(`[commands] Enrolled worker ${payload.worker_name} on device ${device.name}`);
+
             } else if (cmd.command === 'remove_worker') {
               const removeResult = await removeUserFromDevice(device, payload.worker_id, payload.worker_code);
               if (!removeResult.success) {
