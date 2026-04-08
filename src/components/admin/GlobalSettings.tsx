@@ -162,6 +162,58 @@ export const GlobalSettings = () => {
         </Button>
       </div>
 
+      {/* Read-Only Mode (desktop only) */}
+      {isLocalRuntime && (
+        <Card className="border-2 border-primary/20">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              {readOnlyMode ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
+              Modo de Operação
+              <Badge variant={readOnlyMode ? 'default' : 'secondary'} className="ml-2">
+                {readOnlyMode ? 'Somente Leitura' : 'Leitura e Escrita'}
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Quando ativo, o sistema apenas lê dados e logs dos dispositivos, sem cadastrar ou remover trabalhadores no hardware. Ideal para operação paralela com outro sistema.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label htmlFor="read-only-toggle">Modo Somente-Leitura</Label>
+                <p className="text-xs text-muted-foreground">
+                  {readOnlyMode
+                    ? '✅ Leitura de logs • ✅ Reverse sync • ❌ Enrollment • ❌ Full resync'
+                    : 'O sistema opera normalmente com leitura e escrita no hardware.'}
+                </p>
+              </div>
+              <Switch
+                id="read-only-toggle"
+                checked={readOnlyMode}
+                disabled={readOnlyLoading}
+                onCheckedChange={async (checked) => {
+                  setReadOnlyLoading(true);
+                  try {
+                    await localSync.setReadOnlyMode(checked);
+                    setReadOnlyMode(checked);
+                    toast({
+                      title: checked ? 'Modo somente-leitura ativado' : 'Modo leitura e escrita ativado',
+                      description: checked
+                        ? 'O sistema não fará mais enrollment ou remoção de trabalhadores no hardware.'
+                        : 'O sistema voltou a operar com escrita no hardware.',
+                    });
+                  } catch (err: any) {
+                    toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+                  } finally {
+                    setReadOnlyLoading(false);
+                  }
+                }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* System Logo */}
       <Card>
         <CardHeader>
