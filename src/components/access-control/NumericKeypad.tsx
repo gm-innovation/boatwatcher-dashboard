@@ -59,8 +59,9 @@ export function NumericKeypad({ onDigit, onClear, onConfirm, onCamera, disabled 
       <Button
         className="col-span-3 h-14 text-lg font-semibold"
         onClick={onConfirm}
+        disabled={disabled}
       >
-        Verificar Acesso
+        {disabled ? 'Sincronizando...' : 'Verificar Acesso'}
       </Button>
     </div>
   );
