@@ -27,6 +27,16 @@ export const GlobalSettings = () => {
   const lightInputRef = useRef<HTMLInputElement>(null);
   const darkInputRef = useRef<HTMLInputElement>(null);
 
+  // Read-only mode (desktop only)
+  const [readOnlyMode, setReadOnlyMode] = useState(false);
+  const [readOnlyLoading, setReadOnlyLoading] = useState(false);
+
+  useEffect(() => {
+    if (isLocalRuntime) {
+      localSync.getReadOnlyMode().then(r => setReadOnlyMode(r.enabled)).catch(() => {});
+    }
+  }, [isLocalRuntime]);
+
   useEffect(() => {
     if (logoSetting?.value) {
       const val = logoSetting.value as any;
