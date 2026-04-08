@@ -1,28 +1,26 @@
 
 
-## Correção do cálculo de tempo total para trabalhadores "A bordo"
+## Remover abreviações dos PDFs — permitir quebra de linha
 
 ### Problema
+Os três geradores de PDF truncam texto longo com "…" quando ultrapassa a largura da coluna. No PDF há espaço para quebrar linha, diferente da tabela web.
 
-Em `src/components/reports/WorkerTimeReport.tsx`, o `totalMinutes` é calculado como `lastExitLog - firstEntryLog`. Quando o trabalhador está "A bordo" (última ação = entrada), não existe `lastExitLog` após essa entrada final, então o tempo da sessão aberta é ignorado.
+### Locais com truncação
 
-No exemplo: ENTRADA 08:17 → SAÍDA 08:56 → ENTRADA 09:00 (ainda a bordo).  
-Cálculo atual: `08:56 - 08:17 = 39min` (ignora a sessão aberta desde 09:00).  
-Cálculo correto: `39min + (agora - 09:00) ≈ 3h+`.
+1. **`src/utils/exportReportPdf.ts`** linha 119-121 — tabela genérica (`exportReportPdf`)
+2. **`src/utils/exportReportPdf.ts`** linha 329-331 — tabela de empresas (`exportCompanyReportPdf`)
+3. **`src/utils/exportWorkerReportPdf.ts`** linha 272-274 — tabela padrão de trabalhadores (`exportStandardWorkerPdf`)
 
 ### Correção
 
-**Arquivo:** `src/components/reports/WorkerTimeReport.tsx`
+Em cada um dos três pontos:
 
-1. **`totalMinutes` (linhas 150-154):** Quando `isOnBoard === true`, usar `Date.now()` no lugar de `lastExitLog` para o cálculo do tempo total (diferença entre a primeira entrada e o momento atual).
+1. Substituir a lógica de truncação por `doc.splitTextToSize(value, maxWidth)` que retorna um array de linhas.
+2. Calcular a altura da linha como `Math.max(baseRowHeight, numberOfLines * lineHeight)`.
+3. Fazer uma **pré-passagem** por todas as colunas da row para determinar a altura máxima antes de desenhar o fundo alternado e o texto.
+4. Ajustar o `y` pelo valor da altura máxima calculada em vez do valor fixo atual (6mm / 5.5mm).
 
-2. **`effectiveMinutes` (linhas 157-163):** Após somar os pares completos entrada→saída, se o último log for uma entrada sem saída correspondente, adicionar `Date.now() - últimaEntrada` ao total efetivo.
-
-3. **`formatDuration` na exibição:** Quando o trabalhador está a bordo, o badge já mostra "A bordo" — o tempo exibido passará a refletir o valor real incluindo a sessão aberta.
-
-### Também corrigir no PDF
-
-**Arquivo:** `src/utils/exportReportPdf.ts`
-
-Aplicar a mesma lógica de sessão aberta ao calcular `totalMinutes` no export, para que o PDF reflita os mesmos valores da tela.
+### Arquivos a alterar
+- `src/utils/exportReportPdf.ts` (2 pontos)
+- `src/utils/exportWorkerReportPdf.ts` (1 ponto)
 
