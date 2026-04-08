@@ -1299,11 +1299,17 @@ function createDatabaseAPI(db, startCode) {
       }
       if (filters.startDate) {
         conditions.push('al.timestamp >= ?');
-        params.push(`${filters.startDate}T00:00:00`);
+        // Midnight BRT (UTC-3) = 03:00 UTC
+        params.push(`${filters.startDate}T03:00:00.000Z`);
       }
       if (filters.endDate) {
         conditions.push('al.timestamp <= ?');
-        params.push(`${filters.endDate}T23:59:59`);
+        // End of day BRT (23:59:59 BRT) = next day 02:59:59 UTC
+        // Parse endDate and add 1 day, then use 02:59:59 UTC
+        const endParts = filters.endDate.split('-').map(Number);
+        const endDateObj = new Date(Date.UTC(endParts[0], endParts[1] - 1, endParts[2] + 1));
+        const nextDay = endDateObj.toISOString().split('T')[0];
+        params.push(`${nextDay}T02:59:59.999Z`);
       }
       if (filters.since) {
         conditions.push('al.timestamp >= ?');

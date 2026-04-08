@@ -544,6 +544,8 @@ class AgentController {
     let workerId = null;
     let workerName = event.user_name || null;
     let workerDocument = event.user_document || null;
+    const rawUserId = event.user_id;
+    console.log(`[Agent][${device.name}] processEvent: raw user_id=${JSON.stringify(rawUserId)}, timestamp=${event.timestamp}, direction=${event.direction}, access=${event.access}`);
     if (event.user_id) {
       const isUuid = /^[0-9a-f]{8}-/.test(String(event.user_id));
       if (isUuid) {
