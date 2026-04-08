@@ -418,8 +418,14 @@ export async function fetchAccessLogs(filters?: { projectId?: string; startDate?
         // Build base queries for each source
         const buildBase = () => {
           let q = supabase.from('access_logs').select('*').order('timestamp', { ascending: false }).limit(limit);
-          if (filters?.startDate) q = q.gte('timestamp', `${filters.startDate}T00:00:00`);
-          if (filters?.endDate) q = q.lte('timestamp', `${filters.endDate}T23:59:59`);
+          // Use BRT boundaries: midnight BRT = 03:00 UTC
+          if (filters?.startDate) q = q.gte('timestamp', `${filters.startDate}T03:00:00.000Z`);
+          if (filters?.endDate) {
+            const endParts = filters.endDate.split('-').map(Number);
+            const endDateObj = new Date(Date.UTC(endParts[0], endParts[1] - 1, endParts[2] + 1));
+            const nextDay = endDateObj.toISOString().split('T')[0];
+            q = q.lte('timestamp', `${nextDay}T02:59:59.999Z`);
+          }
           return q;
         };
 
@@ -442,8 +448,14 @@ export async function fetchAccessLogs(filters?: { projectId?: string; startDate?
 
       // No project filter — return all logs
       let query = supabase.from('access_logs').select('*').order('timestamp', { ascending: false }).limit(limit);
-      if (filters?.startDate) query = query.gte('timestamp', `${filters.startDate}T00:00:00`);
-      if (filters?.endDate) query = query.lte('timestamp', `${filters.endDate}T23:59:59`);
+      // Use BRT boundaries: midnight BRT = 03:00 UTC
+      if (filters?.startDate) query = query.gte('timestamp', `${filters.startDate}T03:00:00.000Z`);
+      if (filters?.endDate) {
+        const endParts = filters.endDate.split('-').map(Number);
+        const endDateObj = new Date(Date.UTC(endParts[0], endParts[1] - 1, endParts[2] + 1));
+        const nextDay = endDateObj.toISOString().split('T')[0];
+        query = query.lte('timestamp', `${nextDay}T02:59:59.999Z`);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
