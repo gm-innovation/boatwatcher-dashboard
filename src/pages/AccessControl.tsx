@@ -247,7 +247,9 @@ export default function AccessControl() {
                 borderStatus={getWorkerBorderStatus(selectedWorker)}
               />
 
-              <AccessConfirmation onConfirm={handleConfirm} />
+              {isWorkerAuthorized(selectedWorker) && (
+                <AccessConfirmation onConfirm={handleConfirm} />
+              )}
 
               <Button
                 variant="outline"
