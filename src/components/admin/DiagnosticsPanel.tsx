@@ -374,6 +374,20 @@ export const DiagnosticsPanel = () => {
         setDeviceTelemetry(null);
       }
 
+      // Check read-only mode
+      try {
+        const roStatus = await localSync.getReadOnlyMode();
+        if (roStatus.enabled) {
+          results.push({
+            id: 'read-only',
+            name: 'Modo de Operação',
+            status: 'warning',
+            message: 'Modo somente-leitura ativo — enrollment e remoção de trabalhadores no hardware estão bloqueados.',
+            lastCheck: new Date(),
+          });
+        }
+      } catch { /* ignore */ }
+
       setDiagnostics(results);
       setLastRunTime(new Date());
       setIsRunning(false);
