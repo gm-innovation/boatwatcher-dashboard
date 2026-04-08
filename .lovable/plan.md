@@ -1,68 +1,48 @@
 
-Diagnóstico
 
-Do I know what the issue is? Sim.
+## Controle de Acesso Offline-First: Correção dos bugs reais
 
-O problema real não é mais “o banco só retorna o Alexandre”. O snapshot de rede mostra que a consulta de `workers` já está retornando vários trabalhadores. O erro persiste porque a lógica atual ainda transforma muitos trabalhadores em “invisíveis” antes da busca:
+### Diagnóstico dos bugs atuais
 
-1. `useOfflineAccessControl.ts` filtra a lista por `allowed_project_ids?.includes(projectId)`.  
-   Resultado: quem pertence às empresas do cliente, mas não está autorizado nesse projeto, some da lista e vira “Trabalhador não encontrado” — quando o comportamento correto seria aparecer como bloqueado com motivo.
+O sistema já usa IndexedDB como banco de dados local (via `idb-keyval`). O problema não é a ausência de armazenamento local, mas sim 4 bugs concretos que impedem o funcionamento:
 
-2. O cache IndexedDB usa uma chave global única (`ac_workers_cache`).  
-   A tela de configuração (`AccessControlConfig.tsx`) ainda sincroniza só trabalhadores `active` e pode sobrescrever esse cache com um subconjunto parcial.
+**Bug 1 — Configuração do terminal não é cacheada.**  
+`AccessControl.tsx` carrega o terminal via `useQuery` do banco remoto. Offline = sem terminal = tela "Nenhum terminal configurado" = não funciona.
 
-3. A tela principal pega `manual_access_points` com `.eq('is_active', true).limit(1)` sem garantir seleção determinística.  
-   Se existir mais de um terminal ativo, o app pode carregar o escopo errado.
+**Bug 2 — Chave de cache inconsistente.**  
+A tela principal usa `ac_workers_cache_{projectId}`. A tela de configuração usa `ac_workers_cache` (sem projectId). Sincronização manual da config nunca popula o cache que a tela principal lê.
 
-Plano de implementação
+**Bug 3 — Resultado vazio não usa fallback.**  
+Se a query retornar 0 resultados (RLS, timeout, etc.), o hook não faz fallback ao cache. Workers fica como `[]` e qualquer código vira "não encontrado".
 
-1. Corrigir a regra de visibilidade no acesso manual
-- Em `src/hooks/useOfflineAccessControl.ts`, parar de usar o projeto atual para esconder trabalhadores da busca.
-- Carregar todos os trabalhadores do escopo do terminal (empresas vinculadas ao cliente do terminal), não apenas os autorizados para aquele projeto.
-- Separar “visível no terminal” de “autorizado para entrar/sair”.
+**Bug 4 — Filtro "Todos os clientes" quebrado.**  
+O select da config tem `value="all"`, que faz `.eq('company_id', 'all')` e retorna zero resultados, sobrescrevendo o cache com array vazio.
 
-2. Derivar status de acesso corretamente
-- Para cada trabalhador, calcular no frontend:
-  - visível no terminal
-  - autorizado no projeto atual
-  - motivo de bloqueio exibível
-- Regras:
-  - `status !== active` => bloqueado pelo status/revisão
-  - `status === active`, mas sem autorização no projeto do terminal => bloqueado com motivo como “Não autorizado para este projeto”
-  - `status === active` e autorizado => liberado
+### Plano de correção
 
-3. Ajustar a busca e a tela de confirmação
-- Em `src/pages/AccessControl.tsx`, buscar pelo código na lista visível completa.
-- Quando encontrar trabalhador não autorizado, mostrar o `WorkerCard` com borda vermelha e motivo, sem exibir os botões de entrada/saída.
-- Manter “não encontrado” apenas quando o código realmente não existir dentro do escopo do terminal.
+#### 1. Cachear o terminal ativo em IndexedDB
+- Em `AccessControl.tsx`, após carregar o terminal do Supabase, salvar em IndexedDB (`ac_active_terminal`).
+- Na `queryFn`, se offline, ler do cache local.
+- Isso permite que o app funcione 100% offline após a primeira sincronização.
 
-4. Corrigir o cache offline para não contaminar resultados
-- Em `src/hooks/useOfflineAccessControl.ts`, trocar a chave global por cache segmentado por terminal/client/projeto, ou armazenar o dataset bruto e derivar a lista em memória.
-- Em `src/pages/access-control/AccessControlConfig.tsx`, alinhar a sincronização manual com a mesma regra da tela principal:
-  - remover `.eq('status', 'active')`
-  - não salvar subconjuntos incompatíveis no mesmo cache
-  - exibir quantidade sincronizada real do escopo do terminal
+#### 2. Unificar a chave de cache
+- Em `AccessControlConfig.tsx`, usar a mesma função `workersCacheKey(projectId)` do hook principal.
+- Derivar o `projectId` do terminal ativo (mesmo terminal que a tela principal usa).
+- Incluir `rejection_reason` e `allowed_project_ids` nos objetos cacheados pela config.
 
-5. Endurecer a seleção do terminal ativo
-- Revisar a carga de `manual_access_points` em `src/pages/AccessControl.tsx`.
-- Garantir que o app use um único terminal ativo de forma determinística, ou falhe de forma explícita se houver mais de um ativo.
+#### 3. Corrigir fallback para resultado vazio
+- Em `useOfflineAccessControl.ts`, se a query retornar `null` ou array vazio, fazer fallback ao cache existente em vez de manter `workers = []`.
+- Sempre atualizar o cache quando houver dados reais, mas nunca sobrescrever com vazio.
 
-6. Ajustar a visibilidade para operadores no backend
-- Criar migração de RLS para que `operator` consiga ler apenas o mesmo escopo usado pelo terminal:
-  - projetos acessíveis do cliente do operador
-  - empresas vinculadas a esses projetos
-  - trabalhadores dessas empresas
-- Isso mantém o comportamento correto para operador sem abrir acesso global.
+#### 4. Corrigir filtro "all"
+- Em `AccessControlConfig.tsx`, tratar `syncClientId === 'all'` como sem filtro (não aplicar `.eq`).
 
-Arquivos a alterar
-- `src/hooks/useOfflineAccessControl.ts`
-- `src/pages/AccessControl.tsx`
-- `src/pages/access-control/AccessControlConfig.tsx`
-- `src/components/access-control/WorkerCard.tsx`
-- `supabase/migrations/...` (nova política RLS para operador e, se necessário, ajuste de escopo de companies/projects)
+#### 5. Adicionar loading gate na tela principal
+- Desabilitar o teclado numérico e botão de verificação enquanto `loadingWorkers === true`.
+- Exibir contagem de trabalhadores carregados no header do terminal para feedback visual.
 
-Validação esperada
-- Código do Alexandre continua funcionando.
-- Códigos de outros trabalhadores das empresas vinculadas ao cliente passam a ser encontrados.
-- Se o trabalhador não estiver autorizado no projeto atual, ele aparece na tela como bloqueado com motivo, em vez de “não encontrado”.
-- Offline e sincronização manual passam a refletir o mesmo comportamento da busca online.
+### Arquivos a alterar
+1. `src/hooks/useOfflineAccessControl.ts` — fallback de cache vazio
+2. `src/pages/AccessControl.tsx` — cache do terminal + loading gate + contagem
+3. `src/pages/access-control/AccessControlConfig.tsx` — chave de cache unificada + fix "all" + campos completos
+
