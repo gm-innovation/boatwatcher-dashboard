@@ -10,8 +10,8 @@ import { loadImageAsDataUrl } from '@/utils/exportWorkerReportPdf';
 import { useSystemSetting } from '@/hooks/useSystemSettings';
 import { Badge } from '@/components/ui/badge';
 import { Download, Building2, Search } from 'lucide-react';
-import { differenceInMinutes, parseISO, format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { differenceInMinutes } from 'date-fns';
+import { formatBrtDateTime } from '@/utils/brt';
 
 interface CompanyReportProps {
   projectId: string;
@@ -209,8 +209,8 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
         c.name,
         c.totalWorkers,
         c.onBoardNow,
-        c.firstEntry ? format(c.firstEntry, 'dd/MM/yyyy HH:mm') : '-',
-        c.allExited ? (c.lastExit ? format(c.lastExit, 'dd/MM/yyyy HH:mm') : 'Todos saíram') : 'A bordo',
+        c.firstEntry ? formatBrtDateTime(c.firstEntry) : '-',
+        c.allExited ? (c.lastExit ? formatBrtDateTime(c.lastExit) : 'Todos saíram') : 'A bordo',
         formatDuration(c.totalMinutes),
       ].join(','))
     ].join('\n');
@@ -327,13 +327,13 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
                     </td>
                     <td className="p-3 text-center text-sm">
                       {company.firstEntry
-                        ? format(company.firstEntry, "dd/MM/yyyy HH:mm", { locale: ptBR })
+                        ? formatBrtDateTime(company.firstEntry)
                         : '-'}
                     </td>
                     <td className="p-3 text-center">
                       {company.allExited ? (
                         <span className="text-sm text-muted-foreground">
-                          {company.lastExit ? format(company.lastExit, "dd/MM/yyyy HH:mm", { locale: ptBR }) : 'Todos saíram'}
+                          {company.lastExit ? formatBrtDateTime(company.lastExit) : 'Todos saíram'}
                         </span>
                       ) : (
                         <Badge className="border border-green-500 text-green-600 bg-transparent hover:bg-green-50 text-[10px] px-1.5 py-0">

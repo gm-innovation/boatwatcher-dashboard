@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { AccessLog } from '@/types/supabase';
 import { fitImageDimensions } from './exportWorkerReportPdf';
+import { formatBrtTime, formatBrtDateTime, formatBrtDateTimeFull } from '@/utils/brt';
 
 interface WorkerData {
   name: string;
@@ -148,8 +149,8 @@ export const exportToPDF = async (
 
         doc.text(String(worker.name || 'Sem nome'), margin + 5, yPosition);
         doc.text(String(worker.role || 'Sem cargo'), margin + 60, yPosition);
-        doc.text(String(format(worker.firstEntry, 'HH:mm')), margin + 120, yPosition);
-        doc.text(String(format(worker.lastExit, 'HH:mm')), margin + 150, yPosition);
+        doc.text(formatBrtTime(worker.firstEntry), margin + 120, yPosition);
+        doc.text(formatBrtTime(worker.lastExit), margin + 150, yPosition);
         
         yPosition += 10;
       });
@@ -184,8 +185,8 @@ export const exportToExcel = (
       worksheetData.push([
         worker.name,
         worker.role,
-        format(worker.firstEntry, 'HH:mm'),
-        format(worker.lastExit, 'HH:mm')
+        formatBrtTime(worker.firstEntry),
+        formatBrtTime(worker.lastExit)
       ]);
     });
 
@@ -235,7 +236,7 @@ export const exportAccessLogsToPdf = async (
     }
 
     doc.setFontSize(8);
-    doc.text(format(new Date(log.timestamp), 'dd/MM HH:mm'), margin + 2, yPosition);
+    doc.text(formatBrtShort(new Date(log.timestamp)), margin + 2, yPosition);
     doc.text((log.worker_name || '-').slice(0, 20), margin + 35, yPosition);
     doc.text(log.worker_document || '-', margin + 80, yPosition);
     doc.text(log.access_status === 'granted' ? 'Liberado' : 'Negado', margin + 115, yPosition);
@@ -261,7 +262,7 @@ export const exportAccessLogsToExcel = (
 
   logs.forEach(log => {
     worksheetData.push([
-      format(new Date(log.timestamp), 'dd/MM/yyyy HH:mm:ss'),
+      formatBrtDateTimeFull(log.timestamp),
       log.worker_name || '-',
       log.worker_document || '-',
       log.device_name || '-',

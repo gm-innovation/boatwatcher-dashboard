@@ -23,8 +23,9 @@ import {
   Calendar, TrendingUp, Users, Building2, BarChart3,
   ArrowUp, ArrowDown, Printer, Download,
 } from 'lucide-react';
-import { format, parseISO, getISOWeek, getDay, differenceInDays, startOfWeek, addDays } from 'date-fns';
+import { format, parseISO, getDay, startOfWeek, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { getBrtDayKey } from '@/utils/brt';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { toast } from '@/components/ui/use-toast';
@@ -111,10 +112,10 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       }
     });
 
-    // By day
+    // By day — use BRT day key for correct grouping
     const byDay: Record<string, number> = {};
     granted.forEach((l: any) => {
-      const d = format(new Date(l.timestamp), 'yyyy-MM-dd');
+      const d = getBrtDayKey(l.timestamp);
       byDay[d] = (byDay[d] || 0) + 1;
     });
 
