@@ -36,37 +36,37 @@ export const WorkersOnBoardTable = ({ workers }: WorkersOnBoardTableProps) => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-x-auto">
-        <Table>
+      <div className="flex-1 overflow-hidden">
+        <Table className="table-fixed w-full">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-12 py-2 px-3 text-xs whitespace-nowrap">Nº</TableHead>
-              <TableHead className="py-2 px-3 text-xs whitespace-nowrap">Nome</TableHead>
-              {!isMobile && <TableHead className="py-2 px-3 text-xs whitespace-nowrap">Local</TableHead>}
-              {!isMobile && <TableHead className="py-2 px-3 text-xs whitespace-nowrap">Função</TableHead>}
-              <TableHead className="py-2 px-3 text-xs whitespace-nowrap">Empresa</TableHead>
-              <TableHead className="text-right py-2 px-3 text-xs whitespace-nowrap">Entrada</TableHead>
+              <TableHead className="w-8 py-2 px-2 text-xs whitespace-nowrap">Nº</TableHead>
+              <TableHead className="py-2 px-2 text-xs whitespace-nowrap">Nome</TableHead>
+              {!isMobile && <TableHead className="w-16 py-2 px-2 text-xs whitespace-nowrap">Local</TableHead>}
+              {!isMobile && <TableHead className="py-2 px-2 text-xs whitespace-nowrap">Função</TableHead>}
+              <TableHead className="py-2 px-2 text-xs whitespace-nowrap">Empresa</TableHead>
+              <TableHead className="w-20 text-right py-2 px-2 text-xs whitespace-nowrap">Entrada</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {workers.length > 0 ? (
               workers.map((worker, index) => (
               <TableRow key={worker.id} className="hover:bg-gray-50 dark:hover:bg-muted/50">
-                  <TableCell className="font-medium py-2 px-3 text-sm whitespace-nowrap">{index + 1}</TableCell>
-                  <TableCell className="font-medium py-2 px-3 text-sm whitespace-nowrap">{worker.name}</TableCell>
+                  <TableCell className="font-medium py-2 px-2 text-xs whitespace-nowrap">{index + 1}</TableCell>
+                  <TableCell className="font-medium py-2 px-2 text-xs whitespace-nowrap truncate max-w-0" title={worker.name}>{worker.name}</TableCell>
                   {!isMobile && (
-                    <TableCell className="py-2 px-3 text-sm whitespace-nowrap">
+                    <TableCell className="py-2 px-2 text-xs whitespace-nowrap">
                       {worker.location ? (
-                        <span className="inline-flex items-center bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full font-semibold">
+                        <span className="inline-flex items-center bg-green-100 text-green-800 text-xs px-1.5 py-0.5 rounded-full font-semibold">
                           {worker.location}
                         </span>
                       ) : '-'}
                     </TableCell>
                   )}
-                  {!isMobile && <TableCell className="py-2 px-3 text-sm whitespace-nowrap">{worker.role || '-'}</TableCell>}
-                  <TableCell className="py-2 px-3 text-sm whitespace-nowrap">{worker.company}</TableCell>
-                  <TableCell className="text-right py-2 px-3 text-sm whitespace-nowrap">
-                    <span className="inline-flex items-center bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-md font-semibold">
+                  {!isMobile && <TableCell className="py-2 px-2 text-xs whitespace-nowrap truncate max-w-0" title={worker.role || '-'}>{worker.role || '-'}</TableCell>}
+                  <TableCell className="py-2 px-2 text-xs whitespace-nowrap truncate max-w-0" title={worker.company}>{worker.company}</TableCell>
+                  <TableCell className="text-right py-2 px-2 text-xs whitespace-nowrap">
+                    <span className="inline-flex items-center bg-blue-100 text-blue-800 text-xs px-1.5 py-0.5 rounded-md font-semibold">
                       {format(new Date(worker.entryTime), 'dd/MM HH:mm')}
                     </span>
                   </TableCell>
