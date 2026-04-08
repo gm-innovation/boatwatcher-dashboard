@@ -1,118 +1,98 @@
 
-Objetivo: parar de “remendar” pontos isolados e restaurar um comportamento único e estável para entrada/saída manual + facial e relatórios WebView/PDF com o mesmo conjunto de dados e o mesmo horário.
 
-Diagnóstico real após revisão do código:
-1. O sistema hoje mistura dois modelos de tempo ao mesmo tempo:
-   - `electron/agent.js` e funções cloud convertem timestamps para UTC.
-   - `electron/database.js` e alguns comentários/tratamentos ainda assumem “wall-clock time”.
-   - relatórios e PDFs usam `new Date(...)` diretamente em vários pontos.
-   Resultado: desvio de horário e filtros inconsistentes.
-2. A fonte de dados também está fragmentada:
-   - relatórios usam `useAccessLogs` → `fetchAccessLogs`
-   - “a bordo” usa outro caminho (`useWorkersOnBoard`)
-   - manual e facial são combinados por regras diferentes entre SQLite e nuvem
-   Resultado: WebView/PDF/dashboard podem discordar entre si.
-3. O fluxo facial está frágil em dois pontos:
-   - captura local depende de `load_objects.fcgi` + normalização/local lookup do `worker.code`
-   - enrollment existe, mas qualquer inconsistência entre `code`, `allowed_project_ids`, device binding ou resolução local quebra o reconhecimento
-   Resultado: manual funciona, facial não.
+## Diagnóstico real — causa raiz confirmada com dados
 
-Do I know what the issue is?
-Sim. O problema principal não é “um bug só”; é a combinação de:
-- semântica de timestamp inconsistente
-- consultas de acesso divergentes entre áreas
-- pipeline facial dependente de resolução local frágil
+### Problema 1: Entrada/saída facial não funciona
 
-Plano de correção segura
+**Evidência do banco de dados cloud:**
+- Eventos faciais DO dia 08/04 (17:13, 17:16, 17:18, 17:30, 19:32) estão TODOS com `worker_id = NULL` e `worker_name = NULL`
+- O único evento facial que funcionou (11:17) tem `worker_id` e `worker_name` corretos
+- Eventos manuais estão todos com `worker_id` e `worker_name` corretos
 
-1. Congelar a semântica canônica de tempo
-- Adotar explicitamente: banco guarda UTC canônico, UI apenas formata.
-- Revisar e alinhar estes pontos para a mesma regra:
-  - `electron/agent.js`
-  - `supabase/functions/api/index.ts`
-  - `supabase/functions/controlid-webhook/index.ts`
-  - `supabase/functions/agent-sync/index.ts`
-  - `electron/database.js`
-- Remover suposições conflitantes como “timestamps are stored as wall-clock time”.
-- Substituir parsing ambíguo em relatórios/PDFs por parsing explícito e utilitário compartilhado.
+**Causa raiz**: O agente local (`electron/agent.js`) captura o evento do hardware com `user_id = 350` (código inteiro do ControlID). Faz lookup no SQLite local por `code = 350`. Quando funciona, popula `worker_id`, `worker_name`, `worker_document`. Quando FALHA (ex: após reinício/update do app, antes do sync de workers completar), os três campos ficam NULL. O upload para a nuvem NÃO inclui o código original do hardware. Resultado: a nuvem não tem como resolver o trabalhador.
 
-2. Criar uma camada única de normalização/consulta de access logs
-- Extrair uma regra canônica para:
-  - logs faciais do projeto por `device_id`
-  - logs manuais do projeto por `manual_access_points`
-  - filtro de intervalo por data
-  - ordenação por timestamp real
-- Aplicar a mesma regra em:
-  - `electron/database.js#getAccessLogs`
-  - `src/hooks/useDataProvider.ts#fetchAccessLogs`
-  - `src/hooks/useSupabase.ts#fetchWorkersOnBoardFromCloud`
-  - `electron/database.js#getWorkersOnBoard`
-- Eliminar discrepâncias entre WebView, PDF e dashboard.
+**Por que o relatório não mostra os dados faciais**: O código do relatório (WorkerTimeReport, CompanyReport, etc.) faz `resolveKey(log)` → se `worker_id`, `worker_name` e `worker_document` são todos null, retorna string vazia → `if (!key) continue` → evento é ignorado silenciosamente.
 
-3. Restaurar o pipeline facial sem quebrar o manual
-- Revisar a cadeia completa de enrollment/captura:
-  - `src/components/workers/WorkerManagement.tsx`
-  - `server/routes/workers.js`
-  - `server/lib/controlid.js`
-  - `electron/sync.js`
-  - `electron/agent.js`
-- Garantir que o enrollment use sempre o `worker.code` correto e dispositivos resolvidos pelos projetos autorizados.
-- Endurecer a resolução do trabalhador no agente/local:
-  - lookup determinístico por `code`
-  - logs defensivos quando o evento vier sem `user_id` ou sem match local
-  - não degradar eventos válidos para “desconhecido” silenciosamente
-- Preservar manual intacto enquanto a correção facial é feita.
+### Problema 2: Relatórios com horário -3h
 
-4. Unificar relatórios e PDFs no mesmo parsing de data
-- Atualizar componentes/utilitários que hoje usam `new Date(...)` de forma direta:
-  - `src/components/reports/WorkerTimeReport.tsx`
-  - `src/components/reports/CompanyReport.tsx`
-  - `src/components/reports/PresenceReport.tsx`
-  - `src/components/reports/OvernightControl.tsx`
-  - `src/utils/exportReportPdf.ts`
-  - `src/utils/exportWorkerReportPdf.ts`
-- Criar um utilitário compartilhado para:
-  - parse seguro de timestamp
-  - formatação consistente
-  - cálculo de entrada/saída/permanência
+Os timestamps no banco cloud estão corretos em UTC (verificado: evento às 19:32:04 UTC = 16:32:04 BRT, confirmado pelo screenshot do dispositivo). O `format(new Date(...), 'HH:mm')` do date-fns usa timezone local do sistema. Se o sistema está em BRT, exibe corretamente. O horário -3h pode ter sido causado pelos filtros de data antigos que usavam `T00:00:00Z` em vez de `T03:00:00Z` (já corrigido na v1.3.60), ou por alguma inconsistência no ambiente Desktop.
 
-5. Proteger contra novas regressões
-- Adicionar validações defensivas para:
-  - logs faciais sem worker resolvido
-  - duplicidade cloud/local
-  - filtros de período inconsistentes
-  - manual/facial fora do projeto
-- Não alterar o fluxo manual além do necessário.
-- Manter compatibilidade online/offline com a mesma semântica.
+### Problema 3: Token obsoleto
 
-Arquivos principais a alterar
-- `electron/agent.js`
-- `electron/database.js`
-- `electron/sync.js`
-- `server/lib/controlid.js`
-- `server/routes/workers.js`
-- `src/hooks/useDataProvider.ts`
-- `src/hooks/useSupabase.ts`
-- `src/components/reports/WorkerTimeReport.tsx`
-- `src/components/reports/CompanyReport.tsx`
-- `src/components/reports/PresenceReport.tsx`
-- `src/components/reports/OvernightControl.tsx`
-- `src/utils/exportReportPdf.ts`
-- `src/utils/exportWorkerReportPdf.ts`
-- `supabase/functions/api/index.ts`
-- `supabase/functions/controlid-webhook/index.ts`
-- `supabase/functions/agent-sync/index.ts`
+Há um segundo token (`84ed5d35...`) fazendo requisições constantes que falham. Isso indica uma instância duplicada do servidor local rodando com credenciais antigas. Não causa os problemas acima mas polui os logs.
 
-Resultado esperado
-- entrada/saída manual continuam funcionando
-- entrada/saída facial voltam a funcionar
-- WebView e PDF passam a mostrar manual + facial juntos
-- horários deixam de aparecer com -3h
-- desktop online/offline e nuvem passam a refletir a mesma regra de dados
+---
 
-Estratégia de implementação
-1. corrigir semântica de timestamp
-2. unificar consulta manual + facial
-3. reforçar pipeline facial/enrollment
-4. alinhar relatórios e PDFs
-5. validar ponta a ponta sem mexer em mais nada fora dessa trilha
+## Plano de correção — 3 alterações cirúrgicas
+
+### Alteração 1: Incluir código do hardware no access log local
+
+**Arquivo: `electron/agent.js`** — método `processEvent` (~linha 592)
+
+Adicionar campo `hardware_user_id` ao objeto `accessLog`:
+```javascript
+const accessLog = {
+  worker_id: workerId,
+  device_id: device.id,
+  timestamp: event.timestamp,
+  // ... campos existentes ...
+  hardware_user_id: event.user_id || null,  // NOVO: código original do ControlID
+};
+```
+
+**Arquivo: `electron/database.js`** — método `insertAccessLog` (~linha 1334)
+
+Aceitar e armazenar `hardware_user_id` no SQLite (nova coluna na tabela `access_logs`). Adicionar migration na inicialização do banco:
+```sql
+ALTER TABLE access_logs ADD COLUMN hardware_user_id TEXT;
+```
+
+### Alteração 2: Resolver worker por código na nuvem
+
+**Arquivo: `supabase/functions/agent-sync/index.ts`** — seção `upload-logs` (~linha 399)
+
+Quando `worker_id` é null mas `hardware_user_id` está presente, fazer lookup por `code`:
+```typescript
+if (!workerId && log.hardware_user_id) {
+  const code = Number(log.hardware_user_id);
+  if (!isNaN(code) && code > 0) {
+    const { data: byCode } = await supabase
+      .from('workers')
+      .select('id, name, document_number')
+      .eq('code', code)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (byCode) {
+      log.worker_id = byCode.id;
+      log.worker_name = log.worker_name || byCode.name;
+      log.worker_document = log.worker_document || byCode.document_number;
+    }
+  }
+}
+```
+
+Remover `hardware_user_id` antes de inserir no Postgres (não existe na tabela cloud):
+```typescript
+delete log.hardware_user_id;
+```
+
+### Alteração 3: Corrigir eventos históricos já na nuvem
+
+**Migration SQL**: Atualizar os eventos faciais de hoje que têm `worker_id = NULL` mas vieram de dispositivos onde o ControlID reconheceu o trabalhador. Como não temos `hardware_user_id` nos eventos antigos, podemos usar correlação temporal: se existe um evento manual com worker_id dentro de ±5 min de um evento facial sem worker_id, inferir que é o mesmo trabalhador.
+
+Ou mais seguro: simplesmente adicionar uma coluna `hardware_user_id` à tabela cloud `access_logs` para referência futura (não obrigatória para a correção funcionar, já que o upload-logs resolve antes de inserir).
+
+---
+
+## Resultado esperado
+- Facial: quando o lookup local falhar, a nuvem resolve pelo código → `worker_id` é preenchido → relatórios mostram os dados
+- Manual: nenhuma alteração, continua funcionando
+- Relatórios: uma vez que `worker_id` está preenchido, todos os relatórios (WebView, PDF, CSV) incluem os dados automaticamente
+- Timestamps: sem alteração (já corretos)
+
+## Arquivos alterados
+1. `electron/agent.js` — 1 ponto (adicionar `hardware_user_id` ao accessLog)
+2. `electron/database.js` — 2 pontos (migration de coluna + insertAccessLog)
+3. `supabase/functions/agent-sync/index.ts` — 1 ponto (resolução por code no upload-logs)
+4. `electron/sync.js` — 1 ponto (incluir `hardware_user_id` no upload, não stripped)
+
