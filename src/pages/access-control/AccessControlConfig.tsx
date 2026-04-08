@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Pencil, Trash2, RefreshCw, Database, Users, Monitor } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, set } from 'idb-keyval';
-import { CachedWorker } from '@/hooks/useOfflineAccessControl';
+import { workersCacheKey, type CachedWorker } from '@/hooks/useOfflineAccessControl';
 
 interface AccessPoint {
   id: string;
@@ -27,8 +27,6 @@ interface AccessPoint {
   auto_sync: boolean;
 }
 
-const WORKERS_CACHE_KEY = 'ac_workers_cache';
-
 export default function AccessControlConfig() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -40,11 +38,6 @@ export default function AccessControlConfig() {
   const [syncingData, setSyncingData] = useState(false);
   const [cachedCount, setCachedCount] = useState(0);
 
-  // Load cached count
-  useState(() => {
-    get<CachedWorker[]>(WORKERS_CACHE_KEY).then(c => setCachedCount(c?.length || 0));
-  });
-
   const { data: points = [] } = useQuery({
     queryKey: ['manual_access_points'],
     queryFn: async () => {
@@ -53,6 +46,16 @@ export default function AccessControlConfig() {
       return data as AccessPoint[];
     },
   });
+
+  // Derive the projectId of the first active terminal (same logic as main page)
+  const activeTerminal = points.find(p => p.is_active);
+  const terminalProjectId = activeTerminal?.project_id || null;
+
+  // Load cached count using the correct key
+  useEffect(() => {
+    const key = workersCacheKey(terminalProjectId);
+    get<CachedWorker[]>(key).then(c => setCachedCount(c?.length || 0));
+  }, [terminalProjectId]);
 
   const { data: companies = [] } = useQuery({
     queryKey: ['companies_for_sync'],
@@ -82,7 +85,8 @@ export default function AccessControlConfig() {
         .select('id, name, code, document_number, photo_url, company_id, status, job_function_id, role, rejection_reason, allowed_project_ids')
         .limit(5000);
 
-      if (syncClientId) {
+      // Bug 4 fix: treat empty or "all" as no filter
+      if (syncClientId && syncClientId !== 'all') {
         query = query.eq('company_id', syncClientId);
       }
 
@@ -105,22 +109,32 @@ export default function AccessControlConfig() {
         company_name: w.company_id ? companiesMap.get(w.company_id) || undefined : undefined,
         job_function_name: w.job_function_id ? jobFunctionsMap.get(w.job_function_id) || undefined : undefined,
         status: w.status,
+        role: w.role,
+        rejection_reason: w.rejection_reason,
+        allowed_project_ids: w.allowed_project_ids,
       }));
 
-      await set(WORKERS_CACHE_KEY, cached);
-      setCachedCount(cached.length);
-      toast({ title: `${cached.length} trabalhadores sincronizados` });
+      // Bug 2 fix: use same cache key as main page
+      const cacheKey = workersCacheKey(terminalProjectId);
+
+      if (cached.length > 0) {
+        await set(cacheKey, cached);
+        setCachedCount(cached.length);
+        toast({ title: `${cached.length} trabalhadores sincronizados` });
+      } else {
+        // Don't overwrite cache with empty
+        toast({ title: 'Nenhum trabalhador encontrado', description: 'O cache existente foi mantido.', variant: 'destructive' });
+      }
     } catch (err: any) {
       toast({ title: 'Erro na sincronização', description: err.message, variant: 'destructive' });
     } finally {
       setSyncingWorkers(false);
     }
-  }, [syncClientId, toast]);
+  }, [syncClientId, toast, terminalProjectId]);
 
   const handleSyncData = useCallback(async () => {
     setSyncingData(true);
     try {
-      // Force refetch companies and projects
       await queryClient.invalidateQueries({ queryKey: ['companies_for_sync'] });
       await queryClient.invalidateQueries({ queryKey: ['projects_for_access'] });
       toast({ title: 'Dados sincronizados com sucesso' });
@@ -143,7 +157,6 @@ export default function AccessControlConfig() {
     both: 'Entrada/Saída',
   };
 
-  // Show form when creating (null) or editing (uuid string)
   if (editingId !== undefined) {
     return (
       <AccessControlShell>
@@ -157,7 +170,6 @@ export default function AccessControlConfig() {
   return (
     <AccessControlShell>
       <div className="p-4 max-w-2xl mx-auto space-y-8">
-        {/* Header */}
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate('/access-control')}>
             <ArrowLeft className="h-5 w-5" />
@@ -165,7 +177,7 @@ export default function AccessControlConfig() {
           <h2 className="text-xl font-bold">Configurações</h2>
         </div>
 
-        {/* ── Section: Terminais ── */}
+        {/* Terminais */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -208,7 +220,7 @@ export default function AccessControlConfig() {
           </div>
         </section>
 
-        {/* ── Section: Sync Trabalhadores ── */}
+        {/* Sync Trabalhadores */}
         <section className="space-y-3">
           <div className="flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" />
@@ -241,7 +253,7 @@ export default function AccessControlConfig() {
           </div>
         </section>
 
-        {/* ── Section: Sync Dados ── */}
+        {/* Sync Dados */}
         <section className="space-y-3">
           <div className="flex items-center gap-2">
             <Database className="h-5 w-5 text-primary" />

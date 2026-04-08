@@ -6,9 +6,10 @@ interface NumericKeypadProps {
   onClear: () => void;
   onConfirm: () => void;
   onCamera?: () => void;
+  disabled?: boolean;
 }
 
-export function NumericKeypad({ onDigit, onClear, onConfirm, onCamera }: NumericKeypadProps) {
+export function NumericKeypad({ onDigit, onClear, onConfirm, onCamera, disabled }: NumericKeypadProps) {
   const keys = [
     ['1', '2', '3'],
     ['4', '5', '6'],
@@ -58,8 +59,9 @@ export function NumericKeypad({ onDigit, onClear, onConfirm, onCamera }: Numeric
       <Button
         className="col-span-3 h-14 text-lg font-semibold"
         onClick={onConfirm}
+        disabled={disabled}
       >
-        Verificar Acesso
+        {disabled ? 'Sincronizando...' : 'Verificar Acesso'}
       </Button>
     </div>
   );
