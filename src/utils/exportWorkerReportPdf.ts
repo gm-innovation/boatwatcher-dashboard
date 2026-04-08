@@ -241,14 +241,6 @@ export async function exportStandardWorkerPdf(opts: PdfOptions) {
   const drawShiftRows = (shiftRows: WorkerRow[], startY: number) => {
     let cy = startY;
     shiftRows.forEach((row, ri) => {
-      cy = checkPageBreak(doc, cy, 7);
-      if (cy <= 18) cy = drawTableHeader(cy);
-
-      if (ri % 2 === 0) {
-        doc.setFillColor(...COLORS.altRowBg);
-        doc.rect(MARGIN, cy, availableWidth, 5.5, 'F');
-      }
-
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7);
       doc.setTextColor(...COLORS.dark);
@@ -272,6 +264,9 @@ export async function exportStandardWorkerPdf(opts: PdfOptions) {
       const wMaxLines = Math.max(...wrappedVals.map(l => l.length));
       const wLineH = 3.5;
       const wRowH = Math.max(5.5, wMaxLines * wLineH + 2);
+
+      cy = checkPageBreak(doc, cy, wRowH + 2);
+      if (cy <= 18) cy = drawTableHeader(cy);
 
       if (ri % 2 === 0) {
         doc.setFillColor(248, 248, 248);
