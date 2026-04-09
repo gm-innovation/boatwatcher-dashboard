@@ -152,6 +152,14 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
   });
 };
 
+/** Canonical identity key for cloud logs — ensures manual entry + facial exit match */
+function resolveCloudCanonicalKey(log: { worker_id?: string | null; worker_name?: string | null; worker_document?: string | null }): string {
+  if (log.worker_document) return `doc:${log.worker_document}`;
+  if (log.worker_id) return `id:${log.worker_id}`;
+  if (log.worker_name) return `name:${log.worker_name.toLowerCase().trim()}`;
+  return '';
+}
+
 /** Cloud query for workers on board — extracted for reuse and clarity */
 async function fetchWorkersOnBoardFromCloud(
   projectId: string,
