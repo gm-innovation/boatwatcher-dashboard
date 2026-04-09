@@ -11,8 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Download, Moon, User, Clock, Building2 } from 'lucide-react';
-import { parseISO, differenceInCalendarDays } from 'date-fns';
-import { formatBrtTime, toBrtDate } from '@/utils/brt';
+import { formatBrtTime, toBrtDate, getBrtDayKey } from '@/utils/brt';
 
 interface OvernightControlProps {
   projectId: string;
@@ -85,14 +84,12 @@ export const OvernightControl = ({ projectId, startDate, endDate }: OvernightCon
       const isOnBoard = lastEntry && (!lastExit || new Date(lastEntry.timestamp) > new Date(lastExit.timestamp));
 
       if (isOnBoard && lastEntry) {
-        const entryDate = parseISO(lastEntry.timestamp);
-        const brtEntry = toBrtDate(entryDate);
+        const brtEntry = toBrtDate(lastEntry.timestamp);
         const brtNow = toBrtDate(new Date());
-        // Compare BRT calendar days for correct night count
-        const nights = differenceInCalendarDays(
-          new Date(brtNow.getUTCFullYear(), brtNow.getUTCMonth(), brtNow.getUTCDate()),
-          new Date(brtEntry.getUTCFullYear(), brtEntry.getUTCMonth(), brtEntry.getUTCDate())
-        );
+        // Calculate nights as difference in BRT calendar days
+        const entryDay = Date.UTC(brtEntry.getUTCFullYear(), brtEntry.getUTCMonth(), brtEntry.getUTCDate());
+        const nowDay = Date.UTC(brtNow.getUTCFullYear(), brtNow.getUTCMonth(), brtNow.getUTCDate());
+        const nights = Math.floor((nowDay - entryDay) / (24 * 60 * 60 * 1000));
 
         const worker = workerById.get(workerId) || findWorker(logs[0]);
         const companyName = worker?.company && typeof worker.company === 'object' && 'name' in worker.company
@@ -103,7 +100,7 @@ export const OvernightControl = ({ projectId, startDate, endDate }: OvernightCon
           id: workerId,
           name: worker?.name || lastEntry.worker_name || 'Desconhecido',
           company: companyName,
-          entryTime: formatBrtTime(entryDate),
+          entryTime: formatBrtTime(lastEntry.timestamp),
           nights: Math.max(nights, 0),
           photoUrl: worker?.photo_url || undefined,
         });
