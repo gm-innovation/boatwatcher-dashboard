@@ -1,68 +1,59 @@
 
+Objetivo: corrigir de vez o caso “entrada manual → saída facial” e impedir que, depois disso, o facial pareça travado.
 
-# Limpar backlog e sincronizar logs a cada 5 segundos
+Diagnóstico mais provável pelo código atual:
+- O problema agora não é mais só frequência de sync; é uma combinação de reconciliação de identidade + fonte errada no dashboard.
+- Há 4 pontos frágeis:
+  1. `src/hooks/useSupabase.ts` ainda está cloud-first no desktop para `useWorkersOnBoard`, então a saída facial local pode não aparecer imediatamente.
+  2. O cálculo de “a bordo” usa chave `worker_id || worker_name` tanto local quanto nuvem. Isso quebra justamente o fluxo manual → facial quando o manual entra com UUID do trabalhador e o facial sai sem o mesmo UUID exato.
+  3. `electron/database.js#getWorkersOnBoard` filtra manual com `LIKE 'Manual - %'`, misturando qualquer terminal manual, em vez de só os pontos do projeto.
+  4. `electron/sync.js` marca o lote inteiro como sincronizado sempre que a edge function responde `success`, mesmo se parte do lote tiver sido rejeitada. Isso pode fazer uma saída facial sumir silenciosamente.
 
-## Problema
+Plano de correção
 
-1. **465 logs acumulados** que nunca foram enviados — provavelmente duplicatas ou erros antigos que travam a fila
-2. **Upload envia tudo de uma vez** (465 logs = request enorme → timeout ou erro parcial → fila nunca drena)
-3. **Ciclo de sync principal é 60s**, não 5s — o fast-lane só dispara quando um evento novo chega, não limpa backlog
-4. **Quando o upload falha, nada é marcado como synced** — os mesmos 465 logs ficam tentando eternamente
+1. Fazer o desktop ser realmente local-first para presença
+- Em `src/hooks/useSupabase.ts`, no `useWorkersOnBoard`, usar o SQLite local primeiro quando houver servidor local ativo.
+- Nuvem fica como fallback, não como fonte principal no desktop.
 
-## Plano
+2. Corrigir a reconciliação entre manual e facial
+- Criar uma chave canônica de identidade compartilhada pelos cálculos local e cloud.
+- Aplicar em:
+  - `electron/database.js#getWorkersOnBoard`
+  - `src/hooks/useSupabase.ts#fetchWorkersOnBoardFromCloud`
+- Regra:
+  - preferir `worker_document`
+  - depois `worker_id`
+  - depois nome normalizado
+- Isso faz a saída facial cancelar corretamente uma entrada manual do mesmo trabalhador, mesmo com IDs diferentes entre os fluxos.
 
-### 1. Upload em lotes + tolerância a duplicatas (`electron/sync.js`)
+3. Parar de misturar terminais manuais de outros contextos
+- Em `electron/database.js#getWorkersOnBoard`, trocar `LIKE 'Manual - %'` por filtro explícito:
+  - `device_id` dos devices do projeto
+  - ou `device_name IN (SELECT 'Manual - ' || name FROM manual_access_points WHERE project_id = ?)`
+- Assim o cálculo local fica coerente com o projeto correto.
 
-Refatorar `uploadLogs()`:
-- Dividir em **batches de 50**
-- Para cada batch: enviar → se sucesso, marcar como synced → próximo batch
-- Se o servidor retornar erro `23505` (duplicata) mas `success: true` no response geral → marcar como synced
-- Se o batch falhar completamente → parar e tentar o resto no próximo ciclo
-- Adicionar um **teto de tempo** (ex: 10s total) para não travar o ciclo inteiro
+4. Blindar o upload para não perder eventos faciais
+- Em `supabase/functions/agent-sync/index.ts`, devolver resultado granular por lote.
+- Em `electron/sync.js`, marcar como synced apenas os logs realmente aceitos/duplicados tolerados.
+- Se houver rejeição parcial, manter os rejeitados locais para retry e diagnóstico.
 
-### 2. Ciclo de upload a cada 5 segundos (`electron/sync.js`)
+5. Expor diagnóstico específico do problema
+- Em `server/routes/sync.js` e `src/components/admin/DiagnosticsPanel.tsx`, mostrar:
+  - últimos logs locais com `source`, `worker_id`, `worker_document`, `device_name`, `direction`, `synced`
+  - rejeições de upload
+  - divergência de identidade entre manual e facial
+- Isso confirma rapidamente se o facial capturou, mas não reconciliou, ou se nem chegou a subir.
 
-Criar um **loop dedicado de upload de logs** separado do sync principal (que continua em 60s para dados pesados como workers/devices):
+Arquivos previstos:
+- `src/hooks/useSupabase.ts`
+- `electron/database.js`
+- `electron/sync.js`
+- `supabase/functions/agent-sync/index.ts`
+- `server/routes/sync.js`
+- `src/components/admin/DiagnosticsPanel.tsx`
 
-```text
-start():
-  syncInterval = 60s  → triggerSync() (workers, devices, companies, etc.)
-  logUploadInterval = 5s → uploadLogs() (apenas logs pendentes)
-```
-
-Assim, mesmo sem fast-lane, logs pendentes são enviados a cada 5s. Quando a fila está vazia, o upload retorna instantaneamente.
-
-### 3. Flush completo ao voltar online (`electron/sync.js`)
-
-No `checkAndSync()`, quando detectar transição offline → online:
-- Executar `uploadLogs()` imediatamente (antes do sync completo)
-- Isso garante que qualquer acúmulo offline seja drenado na reconexão
-
-### 4. Endpoint para limpar backlog manualmente (`server/routes/sync.js`)
-
-Adicionar rota `POST /api/sync/flush-stale-logs`:
-- Marca como synced todos os logs com mais de 24h que nunca foram enviados
-- Isso limpa o backlog atual de 465 eventos de uma vez
-- Resposta inclui quantos foram limpos
-
-### 5. Auto-limpeza no boot (`electron/sync.js`)
-
-Na inicialização, se houver mais de 200 logs unsynced com mais de 24h:
-- Log de warning
-- Marcar como synced automaticamente (dados muito antigos provavelmente já estão na nuvem por outra via, ou são irrecuperáveis)
-
-### 6. Bump de versão (`electron/package.json`)
-
-## Arquivos modificados
-
-- `electron/sync.js` — batching, loop 5s, flush on reconnect, auto-cleanup
-- `server/routes/sync.js` — endpoint flush-stale-logs
-- `electron/package.json` — versão
-
-## Resultado
-
-- Backlog atual de 465 logs é limpo automaticamente no boot
-- Novos logs são enviados em até 5s (sem depender do fast-lane)
-- Se ficar offline, ao reconectar tudo sincroniza imediatamente
-- Duplicatas nunca mais travam a fila
-
+Resultado esperado:
+- `entrada manual → saída facial` passa a funcionar
+- depois desse fluxo, o facial continua funcionando normalmente
+- o dashboard desktop passa a refletir o estado local imediatamente
+- eventos faciais rejeitados não são mais perdidos silenciosamente
