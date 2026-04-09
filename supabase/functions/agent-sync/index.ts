@@ -532,7 +532,17 @@ serve(async (req) => {
 
       await supabase.from('local_agents').update({ last_sync_at: new Date().toISOString(), pending_sync_count: 0, sync_status: 'synced' }).eq('id', agent.id)
 
-      return new Response(JSON.stringify({ success: true, received: logs.length, accepted: insertedCount, rejected: rejected.length, rejectedDetails: rejected.slice(0, 10) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      // Build per-log status for granular sync tracking on agent side
+      const logResults: Array<{ id: string; status: 'accepted' | 'duplicate' | 'rejected'; reason?: string }> = []
+      for (let i = 0; i < accepted.length; i++) {
+        const logId = String(accepted[i].id || `idx-${i}`)
+        logResults.push({ id: logId, status: 'accepted' })
+      }
+      for (const r of rejected) {
+        logResults.push({ id: String(logs[r.index]?.id || `idx-${r.index}`), status: 'rejected', reason: r.reason })
+      }
+
+      return new Response(JSON.stringify({ success: true, received: logs.length, accepted: insertedCount, rejected: rejected.length, rejectedDetails: rejected.slice(0, 10), logResults }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // POST /upload-operations

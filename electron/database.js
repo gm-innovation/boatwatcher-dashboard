@@ -1382,15 +1382,18 @@ function createDatabaseAPI(db, startCode) {
       // Fetch ALL events (entry + exit) for the day, ordered by TIMESTAMP (event time)
       // Previously used created_at (cloud arrival order) which caused ghost sessions
       // when old events were batch-uploaded later with wrong identity.
+      // Project-scoped filter: match device_id from project devices OR manual access points
+      // specifically registered for this project (not generic 'Manual - %' which leaks cross-project data).
       const deviceFilter = projectId
-        ? 'AND (al.device_id IN (SELECT id FROM devices WHERE project_id = ?) OR (al.device_id IS NULL AND al.device_name LIKE \'Manual - %\'))'
+        ? `AND (al.device_id IN (SELECT id FROM devices WHERE project_id = ?)
+           OR (al.device_id IS NULL AND al.device_name IN (SELECT 'Manual - ' || name FROM manual_access_points WHERE project_id = ?)))`
         : '';
       const params = projectId
-        ? [startTimestamp, maxTimestamp, projectId]
+        ? [startTimestamp, maxTimestamp, projectId, projectId]
         : [startTimestamp, maxTimestamp];
 
       const allLogs = db.prepare(`
-        SELECT al.worker_id, al.worker_name, al.device_name, al.device_id, al.timestamp, al.direction, al.created_at
+        SELECT al.worker_id, al.worker_name, al.worker_document, al.device_name, al.device_id, al.timestamp, al.direction, al.created_at
         FROM access_logs al
         WHERE al.timestamp >= ?
           AND al.timestamp <= ?
@@ -1400,13 +1403,37 @@ function createDatabaseAPI(db, startCode) {
         ORDER BY al.timestamp ASC
       `).all(...params);
 
+      // === Canonical identity key ===
+      // The critical problem: manual access logs use the worker's cloud UUID as worker_id,
+      // while facial events from hardware may use a different local UUID (or even NULL worker_id
+      // with only worker_name). This means a facial exit doesn't cancel a manual entry.
+      //
+      // Solution: build a canonical key per worker by resolving to a stable identity:
+      //   1. worker_document (CPF) — most stable across manual/facial
+      //   2. Cloud worker_id via local DB lookup (resolves local IDs → cloud IDs)
+      //   3. Normalized worker_name as last resort
+      function resolveCanonicalKey(log) {
+        // Prefer document (CPF) — shared between manual and facial
+        if (log.worker_document) return `doc:${log.worker_document}`;
+
+        // Resolve worker_id to cloud_id for stability across local/cloud UUIDs
+        if (log.worker_id) {
+          const worker = db.prepare('SELECT cloud_id, document_number FROM workers WHERE id = ? OR cloud_id = ? LIMIT 1').get(log.worker_id, log.worker_id);
+          if (worker?.document_number) return `doc:${worker.document_number}`;
+          if (worker?.cloud_id) return `id:${worker.cloud_id}`;
+          return `id:${log.worker_id}`;
+        }
+
+        // Last resort: normalized name
+        return `name:${(log.worker_name || '').toLowerCase().trim()}`;
+      }
+
       // Process worker state chronologically by TIMESTAMP (actual event time)
       const workerState = new Map();
       const firstEntryMap = new Map();
       for (const log of allLogs) {
-        // Use worker_id as primary key (stable UUID), fallback to worker_name
-        const key = log.worker_id || log.worker_name || '';
-        if (!key) continue;
+        const key = resolveCanonicalKey(log);
+        if (!key || key === 'name:') continue;
 
         if (log.direction === 'entry') {
           workerState.set(key, {
@@ -1424,6 +1451,16 @@ function createDatabaseAPI(db, startCode) {
           const existing = workerState.get(key);
           if (existing) {
             existing.isOnBoard = false;
+          } else {
+            // Exit without prior entry today — mark as exited
+            workerState.set(key, {
+              worker_id: log.worker_id,
+              worker_name: log.worker_name,
+              device_name: log.device_name,
+              device_id: log.device_id,
+              entry_time: log.timestamp,
+              isOnBoard: false,
+            });
           }
         }
       }

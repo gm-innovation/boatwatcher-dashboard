@@ -1,4 +1,43 @@
 const express = require('express');
+const router = express.Router();
+
+// POST /flush-stale-logs — mark old unsynced logs as synced
+router.post('/flush-stale-logs', (req, res) => {
+  try {
+    const rawDb = req.db.getRawDb?.();
+    if (!rawDb) return res.status(500).json({ error: 'No raw DB access' });
+
+    const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const result = rawDb.prepare(
+      "UPDATE access_logs SET synced = 1 WHERE synced = 0 AND created_at < ?"
+    ).run(cutoff);
+
+    res.json({ flushed: result.changes });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /local-logs — diagnostic view of recent local access logs
+router.get('/local-logs', (req, res) => {
+  try {
+    const rawDb = req.db.getRawDb?.();
+    if (!rawDb) return res.status(500).json({ error: 'No raw DB access' });
+
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    const logs = rawDb.prepare(
+      `SELECT id, worker_id, worker_name, worker_document, device_name, device_id,
+              direction, source, synced, timestamp, created_at
+       FROM access_logs
+       ORDER BY timestamp DESC
+       LIMIT ?`
+    ).all(limit);
+
+    res.json({ logs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 const path = require('path');
 const router = express.Router();
 
