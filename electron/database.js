@@ -1899,6 +1899,7 @@ function createDatabaseAPI(db, startCode) {
       }
 
       const cloudCreatedAt = data.created_at || data.timestamp || new Date().toISOString();
+      const cloudUpdatedAt = data.updated_at || cloudCreatedAt;
 
       // 1. Try exact match by cloud id
       let existing = db.prepare('SELECT id FROM access_logs WHERE id = ?').get(data.id);
@@ -1925,7 +1926,7 @@ function createDatabaseAPI(db, startCode) {
           UPDATE access_logs SET
             id = ?, worker_id = ?, device_id = ?, timestamp = ?, access_status = ?, direction = ?,
             reason = ?, score = ?, worker_name = ?, worker_document = ?, device_name = ?,
-            created_at = ?, synced = 1
+            created_at = ?, updated_at = ?, synced = 1
           WHERE id = ?
         `).run(
           data.id,
@@ -1940,14 +1941,15 @@ function createDatabaseAPI(db, startCode) {
           data.worker_document || null,
           data.device_name || null,
           cloudCreatedAt,
+          cloudUpdatedAt,
           existing.id,
         );
         return;
       }
 
       db.prepare(`
-        INSERT INTO access_logs (id, worker_id, device_id, timestamp, access_status, direction, reason, score, worker_name, worker_document, device_name, created_at, synced)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        INSERT INTO access_logs (id, worker_id, device_id, timestamp, access_status, direction, reason, score, worker_name, worker_document, device_name, created_at, updated_at, synced)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       `).run(
         data.id,
         localWorkerId,
@@ -1961,6 +1963,7 @@ function createDatabaseAPI(db, startCode) {
         data.worker_document || null,
         data.device_name || null,
         cloudCreatedAt,
+        cloudUpdatedAt,
       );
     },
 
