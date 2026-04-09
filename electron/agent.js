@@ -43,31 +43,41 @@ function normalizeTimestamp(event) {
   const raw = event.timestamp || event.time || event.date || event.datetime;
   if (!raw) return null;
 
-  // ControlID firmware computes epoch from BRT wall clock (treats local
-  // time as if it were UTC).  Add 3h to convert to true UTC.
+  // ────────────────────────────────────────────────────────────────────
+  // IMPORTANT: ControlID firmware ALWAYS sends BRT wall-clock time,
+  // regardless of the format (epoch, ISO string with Z, or bare string).
+  // The hardware does NOT track UTC — it treats local BRT as if it were
+  // UTC, so any timezone marker (Z, +00:00) is WRONG and must be ignored.
+  // We ALWAYS add 3 hours to convert BRT → true UTC.
+  // ────────────────────────────────────────────────────────────────────
+
+  const BRT_OFFSET_MS = 3 * 3600 * 1000; // 3 hours in milliseconds
+
+  // Epoch seconds — firmware treats BRT as UTC epoch
   if (typeof raw === 'number') {
-    return new Date(raw * 1000 + 3 * 3600 * 1000).toISOString();
+    return new Date(raw * 1000 + BRT_OFFSET_MS).toISOString();
   }
 
-  // String with timezone suffix — parse directly
-  const hasTimezone = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(raw.trim());
-  if (hasTimezone) {
-    const ms = Date.parse(raw);
-    return isNaN(ms) ? null : new Date(ms).toISOString();
-  }
+  // ISO-like string — strip any timezone suffix and parse as bare datetime
+  const trimmed = String(raw).trim();
 
-  // No timezone — interpret as BRT (UTC-3), convert to true UTC by adding 3h
-  // ControlID devices send local Brazilian time without timezone markers
-  const match = raw.match(/(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/);
+  // Try structured parse first (most reliable)
+  const match = trimmed.match(/(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/);
   if (match) {
     const [, yr, mo, dy, hr, mn, sc] = match.map(Number);
+    // Treat as BRT: add 3h to get true UTC
     const utcDate = new Date(Date.UTC(yr, mo - 1, dy, hr + 3, mn, sc));
     return utcDate.toISOString();
   }
 
-  // Fallback
-  const ms = Date.parse(raw);
-  return isNaN(ms) ? null : new Date(ms).toISOString();
+  // Fallback: strip timezone markers and parse, then add 3h
+  const stripped = trimmed.replace(/[Zz]$/, '').replace(/[+-]\d{2}:?\d{2}$/, '');
+  const ms = Date.parse(stripped);
+  if (!isNaN(ms)) {
+    return new Date(ms + BRT_OFFSET_MS).toISOString();
+  }
+
+  return null;
 }
 
 function parseControlIdEvent(rawEvent, device) {
