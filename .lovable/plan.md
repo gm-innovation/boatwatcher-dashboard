@@ -1,103 +1,88 @@
 
-Objetivo agora: desfazer a regressão e restaurar um fluxo único e confiável para dashboard + relatórios + sync bidirecional, sem “forçar cloud” e sem depender do fuso da máquina.
 
-Do I know what the issue is? Sim.
+# Plano de Correção em Fases
 
-Diagnóstico confirmado no código:
-1. Ainda existe split-brain entre dashboard e relatórios.
-- Dashboard usa caminho cloud-first em `src/hooks/useSupabase.ts#useWorkersOnBoard`.
-- Relatórios usam `useAccessLogs` → `fetchAccessLogs` → local-first em `src/hooks/useDataProvider.ts`.
-- Resultado: um evento pode aparecer no dashboard e não no relatório, ou vice-versa.
+Cada fase será testada antes de avançar. Nenhuma alteração em funcionalidades que já estão operando.
 
-2. A correção de convergência ficou incompleta no SQLite.
-- `electron/database.js` cria `access_logs` sem coluna `updated_at`.
-- `upsertAccessLogFromCloud()` recebe `updated_at`, mas não salva esse campo; hoje ele sobrescreve `created_at`.
-- Então a sync por `updated_at` foi implementada na função cloud e no cursor do desktop, mas o banco local ainda não preserva a versão canônica do log.
+---
 
-3. O horário errado ainda está espalhado em vários pontos.
-- Há uso residual de timezone implícito em:
-  - `src/components/dashboard/RecentActivityFeed.tsx`
-  - `src/components/dashboard/WorkersOnBoardTable.tsx`
-  - `src/components/reports/PresenceReport.tsx`
-  - `src/components/reports/OvernightControl.tsx`
-  - `src/utils/exportReportPdf.ts`
-  - `src/utils/exportReports.ts`
-  - partes de `src/utils/exportWorkerReportPdf.ts`
-- Também há parsing perigoso com `new Date(startDate)` para strings `yyyy-MM-dd`, que pode deslocar o dia.
+## Situação Atual Confirmada
 
-4. O dashboard ignora eventos faciais sem identidade resolvida.
-- Em `useWorkersOnBoard`, o trabalhador só entra no estado se houver `worker_id` ou `worker_name`.
-- Se o facial entrou no SQLite local mas não convergiu corretamente para a nuvem, o relatório local pode ver algo que o dashboard cloud não vê.
+**O que funciona:**
+- Dashboard mostra entradas manuais corretamente
+- Web reports mostram entradas manuais corretamente
+- Sync de workers, companies, devices funciona (token `fe25b788` válido)
+- BRT utility (`src/utils/brt.ts`) está criado e parcialmente em uso
 
-5. Existe suspeita real no parser do agente para payloads do Control iD.
-- `electron/agent.js#normalizeTimestamp()` trata timestamps com timezone como “já corretos”.
-- Se o dispositivo estiver enviando timestamp com marcador enganoso, isso mantém o erro de -3h na origem.
-- Isso explica por que ainda há entrada aparecendo 3h antes mesmo após a camada de formatação em BRT.
+**O que está quebrado:**
+1. **Facial não chega à nuvem** — Agent tem 543 logs não sincronizados com `lastUploadErr=YES`. O token antigo `84ed5d35` (de uma instância obsoleta) está tentando uploads e falhando. O token válido `fe25b788` parece não estar sendo usado para upload-logs.
+2. **Relatórios web e desktop divergem** — Desktop usa SQLite (local-first), que não recebeu os logs manuais da nuvem (porque o cursor `download-access-logs` pode estar avançado demais ou porque o upload falhou). Web usa cloud.
+3. **Horário errado no relatório web** — Os timestamps faciais antigos na nuvem (dia 08/04) estão corretos em UTC, mas a UI de relatório ainda tem parsing residual de timezone em `Reports.tsx` (`parseISO`/`format`) e nos exports.
 
-Plano de correção revisado:
-1. Consertar a convergência real cloud ↔ SQLite
-- Adicionar `updated_at` em `access_logs` local e migrar registros existentes.
-- Salvar `updated_at` corretamente em `upsertAccessLogFromCloud()`.
-- Atualizar reconciliação local para usar a versão mais nova do evento, sem reaproveitar `created_at` como se fosse atualização.
-- Preservar a chave canônica por `device_id/device_name + timestamp + direction`.
+---
 
-2. Unificar a semântica de consulta entre dashboard e relatórios
-- Extrair uma regra única para seleção de logs por projeto:
-  - dispositivos do projeto
-  - terminais manuais do projeto
-  - apenas eventos válidos
-  - ordenação por `timestamp` real
-- Aplicar a mesma regra em:
-  - `fetchAccessLogs`
-  - `getWorkersOnBoard` local
-  - `fetchWorkersOnBoardFromCloud`
-- Assim dashboard e relatórios passam a depender da mesma verdade lógica.
+## Fase 1: Destravar o upload de logs faciais (problema principal)
 
-3. Corrigir a ingestão temporal na origem
-- Revisar `electron/agent.js#normalizeTimestamp()` com foco em todos os formatos reais do Control iD.
-- Tratar explicitamente:
-  - epoch numérico
-  - string sem timezone
-  - string com timezone possivelmente ambíguo
-- Padronizar: armazenar UTC canônico, exibir BRT.
+**Objetivo:** Fazer os 543 logs parados chegarem à nuvem.
 
-4. Finalizar a padronização BRT na UI e exportações
-- Trocar todos os usos restantes de `format(new Date(...))`, `getDay(new Date(...))`, `parseISO(...)` e `new Date('yyyy-mm-dd')` por utilitários centralizados de `src/utils/brt.ts`.
-- Corrigir também labels de período e rodapés de PDF/export para não dependerem do timezone do navegador/Electron.
+**Diagnóstico:** O `uploadLogs()` em `electron/sync.js` usa `this.agentToken` que resolve via `process.env.AGENT_TOKEN || db.getSyncMeta('agent_token')`. Se houver um token antigo em `process.env.AGENT_TOKEN` que o Electron definiu ao iniciar, ele prevalece sobre o do SQLite. O retry de 401 tenta recarregar do DB, mas se o token do DB também estiver errado (ou o env for persistente), o ciclo falha.
 
-5. Restaurar o facial no dashboard sem quebrar o manual
-- Garantir que logs faciais resolvidos localmente subam rápido e reapareçam no cloud/dashboard.
-- Garantir que enriquecimentos cloud voltem para o SQLite e substituam cópias incompletas.
-- Manter manual e facial no mesmo pipeline lógico de projeto.
+**Arquivos a editar:**
+- `electron/sync.js` — Forçar `agentToken` a sempre ler do DB primeiro (mais recente e confiável), não do env. Adicionar log claro do token sendo usado em cada upload.
 
-6. Reparar dados já afetados
-- Aplicar correção dirigida para eventos gerados na janela quebrada:
-  - preencher identidade faltante quando houver correspondência segura
-  - corrigir timestamps deslocados apenas nos registros comprovadamente afetados
-- Fazer isso de forma cirúrgica para não alterar históricos já corretos.
+**Teste:** Verificar nos logs da edge function se o upload-logs passa a chegar com o token `fe25b788` e se os logs são inseridos na nuvem. Confirmar no dashboard que eventos faciais aparecem.
 
-Arquivos principais:
-- `electron/agent.js`
-- `electron/database.js`
-- `electron/sync.js`
-- `supabase/functions/agent-sync/index.ts`
-- `src/hooks/useDataProvider.ts`
-- `src/hooks/useSupabase.ts`
-- `src/hooks/useControlID.ts`
-- `src/components/dashboard/RecentActivityFeed.tsx`
-- `src/components/dashboard/WorkersOnBoardTable.tsx`
-- `src/components/reports/WorkerTimeReport.tsx`
-- `src/components/reports/CompanyReport.tsx`
-- `src/components/reports/PresenceReport.tsx`
-- `src/components/reports/OvernightControl.tsx`
-- `src/utils/exportWorkerReportPdf.ts`
-- `src/utils/exportReportPdf.ts`
-- `src/utils/exportReports.ts`
+---
 
-Resultado esperado:
-- facial volta a aparecer no dashboard
-- manual continua aparecendo no dashboard
-- manual e facial aparecem juntos nos relatórios
-- web e desktop batem
-- horário em tela/PDF/CSV/Excel fica correto em BRT
-- cloud e SQLite voltam a convergir de verdade
+## Fase 2: Corrigir horários nos relatórios web
+
+**Objetivo:** Relatórios web exibem timestamps corretos em BRT.
+
+**Diagnóstico:** `Reports.tsx` usa `format(parseISO(projectStart), 'yyyy-MM-dd')` que pode deslocar dia dependendo do timezone. Os componentes de relatório já usam `useAccessLogs` que busca da nuvem (cloud path) com limites BRT corretos. O problema residual está na formatação/agrupamento nos componentes.
+
+**Arquivos a editar:**
+- `src/pages/Reports.tsx` — Substituir `format(parseISO(...))` por parsing direto de substring `yyyy-MM-dd` (sem timezone)
+- `src/components/reports/OvernightControl.tsx` — Verificar se `differenceInCalendarDays` com `parseISO` causa deslocamento; usar `toBrtDate` se necessário
+- `src/utils/exportReportPdf.ts` — Confirmar que já usa BRT helpers (foi editado antes)
+- `src/utils/exportReports.ts` — Confirmar uso de BRT
+
+**Teste:** Gerar relatório de presença e de trabalhadores no web para o dia 08/04. Confirmar que os horários batem com os timestamps UTC da nuvem convertidos para BRT.
+
+---
+
+## Fase 3: Garantir convergência SQLite ← Nuvem
+
+**Objetivo:** Desktop recebe todos os logs da nuvem (manuais + faciais já enriquecidos).
+
+**Diagnóstico:** O SQLite já tem `updated_at` na tabela. O `downloadAccessLogs` já usa `updated_at` como cursor. O `upsertAccessLogFromCloud` já faz reconciliação por chave canônica. A convergência deveria funcionar se o upload (Fase 1) destravar.
+
+**Verificação:** Após Fase 1, esperar 1 ciclo de sync (60s) e verificar se os mesmos 19+ logs do dia 08/04 aparecem no relatório desktop. Se não aparecerem:
+- Investigar se o cursor `last_download_access_logs` está avançado demais
+- Verificar se o `download-access-logs` está retornando os logs manuais
+
+**Possível correção:** Reset do cursor `last_download_access_logs` para re-download se necessário.
+
+---
+
+## Fase 4: Corrigir normalizeTimestamp no agente (prevenção)
+
+**Objetivo:** Novos eventos faciais são armazenados com timestamp UTC correto na origem.
+
+**Diagnóstico:** `normalizeTimestamp` no `electron/agent.js` trata strings com timezone como "já corretas" (linha 53-57). Se o dispositivo ControlID enviar timestamp com timezone `+00:00` mas o valor real for BRT (ex: `2026-04-09T10:00:00+00:00` quando na verdade são 10h BRT), o código aceita como UTC e o resultado fica 3h adiantado.
+
+**Arquivo a editar:**
+- `electron/agent.js` — Na branch de timestamp com timezone, adicionar heurística: se o offset é +00:00 mas o dispositivo é ControlID (que sempre opera em BRT), tratar como BRT e adicionar +3h. Ou: sempre tratar timestamp de dispositivo como BRT local, independente do marcador.
+
+**Teste:** Registrar entrada facial e verificar no dashboard que o horário exibido corresponde ao horário real (em BRT).
+
+---
+
+## Resumo de impacto por fase
+
+| Fase | Risco | Muda o que funciona? |
+|------|-------|---------------------|
+| 1 | Baixo — muda apenas prioridade de token no sync | Não |
+| 2 | Baixo — muda apenas formatação de texto | Não |
+| 3 | Nenhum — apenas verificação e possível reset de cursor | Não |
+| 4 | Médio — muda parsing de timestamp na ingestão | Não afeta dados existentes |
+
