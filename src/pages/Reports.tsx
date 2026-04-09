@@ -26,9 +26,10 @@ const Reports = () => {
     if (!project) return;
     const projectStart = project.start_date || project.created_at;
     if (projectStart) {
-      setStartDate(format(parseISO(projectStart), 'yyyy-MM-dd'));
+      // Extract yyyy-MM-dd directly without timezone-sensitive parsing
+      setStartDate(projectStart.substring(0, 10));
     }
-    setEndDate(format(new Date(), 'yyyy-MM-dd'));
+    setEndDate(new Date().toISOString().substring(0, 10));
   }, [selectedProject, projects]);
 
   return (
