@@ -1,64 +1,60 @@
 
+Objetivo imediato: fazer a entrada facial voltar a refletir no dashboard agora.
 
-# Fix: Facial Events Disappearing — Stuck `align_cursors_requested` Flag
+Diagnóstico confirmado:
+- O pipeline principal já está capturando e subindo eventos do facial.
+- O agente correto está online, os devices estão vinculados ao projeto certo e o flag `align_cursors_requested` não está mais ativo.
+- O evento facial novo já existe na nuvem com os campos funcionais esperados:
+  - `device_id` correto
+  - `direction = entry`
+  - `access_status = granted`
+  - `worker_id/worker_name` corretos
+- O problema real está no horário do evento facial:
+  - o leitor mostrou `13:59:39` local
+  - a nuvem recebeu `2026-04-09 13:59:39+00`
+  - isso deixa o facial 3 horas atrasado em UTC
+- Como o dashboard ordena pelo `timestamp` do evento (o que está certo), ele enxerga uma saída manual posterior e conclui que o trabalhador está fora. Ou seja: o facial sobe, mas perde na lógica cronológica por causa do timestamp errado.
 
-## Root Cause
+Plano de correção focado só nisso:
 
-The `align_cursors_requested: true` flag is permanently stuck in the agent's cloud configuration (`local_agents.configuration`). Every 60-second sync cycle, `downloadUpdates()` detects this flag and runs `executeAlignCursors()`, which calls `markAllLogsSynced()` — this marks ALL unsynced access logs as already synced, so `uploadLogs()` never finds anything to send.
+1. Corrigir a normalização de horário no agente
+- Arquivo: `electron/agent.js`
+- Ajustar `normalizeTimestamp` / `parseControlIdEvent` para tratar timestamps vindos do ControlID como horário local BRT da controladora, mesmo quando vierem com `Z` ou `+00:00` incorreto.
+- Aplicar essa regra só no fluxo de hardware ControlID, sem mexer em logs manuais/web.
 
-The flag should be cleared after the first alignment via `clear-align-flag`, but the edge function call never succeeds (zero logs for it in the backend). Result: every new facial event is captured locally, then silently erased from the upload queue within seconds.
+2. Confirmar o formato real do payload durante a implementação
+- Validar no `lastEventPayload` qual campo o dispositivo está mandando (`time`, `timestamp`, `date`, `datetime`) e em qual formato.
+- Cobrir explicitamente os formatos reais que o ControlID está emitindo hoje, em vez de depender de parse genérico.
 
-## Evidence
+3. Corrigir os registros já contaminados que estão bloqueando o dashboard agora
+- Criar uma migration SQL para ajustar apenas os logs faciais comprovadamente afetados.
+- Corrigir `timestamp = timestamp + interval '3 hours'` somente nos eventos de hardware impactados.
+- Não tocar em logs manuais (`device_id is null`).
+- Atualizar `updated_at` junto para garantir reconciliação e refetch corretos.
 
-- Cloud telemetry: `unsyncedLogsCount: 0`, `uploadLogsCount: 16`, `lastUploadLogsError: null` — agent thinks everything is fine
-- Edge function logs: zero calls to `upload-logs` in the last 40+ minutes, zero calls to `clear-align-flag` ever
-- Cloud configuration: `align_cursors_requested: true` still set
-- `lastCapturedAt: 15:55:33` — no new captures since the last successful upload batch
+4. Não alterar o dashboard
+- `src/hooks/useSupabase.ts` e os componentes do dashboard ficam como estão.
+- A lógica atual está correta; ela só precisa receber o horário real do facial.
 
-## Fix (3 changes, no impact on working features)
+5. Validação final obrigatória
+- Fazer 1 nova entrada no facial.
+- Verificar em sequência:
+  - o leitor reconhece
+  - o evento entra na nuvem
+  - `direction = entry`
+  - `access_status = granted`
+  - o UTC salvo corresponde ao horário local do leitor convertido corretamente
+  - o novo `timestamp` fica depois da última saída real
+  - o trabalhador volta a aparecer em “Trabalhadores a bordo”
 
-### 1. Clear the stuck flag NOW (database migration)
-Update the `local_agents` configuration to remove `align_cursors_requested`:
-```sql
-UPDATE local_agents 
-SET configuration = configuration - 'align_cursors_requested'
-WHERE id = '0afe0864-6632-4af5-94f0-ce48bce8edd3';
-```
+Arquivos envolvidos:
+- `electron/agent.js`
+- `supabase/migrations/...sql`
 
-### 2. Fix `executeAlignCursors` in `electron/sync.js`
-**Problem:** `markAllLogsSynced()` at line 410 destroys pending uploads.
-**Fix:** Upload unsynced logs BEFORE marking them as synced:
-```js
-// BEFORE aligning, upload any pending logs so they aren't lost
-await this.uploadLogs();
-// Then mark remaining as synced (safety net for stale backlog only)
-const cleared = this.db.markAllLogsSynced?.() || 0;
-```
+Observação técnica:
+- Existe um risco separado no endpoint local `server/routes/sync.js` em `/align-cursors`, que ainda chama `markAllLogsSynced()`. Isso é perigoso, mas não explica o problema atual do dashboard. Para manter o foco, eu não incluiria esse ajuste nesta rodada.
 
-### 3. Make flag clearing more robust in `electron/sync.js`
-**Problem:** If `clear-align-flag` fails, the flag loops forever.
-**Fix:** After executing alignment, set a local `sync_meta` flag to skip re-execution even if the cloud flag persists:
-```js
-// After alignment, mark locally that we've already aligned this session
-const alignKey = 'last_align_cursors_executed';
-const lastAligned = this.db.getSyncMeta?.(alignKey);
-const now = Date.now();
-// Skip if aligned less than 10 minutes ago
-if (lastAligned && (now - parseInt(lastAligned, 10)) < 600000) {
-  return; // Already aligned recently
-}
-// ... execute alignment ...
-this.db.setSyncMeta?.(alignKey, String(now));
-```
-
-## Files changed
-- `electron/sync.js` — `executeAlignCursors()` and the flag check in `downloadUpdates()`
-- Database migration — clear the stuck flag
-
-## What stays untouched
-- Dashboard logic, manual access points, reports, device polling, all UI components
-
-## Expected result
-After clearing the flag and deploying v1.3.65:
-- Next facial event is captured → stays unsynced → uploaded within 3 seconds (fast-lane) → appears on dashboard
-
+Resultado esperado:
+- os próximos eventos faciais entram com horário UTC correto
+- o evento facial deixa de ficar cronologicamente “antes” da saída manual
+- o dashboard volta a refletir a entrada facial imediatamente
