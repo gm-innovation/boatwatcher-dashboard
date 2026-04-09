@@ -216,22 +216,21 @@ async function fetchWorkersOnBoardFromCloud(
     );
 
     // Build last-known state from prior days using STABLE keys and TIMESTAMP order
-    const priorState = new Map<string, { direction: string; worker_id: string | null; worker_name: string | null; device_name: string | null; device_id: string | null; entry_time: string }>();
+    const priorState = new Map<string, { direction: string; worker_id: string | null; worker_name: string | null; worker_document: string | null; device_name: string | null; device_id: string | null; entry_time: string }>();
     for (const log of relevantPriorLogs) {
-      // Use worker_id as primary key (stable UUID), fallback to worker_name
-      const key = log.worker_id || log.worker_name || '';
+      const key = resolveCloudCanonicalKey(log);
       if (!key) continue;
       if (log.direction === 'entry') {
-        priorState.set(key, { direction: 'entry', worker_id: log.worker_id, worker_name: log.worker_name, device_name: log.device_name, device_id: log.device_id, entry_time: log.timestamp });
+        priorState.set(key, { direction: 'entry', worker_id: log.worker_id, worker_name: log.worker_name, worker_document: (log as any).worker_document, device_name: log.device_name, device_id: log.device_id, entry_time: log.timestamp });
       } else if (log.direction === 'exit') {
-        priorState.set(key, { direction: 'exit', worker_id: log.worker_id, worker_name: log.worker_name, device_name: log.device_name, device_id: log.device_id, entry_time: log.timestamp });
+        priorState.set(key, { direction: 'exit', worker_id: log.worker_id, worker_name: log.worker_name, worker_document: (log as any).worker_document, device_name: log.device_name, device_id: log.device_id, entry_time: log.timestamp });
       }
     }
 
     // Fetch ALL events (entry + exit) for the day, ordered by TIMESTAMP (event time, not upload time)
     const { data: allLogs, error: logsError } = await supabase
       .from('access_logs')
-      .select('worker_id, worker_name, device_name, device_id, timestamp, direction, created_at')
+      .select('worker_id, worker_name, worker_document, device_name, device_id, timestamp, direction, created_at')
       .eq('access_status', 'granted')
       .gte('timestamp', startTimestamp)
       .lte('timestamp', maxTimestamp)
@@ -261,11 +260,8 @@ async function fetchWorkersOnBoardFromCloud(
     }
 
     // Process today's events chronologically by TIMESTAMP (actual event time)
-    // Previously used created_at (upload time) which caused ghost sessions when
-    // old events were batch-uploaded later.
     for (const log of relevantLogs) {
-      // Use worker_id as primary key (stable UUID), fallback to worker_name
-      const key = log.worker_id || log.worker_name || '';
+      const key = resolveCloudCanonicalKey(log);
       if (!key) continue;
 
       if (log.direction === 'entry') {
