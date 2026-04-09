@@ -37,7 +37,18 @@ class SyncEngine {
   }
 
   get agentToken() {
-    return process.env.AGENT_TOKEN || this.db.getSyncMeta?.('agent_token') || '';
+    // DB token is the most recent and reliable source (set by bootstrap or Server Local UI).
+    // process.env.AGENT_TOKEN may contain a stale value from a previous Electron session.
+    const dbToken = this.db.getSyncMeta?.('agent_token') || '';
+    if (dbToken) {
+      // Keep env in sync so other modules see the same value
+      if (process.env.AGENT_TOKEN !== dbToken) {
+        console.log(`[sync] agentToken: using DB token ${dbToken.slice(0,8)}... (env was ${process.env.AGENT_TOKEN?.slice(0,8) || 'empty'})`);
+        process.env.AGENT_TOKEN = dbToken;
+      }
+      return dbToken;
+    }
+    return process.env.AGENT_TOKEN || '';
   }
 
   isConfigured() {
