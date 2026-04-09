@@ -1,29 +1,42 @@
 
-# Correção de timestamps — Status: Implementado (v2)
 
-## Convenção do sistema
-- `access_logs.timestamp` → UTC real no banco
-- UI (`src/utils/brt.ts`) → converte para BRT na exibição
-- O ControlID envia horário BRT rotulado como UTC
+# Reduzir latência de sincronização dos eventos faciais
 
-## Arquitetura de correção (v2)
+## Situação atual
 
-### Responsabilidades
-- **Agent (`electron/agent.js`)**: passa o timestamp RAW do dispositivo, sem correção
-- **Servidor (`supabase/functions/agent-sync/index.ts`)**: detecta lag ~3h via heurística e aplica +3h automaticamente
-- **UI (`src/utils/brt.ts`)**: converte UTC → BRT na exibição, sem lógica extra
+O pipeline de um evento facial até aparecer no dashboard:
 
-### Heurística do servidor
-Se `now() - timestamp` está entre 9000s (2h30) e 12600s (3h30):
-- O timestamp é BRT cru → aplica +3h para converter para UTC real
-- Se o agente JÁ aplicou +3h, o lag será ~100s → fora da faixa → sem dupla correção
+```text
+Leitor facial → poll do agent (cada 5s) → salva local → fast-lane trigger (500ms–3s) → upload para nuvem → dashboard
+```
 
-### Dados corrigidos
-- 3 eventos recentes (`e53bba0b`, `cb2698d3`, `e9c3b24b`) corrigidos com +3h
-- Eventos do bulk sync com +3h da migração anterior: corretos (timestamps históricos do ControlID)
+Tempo total estimado: **5s + 3s = ~8s** no melhor caso, até **10s** no pior.
 
-## Resultado
-- Último evento: exit 18:55 UTC (15:55 BRT) → trabalhador corretamente "fora"
-- Ordem cronológica: entry 18:48 → exit 18:51 → entry 18:53 → exit 18:55
-- Novos eventos do facial serão corrigidos automaticamente no servidor
-- Desktop NÃO precisa ser reconstruído para funcionar (servidor faz a correção)
+## O que reduzir
+
+| Parâmetro | Atual | Proposto | Risco |
+|-----------|-------|----------|-------|
+| `pollIntervalMs` (agent.js) | 5000ms (5s) | 3000ms (3s) | Mínimo — o ControlID suporta polling rápido |
+| `_fastLaneThrottleMs` (sync.js) | 3000ms (3s) | 1500ms (1.5s) | Nenhum — throttle apenas evita flood |
+| Delay do fast-lane (sync.js) | 500ms | 200ms | Nenhum |
+
+Resultado: pipeline reduzido de **~8s** para **~3.5-5s**.
+
+## Limites seguros
+
+- **Poll < 2s**: risco de sobrecarregar o ControlID (HTTP request a cada ciclo)
+- **Throttle < 1s**: risco de múltiplos uploads simultâneos para a edge function
+- **3s de poll + 1.5s de throttle** é o ponto seguro mais baixo
+
+## Arquivos a modificar
+
+1. **`electron/agent.js`** — `pollIntervalMs`: 5000 → 3000
+2. **`electron/sync.js`** — `_fastLaneThrottleMs`: 3000 → 1500, delay: 500 → 200
+3. **`electron/package.json`** — bump de versão
+
+## O que NÃO muda
+
+- Heurística de timestamp (funciona independente da velocidade)
+- Lógica de upload/download
+- Edge function
+
