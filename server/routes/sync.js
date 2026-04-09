@@ -107,6 +107,8 @@ router.post('/flush-stale-logs', (req, res) => {
 
     console.log(`[flush-stale-logs] Marked ${result.changes} stale unsynced logs as synced (threshold=${hoursThreshold}h)`);
     res.json({ success: true, flushed: result.changes, cutoff, hoursThreshold });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
