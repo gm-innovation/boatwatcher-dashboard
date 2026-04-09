@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { get, set } from 'idb-keyval';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllWorkers } from '@/lib/fetchAllWorkers';
+import { localAccessLogs } from '@/lib/localServerProvider';
+import { usesLocalServer } from '@/lib/runtimeProfile';
 
 export interface CachedWorker {
   id: string;
@@ -97,17 +99,32 @@ export function useOfflineAccessControl(projectId?: string | null) {
   }, []);
 
   const saveAccessLog = useCallback(async (log: PendingAccessLog) => {
+    const logPayload = {
+      worker_id: log.worker_id,
+      worker_name: log.worker_name,
+      worker_document: log.worker_document,
+      device_name: log.device_name,
+      access_status: log.access_status,
+      direction: log.direction,
+      timestamp: log.timestamp,
+      source: 'manual',
+    };
+
+    // Desktop with local server: route through local SQLite → sync engine → cloud
+    // This unifies manual and facial events into the same pipeline
+    if (usesLocalServer()) {
+      try {
+        await localAccessLogs.insert(logPayload);
+        return true;
+      } catch (err) {
+        console.warn('[AC] Local server insert failed, falling back to cloud:', err);
+        // Fall through to cloud insert
+      }
+    }
+
     if (navigator.onLine) {
       try {
-        const { error } = await supabase.from('access_logs').insert({
-          worker_id: log.worker_id,
-          worker_name: log.worker_name,
-          worker_document: log.worker_document,
-          device_name: log.device_name,
-          access_status: log.access_status,
-          direction: log.direction,
-          timestamp: log.timestamp,
-        });
+        const { error } = await supabase.from('access_logs').insert(logPayload);
         if (error) throw error;
         return true;
       } catch {

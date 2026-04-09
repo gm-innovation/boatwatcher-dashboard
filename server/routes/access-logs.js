@@ -12,7 +12,13 @@ router.get('/', (req, res) => {
 
 router.post('/', (req, res) => {
   try {
-    const log = req.db.insertAccessLog(req.body);
+    // Tag manual logs with source so they're distinguishable from facial events
+    const logData = { ...req.body, source: req.body.source || 'manual' };
+    const log = req.db.insertAccessLog(logData);
+    // Trigger fast-lane sync so manual events reach the cloud immediately
+    if (req.syncEngine) {
+      req.syncEngine.triggerFastLaneSync();
+    }
     res.status(201).json(log);
   } catch (err) {
     res.status(500).json({ error: err.message });
