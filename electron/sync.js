@@ -578,9 +578,40 @@ class SyncEngine {
       try {
         const response = await this.callEdgeFunction('agent-sync/upload-logs', 'POST', { logs });
         if (response.success) {
-          // Server accepted — mark all as synced (even if some were duplicates)
-          this.db.markLogsSynced(localIds);
-          totalUploaded += logs.length;
+          // Use granular per-log results if available
+          if (Array.isArray(response.logResults)) {
+            const acceptedIds = [];
+            const rejectedIds = [];
+            for (let i = 0; i < response.logResults.length; i++) {
+              const lr = response.logResults[i];
+              // Match by index to local chunk (logResults only covers accepted+rejected from server)
+              if (lr.status === 'accepted' || lr.status === 'duplicate') {
+                // Find matching local ID by the server-returned id
+                const matchIdx = logs.findIndex(l => l.id === lr.id);
+                if (matchIdx >= 0) acceptedIds.push(localIds[matchIdx]);
+              } else if (lr.status === 'rejected') {
+                const matchIdx = logs.findIndex(l => l.id === lr.id);
+                if (matchIdx >= 0) rejectedIds.push({ localId: localIds[matchIdx], reason: lr.reason });
+              }
+            }
+            // If server returned logResults, mark only accepted as synced
+            if (acceptedIds.length > 0) {
+              this.db.markLogsSynced(acceptedIds);
+              totalUploaded += acceptedIds.length;
+            }
+            if (rejectedIds.length > 0) {
+              console.warn(`[sync] Batch ${batchIndex}: ${rejectedIds.length} logs rejected by server:`, rejectedIds.slice(0, 3));
+            }
+            // If no logResults matched (edge case), fall back to marking all
+            if (acceptedIds.length === 0 && rejectedIds.length === 0) {
+              this.db.markLogsSynced(localIds);
+              totalUploaded += logs.length;
+            }
+          } else {
+            // Legacy response without logResults — mark all as synced
+            this.db.markLogsSynced(localIds);
+            totalUploaded += logs.length;
+          }
           this._lastUploadLogsError = null;
         } else {
           const errDetail = response.error || response.message || JSON.stringify(response);
