@@ -1,60 +1,70 @@
 
-Objetivo imediato: fazer a entrada facial voltar a refletir no dashboard agora.
+Objetivo: parar a confusão e deixar a regra única e previsível.
 
-Diagnóstico confirmado:
-- O pipeline principal já está capturando e subindo eventos do facial.
-- O agente correto está online, os devices estão vinculados ao projeto certo e o flag `align_cursors_requested` não está mais ativo.
-- O evento facial novo já existe na nuvem com os campos funcionais esperados:
-  - `device_id` correto
-  - `direction = entry`
-  - `access_status = granted`
-  - `worker_id/worker_name` corretos
-- O problema real está no horário do evento facial:
-  - o leitor mostrou `13:59:39` local
-  - a nuvem recebeu `2026-04-09 13:59:39+00`
-  - isso deixa o facial 3 horas atrasado em UTC
-- Como o dashboard ordena pelo `timestamp` do evento (o que está certo), ele enxerga uma saída manual posterior e conclui que o trabalhador está fora. Ou seja: o facial sobe, mas perde na lógica cronológica por causa do timestamp errado.
+Diagnóstico do que existe hoje:
+- Sua leitura conceitual está certa: idealmente não deveríamos “somar 3h e depois tirar 3h” sem motivo.
+- Mas o código atual foi desenhado com a convenção: banco em UTC, interface em BRT.
+- A UI inteira já segue essa convenção:
+  - `src/utils/brt.ts` sempre converte `timestamp` do banco para BRT na tela.
+  - dashboard e listas ordenam pela coluna `timestamp` do banco.
+- O problema atual é que a ingestão dos leitores ficou inconsistente:
+  - `electron/agent.js` hoje está somando `+3h` em `normalizeTimestamp`.
+  - ao mesmo tempo, há logs recentes no banco que ainda chegaram sem essa correção.
+  - resultado: parte dos eventos está em “UTC corrigido” e parte não, então a ordem cronológica fica errada.
 
-Plano de correção focado só nisso:
+O que isso significa na prática:
+- Se o banco vai continuar sendo a fonte cronológica do sistema, então todos os logs precisam entrar no mesmo padrão.
+- Hoje não estão.
+- Por isso você vê um horário “parecendo certo” na tela, mas a lógica de entrada/saída quebra.
 
-1. Corrigir a normalização de horário no agente
-- Arquivo: `electron/agent.js`
-- Ajustar `normalizeTimestamp` / `parseControlIdEvent` para tratar timestamps vindos do ControlID como horário local BRT da controladora, mesmo quando vierem com `Z` ou `+00:00` incorreto.
-- Aplicar essa regra só no fluxo de hardware ControlID, sem mexer em logs manuais/web.
+Direção recomendada:
+- Manter o padrão correto da aplicação: `access_logs.timestamp` em UTC real no banco e BRT só na exibição.
+- Não passar a exibir “o horário cru do dispositivo” diretamente, porque isso quebraria:
+  - ordenação global
+  - filtros por dia
+  - relatórios/PDFs
+  - comparação com logs manuais/web
+  - consistência entre web, desktop e nuvem
 
-2. Confirmar o formato real do payload durante a implementação
-- Validar no `lastEventPayload` qual campo o dispositivo está mandando (`time`, `timestamp`, `date`, `datetime`) e em qual formato.
-- Cobrir explicitamente os formatos reais que o ControlID está emitindo hoje, em vez de depender de parse genérico.
+Plano de correção:
+1. Fixar uma única regra de ingestão
+- Revisar `electron/agent.js` para parar de adivinhar formatos.
+- Tratar o timestamp do ControlID de forma explícita e consistente.
+- Escolher uma única política para todo evento de hardware e aplicá-la sempre.
 
-3. Corrigir os registros já contaminados que estão bloqueando o dashboard agora
-- Criar uma migration SQL para ajustar apenas os logs faciais comprovadamente afetados.
-- Corrigir `timestamp = timestamp + interval '3 hours'` somente nos eventos de hardware impactados.
-- Não tocar em logs manuais (`device_id is null`).
-- Atualizar `updated_at` junto para garantir reconciliação e refetch corretos.
+2. Validar o payload real do leitor
+- Inspecionar o formato exato que o ControlID manda no `lastEventPayload`.
+- Confirmar se ele está vindo como hora local rotulada como UTC, ou se já está chegando no formato esperado.
+- A correção final deve ser baseada no payload real, não em hipótese.
 
-4. Não alterar o dashboard
-- `src/hooks/useSupabase.ts` e os componentes do dashboard ficam como estão.
-- A lógica atual está correta; ela só precisa receber o horário real do facial.
+3. Centralizar a correção em um único ponto
+- Evitar dupla responsabilidade entre agente, sincronização e UI.
+- A correção deve existir em apenas um lugar do pipeline de hardware.
+- A UI deve continuar só exibindo, sem compensações extras além do `brt.ts`.
 
-5. Validação final obrigatória
-- Fazer 1 nova entrada no facial.
-- Verificar em sequência:
-  - o leitor reconhece
-  - o evento entra na nuvem
-  - `direction = entry`
-  - `access_status = granted`
-  - o UTC salvo corresponde ao horário local do leitor convertido corretamente
-  - o novo `timestamp` fica depois da última saída real
-  - o trabalhador volta a aparecer em “Trabalhadores a bordo”
+4. Corrigir os dados já contaminados
+- Ajustar somente os `access_logs` de hardware que ficaram em padrão diferente do restante.
+- Não mexer nos logs manuais/web.
+- O objetivo é deixar todos os eventos recentes comparáveis cronologicamente.
 
-Arquivos envolvidos:
-- `electron/agent.js`
-- `supabase/migrations/...sql`
+5. Validar ponta a ponta
+- Fazer teste real com leitor de entrada e de saída.
+- Conferir:
+  - valor salvo no banco
+  - horário exibido no dashboard
+  - ordem cronológica entre entry e exit
+  - presença correta em “Trabalhadores a bordo”
 
-Observação técnica:
-- Existe um risco separado no endpoint local `server/routes/sync.js` em `/align-cursors`, que ainda chama `markAllLogsSynced()`. Isso é perigoso, mas não explica o problema atual do dashboard. Para manter o foco, eu não incluiria esse ajuste nesta rodada.
+Detalhes técnicos:
+- Arquivos envolvidos:
+  - `electron/agent.js`
+  - possivelmente `supabase/functions/agent-sync/index.ts`
+  - correção de dados existentes em `access_logs`
+- O dashboard não deve ser refeito agora; ele já assume corretamente que o banco é a fonte cronológica.
+- A inconsistência está na captura/sync dos logs, não na tabela do dashboard em si.
 
 Resultado esperado:
-- os próximos eventos faciais entram com horário UTC correto
-- o evento facial deixa de ficar cronologicamente “antes” da saída manual
-- o dashboard volta a refletir a entrada facial imediatamente
+- todos os logs de facial entram no mesmo padrão
+- o horário mostrado continua correto para o usuário
+- entrada e saída passam a respeitar a ordem real
+- o dashboard deixa de marcar presença errada por mistura de timestamps
