@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
-import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { fitImageDimensions } from './exportWorkerReportPdf';
+import { formatBrtShort, formatBrtDateTime, formatBrtNow } from '@/utils/brt';
 
 interface PdfColumn {
   header: string;
@@ -51,7 +51,7 @@ export function exportReportPdf({
   // Date
   doc.setFontSize(8);
   doc.setTextColor(140);
-  doc.text(`Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, margin, y);
+  doc.text(`Gerado em: ${formatBrtNow()}`, margin, y);
   y += 8;
 
   // Summary
