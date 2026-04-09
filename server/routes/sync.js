@@ -81,6 +81,37 @@ router.post('/read-only-mode', (req, res) => {
   }
 });
 
+// Flush stale unsynced logs (older than 24h) — manual cleanup endpoint
+router.post('/flush-stale-logs', (req, res) => {
+  try {
+    const rawDb = req.db.getRawDb?.();
+    if (!rawDb) {
+      return res.status(500).json({ error: 'Raw DB not available' });
+    }
+
+    const hoursThreshold = Number(req.body?.hoursThreshold) || 24;
+    const cutoff = new Date(Date.now() - hoursThreshold * 3600 * 1000).toISOString();
+
+    const countRow = rawDb.prepare(
+      "SELECT COUNT(*) as cnt FROM access_logs WHERE synced = 0 AND created_at < ?"
+    ).get(cutoff);
+    const staleCount = countRow?.cnt || 0;
+
+    if (staleCount === 0) {
+      return res.json({ success: true, flushed: 0, message: 'No stale logs found' });
+    }
+
+    const result = rawDb.prepare(
+      "UPDATE access_logs SET synced = 1 WHERE synced = 0 AND created_at < ?"
+    ).run(cutoff);
+
+    console.log(`[flush-stale-logs] Marked ${result.changes} stale unsynced logs as synced (threshold=${hoursThreshold}h)`);
+    res.json({ success: true, flushed: result.changes, cutoff, hoursThreshold });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Agent control (includes telemetry: capturedEventsCount, ignoredDedupeCount, etc.)
 router.get('/agent/status', (req, res) => {
   try {

@@ -95,8 +95,14 @@ class SyncEngine {
   }
 
   start() {
+    // Auto-cleanup stale unsynced logs on boot (older than 24h, more than 200)
+    this._autoCleanupStaleLogs();
+
     this.interval = setInterval(() => this.checkAndSync(), this.syncIntervalMs);
     setTimeout(() => this.checkAndSync(), 5000);
+
+    // Dedicated high-frequency log upload loop (every 5s)
+    this._logUploadInterval = setInterval(() => this._tickLogUpload(), 5000);
 
     // Dedicated high-frequency command polling loop (every 5s)
     this.commandPollInterval = setInterval(() => this.pollCommands(), 5000);
@@ -106,7 +112,59 @@ class SyncEngine {
 
   stop() {
     if (this.interval) clearInterval(this.interval);
+    if (this._logUploadInterval) clearInterval(this._logUploadInterval);
     if (this.commandPollInterval) clearInterval(this.commandPollInterval);
+  }
+
+  /**
+   * Auto-cleanup: mark very old unsynced logs as synced on boot.
+   * These are likely duplicates or irrecoverable events.
+   */
+  _autoCleanupStaleLogs() {
+    try {
+      const rawDb = this.db.getRawDb?.();
+      if (!rawDb) return;
+
+      const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+      const countRow = rawDb.prepare(
+        "SELECT COUNT(*) as cnt FROM access_logs WHERE synced = 0 AND created_at < ?"
+      ).get(cutoff);
+      const staleCount = countRow?.cnt || 0;
+
+      if (staleCount > 200) {
+        const result = rawDb.prepare(
+          "UPDATE access_logs SET synced = 1 WHERE synced = 0 AND created_at < ?"
+        ).run(cutoff);
+        console.warn(`[sync] Boot cleanup: marked ${result.changes} stale unsynced logs (>24h) as synced`);
+      } else if (staleCount > 0) {
+        console.log(`[sync] Boot: ${staleCount} stale unsynced logs found (<200 threshold, keeping)`);
+      }
+    } catch (err) {
+      console.warn('[sync] Boot cleanup error:', err.message);
+    }
+  }
+
+  /**
+   * Dedicated 5s log upload tick. Lightweight — returns immediately if
+   * nothing to send or if not configured/offline.
+   */
+  async _tickLogUpload() {
+    if (!this.isConfigured() || this._isUploadingLogs) return;
+
+    const unsyncedCount = this.db.getUnsyncedLogs?.()?.length || 0;
+    if (unsyncedCount === 0) return;
+
+    const online = await this.checkConnectivity();
+    if (!online) return;
+
+    this._isUploadingLogs = true;
+    try {
+      await this.uploadLogs();
+    } catch (err) {
+      console.error('[sync] 5s log upload error:', err.message);
+    } finally {
+      this._isUploadingLogs = false;
+    }
   }
 
   /** Fast command polling — independent from the 60s sync cycle */
@@ -472,66 +530,89 @@ class SyncEngine {
   }
 
   async uploadLogs() {
+    const BATCH_SIZE = 50;
+    const MAX_TIME_MS = 10000; // 10s ceiling per upload cycle
+    const startTime = Date.now();
+
     const rawLogs = this.db.getUnsyncedLogs?.() || [];
     if (rawLogs.length === 0) return;
 
-    // Sanitize: remove SQLite-internal fields and ensure canonical ENUM values
     const VALID_ACCESS_STATUS = ['granted', 'denied'];
     const VALID_DIRECTION = ['entry', 'exit', 'unknown'];
 
-    const logs = rawLogs.map(({ synced, created_at, cloud_id, ...rest }) => ({
-      ...rest,
-      access_status: VALID_ACCESS_STATUS.includes(rest.access_status) ? rest.access_status : 'granted',
-      direction: VALID_DIRECTION.includes(rest.direction) ? rest.direction : 'unknown',
-      // Include hardware_user_id so cloud can resolve worker by code if worker_id is null
-      hardware_user_id: rest.hardware_user_id || null,
-    }));
+    // Sanitize all logs
+    const allLogs = rawLogs.map(raw => {
+      const { synced, created_at, cloud_id, ...rest } = raw;
+      return {
+        cleaned: {
+          ...rest,
+          access_status: VALID_ACCESS_STATUS.includes(rest.access_status) ? rest.access_status : 'granted',
+          direction: VALID_DIRECTION.includes(rest.direction) ? rest.direction : 'unknown',
+          hardware_user_id: rest.hardware_user_id || null,
+        },
+        localId: raw.id,
+      };
+    });
 
-    // Keep local IDs for marking as synced after success
-    const localIds = rawLogs.map((l) => l.id);
+    console.log(`[sync] Upload starting: total_unsynced=${allLogs.length} batch_size=${BATCH_SIZE}`);
 
-    // Telemetry: log batch timestamp range for debugging backlog replay
-    const timestamps = rawLogs.map(l => l.timestamp).filter(Boolean).sort();
-    const batchMinTs = timestamps[0] || 'N/A';
-    const batchMaxTs = timestamps[timestamps.length - 1] || 'N/A';
-    console.log(`[sync] Upload batch: count=${logs.length} ts_range=[${batchMinTs} → ${batchMaxTs}] token=${this.agentToken?.slice(0,8)}...`);
+    let totalUploaded = 0;
+    let batchIndex = 0;
 
-    try {
-      const response = await this.callEdgeFunction('agent-sync/upload-logs', 'POST', { logs });
-      if (response.success) {
-        this.db.markLogsSynced(localIds);
-        this._uploadLogsCount += logs.length;
-        this._lastUploadLogsError = null;
-        console.log(`[sync] Uploaded ${logs.length} access logs successfully`);
-      } else {
-        const errDetail = response.error || response.message || JSON.stringify(response);
-        this._lastUploadLogsError = `${new Date().toISOString()}: server returned success=false — ${errDetail}`;
-        console.error('[sync] Upload logs rejected by server:', errDetail);
+    // Process in chunks
+    for (let offset = 0; offset < allLogs.length; offset += BATCH_SIZE) {
+      // Time ceiling check
+      if (Date.now() - startTime > MAX_TIME_MS) {
+        console.warn(`[sync] Upload time ceiling reached after ${totalUploaded} logs, ${allLogs.length - offset} remaining`);
+        break;
       }
-    } catch (err) {
-      // Retry on 401: reload token from sync_meta and try once more
-      if (err.message && err.message.includes('401')) {
-        console.warn(`[sync] Upload logs got 401 — attempting token reload and retry...`);
-        const storedToken = this.db.getSyncMeta?.('agent_token');
-        if (storedToken && storedToken !== process.env.AGENT_TOKEN) {
-          console.log(`[sync] Token mismatch detected: env=${process.env.AGENT_TOKEN?.slice(0,8)}... db=${storedToken.slice(0,8)}... — syncing`);
-          process.env.AGENT_TOKEN = storedToken;
-        }
-        try {
-          const retryResponse = await this.callEdgeFunction('agent-sync/upload-logs', 'POST', { logs });
-          if (retryResponse.success) {
+
+      const chunk = allLogs.slice(offset, offset + BATCH_SIZE);
+      const logs = chunk.map(c => c.cleaned);
+      const localIds = chunk.map(c => c.localId);
+      batchIndex++;
+
+      const timestamps = logs.map(l => l.timestamp).filter(Boolean).sort();
+      console.log(`[sync] Batch ${batchIndex}: count=${logs.length} ts=[${timestamps[0] || '?'} → ${timestamps[timestamps.length - 1] || '?'}]`);
+
+      try {
+        const response = await this.callEdgeFunction('agent-sync/upload-logs', 'POST', { logs });
+        if (response.success) {
+          // Server accepted — mark all as synced (even if some were duplicates)
+          this.db.markLogsSynced(localIds);
+          totalUploaded += logs.length;
+          this._lastUploadLogsError = null;
+        } else {
+          const errDetail = response.error || response.message || JSON.stringify(response);
+          // Check if it's a duplicate error — still mark as synced
+          if (errDetail.includes('23505') || errDetail.includes('duplicate')) {
+            console.warn(`[sync] Batch ${batchIndex} had duplicates, marking as synced anyway`);
             this.db.markLogsSynced(localIds);
-            this._uploadLogsCount += logs.length;
-            this._lastUploadLogsError = null;
-            console.log(`[sync] Retry succeeded: uploaded ${logs.length} access logs`);
-            return;
+            totalUploaded += logs.length;
+          } else {
+            this._lastUploadLogsError = `${new Date().toISOString()}: ${errDetail}`;
+            console.error(`[sync] Batch ${batchIndex} rejected:`, errDetail);
+            break; // Stop processing more batches on hard error
           }
-        } catch (retryErr) {
-          console.error('[sync] Retry also failed:', retryErr.message);
         }
+      } catch (err) {
+        // 401: try token reload once
+        if (err.message?.includes('401') && batchIndex === 1) {
+          const storedToken = this.db.getSyncMeta?.('agent_token');
+          if (storedToken && storedToken !== process.env.AGENT_TOKEN) {
+            process.env.AGENT_TOKEN = storedToken;
+            console.log('[sync] Token reloaded from DB, will retry on next cycle');
+          }
+        }
+        this._lastUploadLogsError = `${new Date().toISOString()}: ${err.message}`;
+        console.error(`[sync] Batch ${batchIndex} error:`, err.message);
+        break; // Stop on network/auth error
       }
-      this._lastUploadLogsError = `${new Date().toISOString()}: ${err.message}`;
-      console.error('[sync] Upload logs error:', err.message);
+    }
+
+    if (totalUploaded > 0) {
+      this._uploadLogsCount += totalUploaded;
+      console.log(`[sync] Upload complete: ${totalUploaded}/${allLogs.length} logs sent`);
     }
   }
 
