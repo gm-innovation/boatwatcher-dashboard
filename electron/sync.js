@@ -385,6 +385,25 @@ class SyncEngine {
    * then clear stale unsynced logs. Called locally or via remote cloud signaling.
    */
   async executeAlignCursors(agentId) {
+    // Local throttle: skip if aligned less than 10 minutes ago
+    // This prevents the loop where cloud flag can't be cleared
+    const alignKey = 'last_align_cursors_executed';
+    const lastAligned = this.db.getSyncMeta?.(alignKey);
+    const now = Date.now();
+    if (lastAligned && (now - parseInt(lastAligned, 10)) < 600000) {
+      console.log('[sync] Skipping align — already executed within last 10 minutes');
+      return { results: [], staleLogsCleared: 0, skipped: true };
+    }
+
+    // CRITICAL: upload any pending logs BEFORE marking them as synced
+    // Otherwise unsynced facial events get silently erased
+    try {
+      await this.uploadLogs();
+      console.log('[sync] Pre-alignment upload completed');
+    } catch (err) {
+      console.warn('[sync] Pre-alignment upload failed (continuing):', err.message);
+    }
+
     const { loginToDevice } = require('../server/lib/controlid');
 
     const devices = this.db.getDevices?.() || [];
@@ -410,13 +429,17 @@ class SyncEngine {
     const cleared = this.db.markAllLogsSynced?.() || 0;
     console.log(`[sync] Cursor alignment complete: ${results.length} devices processed, ${cleared} stale logs cleared`);
 
+    // Mark locally that alignment was executed — prevents re-execution loop
+    this.db.setSyncMeta?.(alignKey, String(now));
+
     // Clear the remote flag
     if (agentId) {
       try {
         await this.callEdgeFunction('agent-sync/clear-align-flag', 'POST', { agentId });
+        console.log('[sync] Remote align flag cleared successfully');
       } catch (err) {
-        // Fallback: try to clear via download-devices next cycle
-        console.warn('[sync] Could not clear align flag:', err.message);
+        // Non-fatal: local throttle prevents re-execution even if flag persists
+        console.warn('[sync] Could not clear align flag (throttled locally):', err.message);
       }
     }
 
