@@ -9,7 +9,7 @@ class SyncEngine {
     this.syncIntervalMs = 60000;
     this.agentController = null;
     this._fastLaneTimer = null;
-    this._fastLaneThrottleMs = 3000; // min 3s between fast-lane syncs
+    this._fastLaneThrottleMs = 1500; // min 1.5s between fast-lane syncs
     this._lastFastLane = 0;
     this._lastUploadLogsError = null;
     this._lastDownloadLogsError = null;
@@ -71,7 +71,7 @@ class SyncEngine {
 
     if (this._fastLaneTimer) clearTimeout(this._fastLaneTimer);
 
-    const delay = elapsed >= this._fastLaneThrottleMs ? 500 : this._fastLaneThrottleMs - elapsed + 100;
+    const delay = elapsed >= this._fastLaneThrottleMs ? 200 : this._fastLaneThrottleMs - elapsed + 100;
 
     this._fastLaneTimer = setTimeout(async () => {
       this._lastFastLane = Date.now();
