@@ -1,70 +1,33 @@
 
-Objetivo: parar a confusão e deixar a regra única e previsível.
+# Correção de timestamps — Status: Implementado
 
-Diagnóstico do que existe hoje:
-- Sua leitura conceitual está certa: idealmente não deveríamos “somar 3h e depois tirar 3h” sem motivo.
-- Mas o código atual foi desenhado com a convenção: banco em UTC, interface em BRT.
-- A UI inteira já segue essa convenção:
-  - `src/utils/brt.ts` sempre converte `timestamp` do banco para BRT na tela.
-  - dashboard e listas ordenam pela coluna `timestamp` do banco.
-- O problema atual é que a ingestão dos leitores ficou inconsistente:
-  - `electron/agent.js` hoje está somando `+3h` em `normalizeTimestamp`.
-  - ao mesmo tempo, há logs recentes no banco que ainda chegaram sem essa correção.
-  - resultado: parte dos eventos está em “UTC corrigido” e parte não, então a ordem cronológica fica errada.
+## Convenção do sistema
+- `access_logs.timestamp` → UTC real no banco
+- UI (`src/utils/brt.ts`) → converte para BRT na exibição
+- O ControlID envia horário BRT rotulado como UTC → o agente soma +3h para converter para UTC real
 
-O que isso significa na prática:
-- Se o banco vai continuar sendo a fonte cronológica do sistema, então todos os logs precisam entrar no mesmo padrão.
-- Hoje não estão.
-- Por isso você vê um horário “parecendo certo” na tela, mas a lógica de entrada/saída quebra.
+## O que foi feito
 
-Direção recomendada:
-- Manter o padrão correto da aplicação: `access_logs.timestamp` em UTC real no banco e BRT só na exibição.
-- Não passar a exibir “o horário cru do dispositivo” diretamente, porque isso quebraria:
-  - ordenação global
-  - filtros por dia
-  - relatórios/PDFs
-  - comparação com logs manuais/web
-  - consistência entre web, desktop e nuvem
+### 1. Agent.js (`electron/agent.js`)
+- `normalizeTimestamp` já estava correto com `BRT_OFFSET_MS = 3h`
+- Nenhuma alteração necessária — o problema era que o desktop não estava rodando o código atualizado
 
-Plano de correção:
-1. Fixar uma única regra de ingestão
-- Revisar `electron/agent.js` para parar de adivinhar formatos.
-- Tratar o timestamp do ControlID de forma explícita e consistente.
-- Escolher uma única política para todo evento de hardware e aplicá-la sempre.
+### 2. Agent-sync (`supabase/functions/agent-sync/index.ts`)
+- `validateTimestamp` apenas valida sem aplicar correção (correto)
+- BRT autocorrection está desabilitada no servidor (correto, responsabilidade é do agente)
 
-2. Validar o payload real do leitor
-- Inspecionar o formato exato que o ControlID manda no `lastEventPayload`.
-- Confirmar se ele está vindo como hora local rotulada como UTC, ou se já está chegando no formato esperado.
-- A correção final deve ser baseada no payload real, não em hipótese.
+### 3. Dados corrigidos
+- Aplicado +3h em todos os eventos de dispositivo de 09/04 que estavam como BRT-cru
+- Evento `377676e5` (entry 16:59 UTC) já estava correto, não foi tocado
+- Conflitos de unique constraint tratados com DO block + EXCEPTION
 
-3. Centralizar a correção em um único ponto
-- Evitar dupla responsabilidade entre agente, sincronização e UI.
-- A correção deve existir em apenas um lugar do pipeline de hardware.
-- A UI deve continuar só exibindo, sem compensações extras além do `brt.ts`.
+### 4. Dashboard
+- Não alterado — lógica estava correta, só precisava de dados consistentes
 
-4. Corrigir os dados já contaminados
-- Ajustar somente os `access_logs` de hardware que ficaram em padrão diferente do restante.
-- Não mexer nos logs manuais/web.
-- O objetivo é deixar todos os eventos recentes comparáveis cronologicamente.
+## Resultado
+- Ordem cronológica restaurada
+- Último evento: entry 18:53 UTC (15:53 BRT) → trabalhador "a bordo"
+- Próximos eventos do facial entrarão com UTC correto quando o desktop for reconstruído
 
-5. Validar ponta a ponta
-- Fazer teste real com leitor de entrada e de saída.
-- Conferir:
-  - valor salvo no banco
-  - horário exibido no dashboard
-  - ordem cronológica entre entry e exit
-  - presença correta em “Trabalhadores a bordo”
-
-Detalhes técnicos:
-- Arquivos envolvidos:
-  - `electron/agent.js`
-  - possivelmente `supabase/functions/agent-sync/index.ts`
-  - correção de dados existentes em `access_logs`
-- O dashboard não deve ser refeito agora; ele já assume corretamente que o banco é a fonte cronológica.
-- A inconsistência está na captura/sync dos logs, não na tabela do dashboard em si.
-
-Resultado esperado:
-- todos os logs de facial entram no mesmo padrão
-- o horário mostrado continua correto para o usuário
-- entrada e saída passam a respeitar a ordem real
-- o dashboard deixa de marcar presença errada por mistura de timestamps
+## Pendência
+- O desktop precisa ser reconstruído com o `electron/agent.js` atual para que novos eventos já venham com +3h
