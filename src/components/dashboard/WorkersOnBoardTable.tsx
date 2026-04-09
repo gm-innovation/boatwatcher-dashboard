@@ -1,5 +1,5 @@
 import { useIsMobile } from '@/hooks/use-mobile';
-import { format } from 'date-fns';
+import { formatBrtShort } from '@/utils/brt';
 import {
   Table,
   TableBody,
@@ -67,7 +67,7 @@ export const WorkersOnBoardTable = ({ workers }: WorkersOnBoardTableProps) => {
                   <TableCell className="py-2 px-2 text-[11px] xl:text-xs whitespace-nowrap truncate max-w-0" title={worker.company}>{worker.company}</TableCell>
                   <TableCell className="text-right py-2 px-2 text-[11px] xl:text-xs whitespace-nowrap">
                     <span className="inline-flex items-center bg-blue-100 text-blue-800 text-[10px] xl:text-xs px-1.5 py-0.5 rounded-md font-semibold">
-                      {format(new Date(worker.entryTime), 'dd/MM HH:mm')}
+                      {formatBrtShort(worker.entryTime)}
                     </span>
                   </TableCell>
                 </TableRow>

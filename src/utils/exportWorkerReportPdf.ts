@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { formatBrtShort, formatBrtDateTime, formatBrtDateTimeFull, isDaytimeBrt, classifyShiftBrt } from '@/utils/brt';
+import { formatBrtShort, formatBrtDateTime, formatBrtDateTimeFull, isDaytimeBrt, classifyShiftBrt, formatBrtNow } from '@/utils/brt';
 
 interface RawLog {
   direction: string;
@@ -94,7 +94,7 @@ function addFooters(doc: jsPDF) {
     doc.setFontSize(7);
     doc.setTextColor(...COLORS.light);
     doc.text(`Página ${i} de ${totalPages}`, pageWidth - MARGIN, pageHeight - 8, { align: 'right' });
-    doc.text(`Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, MARGIN, pageHeight - 8);
+    doc.text(`Gerado em: ${formatBrtNow()}`, MARGIN, pageHeight - 8);
   }
 }
 

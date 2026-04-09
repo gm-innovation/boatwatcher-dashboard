@@ -181,6 +181,7 @@ function initDatabase(userDataPath) {
       device_name TEXT,
       photo_capture_url TEXT,
       created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
       synced INTEGER DEFAULT 0,
       FOREIGN KEY (worker_id) REFERENCES workers(id)
     );
@@ -301,10 +302,14 @@ function initDatabase(userDataPath) {
   db.exec("UPDATE company_documents SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
   db.exec("UPDATE worker_documents SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
 
-  // Ensure hardware_user_id column exists on access_logs (added v1.3.62)
+  // Ensure hardware_user_id and updated_at columns exist on access_logs
   const alCols = new Set(db.prepare("PRAGMA table_info(access_logs)").all().map(c => c.name));
   if (!alCols.has('hardware_user_id')) {
     db.exec("ALTER TABLE access_logs ADD COLUMN hardware_user_id TEXT");
+  }
+  if (!alCols.has('updated_at')) {
+    db.exec("ALTER TABLE access_logs ADD COLUMN updated_at TEXT");
+    db.exec("UPDATE access_logs SET updated_at = COALESCE(created_at, timestamp, datetime('now'))");
   }
 
   const maxCode = db.prepare('SELECT MAX(code) as max_code FROM workers').get();
@@ -1894,6 +1899,7 @@ function createDatabaseAPI(db, startCode) {
       }
 
       const cloudCreatedAt = data.created_at || data.timestamp || new Date().toISOString();
+      const cloudUpdatedAt = data.updated_at || cloudCreatedAt;
 
       // 1. Try exact match by cloud id
       let existing = db.prepare('SELECT id FROM access_logs WHERE id = ?').get(data.id);
@@ -1920,7 +1926,7 @@ function createDatabaseAPI(db, startCode) {
           UPDATE access_logs SET
             id = ?, worker_id = ?, device_id = ?, timestamp = ?, access_status = ?, direction = ?,
             reason = ?, score = ?, worker_name = ?, worker_document = ?, device_name = ?,
-            created_at = ?, synced = 1
+            created_at = ?, updated_at = ?, synced = 1
           WHERE id = ?
         `).run(
           data.id,
@@ -1935,14 +1941,15 @@ function createDatabaseAPI(db, startCode) {
           data.worker_document || null,
           data.device_name || null,
           cloudCreatedAt,
+          cloudUpdatedAt,
           existing.id,
         );
         return;
       }
 
       db.prepare(`
-        INSERT INTO access_logs (id, worker_id, device_id, timestamp, access_status, direction, reason, score, worker_name, worker_document, device_name, created_at, synced)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        INSERT INTO access_logs (id, worker_id, device_id, timestamp, access_status, direction, reason, score, worker_name, worker_document, device_name, created_at, updated_at, synced)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       `).run(
         data.id,
         localWorkerId,
@@ -1956,6 +1963,7 @@ function createDatabaseAPI(db, startCode) {
         data.worker_document || null,
         data.device_name || null,
         cloudCreatedAt,
+        cloudUpdatedAt,
       );
     },
 

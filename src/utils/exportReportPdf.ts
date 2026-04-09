@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { fitImageDimensions } from './exportWorkerReportPdf';
+import { formatBrtShort, formatBrtDateTime, formatBrtNow } from '@/utils/brt';
 
 interface PdfColumn {
   header: string;
@@ -51,7 +52,7 @@ export function exportReportPdf({
   // Date
   doc.setFontSize(8);
   doc.setTextColor(140);
-  doc.text(`Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, margin, y);
+  doc.text(`Gerado em: ${formatBrtNow()}`, margin, y);
   y += 8;
 
   // Summary
@@ -200,7 +201,7 @@ function fmtDuration(mins: number): string {
 
 function fmtShort(date: Date | null): string {
   if (!date) return '-';
-  return format(date, 'dd/MM HH:mm');
+  return formatBrtShort(date);
 }
 
 export async function exportCompanyReportPdf(opts: CompanyPdfOptions) {
@@ -250,7 +251,7 @@ export async function exportCompanyReportPdf(opts: CompanyPdfOptions) {
   }
 
   // --- Period ---
-  const period = `Período: ${format(new Date(opts.startDate), 'dd/MM/yyyy')} a ${format(new Date(opts.endDate), 'dd/MM/yyyy')}`;
+  const period = `Período: ${formatBrtDateTime(new Date(opts.startDate + 'T03:00:00Z')).split(' ')[0]} a ${formatBrtDateTime(new Date(opts.endDate + 'T03:00:00Z')).split(' ')[0]}`;
   doc.text(period, pageWidth / 2, y, { align: 'center' });
   y += 6;
 
@@ -381,7 +382,7 @@ export async function exportCompanyReportPdf(opts: CompanyPdfOptions) {
     doc.setFontSize(7);
     doc.setTextColor(...CLR.light);
     doc.text(`Página ${i} de ${totalPages}`, pageWidth - MARGIN, pageHeight - 8, { align: 'right' });
-    doc.text(`Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, MARGIN, pageHeight - 8);
+    doc.text(`Gerado em: ${formatBrtNow()}`, MARGIN, pageHeight - 8);
   }
 
   doc.save(`relatorio-empresas-${opts.startDate}-${opts.endDate}.pdf`);
@@ -468,7 +469,7 @@ export async function exportOverviewReportPdf(opts: OverviewPdfOptions) {
   }
 
   // --- Period ---
-  const period = `Período: ${format(new Date(opts.startDate), 'dd/MM/yyyy')} a ${format(new Date(opts.endDate), 'dd/MM/yyyy')}`;
+  const period = `Período: ${formatBrtDateTime(new Date(opts.startDate + 'T03:00:00Z')).split(' ')[0]} a ${formatBrtDateTime(new Date(opts.endDate + 'T03:00:00Z')).split(' ')[0]}`;
   doc.text(period, pageWidth / 2, y, { align: 'center' });
   y += 8;
 
@@ -638,7 +639,7 @@ export async function exportOverviewReportPdf(opts: OverviewPdfOptions) {
     doc.setFontSize(7);
     doc.setTextColor(...CLR.light);
     doc.text(`Página ${i} de ${totalPages}`, pageWidth - MARGIN, pageHeight - 8, { align: 'right' });
-    doc.text(`Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, MARGIN, pageHeight - 8);
+    doc.text(`Gerado em: ${formatBrtNow()}`, MARGIN, pageHeight - 8);
   }
 
   doc.save(`visao-geral-${opts.startDate}-${opts.endDate}.pdf`);

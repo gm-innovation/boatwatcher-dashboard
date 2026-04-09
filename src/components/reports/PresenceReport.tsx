@@ -23,9 +23,9 @@ import {
   Calendar, TrendingUp, Users, Building2, BarChart3,
   ArrowUp, ArrowDown, Printer, Download,
 } from 'lucide-react';
-import { format, parseISO, getDay, startOfWeek, addDays } from 'date-fns';
+import { format, parseISO, startOfWeek, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { getBrtDayKey } from '@/utils/brt';
+import { getBrtDayKey, toBrtDate, formatBrtNow } from '@/utils/brt';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { toast } from '@/components/ui/use-toast';
@@ -137,11 +137,11 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
       acessos: count,
     }));
 
-    // By week — format "Sem DD/MM" using start of week (Sunday)
+    // By week — format "Sem DD/MM" using start of week (Sunday), based on BRT day
     const byWeekMap: Record<string, { count: number; weekStart: Date }> = {};
     granted.forEach((l: any) => {
-      const ts = new Date(l.timestamp);
-      const ws = startOfWeek(ts, { weekStartsOn: 0 });
+      const brt = toBrtDate(l.timestamp);
+      const ws = startOfWeek(brt, { weekStartsOn: 0 });
       const key = ws.toISOString();
       if (!byWeekMap[key]) byWeekMap[key] = { count: 0, weekStart: ws };
       byWeekMap[key].count++;
@@ -153,21 +153,22 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
         acessos: count,
       }));
 
-    // By day of week (simple)
+    // By day of week (simple) — use BRT date
     const byDayOfWeek: number[] = [0, 0, 0, 0, 0, 0, 0];
     granted.forEach((l: any) => {
-      const d = getDay(new Date(l.timestamp));
+      const brt = toBrtDate(l.timestamp);
+      const d = brt.getUTCDay();
       byDayOfWeek[d]++;
     });
 
     // Stacked chart: distribution by day of week per week
     const weeklyByDay: Record<string, { weekStart: Date; days: number[] }> = {};
     granted.forEach((l: any) => {
-      const ts = new Date(l.timestamp);
-      const ws = startOfWeek(ts, { weekStartsOn: 0 });
+      const brt = toBrtDate(l.timestamp);
+      const ws = startOfWeek(brt, { weekStartsOn: 0 });
       const key = ws.toISOString();
       if (!weeklyByDay[key]) weeklyByDay[key] = { weekStart: ws, days: [0, 0, 0, 0, 0, 0, 0] };
-      weeklyByDay[key].days[getDay(ts)]++;
+      weeklyByDay[key].days[brt.getUTCDay()]++;
     });
     const weeklyByDayChart = Object.values(weeklyByDay)
       .sort((a, b) => a.weekStart.getTime() - b.weekStart.getTime())
@@ -319,7 +320,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
         pdf.setTextColor(160);
         pdf.text(`Página ${page + 1} de ${totalPages}`, pdfPageW - margin, pdfPageH - 6, { align: 'right' });
         pdf.text(
-          `Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+          `Gerado em: ${formatBrtNow()}`,
           margin,
           pdfPageH - 6
         );

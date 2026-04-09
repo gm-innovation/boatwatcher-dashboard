@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { User, ArrowRight, ArrowLeft, Clock } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatBrtTimeFull } from '@/utils/brt';
 import type { AccessLog } from '@/types/supabase';
 
 interface RecentActivityFeedProps {
@@ -108,7 +108,7 @@ export const RecentActivityFeed = ({ projectId }: RecentActivityFeedProps) => {
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span>{log.device_name || 'Dispositivo'}</span>
                       <span>•</span>
-                      <span>{format(new Date(log.timestamp), 'HH:mm:ss')}</span>
+                      <span>{formatBrtTimeFull(log.timestamp)}</span>
                     </div>
                   </div>
                   {getStatusBadge(log.access_status)}

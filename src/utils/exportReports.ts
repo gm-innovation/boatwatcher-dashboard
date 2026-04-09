@@ -107,7 +107,7 @@ export const exportToPDF = async (
     // Project information
     doc.setFontSize(12);
     doc.text(String(`Projeto: ${projectName}`), margin, yPosition);
-    doc.text(String(`Data: ${format(new Date(selectedDate), 'dd/MM/yyyy')}`), pageWidth - margin, yPosition, { align: 'right' });
+    doc.text(String(`Data: ${formatBrtDateTime(new Date(selectedDate + 'T03:00:00Z')).split(' ')[0]}`), pageWidth - margin, yPosition, { align: 'right' });
     
     yPosition += 10;
 
