@@ -1,88 +1,115 @@
 
+Objetivo imediato: focar só em fazer os eventos do leitor facial voltarem ao dashboard, sem mexer no restante.
 
-# Plano de Correção em Fases
+Diagnóstico minucioso do que o código mostra:
+1. O dashboard não está “quebrado” de forma genérica.
+- `src/hooks/useSupabase.ts#useWorkersOnBoard` busca direto na nuvem.
+- Ele só considera logs:
+  - com `access_status = 'granted'`
+  - pertencentes ao projeto por `device_id` do projeto, ou manual point do projeto
+  - cujo estado final do trabalhador no dia seja `direction = 'entry'`
+- Então, se o facial não aparece, o problema real está antes disso: o evento não está chegando na nuvem do jeito que o dashboard consegue reconhecer.
 
-Cada fase será testada antes de avançar. Nenhuma alteração em funcionalidades que já estão operando.
+2. O funil exato para o facial é:
+```text
+Leitor facial
+  -> electron/agent.js processEvent()
+  -> SQLite access_logs local
+  -> electron/sync.js uploadLogs()
+  -> supabase/functions/agent-sync upload-logs
+  -> tabela access_logs na nuvem
+  -> useWorkersOnBoard filtra por projeto + granted + entry
+  -> dashboard
+```
 
----
+3. O token antigo não parece mais ser a causa principal.
+- O código já prioriza token do SQLite em `electron/sync.js`.
+- Os logs recentes do backend mostram chamadas válidas com `fe25b788`.
+- Então agora a investigação precisa sair de “autenticação” e ir para “semântica do evento”.
 
-## Situação Atual Confirmada
+4. Existem 4 hipóteses fortes ainda abertas no código:
+- Hipótese A: o evento facial está sendo capturado, mas sobe com `direction = 'unknown'` ou `exit`, então o dashboard ignora.
+- Hipótese B: o evento sobe com `access_status != 'granted'`, então o dashboard ignora.
+- Hipótese C: o evento sobe com `device_id` nulo/errado, ou com `device_id` que não pertence ao projeto selecionado, então o filtro do dashboard exclui.
+- Hipótese D: o evento fica só no SQLite local porque o upload “success=true” não significa necessariamente que inseriu um log útil; hoje o sync marca tudo como sincronizado se a função responder sucesso, mesmo que `accepted/inserted` seja zero ou parcial.
 
-**O que funciona:**
-- Dashboard mostra entradas manuais corretamente
-- Web reports mostram entradas manuais corretamente
-- Sync de workers, companies, devices funciona (token `fe25b788` válido)
-- BRT utility (`src/utils/brt.ts`) está criado e parcialmente em uso
+5. Há um ponto crítico no agente:
+- `electron/agent.js#normalizeDirection()` depende de `rawEvent.direction`, `rawEvent.passage_direction`, `rawEvent.sentido` ou fallback de `device.configuration.passage_direction`.
+- Se o payload real do facial vier com outro campo, ou vier vazio, o log vai como `unknown`.
+- E `useWorkersOnBoard` só monta estado a bordo quando o log final é `entry`.
 
-**O que está quebrado:**
-1. **Facial não chega à nuvem** — Agent tem 543 logs não sincronizados com `lastUploadErr=YES`. O token antigo `84ed5d35` (de uma instância obsoleta) está tentando uploads e falhando. O token válido `fe25b788` parece não estar sendo usado para upload-logs.
-2. **Relatórios web e desktop divergem** — Desktop usa SQLite (local-first), que não recebeu os logs manuais da nuvem (porque o cursor `download-access-logs` pode estar avançado demais ou porque o upload falhou). Web usa cloud.
-3. **Horário errado no relatório web** — Os timestamps faciais antigos na nuvem (dia 08/04) estão corretos em UTC, mas a UI de relatório ainda tem parsing residual de timezone em `Reports.tsx` (`parseISO`/`format`) e nos exports.
+6. Há um ponto crítico no upload:
+- `supabase/functions/agent-sync/index.ts#upload-logs` aceita logs, normaliza, e pode:
+  - anular `device_id` se formato for inválido
+  - manter `direction = 'unknown'`
+  - manter `access_status` diferente do esperado
+- Mesmo assim a resposta geral pode voltar `success: true`.
+- E `electron/sync.js#uploadLogs()` marca o lote inteiro como synced se `response.success` vier true, sem verificar se o evento realmente entrou com os campos corretos.
 
----
+7. O dashboard também depende do projeto certo.
+- `useWorkersOnBoard` só inclui logs cujo `device_id` esteja entre os devices de `project_id` selecionado.
+- Se o leitor facial estiver vinculado ao agente, mas não ao projeto correto na nuvem, o evento pode até existir em `access_logs` e ainda assim nunca aparecer no dashboard.
 
-## Fase 1: Destravar o upload de logs faciais (problema principal)
+Fase única agora: investigação cirúrgica e correção só do fluxo facial para dashboard
 
-**Objetivo:** Fazer os 543 logs parados chegarem à nuvem.
+1. Validar o evento facial recém-gerado na nuvem
+- Consultar os logs mais recentes em `access_logs` para o período do seu último teste.
+- Conferir especificamente:
+  - `device_id`
+  - `device_name`
+  - `direction`
+  - `access_status`
+  - `worker_id`
+  - `worker_name`
+  - `timestamp`
+- Cruzar com os devices do projeto selecionado.
 
-**Diagnóstico:** O `uploadLogs()` em `electron/sync.js` usa `this.agentToken` que resolve via `process.env.AGENT_TOKEN || db.getSyncMeta('agent_token')`. Se houver um token antigo em `process.env.AGENT_TOKEN` que o Electron definiu ao iniciar, ele prevalece sobre o do SQLite. O retry de 401 tenta recarregar do DB, mas se o token do DB também estiver errado (ou o env for persistente), o ciclo falha.
+2. Validar o vínculo do leitor facial com o projeto
+- Confirmar no backend que o leitor facial usado no teste está com:
+  - `agent_id` correto
+  - `project_id` correto
+  - `configuration.passage_direction` coerente
+- Se o `device_id` do log não cair no conjunto de devices desse projeto, o dashboard nunca vai mostrar.
 
-**Arquivos a editar:**
-- `electron/sync.js` — Forçar `agentToken` a sempre ler do DB primeiro (mais recente e confiável), não do env. Adicionar log claro do token sendo usado em cada upload.
+3. Validar se o agente está classificando a direção corretamente
+- Inspecionar `electron/agent.js#processEvent()` e o payload real salvo em `lastEventPayload`.
+- Ver se o facial está chegando sem `direction/passage_direction/sentido`.
+- Se estiver, ajustar só a lógica de normalização para esse formato real do ControlID, sem tocar no fluxo manual.
 
-**Teste:** Verificar nos logs da edge function se o upload-logs passa a chegar com o token `fe25b788` e se os logs são inseridos na nuvem. Confirmar no dashboard que eventos faciais aparecem.
+4. Validar se o upload está “confirmando sucesso” sem produzir log utilizável
+- Revisar a resposta de `upload-logs` para comparar:
+  - `received`
+  - `accepted`
+  - `inserted`
+  - `rejected`
+- Se houver sucesso parcial com evento descartado, corrigir `electron/sync.js` para não marcar como synced quando o lote não for efetivamente persistido de forma útil.
 
----
+5. Corrigir apenas o ponto comprovado pela evidência
+- Se o problema for direção: ajustar somente o parsing do facial.
+- Se for device/project mismatch: ajustar somente o vínculo/consulta do device.
+- Se for persistência parcial: ajustar somente a regra de confirmação do upload.
+- Não mexer na lógica dos eventos manuais nem nos relatórios agora.
 
-## Fase 2: Corrigir horários nos relatórios web
+6. Teste obrigatório antes de qualquer fase seguinte
+- Gerar 1 nova entrada pelo leitor facial.
+- Verificar em sequência:
+  - evento capturado no local
+  - evento persistido na nuvem
+  - `direction = entry`
+  - `access_status = granted`
+  - `device_id` pertencente ao projeto selecionado
+  - trabalhador aparecendo no dashboard
+- Só depois disso seguir para qualquer outra correção.
 
-**Objetivo:** Relatórios web exibem timestamps corretos em BRT.
+Arquivos mais prováveis de ajuste:
+- `electron/agent.js`
+- `electron/sync.js`
+- `supabase/functions/agent-sync/index.ts`
 
-**Diagnóstico:** `Reports.tsx` usa `format(parseISO(projectStart), 'yyyy-MM-dd')` que pode deslocar dia dependendo do timezone. Os componentes de relatório já usam `useAccessLogs` que busca da nuvem (cloud path) com limites BRT corretos. O problema residual está na formatação/agrupamento nos componentes.
+Detalhe técnico importante:
+Hoje a causa mais provável não é mais “token antigo”. O código aponta que o gargalo restante está na qualidade semântica do log facial que chega ao backend: direção, status, vínculo com device/projeto ou confirmação enganosa de upload.
 
-**Arquivos a editar:**
-- `src/pages/Reports.tsx` — Substituir `format(parseISO(...))` por parsing direto de substring `yyyy-MM-dd` (sem timezone)
-- `src/components/reports/OvernightControl.tsx` — Verificar se `differenceInCalendarDays` com `parseISO` causa deslocamento; usar `toBrtDate` se necessário
-- `src/utils/exportReportPdf.ts` — Confirmar que já usa BRT helpers (foi editado antes)
-- `src/utils/exportReports.ts` — Confirmar uso de BRT
-
-**Teste:** Gerar relatório de presença e de trabalhadores no web para o dia 08/04. Confirmar que os horários batem com os timestamps UTC da nuvem convertidos para BRT.
-
----
-
-## Fase 3: Garantir convergência SQLite ← Nuvem
-
-**Objetivo:** Desktop recebe todos os logs da nuvem (manuais + faciais já enriquecidos).
-
-**Diagnóstico:** O SQLite já tem `updated_at` na tabela. O `downloadAccessLogs` já usa `updated_at` como cursor. O `upsertAccessLogFromCloud` já faz reconciliação por chave canônica. A convergência deveria funcionar se o upload (Fase 1) destravar.
-
-**Verificação:** Após Fase 1, esperar 1 ciclo de sync (60s) e verificar se os mesmos 19+ logs do dia 08/04 aparecem no relatório desktop. Se não aparecerem:
-- Investigar se o cursor `last_download_access_logs` está avançado demais
-- Verificar se o `download-access-logs` está retornando os logs manuais
-
-**Possível correção:** Reset do cursor `last_download_access_logs` para re-download se necessário.
-
----
-
-## Fase 4: Corrigir normalizeTimestamp no agente (prevenção)
-
-**Objetivo:** Novos eventos faciais são armazenados com timestamp UTC correto na origem.
-
-**Diagnóstico:** `normalizeTimestamp` no `electron/agent.js` trata strings com timezone como "já corretas" (linha 53-57). Se o dispositivo ControlID enviar timestamp com timezone `+00:00` mas o valor real for BRT (ex: `2026-04-09T10:00:00+00:00` quando na verdade são 10h BRT), o código aceita como UTC e o resultado fica 3h adiantado.
-
-**Arquivo a editar:**
-- `electron/agent.js` — Na branch de timestamp com timezone, adicionar heurística: se o offset é +00:00 mas o dispositivo é ControlID (que sempre opera em BRT), tratar como BRT e adicionar +3h. Ou: sempre tratar timestamp de dispositivo como BRT local, independente do marcador.
-
-**Teste:** Registrar entrada facial e verificar no dashboard que o horário exibido corresponde ao horário real (em BRT).
-
----
-
-## Resumo de impacto por fase
-
-| Fase | Risco | Muda o que funciona? |
-|------|-------|---------------------|
-| 1 | Baixo — muda apenas prioridade de token no sync | Não |
-| 2 | Baixo — muda apenas formatação de texto | Não |
-| 3 | Nenhum — apenas verificação e possível reset de cursor | Não |
-| 4 | Médio — muda parsing de timestamp na ingestão | Não afeta dados existentes |
-
+Resultado esperado desta fase:
+- o próximo evento facial entra na nuvem com os campos corretos
+- ele passa no filtro de `useWorkersOnBoard`
+- volta a aparecer no dashboard sem afetar o que já funciona
