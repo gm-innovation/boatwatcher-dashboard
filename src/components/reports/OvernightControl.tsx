@@ -100,7 +100,7 @@ export const OvernightControl = ({ projectId, startDate, endDate }: OvernightCon
           id: workerId,
           name: worker?.name || lastEntry.worker_name || 'Desconhecido',
           company: companyName,
-          entryTime: formatBrtTime(entryDate),
+          entryTime: formatBrtTime(lastEntry.timestamp),
           nights: Math.max(nights, 0),
           photoUrl: worker?.photo_url || undefined,
         });
