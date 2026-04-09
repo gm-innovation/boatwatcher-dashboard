@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { format, parseISO, startOfWeek, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { getBrtDayKey, toBrtDate } from '@/utils/brt';
+import { getBrtDayKey, toBrtDate, formatBrtNow } from '@/utils/brt';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { toast } from '@/components/ui/use-toast';
