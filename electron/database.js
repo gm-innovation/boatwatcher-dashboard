@@ -181,6 +181,7 @@ function initDatabase(userDataPath) {
       device_name TEXT,
       photo_capture_url TEXT,
       created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
       synced INTEGER DEFAULT 0,
       FOREIGN KEY (worker_id) REFERENCES workers(id)
     );
@@ -301,10 +302,14 @@ function initDatabase(userDataPath) {
   db.exec("UPDATE company_documents SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
   db.exec("UPDATE worker_documents SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
 
-  // Ensure hardware_user_id column exists on access_logs (added v1.3.62)
+  // Ensure hardware_user_id and updated_at columns exist on access_logs
   const alCols = new Set(db.prepare("PRAGMA table_info(access_logs)").all().map(c => c.name));
   if (!alCols.has('hardware_user_id')) {
     db.exec("ALTER TABLE access_logs ADD COLUMN hardware_user_id TEXT");
+  }
+  if (!alCols.has('updated_at')) {
+    db.exec("ALTER TABLE access_logs ADD COLUMN updated_at TEXT");
+    db.exec("UPDATE access_logs SET updated_at = COALESCE(created_at, timestamp, datetime('now'))");
   }
 
   const maxCode = db.prepare('SELECT MAX(code) as max_code FROM workers').get();
