@@ -103,7 +103,7 @@ class AgentController {
     this.pollInterval = null;
     this.devices = [];
     this.listeners = [];
-    this.pollIntervalMs = 5000;
+    this.pollIntervalMs = 3000;
     this.deviceConnectivity = new Map();
     this.sessionCache = new Map();
     this.SESSION_TTL_MS = 10 * 60 * 1000;
