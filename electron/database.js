@@ -302,7 +302,7 @@ function initDatabase(userDataPath) {
   db.exec("UPDATE company_documents SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
   db.exec("UPDATE worker_documents SET updated_at = COALESCE(updated_at, created_at, datetime('now'))");
 
-  // Ensure hardware_user_id and updated_at columns exist on access_logs
+  // Ensure hardware_user_id, updated_at, and source columns exist on access_logs
   const alCols = new Set(db.prepare("PRAGMA table_info(access_logs)").all().map(c => c.name));
   if (!alCols.has('hardware_user_id')) {
     db.exec("ALTER TABLE access_logs ADD COLUMN hardware_user_id TEXT");
@@ -310,6 +310,9 @@ function initDatabase(userDataPath) {
   if (!alCols.has('updated_at')) {
     db.exec("ALTER TABLE access_logs ADD COLUMN updated_at TEXT");
     db.exec("UPDATE access_logs SET updated_at = COALESCE(created_at, timestamp, datetime('now'))");
+  }
+  if (!alCols.has('source')) {
+    db.exec("ALTER TABLE access_logs ADD COLUMN source TEXT DEFAULT 'facial'");
   }
 
   const maxCode = db.prepare('SELECT MAX(code) as max_code FROM workers').get();
@@ -1345,8 +1348,8 @@ function createDatabaseAPI(db, startCode) {
     insertAccessLog(data) {
       const id = uuidv4();
       db.prepare(`
-        INSERT INTO access_logs (id, worker_id, device_id, timestamp, access_status, direction, reason, score, worker_name, worker_document, device_name, hardware_user_id, synced)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        INSERT INTO access_logs (id, worker_id, device_id, timestamp, access_status, direction, reason, score, worker_name, worker_document, device_name, hardware_user_id, source, synced)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
       `).run(
         id,
         data.worker_id || null,
@@ -1360,6 +1363,7 @@ function createDatabaseAPI(db, startCode) {
         data.worker_document || null,
         data.device_name || null,
         data.hardware_user_id || null,
+        data.source || 'facial',
       );
       return { id, ...data };
     },
