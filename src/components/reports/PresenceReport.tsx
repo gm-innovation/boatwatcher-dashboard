@@ -320,7 +320,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
         pdf.setTextColor(160);
         pdf.text(`Página ${page + 1} de ${totalPages}`, pdfPageW - margin, pdfPageH - 6, { align: 'right' });
         pdf.text(
-          `Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+          `Gerado em: ${formatBrtNow()}`,
           margin,
           pdfPageH - 6
         );
