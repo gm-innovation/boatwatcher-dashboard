@@ -44,37 +44,32 @@ function normalizeTimestamp(event) {
   if (!raw) return null;
 
   // ────────────────────────────────────────────────────────────────────
-  // IMPORTANT: ControlID firmware ALWAYS sends BRT wall-clock time,
-  // regardless of the format (epoch, ISO string with Z, or bare string).
-  // The hardware does NOT track UTC — it treats local BRT as if it were
-  // UTC, so any timezone marker (Z, +00:00) is WRONG and must be ignored.
-  // We ALWAYS add 3 hours to convert BRT → true UTC.
+  // The agent passes the raw device timestamp WITHOUT timezone correction.
+  // The server (agent-sync edge function) detects raw BRT via a lag
+  // heuristic and applies +3h automatically when needed.
+  // This avoids double-correction when both agent and server try to fix.
   // ────────────────────────────────────────────────────────────────────
 
-  const BRT_OFFSET_MS = 3 * 3600 * 1000; // 3 hours in milliseconds
-
-  // Epoch seconds — firmware treats BRT as UTC epoch
+  // Epoch seconds
   if (typeof raw === 'number') {
-    return new Date(raw * 1000 + BRT_OFFSET_MS).toISOString();
+    return new Date(raw * 1000).toISOString();
   }
 
-  // ISO-like string — strip any timezone suffix and parse as bare datetime
+  // ISO-like string — parse as-is
   const trimmed = String(raw).trim();
 
-  // Try structured parse first (most reliable)
+  // Structured parse
   const match = trimmed.match(/(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/);
   if (match) {
     const [, yr, mo, dy, hr, mn, sc] = match.map(Number);
-    // Treat as BRT: add 3h to get true UTC
-    const utcDate = new Date(Date.UTC(yr, mo - 1, dy, hr + 3, mn, sc));
-    return utcDate.toISOString();
+    return new Date(Date.UTC(yr, mo - 1, dy, hr, mn, sc)).toISOString();
   }
 
-  // Fallback: strip timezone markers and parse, then add 3h
+  // Fallback: strip timezone markers and parse
   const stripped = trimmed.replace(/[Zz]$/, '').replace(/[+-]\d{2}:?\d{2}$/, '');
   const ms = Date.parse(stripped);
   if (!isNaN(ms)) {
-    return new Date(ms + BRT_OFFSET_MS).toISOString();
+    return new Date(ms).toISOString();
   }
 
   return null;
