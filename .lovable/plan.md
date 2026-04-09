@@ -1,33 +1,29 @@
 
-# Correção de timestamps — Status: Implementado
+# Correção de timestamps — Status: Implementado (v2)
 
 ## Convenção do sistema
 - `access_logs.timestamp` → UTC real no banco
 - UI (`src/utils/brt.ts`) → converte para BRT na exibição
-- O ControlID envia horário BRT rotulado como UTC → o agente soma +3h para converter para UTC real
+- O ControlID envia horário BRT rotulado como UTC
 
-## O que foi feito
+## Arquitetura de correção (v2)
 
-### 1. Agent.js (`electron/agent.js`)
-- `normalizeTimestamp` já estava correto com `BRT_OFFSET_MS = 3h`
-- Nenhuma alteração necessária — o problema era que o desktop não estava rodando o código atualizado
+### Responsabilidades
+- **Agent (`electron/agent.js`)**: passa o timestamp RAW do dispositivo, sem correção
+- **Servidor (`supabase/functions/agent-sync/index.ts`)**: detecta lag ~3h via heurística e aplica +3h automaticamente
+- **UI (`src/utils/brt.ts`)**: converte UTC → BRT na exibição, sem lógica extra
 
-### 2. Agent-sync (`supabase/functions/agent-sync/index.ts`)
-- `validateTimestamp` apenas valida sem aplicar correção (correto)
-- BRT autocorrection está desabilitada no servidor (correto, responsabilidade é do agente)
+### Heurística do servidor
+Se `now() - timestamp` está entre 9000s (2h30) e 12600s (3h30):
+- O timestamp é BRT cru → aplica +3h para converter para UTC real
+- Se o agente JÁ aplicou +3h, o lag será ~100s → fora da faixa → sem dupla correção
 
-### 3. Dados corrigidos
-- Aplicado +3h em todos os eventos de dispositivo de 09/04 que estavam como BRT-cru
-- Evento `377676e5` (entry 16:59 UTC) já estava correto, não foi tocado
-- Conflitos de unique constraint tratados com DO block + EXCEPTION
-
-### 4. Dashboard
-- Não alterado — lógica estava correta, só precisava de dados consistentes
+### Dados corrigidos
+- 3 eventos recentes (`e53bba0b`, `cb2698d3`, `e9c3b24b`) corrigidos com +3h
+- Eventos do bulk sync com +3h da migração anterior: corretos (timestamps históricos do ControlID)
 
 ## Resultado
-- Ordem cronológica restaurada
-- Último evento: entry 18:53 UTC (15:53 BRT) → trabalhador "a bordo"
-- Próximos eventos do facial entrarão com UTC correto quando o desktop for reconstruído
-
-## Pendência
-- O desktop precisa ser reconstruído com o `electron/agent.js` atual para que novos eventos já venham com +3h
+- Último evento: exit 18:55 UTC (15:55 BRT) → trabalhador corretamente "fora"
+- Ordem cronológica: entry 18:48 → exit 18:51 → entry 18:53 → exit 18:55
+- Novos eventos do facial serão corrigidos automaticamente no servidor
+- Desktop NÃO precisa ser reconstruído para funcionar (servidor faz a correção)
