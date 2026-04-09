@@ -7,25 +7,34 @@ const corsHeaders = {
 }
 
 /**
- * Validate timestamp: reject timestamps that are absurdly in the future (> 5 min ahead).
- * Returns the timestamp as-is if valid, or null if it should be rejected.
- * No automatic corrections are applied — the agent is responsible for proper UTC conversion.
+ * Validate timestamp and auto-correct raw BRT if needed.
+ *
+ * ControlID devices send local BRT time labelled as UTC. If the agent has NOT
+ * already applied the +3h correction, the server-side lag (now − timestamp)
+ * will be ~3 hours.  We detect that window (2h30 – 3h30) and add +3h.
+ *
+ * If the agent HAS already corrected, the lag will be only a few seconds,
+ * well outside the detection window → no double correction.
  */
 function validateTimestamp(ts: string): { valid: boolean; timestamp: string; reason?: string } {
   const parsed = new Date(ts);
   if (isNaN(parsed.getTime())) return { valid: false, timestamp: ts, reason: 'unparseable timestamp' };
+
   const now = Date.now();
-  const diffMs = parsed.getTime() - now;
+  const diffMs = now - parsed.getTime();          // positive = timestamp in the past
+  const diffSeconds = diffMs / 1000;
 
   // Reject timestamps more than 5 minutes in the future
-  if (diffMs > 5 * 60 * 1000) {
-    return { valid: false, timestamp: ts, reason: `timestamp ${Math.round(diffMs / 60000)}min in the future` };
+  if (diffMs < -5 * 60 * 1000) {
+    return { valid: false, timestamp: ts, reason: `timestamp ${Math.round(-diffMs / 60000)}min in the future` };
   }
 
-  // BRT autocorrection DISABLED: The agent (v1.3.47+) now handles all timezone
-  // conversion correctly. Keeping this heuristic caused double +3h shifts
-  // on properly-converted timestamps, creating misattributed events.
-  // Legacy agents (pre-1.3.40) should be updated instead of relying on server-side guessing.
+  // BRT autocorrection: if lag is between 2h30 and 3h30, the agent sent raw BRT
+  if (diffSeconds > 9000 && diffSeconds < 12600) {
+    const corrected = new Date(parsed.getTime() + 3 * 3600 * 1000);
+    console.log(`[validateTimestamp] BRT autocorrect: ${ts} → ${corrected.toISOString()} (lag=${Math.round(diffSeconds)}s)`);
+    return { valid: true, timestamp: corrected.toISOString() };
+  }
 
   return { valid: true, timestamp: ts };
 }
