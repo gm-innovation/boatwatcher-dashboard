@@ -1,6 +1,7 @@
 
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { AccessLog } from '@/types/supabase';
 import { fitImageDimensions } from './exportWorkerReportPdf';

@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatBrtShort, formatBrtDateTime, formatBrtDateTimeFull, isDaytimeBrt, classifyShiftBrt, formatBrtNow } from '@/utils/brt';
 
