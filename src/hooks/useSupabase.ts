@@ -316,7 +316,7 @@ async function fetchWorkersOnBoardFromCloud(
     const firstEntryMap = new Map<string, string>();
     for (const log of relevantLogs) {
       if (log.direction !== 'entry') continue;
-      const key = log.worker_id || log.worker_name || '';
+      const key = resolveCloudCanonicalKey(log);
       if (key && !firstEntryMap.has(key)) {
         firstEntryMap.set(key, log.timestamp);
       }
