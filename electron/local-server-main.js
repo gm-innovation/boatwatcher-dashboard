@@ -39,7 +39,19 @@ try {
   startLocalServer = require('../server/index').startLocalServer;
   logToFile('server/index module loaded successfully');
 } catch (err) {
-  logToFile(`FAILED TO REQUIRE server/index: ${err.stack || err.message}`);
+  const errMsg = err.stack || err.message;
+  logToFile(`FAILED TO REQUIRE server/index: ${errMsg}`);
+
+  // Diagnose common causes
+  if (errMsg.includes('better-sqlite3') || errMsg.includes('.node')) {
+    logToFile('DIAGNOSTIC: Native module (better-sqlite3) failed to load. The binary may need to be rebuilt for this Electron version. Try reinstalling the app.');
+  }
+  if (errMsg.includes('Cannot find module') || errMsg.includes('MODULE_NOT_FOUND')) {
+    logToFile('DIAGNOSTIC: A required module is missing. If running from source code, run "npm install" in the server/ folder first. If running the installed app, try reinstalling.');
+  }
+  if (errMsg.includes('Windows Script Host') || errMsg.includes('WScript')) {
+    logToFile('DIAGNOSTIC: A .js file is being executed by Windows Script Host instead of Node.js. Do NOT open .js files directly from Windows Explorer. Use the installed app or start-server.bat.');
+  }
 }
 
 // --- Auto-updater setup ---

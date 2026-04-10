@@ -1,5 +1,29 @@
 # Dock Check — Servidor Local Dedicado
 
+## ⚠️ IMPORTANTE — Como executar
+
+**NUNCA abra arquivos `.js` diretamente pelo Windows Explorer.**
+O Windows tentará executar com o Windows Script Host (WSH), que não é compatível com Node.js e causará erros de sintaxe.
+
+### Método recomendado: Instalador `.exe`
+
+```text
+1. Baixe o DockCheck-Local-Server-Setup-<versão>.exe do GitHub Releases
+2. Execute o instalador
+3. O app inicia automaticamente e roda em background (bandeja do sistema)
+```
+
+### Método alternativo: Execução manual a partir do código-fonte
+
+```bash
+cd server
+npm install
+start-server.bat      # Windows
+./install.sh          # Linux (instala como serviço systemd)
+```
+
+**Use sempre `start-server.bat`** — nunca clique em arquivos `.js` individuais.
+
 ## Fluxo recomendado
 
 ```text
@@ -9,21 +33,6 @@
 4. O Desktop aponta para http://localhost:3001 ou para o IP da máquina servidora
 5. Se o servidor local ficar indisponível, o Desktop entra em fallback automaticamente
 ```
-
-## Instalador Windows (.exe)
-
-O projeto agora possui um build dedicado para gerar um instalador separado do servidor local:
-
-```bash
-npm install
-npm run build:local-server
-```
-
-Saída esperada:
-- pasta `local-server-dist/`
-- instalador `DockCheck-Local-Server-Setup-<versão>.exe`
-
-Esse instalador gera um aplicativo separado chamado **Dock Check Local Server**, com inicialização automática no Windows e execução em background com ícone na bandeja do sistema.
 
 ## Dados persistentes
 
@@ -72,7 +81,14 @@ No app Desktop, configure a URL do servidor local para um destes cenários:
 
 A URL fica persistida em `server-config.json` no diretório de dados do Desktop.
 
+## Troubleshooting
+
+| Problema | Solução |
+|---|---|
+| Erro "Windows Script Host" ao abrir `.js` | Não abra `.js` pelo Explorer. Use `start-server.bat` ou o app instalado. |
+| "server/index module failed to load" | Verifique o `error.log` em `%APPDATA%/Dock Check Local Server/`. Reinstale o app se necessário. |
+| Porta 3001 em uso | Outro processo ocupa a porta. Feche-o ou mude `BW_PORT`. |
+
 ## Scripts manuais legados
 
 Os scripts `install.bat` e `install.sh` continuam úteis para instalação manual em ambientes de suporte, mas o fluxo principal no Windows agora deve usar o instalador `.exe` dedicado.
-

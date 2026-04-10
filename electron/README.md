@@ -1,5 +1,10 @@
 # Dock Check Desktop — Build Instructions
 
+## ⚠️ IMPORTANTE
+
+**NUNCA abra arquivos `.js` diretamente pelo Windows Explorer.**
+Use sempre o app instalado ou os scripts de build/dev descritos abaixo.
+
 ## Pré-requisitos
 
 - Node.js 20 LTS
@@ -66,3 +71,10 @@ Exemplos de URL do servidor local:
 - mesma máquina: `http://localhost:3001`
 - servidor dedicado na rede: `http://192.168.1.100:3001`
 
+## Troubleshooting
+
+| Problema | Solução |
+|---|---|
+| Erro "Windows Script Host" | Não abra `.js` pelo Explorer. Use o app instalado. |
+| Tela branca no Desktop | Verifique `base: './'` no vite.config.ts |
+| Servidor não conecta | Confirme que o Local Server está rodando na porta 3001 |
