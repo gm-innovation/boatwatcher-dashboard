@@ -1,90 +1,64 @@
 
+Objetivo desta etapa: corrigir o problema de inicialização mostrado na imagem sem encostar na lógica de relatórios, sync, dashboard, banco ou fluxo de entrada/saída.
 
-# Correção cirúrgica: horário -3h e eventos manuais nos relatórios desktop
+Diagnóstico confirmado após revisar o código e a imagem:
+- Do I know what the issue is? Sim.
+- O erro da imagem não aponta para um bug funcional em `server/routes/access-logs.js`.
+- A janela é do **Windows Script Host**, ou seja: o Windows está tentando executar um arquivo `.js` diretamente, fora do runtime correto.
+- A prova principal é o caminho da imagem: `...\boatwatcher-dashboard-main\server\routes\access-logs.js`. Isso é cara de **pasta de código-fonte extraída do GitHub/zip**, não do app instalado.
+- `access-logs.js` é apenas uma rota Express. Ele foi feito para ser carregado por `server/index.js` dentro de Node/Electron, nunca para ser aberto diretamente pelo Windows.
+- Portanto, reiniciar “o servidor” não resolve se a execução estiver partindo da pasta errada ou do arquivo errado.
 
-## Diagnóstico confirmado
+Plano cirúrgico:
+1. Blindar o fluxo de execução do Servidor Local
+- Revisar o fluxo de inicialização para garantir que o operador tenha um ponto único e claro de execução.
+- Manter como caminhos suportados apenas:
+  - app instalado `Dock Check Local Server.exe`
+  - fluxo manual explícito por script/batch
+- Não tocar em `server/routes/access-logs.js` nem na lógica dos endpoints.
 
-### Problema 1: Horário com -3h (double subtraction)
+2. Adicionar um launcher manual seguro para Windows
+- Criar um launcher `.bat/.cmd` simples e explícito para o modo “rodar a partir do código-fonte”, chamando o entrypoint correto com Node.
+- Isso evita que alguém tente abrir `.js` internos da pasta `server/routes/`.
 
-O agente ControlID armazena no SQLite local o timestamp bruto do hardware como UTC (`new Date(Date.UTC(yr, mo, dy, hr, mn, sc))`), mas o hardware reporta em BRT. Exemplo: evento às 08:34 BRT → armazenado localmente como `08:34:00.000Z` (BRT-como-UTC).
+3. Melhorar a mensagem de erro/diagnóstico do bootstrap
+- Ajustar `electron/local-server-main.js` para registrar e exibir um diagnóstico mais útil quando o servidor não sobe:
+  - diferenciar falha real de módulo
+  - indicar quando o problema aparenta ser “execução fora do app instalado”
+- Assim o erro deixa de parecer um defeito em `access-logs.js`.
 
-A edge function `agent-sync` corrige +3h no upload para a nuvem, resultando em `11:34:00Z` (UTC correto). Porém, **localmente no SQLite o timestamp permanece `08:34Z`**.
+4. Deixar o caminho correto explícito na documentação
+- Atualizar `server/README.md` e `electron/README.md` para deixar inequívoco:
+  - não usar a pasta `boatwatcher-dashboard-main` como instalação
+  - não abrir arquivos `.js` manualmente
+  - usar o instalador `.exe` ou o launcher manual oficial
 
-Quando o relatório desktop lê do servidor local e aplica `formatBrtDateTime()` (que subtrai 3h), o resultado é `05:34` — dupla subtração.
+5. Preservar integralmente o que já está funcionando
+- Nenhuma alteração em:
+  - `electron/sync.js`
+  - `electron/agent.js`
+  - `server/routes/access-logs.js` (regra de negócio)
+  - relatórios
+  - dashboard
+  - banco/local SQLite
+  - sincronização com a nuvem
 
-```text
-Hardware BRT 08:34 → SQLite local 08:34Z (BRT-como-UTC)
-                   → formatBrtDateTime -3h → 05:34 ← ERRADO
+Arquivos previstos para ajuste:
+- `electron/local-server-main.js`
+- `server/README.md`
+- `electron/README.md`
+- `server/install.bat`
+- novo launcher Windows seguro (ex.: `server/start-server.bat` ou equivalente)
 
-Nuvem (após upload) 11:34Z (UTC correto)
-                   → formatBrtDateTime -3h → 08:34 ← CORRETO
-```
+Arquivos que não serão mexidos:
+- `server/routes/access-logs.js`
+- `server/index.js` (exceto se for estritamente necessário para mensagem de bootstrap)
+- `electron/sync.js`
+- `electron/database.js`
+- componentes de relatórios já corrigidos
 
-**Eventos manuais** não têm esse problema porque usam `new Date().toISOString()` que já retorna UTC correto.
-
-### Problema 2: Eventos manuais não aparecem
-
-Duas causas potenciais:
-1. **`ReportsList.tsx` (aba "Todos Trabalhadores")** filtra `log.worker_id` como obrigatório (linha 50). Eventos manuais inseridos localmente podem não ter `worker_id` populado.
-2. **Filtro de projeto no SQLite** depende da tabela `manual_access_points` local estar sincronizada. Se não estiver, a subquery retorna vazio e filtra todos os eventos manuais.
-
-## Plano de correção
-
-### 1. Normalizar timestamps locais no servidor Express (`server/routes/access-logs.js`)
-
-Quando o servidor local retorna logs via GET, aplicar correção +3h nos timestamps de eventos faciais que estão armazenados como BRT-como-UTC. Critério: logs com `source = 'facial'` (ou sem source, que é o padrão antigo).
-
-Isso corrige a exibição sem alterar os dados no SQLite nem o fluxo de upload (que já funciona).
-
-**Alternativa considerada e descartada**: corrigir no `agent.js` ao salvar — isso quebraria a heurística da edge function que já adiciona +3h nos uploads, causando double-add.
-
-Arquivo: `server/routes/access-logs.js`
-
-### 2. Incluir eventos manuais nos relatórios (`ReportsList.tsx`)
-
-Remover o filtro `&& log.worker_id` obrigatório, usando fallback para `worker_name` e `worker_document` na identificação.
-
-Arquivo: `src/components/reports/ReportsList.tsx`
-
-### 3. Garantir que `WorkerTimeReport.tsx` reconheça logs sem `worker_id`
-
-O `resolveKey` já faz fallback para `worker_name`, mas precisa garantir que logs manuais (que podem vir sem `worker_id`) sejam processados corretamente na reconciliação.
-
-Arquivo: `src/components/reports/WorkerTimeReport.tsx`
-
-## Arquivos modificados
-
-- `server/routes/access-logs.js` — normalizar timestamp de facial +3h na resposta GET
-- `src/components/reports/ReportsList.tsx` — remover filtro obrigatório de `worker_id`
-- `src/components/reports/WorkerTimeReport.tsx` — ajuste mínimo se necessário no `resolveKey`
-
-## O que NÃO muda
-
-- `electron/agent.js` — continua salvando timestamp raw (edge function depende disso)
-- `electron/sync.js` — upload continua igual
-- `supabase/functions/agent-sync/index.ts` — heurística de +3h intocada
-- `src/utils/brt.ts` — funções de formatação intocadas
-- Dashboard e fluxos de entrada/saída — já funcionando
-
-## Detalhes técnicos
-
-```text
-Correção de timestamp no GET /api/access-logs:
-
-for (const log of logs) {
-  if (log.source !== 'manual') {
-    // Facial events stored as BRT-as-UTC → add +3h to normalize to real UTC
-    const d = new Date(log.timestamp);
-    d.setUTCHours(d.getUTCHours() + 3);
-    log.timestamp = d.toISOString();
-  }
-}
-```
-
-```text
-Correção em ReportsList.tsx linha 50:
-
-ANTES: accessLogs.filter(log => log.access_status === 'granted' && log.worker_id)
-DEPOIS: accessLogs.filter(log => log.access_status === 'granted' && (log.worker_id || log.worker_name))
-```
-
+Resultado esperado:
+- o servidor local deixa de depender de execução manual incorreta por `.js`;
+- a pasta de código-fonte não vira mais um falso “instalador”;
+- o erro deixa de aparecer como se `access-logs.js` estivesse quebrado;
+- as correções anteriores de relatórios permanecem intactas.
