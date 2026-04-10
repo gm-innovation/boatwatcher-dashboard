@@ -35,23 +35,35 @@ process.on('unhandledRejection', (reason) => logToFile(`UNHANDLED REJECTION: ${r
 
 // --- Load server module ---
 let startLocalServer;
+let serverLoadError = null;
 try {
   startLocalServer = require('../server/index').startLocalServer;
   logToFile('server/index module loaded successfully');
 } catch (err) {
+  serverLoadError = err;
   const errMsg = err.stack || err.message;
   logToFile(`FAILED TO REQUIRE server/index: ${errMsg}`);
 
-  // Diagnose common causes
+  // Diagnose common causes and build a human-readable summary
+  const diagnostics = [];
   if (errMsg.includes('better-sqlite3') || errMsg.includes('.node')) {
-    logToFile('DIAGNOSTIC: Native module (better-sqlite3) failed to load. The binary may need to be rebuilt for this Electron version. Try reinstalling the app.');
+    diagnostics.push('Módulo nativo (better-sqlite3) não pôde ser carregado. O binário pode estar incompatível com esta versão do Electron. Reinstale o aplicativo.');
   }
   if (errMsg.includes('Cannot find module') || errMsg.includes('MODULE_NOT_FOUND')) {
-    logToFile('DIAGNOSTIC: A required module is missing. If running from source code, run "npm install" in the server/ folder first. If running the installed app, try reinstalling.');
+    const moduleMatch = errMsg.match(/Cannot find module '([^']+)'/);
+    const moduleName = moduleMatch ? moduleMatch[1] : 'desconhecido';
+    diagnostics.push(`Módulo ausente: ${moduleName}. Se estiver rodando do código-fonte, execute "npm install" na pasta server/. Se estiver usando o instalador, reinstale o app.`);
   }
   if (errMsg.includes('Windows Script Host') || errMsg.includes('WScript')) {
-    logToFile('DIAGNOSTIC: A .js file is being executed by Windows Script Host instead of Node.js. Do NOT open .js files directly from Windows Explorer. Use the installed app or start-server.bat.');
+    diagnostics.push('Arquivo .js aberto pelo Windows Script Host. NÃO abra arquivos .js pelo Explorer. Use o app instalado ou start-server.bat.');
   }
+  if (diagnostics.length === 0) {
+    diagnostics.push(`Erro inesperado ao carregar o servidor: ${err.message}`);
+  }
+  for (const d of diagnostics) logToFile(`DIAGNOSTIC: ${d}`);
+
+  // Store formatted diagnostic for display in dialog later
+  serverLoadError._diagnosticSummary = diagnostics.join('\n');
 }
 
 // --- Auto-updater setup ---
@@ -622,7 +634,14 @@ app.whenReady().then(async () => {
     logToFile('Tray created successfully');
 
     if (!startLocalServer) {
-      throw new Error('server/index module failed to load — check error.log');
+      const summary = serverLoadError?._diagnosticSummary || 'Motivo desconhecido';
+      const originalMsg = serverLoadError?.message || '';
+      throw new Error(
+        `Falha ao carregar o módulo do servidor.\n\n` +
+        `Diagnóstico:\n${summary}\n\n` +
+        `Erro original: ${originalMsg}\n\n` +
+        `Verifique o log completo em:\n${LOG_PATH}`
+      );
     }
 
     await bootLocalServer();
