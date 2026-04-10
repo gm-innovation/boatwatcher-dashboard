@@ -1,22 +1,11 @@
 const express = require('express');
+const path = require('path');
 const router = express.Router();
 
-// POST /flush-stale-logs — mark old unsynced logs as synced
-router.post('/flush-stale-logs', (req, res) => {
-  try {
-    const rawDb = req.db.getRawDb?.();
-    if (!rawDb) return res.status(500).json({ error: 'No raw DB access' });
-
-    const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-    const result = rawDb.prepare(
-      "UPDATE access_logs SET synced = 1 WHERE synced = 0 AND created_at < ?"
-    ).run(cutoff);
-
-    res.json({ flushed: result.changes });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+const serverVersion = (() => {
+  try { return require(path.join(__dirname, '..', 'package.json')).version; }
+  catch { return 'unknown'; }
+})();
 
 // GET /local-logs — diagnostic view of recent local access logs
 router.get('/local-logs', (req, res) => {
@@ -38,13 +27,6 @@ router.get('/local-logs', (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-const path = require('path');
-const router = express.Router();
-
-const serverVersion = (() => {
-  try { return require(path.join(__dirname, '..', 'package.json')).version; }
-  catch { return 'unknown'; }
-})();
 
 router.get('/status', (req, res) => {
   try {
@@ -120,7 +102,7 @@ router.post('/read-only-mode', (req, res) => {
   }
 });
 
-// Flush stale unsynced logs (older than 24h) — manual cleanup endpoint
+// Flush stale unsynced logs (older than threshold) — manual cleanup endpoint
 router.post('/flush-stale-logs', (req, res) => {
   try {
     const rawDb = req.db.getRawDb?.();
