@@ -47,7 +47,7 @@ export const ReportsList = ({ projectId, startDate, endDate }: ReportsListProps)
 
   // Deduplicate: extract unique workers who had granted access
   const { uniqueWorkers, groupedByCompany } = useMemo(() => {
-    const grantedLogs = accessLogs.filter(log => log.access_status === 'granted' && log.worker_id);
+    const grantedLogs = accessLogs.filter(log => log.access_status === 'granted' && (log.worker_id || log.worker_name));
     const workerIdSet = new Set<string>();
     const workerMap = new Map<string, UniqueWorker>();
 
