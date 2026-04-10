@@ -1,64 +1,74 @@
 
-Objetivo desta etapa: corrigir o problema de inicialização mostrado na imagem sem encostar na lógica de relatórios, sync, dashboard, banco ou fluxo de entrada/saída.
+Objetivo desta etapa: corrigir o erro do executável instalado sem tocar em relatórios, sync, banco, dashboard nem fluxo de entrada/saída.
 
-Diagnóstico confirmado após revisar o código e a imagem:
-- Do I know what the issue is? Sim.
-- O erro da imagem não aponta para um bug funcional em `server/routes/access-logs.js`.
-- A janela é do **Windows Script Host**, ou seja: o Windows está tentando executar um arquivo `.js` diretamente, fora do runtime correto.
-- A prova principal é o caminho da imagem: `...\boatwatcher-dashboard-main\server\routes\access-logs.js`. Isso é cara de **pasta de código-fonte extraída do GitHub/zip**, não do app instalado.
-- `access-logs.js` é apenas uma rota Express. Ele foi feito para ser carregado por `server/index.js` dentro de Node/Electron, nunca para ser aberto diretamente pelo Windows.
-- Portanto, reiniciar “o servidor” não resolve se a execução estiver partindo da pasta errada ou do arquivo errado.
+Do I know what the issue is? Sim.
+
+O print novo confirma que agora não estamos mais no cenário de Windows Script Host. O caminho do erro é o do app instalado (`...Dock Check Local Server\resources\app.asar\electron\local-server-main.js:625`), então o executável abriu corretamente, mas falhou no primeiro carregamento de `require('../server/index')`. Isso aponta para um problema de boot/empacotamento do runtime local, não para a lógica de `access-logs.js`.
+
+O problema exato desta fase é:
+- o shell Electron sobe;
+- o bootstrap entra em `local-server-main.js`;
+- `server/index` não consegue ser carregado dentro do pacote instalado;
+- o app mostra apenas a mensagem genérica, então em campo fica parecendo defeito do servidor inteiro, quando na prática o erro está na fronteira de empacotamento/runtime.
 
 Plano cirúrgico:
-1. Blindar o fluxo de execução do Servidor Local
-- Revisar o fluxo de inicialização para garantir que o operador tenha um ponto único e claro de execução.
-- Manter como caminhos suportados apenas:
-  - app instalado `Dock Check Local Server.exe`
-  - fluxo manual explícito por script/batch
-- Não tocar em `server/routes/access-logs.js` nem na lógica dos endpoints.
 
-2. Adicionar um launcher manual seguro para Windows
-- Criar um launcher `.bat/.cmd` simples e explícito para o modo “rodar a partir do código-fonte”, chamando o entrypoint correto com Node.
-- Isso evita que alguém tente abrir `.js` internos da pasta `server/routes/`.
+1. Tornar o erro real visível no bootstrap
+- Ajustar `electron/local-server-main.js` para guardar o erro original do `require('../server/index')` e exibi-lo no `dialog.showErrorBox`, não apenas no `error.log`.
+- Mostrar também diagnóstico resumido por categoria:
+  - dependência ausente;
+  - falha de módulo nativo (`better-sqlite3`);
+  - arquivo empacotado ausente;
+  - incompatibilidade de build.
+- Isso não muda nenhuma regra de negócio; só melhora a abertura do erro.
 
-3. Melhorar a mensagem de erro/diagnóstico do bootstrap
-- Ajustar `electron/local-server-main.js` para registrar e exibir um diagnóstico mais útil quando o servidor não sobe:
-  - diferenciar falha real de módulo
-  - indicar quando o problema aparenta ser “execução fora do app instalado”
-- Assim o erro deixa de parecer um defeito em `access-logs.js`.
+2. Blindar o empacotamento do Local Server
+- Revisar `electron-builder.server.yml` para deixar explícito o empacotamento dos artefatos de runtime necessários ao servidor local, em vez de depender do comportamento implícito.
+- Garantir especialmente:
+  - inclusão dos arquivos do servidor;
+  - presença dos metadados de runtime necessários;
+  - unpack correto do `better-sqlite3` e do binário `.node`.
+- A correção ficará restrita ao instalador do Local Server.
 
-4. Deixar o caminho correto explícito na documentação
-- Atualizar `server/README.md` e `electron/README.md` para deixar inequívoco:
-  - não usar a pasta `boatwatcher-dashboard-main` como instalação
-  - não abrir arquivos `.js` manualmente
-  - usar o instalador `.exe` ou o launcher manual oficial
+3. Eliminar risco de desalinhamento de dependências
+- Alinhar a definição de dependências do servidor local com o runtime usado no build principal, principalmente `better-sqlite3`.
+- O objetivo é evitar que o modo manual e o instalador apontem para expectativas diferentes de versão/binário.
+- Isso impacta apenas a camada de inicialização/empacotamento.
 
-5. Preservar integralmente o que já está funcionando
-- Nenhuma alteração em:
+4. Adicionar verificação pós-build específica do Local Server
+- Reforçar o pipeline para validar o pacote do servidor local antes de publicar:
+  - confirmar que `server/index.js` foi para o pacote;
+  - confirmar que o pacote inclui as dependências esperadas;
+  - confirmar que o binário nativo do SQLite ficou acessível no local correto.
+- Assim evitamos publicar um instalador que abre a bandeja mas morre no `require`.
+
+5. Preservar estritamente o que já funciona
+- Não mexer em:
+  - `server/routes/access-logs.js`
+  - `server/index.js` na lógica de endpoints
   - `electron/sync.js`
   - `electron/agent.js`
-  - `server/routes/access-logs.js` (regra de negócio)
-  - relatórios
-  - dashboard
-  - banco/local SQLite
-  - sincronização com a nuvem
+  - relatórios já corrigidos
+  - banco SQLite
+  - fluxo manual/facial
+  - sincronização e dashboards
 
 Arquivos previstos para ajuste:
 - `electron/local-server-main.js`
-- `server/README.md`
-- `electron/README.md`
-- `server/install.bat`
-- novo launcher Windows seguro (ex.: `server/start-server.bat` ou equivalente)
+- `electron-builder.server.yml`
+- `.github/workflows/desktop-release.yml`
+- `scripts/verify-local-server-deps.cjs`
+- `server/package.json` apenas se for necessário alinhar dependências de runtime
 
 Arquivos que não serão mexidos:
 - `server/routes/access-logs.js`
-- `server/index.js` (exceto se for estritamente necessário para mensagem de bootstrap)
+- `server/routes/*.js` de regra de negócio
 - `electron/sync.js`
-- `electron/database.js`
-- componentes de relatórios já corrigidos
+- `electron/database.js` salvo se houver necessidade mínima de diagnóstico, sem mudar comportamento funcional
+- componentes React e relatórios
 
 Resultado esperado:
-- o servidor local deixa de depender de execução manual incorreta por `.js`;
-- a pasta de código-fonte não vira mais um falso “instalador”;
-- o erro deixa de aparecer como se `access-logs.js` estivesse quebrado;
-- as correções anteriores de relatórios permanecem intactas.
+- o executável instalado deixa de falhar silenciosamente no carregamento do servidor;
+- se ainda houver falha, a própria janela passará a mostrar a causa real;
+- o instalador publicado ficará coerente com o runtime esperado do SQLite;
+- as correções ficam limitadas ao boot/packaging do Local Server, sem efeito colateral no restante do sistema.
