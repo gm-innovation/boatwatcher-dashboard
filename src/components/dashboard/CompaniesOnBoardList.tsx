@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { formatBrtTime } from '@/utils/brt';
 import {
   Table,
   TableBody,
