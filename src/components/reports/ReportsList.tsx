@@ -47,22 +47,26 @@ export const ReportsList = ({ projectId, startDate, endDate }: ReportsListProps)
 
   // Deduplicate: extract unique workers who had granted access
   const { uniqueWorkers, groupedByCompany } = useMemo(() => {
-    const grantedLogs = accessLogs.filter(log => log.access_status === 'granted' && log.worker_id);
+    const grantedLogs = accessLogs.filter(log => log.access_status === 'granted' && (log.worker_id || log.worker_name));
     const workerIdSet = new Set<string>();
     const workerMap = new Map<string, UniqueWorker>();
 
     for (const log of grantedLogs) {
-      const wId = log.worker_id!;
-      if (workerIdSet.has(wId)) continue;
-      workerIdSet.add(wId);
+      // Resolve canonical key: prefer worker_document, then worker_id, then name
+      const worker = log.worker_id ? workers.find(w => w.id === log.worker_id) : 
+        (log.worker_document ? workers.find(w => w.document_number === log.worker_document) :
+         (log.worker_name ? workers.find(w => w.name?.toLowerCase().trim() === log.worker_name.toLowerCase().trim()) : null));
 
-      const worker = workers.find(w => w.id === wId);
+      const canonicalKey = worker?.id || log.worker_id || log.worker_document || log.worker_name || '';
+      if (!canonicalKey || workerIdSet.has(canonicalKey)) continue;
+      workerIdSet.add(canonicalKey);
+
       const companyId = worker?.company_id || null;
       const company = companyId ? companies.find(c => c.id === companyId) : null;
       const jf = worker?.job_function_id ? jobFunctions.find(j => j.id === worker.job_function_id) : null;
 
-      workerMap.set(wId, {
-        workerId: wId,
+      workerMap.set(canonicalKey, {
+        workerId: canonicalKey,
         code: worker?.code ?? null,
         name: log.worker_name || worker?.name || 'Não identificado',
         document: log.worker_document || worker?.document_number || '-',
