@@ -64,7 +64,7 @@ export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReport
   const [exporting, setExporting] = useState(false);
   const reportContainerRef = useRef<HTMLDivElement>(null);
 
-  const { data: workers = [] } = useQuery({
+  const { data: workers = [] } = useQuery<any[]>({
     queryKey: ['workers-list', usesLocalServer()],
     queryFn: async () => {
       if (usesLocalServer()) {
