@@ -5,6 +5,9 @@ import { useJobFunctions } from '@/hooks/useJobFunctions';
 import { useSystemSetting } from '@/hooks/useSystemSettings';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { usesLocalServer } from '@/lib/runtimeProfile';
+import { fetchWorkers } from '@/hooks/useDataProvider';
+import { useNormalizedAccessLogs } from '@/utils/reportNormalization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -53,16 +56,20 @@ const DAY_NAMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 export const PresenceReport = ({ projectId, startDate, endDate }: PresenceReportProps) => {
   const { data: companies = [] } = useCompanies();
-  const { data: accessLogs = [], isLoading } = useAccessLogs(projectId || null, startDate, endDate, 5000);
+  const { data: rawAccessLogs = [], isLoading } = useAccessLogs(projectId || null, startDate, endDate, 5000);
+  const accessLogs = useNormalizedAccessLogs(rawAccessLogs);
   const { data: jobFunctions = [] } = useJobFunctions();
   const { data: systemLogoSetting } = useSystemSetting('system_logo');
 
   const [exporting, setExporting] = useState(false);
   const reportContainerRef = useRef<HTMLDivElement>(null);
 
-  const { data: workers = [] } = useQuery({
-    queryKey: ['workers-list'],
+  const { data: workers = [] } = useQuery<any[]>({
+    queryKey: ['workers-list', usesLocalServer()],
     queryFn: async () => {
+      if (usesLocalServer()) {
+        return fetchWorkers();
+      }
       const { data, error } = await supabase
         .from('workers')
         .select('id, name, company_id, job_function_id')

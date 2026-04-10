@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { useAccessLogs } from '@/hooks/useControlID';
 import { useQuery } from '@tanstack/react-query';
-import { isElectron } from '@/lib/dataProvider';
 import { fetchWorkers } from '@/hooks/useDataProvider';
+import { useCompanies } from '@/hooks/useSupabase';
 import { supabase } from '@/integrations/supabase/client';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,9 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Download, Moon, User, Clock, Building2 } from 'lucide-react';
-import { formatBrtTime, toBrtDate, getBrtDayKey } from '@/utils/brt';
+import { formatBrtTime, toBrtDate } from '@/utils/brt';
+import { usesLocalServer } from '@/lib/runtimeProfile';
+import { buildWorkerLookup, findWorkerFromLog, groupLogsByWorker, useNormalizedAccessLogs, getWorkerCompanyName } from '@/utils/reportNormalization';
 
 interface OvernightControlProps {
   projectId: string;
@@ -29,12 +31,14 @@ interface OvernightWorker {
 }
 
 export const OvernightControl = ({ projectId, startDate, endDate }: OvernightControlProps) => {
-  const { data: accessLogs = [], isLoading } = useAccessLogs(projectId, startDate, endDate, 1000);
+  const { data: rawAccessLogs = [], isLoading } = useAccessLogs(projectId, startDate, endDate, 1000);
+  const accessLogs = useNormalizedAccessLogs(rawAccessLogs);
+  const { data: companiesList = [] } = useCompanies();
 
   const { data: workers = [] } = useQuery({
-    queryKey: ['workers-with-companies'],
+    queryKey: ['workers-with-companies', usesLocalServer()],
     queryFn: async () => {
-      if (isElectron()) {
+      if (usesLocalServer()) {
         return fetchWorkers();
       }
       const { data, error } = await supabase
@@ -49,25 +53,8 @@ export const OvernightControl = ({ projectId, startDate, endDate }: OvernightCon
   const overnightWorkers = useMemo<OvernightWorker[]>(() => {
     if (!accessLogs.length) return [];
 
-    // Build hybrid lookup
-    const workerById = new Map<string, any>(workers.map((w: any) => [w.id, w]));
-    const workerByName = new Map<string, any>(workers.map((w: any) => [w.name?.toLowerCase().trim(), w]));
-
-    const findWorker = (log: any): any | null => {
-      if (log.worker_id && workerById.has(log.worker_id)) return workerById.get(log.worker_id)!;
-      if (log.worker_name) return workerByName.get(log.worker_name.toLowerCase().trim()) || null;
-      return null;
-    };
-
-    // Group logs by resolved worker key
-    const workerLogs = new Map<string, typeof accessLogs>();
-    for (const log of accessLogs) {
-      const w = findWorker(log);
-      const key = w?.id || log.worker_id || log.worker_name || '';
-      if (!key) continue;
-      if (!workerLogs.has(key)) workerLogs.set(key, []);
-      workerLogs.get(key)!.push(log);
-    }
+    const lookup = buildWorkerLookup(workers);
+    const workerLogs = groupLogsByWorker(accessLogs, lookup);
 
     const result: OvernightWorker[] = [];
 
@@ -91,10 +78,8 @@ export const OvernightControl = ({ projectId, startDate, endDate }: OvernightCon
         const nowDay = Date.UTC(brtNow.getUTCFullYear(), brtNow.getUTCMonth(), brtNow.getUTCDate());
         const nights = Math.floor((nowDay - entryDay) / (24 * 60 * 60 * 1000));
 
-        const worker = workerById.get(workerId) || findWorker(logs[0]);
-        const companyName = worker?.company && typeof worker.company === 'object' && 'name' in worker.company
-          ? (worker.company as { name: string }).name
-          : 'Desconhecida';
+        const worker = lookup.byId.get(workerId) || findWorkerFromLog(logs[0], lookup);
+        const companyName = getWorkerCompanyName(worker, companiesList) || 'Desconhecida';
 
         result.push({
           id: workerId,
@@ -108,7 +93,7 @@ export const OvernightControl = ({ projectId, startDate, endDate }: OvernightCon
     });
 
     return result.sort((a, b) => b.nights - a.nights);
-  }, [accessLogs, workers]);
+  }, [accessLogs, workers, companiesList]);
 
   if (!projectId) {
     return (
