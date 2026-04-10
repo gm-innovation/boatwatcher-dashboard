@@ -131,6 +131,7 @@ function createLocalServer(options = {}) {
         sanitize_workers: true,
         fast_upload_logs: true,
         full_device_resync: true,
+        timestamp_normalized: true,
       },
       runtime: {
         host,
