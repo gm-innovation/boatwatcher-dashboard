@@ -12,6 +12,10 @@ import { Badge } from '@/components/ui/badge';
 import { Download, Building2, Search } from 'lucide-react';
 import { differenceInMinutes } from 'date-fns';
 import { formatBrtDateTime } from '@/utils/brt';
+import { usesLocalServer } from '@/lib/runtimeProfile';
+import { fetchWorkers } from '@/hooks/useDataProvider';
+import { useCompanies } from '@/hooks/useSupabase';
+import { buildWorkerLookup, findWorkerFromLog, groupLogsByWorker, useNormalizedAccessLogs, getWorkerCompanyName } from '@/utils/reportNormalization';
 
 interface CompanyReportProps {
   projectId: string;
@@ -47,7 +51,8 @@ function classifyShift(timestamp: string): 'day' | 'night' {
 
 export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportProps) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const { data: accessLogs = [], isLoading } = useAccessLogs(projectId, startDate, endDate, 1000);
+  const { data: rawAccessLogs = [], isLoading } = useAccessLogs(projectId, startDate, endDate, 1000);
+  const accessLogs = useNormalizedAccessLogs(rawAccessLogs);
   const { data: systemLogoSetting } = useSystemSetting('system_logo');
 
   const { data: project } = useQuery({
@@ -65,9 +70,14 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
     enabled: !!projectId,
   });
 
+  const { data: companiesList = [] } = useCompanies();
+
   const { data: workers = [] } = useQuery({
-    queryKey: ['workers-with-companies-report'],
+    queryKey: ['workers-with-companies-report', usesLocalServer()],
     queryFn: async () => {
+      if (usesLocalServer()) {
+        return fetchWorkers();
+      }
       const { data, error } = await supabase
         .from('workers')
         .select('id, name, company:companies(id, name)');
@@ -82,31 +92,8 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
   const companyData = useMemo<CompanyData[]>(() => {
     if (!accessLogs.length || !workers.length) return [];
 
-    const workerById = new Map(workers.map((w: any) => [w.id, w]));
-    const workerByName = new Map(workers.map((w: any) => [w.name?.toLowerCase().trim(), w]));
-
-    const findWorker = (log: any) => {
-      if (log.worker_id && workerById.has(log.worker_id)) return workerById.get(log.worker_id)!;
-      if (log.worker_name) return workerByName.get(log.worker_name.toLowerCase().trim()) || null;
-      return null;
-    };
-
-    const getCompanyName = (w: any) => {
-      if (!w) return 'Sem empresa';
-      const comp = w.company && typeof w.company === 'object' && 'name' in w.company
-        ? (w.company as { name: string }).name : 'Sem empresa';
-      return comp;
-    };
-
-    // Group logs by worker
-    const workerLogs = new Map<string, typeof accessLogs>();
-    for (const log of accessLogs) {
-      const w = findWorker(log);
-      const key = w?.id || log.worker_id || log.worker_name || '';
-      if (!key) continue;
-      if (!workerLogs.has(key)) workerLogs.set(key, []);
-      workerLogs.get(key)!.push(log);
-    }
+    const lookup = buildWorkerLookup(workers);
+    const workerLogs = groupLogsByWorker(accessLogs, lookup);
 
     const companyStats = new Map<string, {
       workers: Set<string>;
@@ -120,8 +107,8 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
     }>();
 
     workerLogs.forEach((logs, workerId) => {
-      const worker = workerById.get(workerId) || null;
-      const companyName = getCompanyName(worker);
+      const worker = lookup.byId.get(workerId) || findWorkerFromLog(logs[0], lookup);
+      const companyName = getWorkerCompanyName(worker, companiesList);
       if (!companyStats.has(companyName)) {
         companyStats.set(companyName, {
           workers: new Set(),
@@ -190,7 +177,7 @@ export const CompanyReport = ({ projectId, startDate, endDate }: CompanyReportPr
         nightWorkers: stats.nightWorkers,
       };
     }).sort((a, b) => b.totalWorkers - a.totalWorkers);
-  }, [accessLogs, workers]);
+  }, [accessLogs, workers, companiesList]);
 
   const filtered = useMemo(() => {
     if (!searchTerm) return companyData;

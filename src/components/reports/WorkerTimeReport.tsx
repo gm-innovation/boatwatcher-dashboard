@@ -16,6 +16,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useSystemSetting } from '@/hooks/useSystemSettings';
 import { formatBrtShort, formatBrtDateTime } from '@/utils/brt';
 import { ptBR } from 'date-fns/locale';
+import { usesLocalServer } from '@/lib/runtimeProfile';
+import { fetchWorkers } from '@/hooks/useDataProvider';
+import { buildWorkerLookup, findWorkerFromLog, groupLogsByWorker, useNormalizedAccessLogs } from '@/utils/reportNormalization';
 
 interface WorkerTimeReportProps {
   projectId: string;
@@ -53,7 +56,8 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
   const [expandedWorkers, setExpandedWorkers] = useState<Set<string>>(new Set());
 
   const { data: companies = [] } = useCompanies();
-  const { data: accessLogs = [], isLoading } = useAccessLogs(projectId, startDate, endDate, 1000);
+  const { data: rawAccessLogs = [], isLoading } = useAccessLogs(projectId, startDate, endDate, 1000);
+  const accessLogs = useNormalizedAccessLogs(rawAccessLogs);
 
   const { data: systemLogoSetting } = useSystemSetting('system_logo');
 
@@ -82,8 +86,11 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
   });
 
   const { data: workers = [] } = useQuery({
-    queryKey: ['workers-full-report'],
+    queryKey: ['workers-full-report', usesLocalServer()],
     queryFn: async () => {
+      if (usesLocalServer()) {
+        return fetchWorkers();
+      }
       const { data, error } = await supabase
         .from('workers')
         .select('id, name, code, role, company_id, job_function_id, document_number, companies(id, name), job_functions(id, name)')
@@ -96,41 +103,8 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
   const rows = useMemo<WorkerTimeRow[]>(() => {
     if (!accessLogs.length) return [];
 
-    const workerById = new Map<string, typeof workers[0]>();
-    const workerByName = new Map<string, typeof workers[0]>();
-    const workerByDoc = new Map<string, typeof workers[0]>();
-    for (const w of workers) {
-      workerById.set(w.id, w);
-      if (w.name) workerByName.set(w.name.toLowerCase().trim(), w);
-      if (w.document_number) workerByDoc.set(w.document_number.trim(), w);
-    }
-
-    const findWorker = (log: any) => {
-      if (log.worker_id && workerById.has(log.worker_id)) return workerById.get(log.worker_id)!;
-      if (log.worker_name) {
-        const byName = workerByName.get(log.worker_name.toLowerCase().trim());
-        if (byName) return byName;
-      }
-      if (log.worker_document) {
-        const byDoc = workerByDoc.get(log.worker_document.trim());
-        if (byDoc) return byDoc;
-      }
-      return null;
-    };
-
-    const resolveKey = (log: any): string => {
-      const w = findWorker(log);
-      if (w) return w.id;
-      return log.worker_id || log.worker_name || '';
-    };
-
-    const workerLogs = new Map<string, typeof accessLogs>();
-    for (const log of accessLogs) {
-      const key = resolveKey(log);
-      if (!key) continue;
-      if (!workerLogs.has(key)) workerLogs.set(key, []);
-      workerLogs.get(key)!.push(log);
-    }
+    const lookup = buildWorkerLookup(workers);
+    const workerLogs = groupLogsByWorker(accessLogs, lookup);
 
     const results: WorkerTimeRow[] = [];
 
@@ -169,9 +143,9 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
         if (openMs > 0) effectiveMinutes += Math.round(openMs / 60000);
       }
 
-      const worker = workerById.get(key) || findWorker(logs[0]);
-      const companyObj = worker?.companies as any;
-      const jobObj = worker?.job_functions as any;
+      const worker = lookup.byId.get(key) || findWorkerFromLog(logs[0], lookup);
+      const companyObj = worker?.companies || (worker?.company_id ? companies.find((c: any) => c.id === worker.company_id) : null);
+      const jobObj = worker?.job_functions || (worker?.job_function_id ? jobFunctions.find((j: any) => j.id === worker.job_function_id) : null);
 
       results.push({
         workerId: worker?.id || key,
@@ -197,7 +171,7 @@ export const WorkerTimeReport = ({ projectId, startDate, endDate }: WorkerTimeRe
     });
 
     return results.sort((a, b) => a.companyName.localeCompare(b.companyName) || a.workerName.localeCompare(b.workerName));
-  }, [accessLogs, workers]);
+  }, [accessLogs, workers, companies, jobFunctions]);
 
   const filteredRows = useMemo(() => {
     return rows.filter(row => {
