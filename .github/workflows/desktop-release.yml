@@ -179,6 +179,51 @@ jobs:
       - name: Build Local Server (package only, no publish)
         run: npm run build:local-server
 
+      - name: Validate Local Server asar contents
+        shell: bash
+        run: |
+          echo "--- Checking Local Server asar ---"
+          ASAR=""
+          if [ -d "local-server-dist" ]; then
+            for f in $(find local-server-dist -name 'app.asar' -type f 2>/dev/null || true); do
+              ASAR="$f"
+              break
+            done
+          fi
+          if [ -z "$ASAR" ]; then
+            echo "::warning::Local Server app.asar not found — skipping content validation (unpacked build?)"
+          else
+            echo "✅ Found: $ASAR"
+            ASAR_LIST=$(npx asar list "$ASAR" | tr '\\' '/' | tr -d '\r')
+            REQUIRED_FILES="server/index.js electron/local-server-main.js electron/database.js electron/sync.js electron/agent.js"
+            MISSING=""
+            for REQ in $REQUIRED_FILES; do
+              if ! grep -qE "(^|/)${REQ}$" <<< "$ASAR_LIST"; then
+                MISSING="$MISSING $REQ"
+              fi
+            done
+            if [ -n "$MISSING" ]; then
+              echo "::error::Local Server asar is MISSING critical files:$MISSING"
+              echo "--- asar contents (first 60 lines) ---"
+              head -60 <<< "$ASAR_LIST"
+              exit 1
+            fi
+            echo "✅ All critical server files present in asar."
+
+            if grep -qE 'node_modules/express/' <<< "$ASAR_LIST"; then
+              echo "✅ express found in asar"
+            else
+              echo "::error::express NOT found in Local Server asar!"
+              exit 1
+            fi
+            if grep -qE 'node_modules/better-sqlite3/' <<< "$ASAR_LIST"; then
+              echo "✅ better-sqlite3 found in asar"
+            else
+              echo "::error::better-sqlite3 NOT found in Local Server asar!"
+              exit 1
+            fi
+          fi
+
       - name: Verify Local Server artifacts
         shell: bash
         run: |
