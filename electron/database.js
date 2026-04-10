@@ -1347,12 +1347,26 @@ function createDatabaseAPI(db, startCode) {
 
     insertAccessLog(data) {
       const id = uuidv4();
+
+      // Resolve worker_id: manual access sends cloud UUID, but local workers
+      // may be stored with a different local id and cloud_id.
+      // Look up by both id and cloud_id to find the correct local row.
+      let resolvedWorkerId = data.worker_id || null;
+      if (resolvedWorkerId) {
+        const localWorker = db.prepare(
+          'SELECT id FROM workers WHERE id = ? OR cloud_id = ? LIMIT 1'
+        ).get(resolvedWorkerId, resolvedWorkerId);
+        if (localWorker) {
+          resolvedWorkerId = localWorker.id;
+        }
+      }
+
       db.prepare(`
         INSERT INTO access_logs (id, worker_id, device_id, timestamp, access_status, direction, reason, score, worker_name, worker_document, device_name, hardware_user_id, source, synced)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
       `).run(
         id,
-        data.worker_id || null,
+        resolvedWorkerId,
         data.device_id || null,
         data.timestamp || new Date().toISOString(),
         data.access_status,
@@ -1470,9 +1484,9 @@ function createDatabaseAPI(db, startCode) {
       for (const [key, state] of workerState) {
         if (!state.isOnBoard) continue;
 
-        // Enrich with worker/company data
+        // Enrich with worker/company data (resolve by local id OR cloud_id for manual events)
         const worker = state.worker_id
-          ? db.prepare('SELECT w.name, w.role, w.company_id, c.name as company_name FROM workers w LEFT JOIN companies c ON w.company_id = c.id WHERE w.id = ?').get(state.worker_id)
+          ? db.prepare('SELECT w.name, w.role, w.company_id, c.name as company_name FROM workers w LEFT JOIN companies c ON w.company_id = c.id WHERE w.id = ? OR w.cloud_id = ? LIMIT 1').get(state.worker_id, state.worker_id)
           : null;
 
         // Resolve location label

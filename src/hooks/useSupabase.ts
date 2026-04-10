@@ -128,27 +128,6 @@ export const useWorkersOnBoard = (projectId: string | null, dateFilter: DateFilt
         if (dateFilter === 'today') {
           const localWorkersOnBoard = await fetchProjectWorkersOnBoard(projectId);
           if (localWorkersOnBoard !== null) {
-            // Normalize BRT-as-UTC timestamps from old local servers (same logic as reports)
-            const { getServerCapabilities } = await import('@/lib/localServerProvider');
-            const caps = await getServerCapabilities();
-            if (!caps.timestamp_normalized) {
-              return localWorkersOnBoard.map((w: any) => {
-                // Skip manual events (already correct)
-                if (!w.device_id && w.device_name?.startsWith('Manual')) return w;
-                const normalized = { ...w };
-                if (normalized.entryTime) {
-                  const d = new Date(normalized.entryTime);
-                  d.setUTCHours(d.getUTCHours() + 3);
-                  normalized.entryTime = d.toISOString();
-                }
-                if (normalized.firstEntryTime) {
-                  const d = new Date(normalized.firstEntryTime);
-                  d.setUTCHours(d.getUTCHours() + 3);
-                  normalized.firstEntryTime = d.toISOString();
-                }
-                return normalized;
-              });
-            }
             return localWorkersOnBoard;
           }
         }
