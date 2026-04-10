@@ -49,7 +49,7 @@ export const CompaniesOnBoardList = ({ companies }: CompaniesOnBoardListProps) =
                   <TableCell className="text-right py-2 px-3 text-sm whitespace-nowrap">
                     {company.entryTime ? (
                       <span className="inline-flex items-center bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-md font-semibold">
-                        {format(new Date(company.entryTime), 'HH:mm')}
+                        {formatBrtTime(company.entryTime)}
                       </span>
                     ) : '-'}
                   </TableCell>
