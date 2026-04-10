@@ -111,11 +111,18 @@ export function useOfflineAccessControl(projectId?: string | null) {
     };
 
     // Desktop with local server: route through local SQLite → sync engine → cloud
-    // This unifies manual and facial events into the same pipeline
+    // This unifies manual and facial events into the same pipeline.
+    // Use an active availability probe instead of the stale snapshot from usesLocalServer()
+    // to avoid accidentally routing manual events to the cloud when the local server is running.
     if (usesLocalServer()) {
       try {
-        await localAccessLogs.insert(logPayload);
-        return true;
+        // Active probe: check if local server is actually reachable right now
+        const probe = await fetch('http://localhost:3001/api/health', { signal: AbortSignal.timeout(2000) }).catch(() => null);
+        if (probe && probe.ok) {
+          await localAccessLogs.insert(logPayload);
+          return true;
+        }
+        console.warn('[AC] Local server health check failed, falling back to cloud');
       } catch (err) {
         console.warn('[AC] Local server insert failed, falling back to cloud:', err);
         // Fall through to cloud insert
